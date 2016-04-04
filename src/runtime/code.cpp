@@ -106,7 +106,7 @@ Box* BoxedCode::flags(Box* b, void*) {
     return boxInt(flags);
 }
 
-int BoxedCode::traverse(Box* self, visitproc visit, void *arg) noexcept {
+int BoxedCode::traverse(Box* self, visitproc visit, void* arg) noexcept {
     BoxedCode* o = static_cast<BoxedCode*>(self);
     Py_VISIT(o->_filename);
     Py_VISIT(o->_name);
@@ -209,7 +209,8 @@ extern "C" BORROWED(PyObject*) PyCode_GetName(PyCodeObject* op) noexcept {
 
 void setupCode() {
     code_cls
-        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedCode), false, "code", false, (destructor)BoxedCode::dealloc, NULL, true, (traverseproc)BoxedCode::traverse, NOCLEAR);
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedCode), false, "code", false,
+                             (destructor)BoxedCode::dealloc, NULL, true, (traverseproc)BoxedCode::traverse, NOCLEAR);
 
     code_cls->giveAttrBorrowed("__new__", None); // Hacky way of preventing users from instantiating this
 

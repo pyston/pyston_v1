@@ -206,7 +206,8 @@ class RewriterAction;
 class RewriterVar {
     // Fields for automatic refcounting:
     int num_refs_consumed = 0; // The number of "refConsumed()" calls on this RewriterVar
-    int last_refconsumed_numuses = 0; // The number of uses in the `uses` array when the last refConsumed() call was made.
+    int last_refconsumed_numuses
+        = 0; // The number of uses in the `uses` array when the last refConsumed() call was made.
     RefType reftype = RefType::UNKNOWN;
     bool nullable = false;
     // Helper function: whether there is a ref that got consumed but came from the consumption of the
@@ -565,7 +566,7 @@ protected:
     void _toBool(RewriterVar* result, RewriterVar* var, Location loc = Location::any());
 
     // These do not call bumpUse on their arguments:
-    void _incref(RewriterVar* var, int num_refs=1);
+    void _incref(RewriterVar* var, int num_refs = 1);
     void _decref(RewriterVar* var);
     void _xdecref(RewriterVar* var);
 

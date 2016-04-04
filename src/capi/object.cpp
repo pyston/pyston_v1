@@ -1118,11 +1118,11 @@ Py_ssize_t _Py_RefTotal;
 extern "C" Py_ssize_t _Py_GetRefTotal(void) noexcept {
     PyObject* o;
     Py_ssize_t total = _Py_RefTotal;
-    /* ignore the references to the dummy object of the dicts and sets
-     *        because they are not reliable and not useful (now that the
-     *               hash table code is well-tested) */
+/* ignore the references to the dummy object of the dicts and sets
+ *        because they are not reliable and not useful (now that the
+ *               hash table code is well-tested) */
 
-    // Pyston change: not sure what these are
+// Pyston change: not sure what these are
 #if 0
     o = _PyDict_Dummy();
     if (o != NULL)
@@ -1150,7 +1150,7 @@ extern "C" void _Py_NegativeRefcount(const char* fname, int lineno, PyObject* op
 
 extern "C" {
 int _PyTrash_delete_nesting = 0;
-PyObject *_PyTrash_delete_later = NULL;
+PyObject* _PyTrash_delete_later = NULL;
 }
 
 extern "C" void _PyTrash_thread_deposit_object(PyObject* op) noexcept {
@@ -1264,8 +1264,8 @@ extern "C" void _Py_PrintReferenceAddressesCapped(FILE* fp, int max_to_print) no
     for (op = refchain._ob_next; op != &refchain; op = op->_ob_next) {
         found++;
         if (found <= max_to_print) {
-            fprintf(fp, "%p [%" PY_FORMAT_SIZE_T "d] %s     \033[40mwatch -l ((PyObject*)%p)->ob_refcnt\033[0m\n", op, op->ob_refcnt,
-                    Py_TYPE(op)->tp_name, op);
+            fprintf(fp, "%p [%" PY_FORMAT_SIZE_T "d] %s     \033[40mwatch -l ((PyObject*)%p)->ob_refcnt\033[0m\n", op,
+                    op->ob_refcnt, Py_TYPE(op)->tp_name, op);
         }
     }
     if (found > max_to_print) {

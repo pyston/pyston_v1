@@ -88,9 +88,7 @@ public:
         return f->_code;
     }
 
-    static Box* f_code(Box* obj, void* arg) {
-        return incref(code(obj, arg));
-    }
+    static Box* f_code(Box* obj, void* arg) { return incref(code(obj, arg)); }
 
     static BORROWED(Box*) locals(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
@@ -101,9 +99,7 @@ public:
         return f->frame_info->updateBoxedLocals();
     }
 
-    static Box* f_locals(Box* obj, void* arg) {
-        return incref(locals(obj, arg));
-    }
+    static Box* f_locals(Box* obj, void* arg) { return incref(locals(obj, arg)); }
 
     static BORROWED(Box*) globals(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
@@ -120,9 +116,7 @@ public:
         return f->_globals;
     }
 
-    static Box* f_globals(Box* obj, void* arg) {
-        return incref(globals(obj, arg));
-    }
+    static Box* f_globals(Box* obj, void* arg) { return incref(globals(obj, arg)); }
 
     static BORROWED(Box*) back(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
@@ -137,9 +131,7 @@ public:
         return f->_back;
     }
 
-    static Box* f_back(Box* obj, void* arg) {
-        return incref(back(obj, arg));
-    }
+    static Box* f_back(Box* obj, void* arg) { return incref(back(obj, arg)); }
 
     static Box* lineno(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
@@ -183,7 +175,7 @@ public:
         clear(b);
         f->cls->tp_free(b);
     }
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept {
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept {
         BoxedFrame* o = static_cast<BoxedFrame*>(self);
         Py_VISIT(o->_back);
         Py_VISIT(o->_code);

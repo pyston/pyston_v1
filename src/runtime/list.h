@@ -36,7 +36,7 @@ public:
         o->cls->tp_free(o);
     }
 
-    static int traverse(BoxedListIterator* self, visitproc visit, void *arg) noexcept {
+    static int traverse(BoxedListIterator* self, visitproc visit, void* arg) noexcept {
         Py_VISIT(self->l);
         return 0;
     }

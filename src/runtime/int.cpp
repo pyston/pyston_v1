@@ -55,19 +55,19 @@ extern "C" long PyInt_GetMax() noexcept {
    via abuse of their ob_type members.
 */
 
-#define BLOCK_SIZE      1000    /* 1K less typical malloc overhead */
-#define BHEAD_SIZE      8       /* Enough for a 64-bit pointer */
-#define N_INTOBJECTS    ((BLOCK_SIZE - BHEAD_SIZE) / sizeof(PyIntObject))
+#define BLOCK_SIZE 1000 /* 1K less typical malloc overhead */
+#define BHEAD_SIZE 8    /* Enough for a 64-bit pointer */
+#define N_INTOBJECTS ((BLOCK_SIZE - BHEAD_SIZE) / sizeof(PyIntObject))
 
 struct _intblock {
-    struct _intblock *next;
+    struct _intblock* next;
     PyIntObject objects[N_INTOBJECTS];
 };
 
 typedef struct _intblock PyIntBlock;
 
-static PyIntBlock *block_list = NULL;
-PyIntObject *BoxedInt::free_list = NULL;
+static PyIntBlock* block_list = NULL;
+PyIntObject* BoxedInt::free_list = NULL;
 
 PyIntObject* BoxedInt::fill_free_list(void) noexcept {
     PyIntObject* p, *q;
@@ -93,7 +93,7 @@ void BoxedInt::tp_dealloc(Box* b) noexcept {
 #else
     if (PyInt_CheckExact(b)) {
         PyIntObject* v = (PyIntObject*)(b);
-        v->ob_type = (struct _typeobject *)free_list;
+        v->ob_type = (struct _typeobject*)free_list;
         free_list = v;
     } else {
         b->cls->tp_free(b);

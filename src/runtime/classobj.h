@@ -54,7 +54,7 @@ public:
     }
 
     static void dealloc(Box* b) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
     static int clear(Box* self) noexcept;
 };
 
@@ -66,14 +66,12 @@ public:
 
     Box** weakreflist;
 
-    BoxedInstance(BoxedClassobj* inst_cls) : inst_cls(inst_cls) {
-        Py_INCREF(inst_cls);
-    }
+    BoxedInstance(BoxedClassobj* inst_cls) : inst_cls(inst_cls) { Py_INCREF(inst_cls); }
 
     DEFAULT_CLASS(instance_cls);
 
     static void dealloc(Box* b) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
     static int clear(Box* self) noexcept;
 };
 

@@ -104,8 +104,8 @@ void generatorEntry(BoxedGenerator* g) {
 
             Box** args = g->args ? &g->args->elts[0] : nullptr;
             auto r = callCLFunc<ExceptionStyle::CXX, NOT_REWRITABLE>(func->md, nullptr, func->md->numReceivedArgs(),
-                                                            func->closure, g, func->globals, g->arg1, g->arg2, g->arg3,
-                                                            args);
+                                                                     func->closure, g, func->globals, g->arg1, g->arg2,
+                                                                     g->arg3, args);
             assert(r == None);
             Py_DECREF(r);
         } catch (ExcInfo e) {
@@ -527,7 +527,7 @@ static void generator_dealloc(BoxedGenerator* self) noexcept {
     int numArgs = self->function->md->numReceivedArgs();
     if (numArgs > 3) {
         numArgs -= 3;
-        for (int i= 0; i < numArgs; i++) {
+        for (int i = 0; i < numArgs; i++) {
             Py_CLEAR(self->args->elts[i]);
         }
     }
@@ -549,7 +549,7 @@ static void generator_dealloc(BoxedGenerator* self) noexcept {
     self->cls->tp_free(self);
 }
 
-static int generator_traverse(BoxedGenerator* self, visitproc visit, void *arg) noexcept {
+static int generator_traverse(BoxedGenerator* self, visitproc visit, void* arg) noexcept {
     assert(isSubclass(self->cls, generator_cls));
 
     if (self->paused_frame_info) {
@@ -561,7 +561,7 @@ static int generator_traverse(BoxedGenerator* self, visitproc visit, void *arg) 
     int numArgs = self->function->md->numReceivedArgs();
     if (numArgs > 3) {
         numArgs -= 3;
-        for (int i= 0; i < numArgs; i++) {
+        for (int i = 0; i < numArgs; i++) {
             Py_VISIT(self->args->elts[i]);
         }
     }

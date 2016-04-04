@@ -2028,34 +2028,26 @@ static int recurse_down_subclasses(PyTypeObject* type, PyObject* name, update_ca
 }
 
 /* Pyston change: static */ PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept {
-    PyTypeObject *type, *subtype, *staticbase;
-    PyObject *arg0, *res;
+    PyTypeObject* type, *subtype, *staticbase;
+    PyObject* arg0, *res;
 
     if (self == NULL || !PyType_Check(self))
         Py_FatalError("__new__() called with non-type 'self'");
-    type = (PyTypeObject *)self;
+    type = (PyTypeObject*)self;
     if (!PyTuple_Check(args) || PyTuple_GET_SIZE(args) < 1) {
-        PyErr_Format(PyExc_TypeError,
-                     "%s.__new__(): not enough arguments",
-                     type->tp_name);
+        PyErr_Format(PyExc_TypeError, "%s.__new__(): not enough arguments", type->tp_name);
         return NULL;
     }
     arg0 = PyTuple_GET_ITEM(args, 0);
     if (!PyType_Check(arg0)) {
-        PyErr_Format(PyExc_TypeError,
-                     "%s.__new__(X): X is not a type object (%s)",
-                     type->tp_name,
+        PyErr_Format(PyExc_TypeError, "%s.__new__(X): X is not a type object (%s)", type->tp_name,
                      Py_TYPE(arg0)->tp_name);
         return NULL;
     }
-    subtype = (PyTypeObject *)arg0;
+    subtype = (PyTypeObject*)arg0;
     if (!PyType_IsSubtype(subtype, type)) {
-        PyErr_Format(PyExc_TypeError,
-                     "%s.__new__(%s): %s is not a subtype of %s",
-                     type->tp_name,
-                     subtype->tp_name,
-                     subtype->tp_name,
-                     type->tp_name);
+        PyErr_Format(PyExc_TypeError, "%s.__new__(%s): %s is not a subtype of %s", type->tp_name, subtype->tp_name,
+                     subtype->tp_name, type->tp_name);
         return NULL;
     }
 
@@ -2068,10 +2060,7 @@ static int recurse_down_subclasses(PyTypeObject* type, PyObject* name, update_ca
     /* If staticbase is NULL now, it is a really weird type.
        In the spirit of backwards compatibility (?), just shut up. */
     if (staticbase && staticbase->tp_new != type->tp_new) {
-        PyErr_Format(PyExc_TypeError,
-                     "%s.__new__(%s) is not safe, use %s.__new__()",
-                     type->tp_name,
-                     subtype->tp_name,
+        PyErr_Format(PyExc_TypeError, "%s.__new__(%s) is not safe, use %s.__new__()", type->tp_name, subtype->tp_name,
                      staticbase == NULL ? "?" : staticbase->tp_name);
         return NULL;
     }

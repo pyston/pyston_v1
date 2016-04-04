@@ -32,9 +32,7 @@ public:
     decltype(BoxedSet::s)::iterator it;
     long size;
 
-    BoxedSetIterator(BoxedSet* s) : s(s), it(s->s.begin()), size(s->s.size()) {
-        Py_INCREF(s);
-    }
+    BoxedSetIterator(BoxedSet* s) : s(s), it(s->s.begin()), size(s->s.size()) { Py_INCREF(s); }
 
     DEFAULT_CLASS(set_iterator_cls);
 
@@ -54,7 +52,7 @@ public:
         o->cls->tp_free(o);
     }
 
-    static int traverse(BoxedSetIterator* self, visitproc visit, void *arg) noexcept {
+    static int traverse(BoxedSetIterator* self, visitproc visit, void* arg) noexcept {
         Py_VISIT(self->s);
         return 0;
     }
@@ -460,7 +458,7 @@ Box* setUpdate(BoxedSet* self, BoxedTuple* args) {
     for (auto l : *args) {
         if (l->cls == set_cls) {
             BoxedSet* s2 = static_cast<BoxedSet*>(l);
-            for (auto&& p :s2->s) {
+            for (auto&& p : s2->s) {
                 _setAdd(self, p);
             }
         } else {

@@ -94,7 +94,6 @@ public:
         Py_CLEAR(o->passthrough);
         return 0;
     }
-
 };
 static_assert(sizeof(BoxedCApiFunction) == sizeof(PyCFunctionObject), "");
 static_assert(offsetof(BoxedCApiFunction, method_def) == offsetof(PyCFunctionObject, m_ml), "");

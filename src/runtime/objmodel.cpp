@@ -338,7 +338,6 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size, Box** out_keep
             Py_INCREF(l->elts->elts[i]);
         return &l->elts->elts[0];
     }
-
 }
 
 static void clear_slots(PyTypeObject* type, PyObject* self) noexcept {
@@ -845,7 +844,7 @@ static int subtype_clear(PyObject* self) noexcept {
     /* Clear the instance dict (if any), to break cycles involving only
        __dict__ slots (as in the case 'self.__dict__ is self'). */
     if (type->tp_dictoffset != base->tp_dictoffset) {
-        PyObject **dictptr = _PyObject_GetDictPtr(self);
+        PyObject** dictptr = _PyObject_GetDictPtr(self);
         if (dictptr && *dictptr)
             Py_CLEAR(*dictptr);
     }
@@ -882,9 +881,9 @@ BoxedHeapClass::BoxedHeapClass(BoxedClass* base, int attrs_offset, int weaklist_
     memset(&as_buffer, 0, sizeof(as_buffer));
 }
 
-BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, int attrs_offset,
-                                       int weaklist_offset, int instance_size, bool is_user_defined, BoxedString* name,
-                                       BoxedTuple* bases, size_t nslots) {
+BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, int attrs_offset, int weaklist_offset,
+                                       int instance_size, bool is_user_defined, BoxedString* name, BoxedTuple* bases,
+                                       size_t nslots) {
     BoxedHeapClass* made = new (metaclass, nslots)
         BoxedHeapClass(base, attrs_offset, weaklist_offset, instance_size, is_user_defined, name);
 
@@ -1272,8 +1271,8 @@ void Box::appendNewHCAttr(BORROWED(Box*) new_attr, SetattrRewriteArgs* rewrite_a
                     REWRITE_ABORTED("");
                     rewrite_args = NULL;
                 } else {
-                    RewriterVar* r_oldarray
-                        = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::forArg(0));
+                    RewriterVar* r_oldarray = rewrite_args->obj->getAttr(
+                        cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::forArg(0));
                     RewriterVar* r_oldsize = rewrite_args->rewriter->loadConst(numattrs, Location::forArg(1));
                     RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(2));
                     r_array = rewrite_args->rewriter->call(true, (void*)reallocAttrs, r_oldarray, r_oldsize, r_newsize);
@@ -1532,7 +1531,8 @@ int assign_version_tag(PyTypeObject* type) noexcept {
     return 1;
 }
 
-template <Rewritable rewritable> BORROWED(Box*) typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
+template <Rewritable rewritable>
+BORROWED(Box*) typeLookup(BoxedClass* cls, BoxedString* attr, GetattrRewriteArgs* rewrite_args) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -1643,9 +1643,8 @@ template <Rewritable rewritable> BORROWED(Box*) typeLookup(BoxedClass* cls, Boxe
             if (!val)
                 rewrite_args->setReturn(NULL, ReturnConvention::NO_RETURN);
             else {
-                rewrite_args->setReturn(
-                    rewrite_args->rewriter->loadConst((int64_t)val)->setType(RefType::BORROWED),
-                    ReturnConvention::HAS_RETURN);
+                rewrite_args->setReturn(rewrite_args->rewriter->loadConst((int64_t)val)->setType(RefType::BORROWED),
+                                        ReturnConvention::HAS_RETURN);
             }
         }
         return val;
@@ -2904,12 +2903,14 @@ void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewrit
             crewrite_args.arg1 = r_descr;
             crewrite_args.arg2 = rewrite_args->obj;
             crewrite_args.arg3 = rewrite_args->attrval;
-            set_rtn = runtimeCallInternal<CXX, REWRITABLE>(_set_, &crewrite_args, ArgPassSpec(3), descr, obj, val, NULL, NULL);
+            set_rtn = runtimeCallInternal<CXX, REWRITABLE>(_set_, &crewrite_args, ArgPassSpec(3), descr, obj, val, NULL,
+                                                           NULL);
             if (crewrite_args.out_success) {
                 rewrite_args->out_success = true;
             }
         } else {
-            set_rtn = runtimeCallInternal<CXX, NOT_REWRITABLE>(_set_, NULL, ArgPassSpec(3), descr, obj, val, NULL, NULL);
+            set_rtn
+                = runtimeCallInternal<CXX, NOT_REWRITABLE>(_set_, NULL, ArgPassSpec(3), descr, obj, val, NULL, NULL);
         }
         Py_DECREF(set_rtn);
 
@@ -3046,7 +3047,8 @@ extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) {
         // TODO actually rewrite this?
         setattr = processDescriptor(setattr, obj, obj->cls);
         AUTO_DECREF(setattr);
-        autoDecref(runtimeCallInternal<CXX, REWRITABLE>(setattr, NULL, ArgPassSpec(2), attr, attr_val, NULL, NULL, NULL));
+        autoDecref(
+            runtimeCallInternal<CXX, REWRITABLE>(setattr, NULL, ArgPassSpec(2), attr, attr_val, NULL, NULL, NULL));
     } else {
         STAT_TIMER(t0, "us_timer_slowpath_tpsetattro", 10);
         int r = tp_setattro(obj, attr, attr_val);
@@ -3408,7 +3410,8 @@ BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI
 
     if (rewrite_args) {
         if (S == CXX) {
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)FixupLenReturn::call, r_rtn)->setType(RefType::OWNED);
+            rewrite_args->out_rtn
+                = rewrite_args->rewriter->call(true, (void*)FixupLenReturn::call, r_rtn)->setType(RefType::OWNED);
             rewrite_args->out_success = true;
         } else {
             // Don't know how to propagate the exception
@@ -3718,7 +3721,8 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
         // or this kind of thing is necessary in a lot more places
         // rewriter->getArg(3).addGuard(npassed_args);
 
-        CallattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->setType(RefType::BORROWED), rewriter->getReturnDestination());
+        CallattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->setType(RefType::BORROWED),
+                                         rewriter->getReturnDestination());
         if (npassed_args >= 1)
             rewrite_args.arg1 = rewriter->getArg(3)->setType(RefType::BORROWED);
         if (npassed_args >= 2)
@@ -3944,8 +3948,7 @@ template <Rewritable rewritable, typename FuncNameCB>
 void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* param_names, FuncNameCB func_name_cb,
                                 Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success,
                                 ArgPassSpec argspec, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** args, Box** oargs,
-                                const std::vector<BoxedString*>* keyword_names,
-                                bool* oargs_owned) {
+                                const std::vector<BoxedString*>* keyword_names, bool* oargs_owned) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -4209,7 +4212,8 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
             if (!varargs)
                 ovarargs = incref(EmptyTuple);
             else
-                ovarargs = incref(varargs.get()); // TODO we could have DecrefHandle be smart and hand off it's reference
+                ovarargs
+                    = incref(varargs.get()); // TODO we could have DecrefHandle be smart and hand off it's reference
         } else {
             ovarargs = BoxedTuple::create(unused_positional.size(), unused_positional.data());
         }
@@ -4390,14 +4394,14 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
 
         if (rewrite_args) {
             if (arg_idx == 0)
-                rewrite_args->arg1
-                    = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(0))->setType(RefType::BORROWED);
+                rewrite_args->arg1 = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(0))
+                                         ->setType(RefType::BORROWED);
             else if (arg_idx == 1)
-                rewrite_args->arg2
-                    = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(1))->setType(RefType::BORROWED);
+                rewrite_args->arg2 = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(1))
+                                         ->setType(RefType::BORROWED);
             else if (arg_idx == 2)
-                rewrite_args->arg3
-                    = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(2))->setType(RefType::BORROWED);
+                rewrite_args->arg3 = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(2))
+                                         ->setType(RefType::BORROWED);
             else {
                 auto rvar = rewrite_args->rewriter->loadConst((intptr_t)default_obj);
                 rewrite_args->args->setAttr((arg_idx - 3) * sizeof(Box*), rvar);
@@ -4476,9 +4480,9 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 
     try {
         auto func_name_cb = [md]() { return getFunctionName(md).data(); };
-        rearrangeArgumentsInternal<rewritable>(paramspec, &md->param_names, func_name_cb,
-                                               paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args,
-                                               rewrite_success, argspec, arg1, arg2, arg3, args, oargs, keyword_names, oargs_owned);
+        rearrangeArgumentsInternal<rewritable>(
+            paramspec, &md->param_names, func_name_cb, paramspec.num_defaults ? func->defaults->elts : NULL,
+            rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args, oargs, keyword_names, oargs_owned);
     } catch (ExcInfo e) {
         if (S == CAPI) {
             setCAPIException(e);
@@ -4574,8 +4578,9 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
             RewriterVar* r_arg2 = num_output_args >= 2 ? rewrite_args->arg2 : rewrite_args->rewriter->loadConst(0);
             RewriterVar* r_arg3 = num_output_args >= 3 ? rewrite_args->arg3 : rewrite_args->rewriter->loadConst(0);
             RewriterVar* r_args = num_output_args >= 4 ? rewrite_args->args : rewrite_args->rewriter->loadConst(0);
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)createGenerator, rewrite_args->obj,
-                                                                 r_arg1, r_arg2, r_arg3, r_args)->setType(RefType::OWNED);
+            rewrite_args->out_rtn
+                = rewrite_args->rewriter->call(true, (void*)createGenerator, rewrite_args->obj, r_arg1, r_arg2, r_arg3,
+                                               r_args)->setType(RefType::OWNED);
 
             rewrite_args->out_success = true;
         }
@@ -5115,7 +5120,7 @@ static Box* runtimeCallEntry(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2
     }
     assert(rtn || (S == CAPI && PyErr_Occurred()));
 
-    // XXX
+// XXX
 #ifndef NDEBUG
     rewriter.release();
 #endif
@@ -5238,7 +5243,7 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
         }
     }
 
-    BORROWED(BoxedString*) op_name = getOpName(op_type);
+    BORROWED(BoxedString*)op_name = getOpName(op_type);
     Box* lrtn = binopInternalHelper<rewritable>(rewrite_args, op_name, lhs, rhs, r_lhs, r_rhs);
     if (lrtn) {
         if (lrtn != NotImplemented)
@@ -5311,7 +5316,7 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
         rtn = binopInternal<NOT_REWRITABLE>(lhs, rhs, op_type, false, NULL);
     }
 
-    // XXX
+// XXX
 #ifndef NDEBUG
     rewriter.release();
 #endif
@@ -5378,8 +5383,7 @@ static bool convert3wayCompareResultToBool(Box* v, int op_type) {
     };
 }
 
-template <bool negate>
-Box* nonzeroAndBox(Box* b) {
+template <bool negate> Box* nonzeroAndBox(Box* b) {
     if (likely(b->cls == bool_cls)) {
         if (negate)
             return boxBool(b != True);
@@ -5407,7 +5411,8 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         if (rewrite_args) {
             RewriterVar* cmpres = rewrite_args->lhs->cmp(neg ? AST_TYPE::NotEq : AST_TYPE::Eq, rewrite_args->rhs,
                                                          rewrite_args->destination);
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxBool, cmpres)->setType(RefType::OWNED);
+            rewrite_args->out_rtn
+                = rewrite_args->rewriter->call(false, (void*)boxBool, cmpres)->setType(RefType::OWNED);
             rewrite_args->out_success = true;
         }
 
@@ -5584,7 +5589,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         return r;
     }
 
-    BORROWED(BoxedString*) op_name = getOpName(op_type);
+    BORROWED(BoxedString*)op_name = getOpName(op_type);
 
     Box* lrtn;
     if (rewrite_args) {
@@ -5629,7 +5634,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         REWRITE_ABORTED("");
     }
 
-    BORROWED(BoxedString*) rop_name = getReverseOpName(op_type);
+    BORROWED(BoxedString*)rop_name = getReverseOpName(op_type);
     Box* rrtn = callattrInternal1<CXX, NOT_REWRITABLE>(rhs, rop_name, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
     if (rrtn != NULL && rrtn != NotImplemented)
         return rrtn;
@@ -5679,7 +5684,8 @@ extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {
 
     if (rewriter.get()) {
         // rewriter->trap();
-        CompareRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->setType(RefType::BORROWED), rewriter->getArg(1)->setType(RefType::BORROWED),
+        CompareRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->setType(RefType::BORROWED),
+                                        rewriter->getArg(1)->setType(RefType::BORROWED),
                                         rewriter->getReturnDestination());
         Box* rtn = compareInternal<REWRITABLE>(lhs, rhs, op_type, &rewrite_args);
         if (!rewrite_args.out_success) {
@@ -5731,7 +5737,7 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
     static StatCounter slowpath_unaryop("slowpath_unaryop");
     slowpath_unaryop.log();
 
-    BORROWED(BoxedString*) op_name = getOpName(op_type);
+    BORROWED(BoxedString*)op_name = getOpName(op_type);
 
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 1, "unaryop"));
@@ -6657,9 +6663,9 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
     }
 
     size_t total_slots = final_slot_names.size();
-                         /*+ (base->tp_flags & Py_TPFLAGS_HEAPTYPE ? static_cast<BoxedHeapClass*>(base)->nslots() : 0);*/
-    BoxedHeapClass* made = BoxedHeapClass::create(metatype, base, attrs_offset, weaklist_offset, basic_size, true,
-                                                  name, bases, total_slots);
+    /*+ (base->tp_flags & Py_TPFLAGS_HEAPTYPE ? static_cast<BoxedHeapClass*>(base)->nslots() : 0);*/
+    BoxedHeapClass* made = BoxedHeapClass::create(metatype, base, attrs_offset, weaklist_offset, basic_size, true, name,
+                                                  bases, total_slots);
     made->tp_dictoffset = dict_offset;
 
     if (boxedSlots) {

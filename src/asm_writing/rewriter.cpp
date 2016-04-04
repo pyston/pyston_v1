@@ -306,7 +306,8 @@ void Rewriter::_slowpathJump(bool condition_eq) {
 }
 
 void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_addGuard");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_addGuard");
 
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
@@ -337,7 +338,8 @@ void RewriterVar::addGuardNotEq(uint64_t val) {
 }
 
 void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_addGuardNotEq");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_addGuardNotEq");
 
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
@@ -372,7 +374,8 @@ void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
 }
 
 void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_constant, bool negate) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_addAttrGuard");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_addAttrGuard");
 
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
@@ -420,7 +423,8 @@ RewriterVar* RewriterVar::getAttr(int offset, Location dest, assembler::MovType 
 }
 
 void Rewriter::_getAttr(RewriterVar* result, RewriterVar* ptr, int offset, Location dest, assembler::MovType type) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_getAttr");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_getAttr");
 
     // TODO if var is a constant, we will end up emitting something like
     //   mov $0x123, %rax
@@ -449,7 +453,8 @@ RewriterVar* RewriterVar::getAttrDouble(int offset, Location dest) {
 }
 
 void Rewriter::_getAttrDouble(RewriterVar* result, RewriterVar* ptr, int offset, Location dest) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_getAttrDouble");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_getAttrDouble");
 
     assembler::Register ptr_reg = ptr->getInReg();
 
@@ -471,7 +476,8 @@ RewriterVar* RewriterVar::getAttrFloat(int offset, Location dest) {
 }
 
 void Rewriter::_getAttrFloat(RewriterVar* result, RewriterVar* ptr, int offset, Location dest) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_getAttrFloat");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_getAttrFloat");
 
     assembler::Register ptr_reg = ptr->getInReg();
 
@@ -489,15 +495,9 @@ void Rewriter::_getAttrFloat(RewriterVar* result, RewriterVar* ptr, int offset, 
 
 class Helper {
 public:
-    static void incref(Box* b) {
-        Py_INCREF(b);
-    }
-    static void decref(Box* b) {
-        Py_DECREF(b);
-    }
-    static void xdecref(Box* b) {
-        Py_XDECREF(b);
-    }
+    static void incref(Box* b) { Py_INCREF(b); }
+    static void decref(Box* b) { Py_DECREF(b); }
+    static void xdecref(Box* b) { Py_XDECREF(b); }
 };
 
 void RewriterVar::incref() {
@@ -532,23 +532,23 @@ void Rewriter::_incref(RewriterVar* var, int num_refs) {
     }
 
     assert(!var->nullable);
-    //assembler->trap();
-    //auto reg = var->getInReg();
-    //assembler->incl(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+// assembler->trap();
+// auto reg = var->getInReg();
+// assembler->incl(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
 
-    //this->_trap();
+// this->_trap();
 
-    //this->_call(NULL, true, (void*)Helper::incref, llvm::ArrayRef<RewriterVar*>(&var, 1),
-                //llvm::ArrayRef<RewriterVar*>());
+// this->_call(NULL, true, (void*)Helper::incref, llvm::ArrayRef<RewriterVar*>(&var, 1),
+// llvm::ArrayRef<RewriterVar*>());
 #ifdef Py_REF_DEBUG
-    //assembler->trap();
+    // assembler->trap();
     assembler->incq(assembler::Immediate(&_Py_RefTotal));
 #endif
     auto reg = var->getInReg();
 
     if (num_refs == 1)
         assembler->incq(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
-     else
+    else
         assembler->add(assembler::Immediate(num_refs), assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
 
     // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
@@ -557,13 +557,13 @@ void Rewriter::_incref(RewriterVar* var, int num_refs) {
 
 void Rewriter::_decref(RewriterVar* var) {
     assert(!var->nullable);
-    //assembler->trap();
+// assembler->trap();
 
-    //this->_call(NULL, true, (void*)Helper::decref, llvm::ArrayRef<RewriterVar*>(&var, 1),
-                //llvm::ArrayRef<RewriterVar*>(NULL, (int)0));
+// this->_call(NULL, true, (void*)Helper::decref, llvm::ArrayRef<RewriterVar*>(&var, 1),
+// llvm::ArrayRef<RewriterVar*>(NULL, (int)0));
 
 #ifdef Py_REF_DEBUG
-    //assembler->trap();
+    // assembler->trap();
     assembler->decq(assembler::Immediate(&_Py_RefTotal));
 #endif
 
@@ -578,7 +578,7 @@ void Rewriter::_decref(RewriterVar* var) {
 #endif
     // _setupCall doesn't remember that it added the arg regs to the location set
     auto reg = assembler::RDI;
-    //auto reg = var->getInReg();
+    // auto reg = var->getInReg();
 
     assembler->decq(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
     {
@@ -590,8 +590,8 @@ void Rewriter::_decref(RewriterVar* var) {
         assembler->movq(assembler::Indirect(reg, offsetof(Box, cls)), assembler::RAX);
         assembler->callq(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)));
 #endif
-        //assembler->mov(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)), assembler::R11);
-        //assembler->callq(assembler::R11);
+        // assembler->mov(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)), assembler::R11);
+        // assembler->callq(assembler::R11);
     }
 
     // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
@@ -600,7 +600,7 @@ void Rewriter::_decref(RewriterVar* var) {
 
 void Rewriter::_xdecref(RewriterVar* var) {
     assert(var->nullable);
-    //assembler->trap();
+    // assembler->trap();
 
     this->_call(NULL, true, (void*)Helper::xdecref, llvm::ArrayRef<RewriterVar*>(&var, 1),
                 llvm::ArrayRef<RewriterVar*>(NULL, (size_t)0));
@@ -619,7 +619,8 @@ RewriterVar* RewriterVar::cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, L
 }
 
 void Rewriter::_cmp(RewriterVar* result, RewriterVar* v1, AST_TYPE::AST_TYPE cmp_type, RewriterVar* v2, Location dest) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_cmp");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_cmp");
 
     assembler::Register v1_reg = v1->getInReg();
     assembler::Register v2_reg = v2->getInReg();
@@ -655,7 +656,8 @@ RewriterVar* RewriterVar::toBool(Location dest) {
 }
 
 void Rewriter::_toBool(RewriterVar* result, RewriterVar* var, Location dest) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_toBool");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_toBool");
 
     assembler::Register this_reg = var->getInReg();
 
@@ -678,7 +680,8 @@ void RewriterVar::setAttr(int offset, RewriterVar* val) {
 }
 
 void Rewriter::_setAttr(RewriterVar* ptr, int offset, RewriterVar* val) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_setAttr");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_setAttr");
 
     assembler::Register ptr_reg = ptr->getInReg();
 
@@ -1138,7 +1141,8 @@ void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> ar
 
 void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
                      llvm::ArrayRef<RewriterVar*> args_xmm) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_call");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_call");
 
     // RewriterVarUsage scratch = createNewVar(Location::any());
     assembler::Register r = allocReg(assembler::R11);
@@ -1382,7 +1386,8 @@ void Rewriter::commit() {
     }
 
     if (marked_inside_ic) {
-        if (LOG_IC_ASSEMBLY) assembler->comment("mark inside ic");
+        if (LOG_IC_ASSEMBLY)
+            assembler->comment("mark inside ic");
 
         ASSERT(this->needs_invalidation_support, "why did we mark ourselves as inside this?");
 
@@ -1396,7 +1401,8 @@ void Rewriter::commit() {
         }
     }
 
-    if (LOG_IC_ASSEMBLY) assembler->comment("live outs");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("live outs");
 
 // Make sure that we have been calling bumpUse correctly.
 // All uses should have been accounted for, other than the live outs
@@ -1569,7 +1575,8 @@ void Rewriter::commitReturning(RewriterVar* var) {
     ASSERT(var->reftype != RefType::UNKNOWN, "%p", var);
 
     addAction([=]() {
-        if (LOG_IC_ASSEMBLY) assembler->comment("commitReturning");
+        if (LOG_IC_ASSEMBLY)
+            assembler->comment("commitReturning");
         var->getInReg(getReturnDestination(), true /* allow_constant_in_reg */);
         var->bumpUse();
     }, { var }, ActionType::NORMAL);
@@ -1585,7 +1592,8 @@ void Rewriter::commitReturningNonPython(RewriterVar* var) {
     assert(var->reftype == RefType::UNKNOWN);
 
     addAction([=]() {
-        if (LOG_IC_ASSEMBLY) assembler->comment("commitReturning");
+        if (LOG_IC_ASSEMBLY)
+            assembler->comment("commitReturning");
         var->getInReg(getReturnDestination(), true /* allow_constant_in_reg */);
         var->bumpUse();
     }, { var }, ActionType::NORMAL);
@@ -1620,7 +1628,8 @@ RewriterVar* Rewriter::add(RewriterVar* a, int64_t b, Location dest) {
 }
 
 void Rewriter::_add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_add");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_add");
 
     // TODO better reg alloc (e.g., mov `a` directly to the dest reg)
 
@@ -1652,7 +1661,8 @@ RewriterVar* Rewriter::allocate(int n) {
 }
 
 int Rewriter::_allocate(RewriterVar* result, int n) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_allocate");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_allocate");
 
     assert(n >= 1);
 
@@ -1704,7 +1714,8 @@ RewriterVar* Rewriter::allocateAndCopy(RewriterVar* array_ptr, int n) {
 }
 
 void Rewriter::_allocateAndCopy(RewriterVar* result, RewriterVar* array_ptr, int n) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_allocateAndCopy");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_allocateAndCopy");
 
     // TODO smart register allocation
 
@@ -1744,7 +1755,8 @@ RewriterVar* Rewriter::allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar
 }
 
 void Rewriter::_allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_elem, RewriterVar* rest_ptr, int n_rest) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_allocateAndCopyPlus1");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_allocateAndCopyPlus1");
 
     int offset = _allocate(result, n_rest + 1);
 
@@ -1777,7 +1789,8 @@ void Rewriter::checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val) {
 }
 
 void Rewriter::_checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val) {
-    if (LOG_IC_ASSEMBLY) assembler->comment("_checkAndThrowCAPIException");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_checkAndThrowCAPIException");
 
     assembler::Register var_reg = r->getInReg();
     if (exc_val == 0)
@@ -2040,7 +2053,8 @@ TypeRecorder* Rewriter::getTypeRecorder() {
     return rewrite->getTypeRecorder();
 }
 
-Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs, bool needs_invalidation_support)
+Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs,
+                   bool needs_invalidation_support)
     : rewrite(std::move(rewrite)),
       assembler(this->rewrite->getAssembler()),
       picked_slot(NULL),

@@ -78,7 +78,7 @@ void BoxedFloat::tp_dealloc(Box* b) noexcept {
 #else
     if (likely(PyFloat_CheckExact(b))) {
         PyFloatObject* v = (PyFloatObject*)(b);
-        v->ob_type = (struct _typeobject *)free_list;
+        v->ob_type = (struct _typeobject*)free_list;
         free_list = v;
     } else {
         b->cls->tp_free(b);

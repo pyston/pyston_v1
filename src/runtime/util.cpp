@@ -130,7 +130,7 @@ extern "C" void dumpEx(void* p, int levels) {
     printf("\n");
     printf("Raw address: %p\n", p);
 
-    if ((intptr_t)p < 0x1000){
+    if ((intptr_t)p < 0x1000) {
         if (p != NULL)
             printf("Not a real pointer?\n");
     } else if ((((intptr_t)p) & 0x7) == 0) {
@@ -155,7 +155,7 @@ extern "C" void dumpEx(void* p, int levels) {
             printf("Object has hcattrs:\n");
             HCAttrs* attrs = b->getHCAttrsPtr();
             attrs->hcls->dump();
-            //attrs->dump();
+            // attrs->dump();
         }
 
         printf("Class: %s", b->cls->tp_name);

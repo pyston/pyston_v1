@@ -515,9 +515,10 @@ Box* complexDivmodComplex(BoxedComplex* lhs, Box* _rhs) {
 
     BoxedComplex* div = (BoxedComplex*)complexDiv(lhs, rhs_complex); /* The raw divisor value. */
     AUTO_DECREF(div);
-    div->real = floor(div->real);                                    /* Use the floor of the real part. */
+    div->real = floor(div->real); /* Use the floor of the real part. */
     div->imag = 0.0;
-    BoxedComplex* mod = (BoxedComplex*)complexSubComplex(lhs, (BoxedComplex*)autoDecref(complexMulComplex(rhs_complex, div)));
+    BoxedComplex* mod
+        = (BoxedComplex*)complexSubComplex(lhs, (BoxedComplex*)autoDecref(complexMulComplex(rhs_complex, div)));
     AUTO_DECREF(mod);
     Box* res = BoxedTuple::create({ div, mod });
     return res;
@@ -572,7 +573,7 @@ Box* complexModComplex(BoxedComplex* lhs, Box* _rhs) {
 
     BoxedComplex* div = (BoxedComplex*)complexDiv(lhs, rhs); /* The raw divisor value. */
     AUTO_DECREF(div);
-    div->real = floor(div->real);                            /* Use the floor of the real part. */
+    div->real = floor(div->real); /* Use the floor of the real part. */
     div->imag = 0.0;
     BoxedComplex* mod = (BoxedComplex*)complexSubComplex(lhs, (BoxedComplex*)autoDecref(complexMulComplex(rhs, div)));
     return mod;

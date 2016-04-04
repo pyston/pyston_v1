@@ -97,8 +97,7 @@ void remapPhis(llvm::BasicBlock* in_block, llvm::BasicBlock* from_block, llvm::B
 }
 
 typedef llvm::DenseMap<std::pair<llvm::BasicBlock*, llvm::BasicBlock*>, llvm::Instruction*> InsertionCache;
-llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, llvm::BasicBlock* from_bb,
-                                      InsertionCache& cache) {
+llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, llvm::BasicBlock* from_bb, InsertionCache& cache) {
     assert(BB);
     assert(BB != from_bb);
 
@@ -167,8 +166,8 @@ llvm::Instruction* findInsertionPoint(llvm::BasicBlock* BB, llvm::BasicBlock* fr
 void addIncrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* incref_pt) {
     if (num_refs > 1) {
         // Not bad but I don't think this should happen:
-        //printf("Whoa more than one incref??\n");
-        //raise(SIGTRAP);
+        // printf("Whoa more than one incref??\n");
+        // raise(SIGTRAP);
     }
 
     if (isa<ConstantPointerNull>(v)) {
@@ -278,7 +277,7 @@ void addDecrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
     new llvm::StoreInst(new_refcount, refcount_ptr, decref_pt);
 
 #ifdef Py_REF_DEBUG
-    llvm::CallInst::Create(g.funcs.checkRefs, {v}, "", decref_pt);
+    llvm::CallInst::Create(g.funcs.checkRefs, { v }, "", decref_pt);
 #endif
 
     llvm::BasicBlock* cur_block = decref_pt->getParent();
@@ -458,7 +457,6 @@ static std::vector<llvm::BasicBlock*> computeTraversalOrder(llvm::Function* f) {
                             visit_queue.push_back(SBB);
                         }
                     }
-
                 }
             }
 
@@ -570,14 +568,14 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         auto t = v->getType();
         auto p = llvm::dyn_cast<llvm::PointerType>(t);
         if (!p) {
-            //t->dump();
-            //printf("Not a pointer\n");
+            // t->dump();
+            // printf("Not a pointer\n");
             return;
         }
         auto s = llvm::dyn_cast<llvm::StructType>(p->getElementType());
         if (!s) {
-            //t->dump();
-            //printf("Not a pointer\n");
+            // t->dump();
+            // printf("Not a pointer\n");
             return;
         }
 
@@ -588,7 +586,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
         bool ok_type = false;
         if (s->elements().size() >= 2 && s->elements()[0] == g.i64 && s->elements()[1] == g.llvm_class_type_ptr) {
-            //printf("This looks likes a class\n");
+            // printf("This looks likes a class\n");
             ok_type = true;
         }
 
@@ -620,7 +618,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
     };
 
     for (auto&& g : f->getParent()->getGlobalList()) {
-        //g.dump();
+        // g.dump();
         check_val_missed(&g);
     }
 
@@ -738,12 +736,12 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 for (auto SBB : successors) {
                     auto&& ending_refs = states[SBB].ending_refs;
                     if (ending_refs.count(v)) {
-                        //llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName() << ", have "
-                                     //<< it->second << " refs on " << *v << '\n';
+                        // llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName() << ", have "
+                        //<< it->second << " refs on " << *v << '\n';
                         min_refs = std::min(ending_refs[v], min_refs);
                     } else {
-                        //llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName()
-                                     //<< ", have 0 (missing) refs on " << *v << '\n';
+                        // llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName()
+                        //<< ", have 0 (missing) refs on " << *v << '\n';
                         min_refs = 0;
                     }
                 }
@@ -758,12 +756,12 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                         this_refs = ending_refs[v];
 
                     if (this_refs > min_refs) {
-                        //llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName() << ", need to add "
-                                     //<< (this_refs - min_refs) << " refs to " << *v << '\n';
-                        state.increfs.push_back(RefOp({v, refstate.nullable, this_refs - min_refs, NULL, SBB, bb}));
+                        // llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName() << ", need to add "
+                        //<< (this_refs - min_refs) << " refs to " << *v << '\n';
+                        state.increfs.push_back(RefOp({ v, refstate.nullable, this_refs - min_refs, NULL, SBB, bb }));
                     } else if (this_refs < min_refs) {
                         assert(refstate.reftype == RefType::OWNED);
-                        state.decrefs.push_back(RefOp({v, refstate.nullable, min_refs - this_refs, NULL, SBB, bb}));
+                        state.decrefs.push_back(RefOp({ v, refstate.nullable, min_refs - this_refs, NULL, SBB, bb }));
                     }
                 }
 
@@ -778,10 +776,11 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         state.ending_refs = state.starting_refs;
 
         // Then, iterate backwards through the instructions in this BB, updating the ref states
-        for (auto &I : llvm::iterator_range<llvm::BasicBlock::reverse_iterator>(BB.rbegin(), BB.rend())) {
+        for (auto& I : llvm::iterator_range<llvm::BasicBlock::reverse_iterator>(BB.rbegin(), BB.rend())) {
             // Phis get special handling:
             // - we only use one of the operands to the phi node (based on the block we came from)
-            // - the phi-node-generator is supposed to handle that by putting a refConsumed on the terminator of the previous block
+            // - the phi-node-generator is supposed to handle that by putting a refConsumed on the terminator of the
+            // previous block
             // - that refConsumed will caus a use as well.
             if (llvm::isa<llvm::PHINode>(&I))
                 continue;
@@ -819,7 +818,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 if (num_times_as_op[op] > num_consumed) {
                     if (rt->vars[op].reftype == RefType::OWNED) {
                         if (state.ending_refs[op] == 0) {
-                             //llvm::outs() << "Last use of " << *op << " is at " << I << "; adding a decref after\n";
+                            // llvm::outs() << "Last use of " << *op << " is at " << I << "; adding a decref after\n";
 
                             if (llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(&I)) {
                                 state.decrefs.push_back(
@@ -869,7 +868,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 int starting_refs = (rstate.reftype == RefType::OWNED ? 1 : 0);
                 if (state.ending_refs[inst] != starting_refs) {
                     llvm::Instruction* insertion_pt = NULL;
-                    llvm::BasicBlock* insertion_block = NULL, *insertion_from_block = NULL;
+                    llvm::BasicBlock* insertion_block = NULL, * insertion_from_block = NULL;
                     if (ii) {
                         insertion_block = bb;
                         insertion_from_block = inst->getParent();
@@ -882,13 +881,11 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
                     if (state.ending_refs[inst] < starting_refs) {
                         assert(rstate.reftype == RefType::OWNED);
-                        state.decrefs.push_back(
-                            RefOp({ inst, rstate.nullable, starting_refs - state.ending_refs[inst], insertion_pt,
-                                    insertion_block, insertion_from_block }));
+                        state.decrefs.push_back(RefOp({ inst, rstate.nullable, starting_refs - state.ending_refs[inst],
+                                                        insertion_pt, insertion_block, insertion_from_block }));
                     } else {
-                        state.increfs.push_back(
-                            RefOp({ inst, rstate.nullable, state.ending_refs[inst] - starting_refs, insertion_pt,
-                                    insertion_block, insertion_from_block }));
+                        state.increfs.push_back(RefOp({ inst, rstate.nullable, state.ending_refs[inst] - starting_refs,
+                                                        insertion_pt, insertion_block, insertion_from_block }));
                     }
                 }
                 state.ending_refs.erase(inst);
@@ -901,7 +898,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             for (auto&& p : state.ending_refs) {
                 assert(p.second);
 
-                // Anything left should either be an argument, constant or global variable
+// Anything left should either be an argument, constant or global variable
 #ifndef NDEBUG
                 if (!llvm::isa<llvm::GlobalVariable>(p.first) && !llvm::isa<llvm::Constant>(p.first)) {
                     bool found = false;

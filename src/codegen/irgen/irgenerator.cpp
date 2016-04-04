@@ -424,7 +424,8 @@ private:
         if (exc_val == ALWAYS_THROWS) {
             assert(returned_val->getType() == g.void_);
 
-            llvm::BasicBlock* exc_dest = irgenerator->getCAPIExcDest(curblock, unw_info.exc_dest, unw_info.current_stmt);
+            llvm::BasicBlock* exc_dest
+                = irgenerator->getCAPIExcDest(curblock, unw_info.exc_dest, unw_info.current_stmt);
             getBuilder()->CreateBr(exc_dest);
         } else {
             assert(returned_val->getType() == exc_val->getType());
@@ -608,8 +609,8 @@ public:
     }
 
     llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
-                                  const std::vector<llvm::Value*>& args,
-                                  ExceptionStyle target_exception_style = CXX, llvm::Value* capi_exc_value = NULL) override {
+                                  const std::vector<llvm::Value*>& args, ExceptionStyle target_exception_style = CXX,
+                                  llvm::Value* capi_exc_value = NULL) override {
 #ifndef NDEBUG
         // Copied the argument-type-checking from CallInst::init, since the patchpoint arguments don't
         // get checked.
@@ -678,21 +679,15 @@ public:
         return rtn;
     }
 
-    Box* getIntConstant(int64_t n) override {
-        return irstate->getSourceInfo()->parent_module->getIntConstant(n);
-    }
+    Box* getIntConstant(int64_t n) override { return irstate->getSourceInfo()->parent_module->getIntConstant(n); }
 
-    Box* getFloatConstant(double d) override {
-        return irstate->getSourceInfo()->parent_module->getFloatConstant(d);
-    }
+    Box* getFloatConstant(double d) override { return irstate->getSourceInfo()->parent_module->getFloatConstant(d); }
 
     void refConsumed(llvm::Value* v, llvm::Instruction* inst) override {
         irstate->getRefcounts()->refConsumed(v, inst);
     }
 
-    void refUsed(llvm::Value* v, llvm::Instruction* inst) override {
-        irstate->getRefcounts()->refUsed(v, inst);
-    }
+    void refUsed(llvm::Value* v, llvm::Instruction* inst) override { irstate->getRefcounts()->refUsed(v, inst); }
 
     llvm::Value* setType(llvm::Value* v, RefType reftype) override {
         assert(llvm::isa<PointerType>(v->getType()));
@@ -772,7 +767,7 @@ private:
     llvm::SmallVector<ExceptionState, 2> incoming_exc_state;
     // These are the values that are outgoing of an invoke block:
     llvm::SmallVector<ExceptionState, 2> outgoing_exc_state;
-    //llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> cxx_exc_dests;
+    // llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> cxx_exc_dests;
     llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> capi_exc_dests;
     llvm::DenseMap<llvm::BasicBlock*, llvm::PHINode*> capi_phis;
 
@@ -793,9 +788,7 @@ public:
           types(types),
           state(RUNNING) {}
 
-    virtual CFGBlock* getCFGBlock() override {
-        return myblock;
-    }
+    virtual CFGBlock* getCFGBlock() override { return myblock; }
 
 private:
     OpInfo getOpInfoForNode(AST* ast, const UnwindInfo& unw_info) {
@@ -1346,8 +1339,7 @@ private:
 
             llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
             emitter.setType(null_value, RefType::BORROWED);
-            llvm::Value* check_val
-                = emitter.getBuilder()->CreateICmpEQ(lookupResult, null_value);
+            llvm::Value* check_val = emitter.getBuilder()->CreateICmpEQ(lookupResult, null_value);
             llvm::BranchInst* non_null_check = emitter.getBuilder()->CreateCondBr(check_val, fail_bb, success_bb);
 
             // Case that it is undefined: call the assert fail function.
@@ -1871,7 +1863,8 @@ private:
         return rtn;
     }
 
-    template <typename GetLLVMValCB> void _setVRegIfUserVisible(InternedString name, GetLLVMValCB get_llvm_val_cb, CompilerVariable* prev) {
+    template <typename GetLLVMValCB>
+    void _setVRegIfUserVisible(InternedString name, GetLLVMValCB get_llvm_val_cb, CompilerVariable* prev) {
         auto cfg = irstate->getSourceInfo()->cfg;
         if (!cfg->hasVregsAssigned())
             irstate->getMD()->calculateNumVRegs();
@@ -2268,9 +2261,7 @@ private:
         emitter.getBuilder()->CreateCondBr(v, iftrue, iffalse);
     }
 
-    void doExpr(AST_Expr* node, const UnwindInfo& unw_info) {
-        CompilerVariable* var = evalExpr(node->value, unw_info);
-    }
+    void doExpr(AST_Expr* node, const UnwindInfo& unw_info) { CompilerVariable* var = evalExpr(node->value, unw_info); }
 
     void doOSRExit(llvm::BasicBlock* normal_target, AST_Jump* osr_key) {
         llvm::BasicBlock* starting_block = curblock;
@@ -2865,8 +2856,7 @@ public:
         }
 
         if (irstate->getSourceInfo()->is_generator)
-            symbol_table[internString(PASSED_GENERATOR_NAME)]
-                = new ConcreteCompilerVariable(GENERATOR, generator);
+            symbol_table[internString(PASSED_GENERATOR_NAME)] = new ConcreteCompilerVariable(GENERATOR, generator);
 
         std::vector<llvm::Value*> python_parameters;
         for (int i = 0; i < arg_types.size(); i++) {
@@ -3058,9 +3048,9 @@ public:
     }
 
     llvm::BasicBlock* getCXXExcDest(const UnwindInfo& unw_info) override {
-        //llvm::BasicBlock*& cxx_exc_dest = cxx_exc_dests[final_dest];
-        //if (cxx_exc_dest)
-            //return cxx_exc_dest;
+        // llvm::BasicBlock*& cxx_exc_dest = cxx_exc_dests[final_dest];
+        // if (cxx_exc_dest)
+        // return cxx_exc_dest;
 
         llvm::BasicBlock* final_dest;
         if (unw_info.hasHandler()) {
@@ -3107,8 +3097,7 @@ public:
         // final_dest==NULL => propagate the exception out of the function.
         if (final_dest) {
             // Catch the exception and forward to final_dest:
-            addOutgoingExceptionState(ExceptionState(cxx_exc_dest,
-                                                     new ConcreteCompilerVariable(UNKNOWN, exc_type),
+            addOutgoingExceptionState(ExceptionState(cxx_exc_dest, new ConcreteCompilerVariable(UNKNOWN, exc_type),
                                                      new ConcreteCompilerVariable(UNKNOWN, exc_value),
                                                      new ConcreteCompilerVariable(UNKNOWN, exc_traceback)));
 
@@ -3121,8 +3110,8 @@ public:
             builder->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
             builder->CreateRet(getNullPtr(g.llvm_value_type_ptr));
         } else {
-            //auto call_inst = emitter.createCall3(UnwindInfo(unw_info.current_stmt, NO_CXX_INTERCEPTION),
-                                                 //g.funcs.rawThrow, exc_type, exc_value, exc_traceback);
+            // auto call_inst = emitter.createCall3(UnwindInfo(unw_info.current_stmt, NO_CXX_INTERCEPTION),
+            // g.funcs.rawThrow, exc_type, exc_value, exc_traceback);
             auto call_inst = emitter.getBuilder()->CreateCall3(g.funcs.rawThrow, exc_type, exc_value, exc_traceback);
             irstate->getRefcounts()->refConsumed(exc_type, call_inst);
             irstate->getRefcounts()->refConsumed(exc_value, call_inst);

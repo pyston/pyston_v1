@@ -121,9 +121,7 @@ public:
         return *this;
     }
 
-    ~BoxIteratorIndex() {
-        Py_CLEAR(obj);
-    }
+    ~BoxIteratorIndex() { Py_CLEAR(obj); }
 
     void next() override {
         if (!end()->isSame(this)) {

@@ -418,7 +418,7 @@ static void functionDtor(Box* b) {
 }
 
 static int func_traverse(BoxedFunction* f, visitproc visit, void* arg) noexcept {
-    //Py_VISIT(f->func_code);
+    // Py_VISIT(f->func_code);
     Py_VISIT(f->globals);
     Py_VISIT(f->modname);
     Py_VISIT(f->defaults);
@@ -426,13 +426,13 @@ static int func_traverse(BoxedFunction* f, visitproc visit, void* arg) noexcept 
     Py_VISIT(f->name);
     Py_VISIT(f->closure);
 
-    //Py_VISIT(f->func_dict);
+    // Py_VISIT(f->func_dict);
     Py_TRAVERSE(f->attrs);
     return 0;
 }
 
 static int builtin_func_traverse(BoxedBuiltinFunctionOrMethod* f, visitproc visit, void* arg) noexcept {
-    //Py_VISIT(f->func_code);
+    // Py_VISIT(f->func_code);
     Py_VISIT(f->globals);
     Py_VISIT(f->modname);
     Py_VISIT(f->defaults);
@@ -888,7 +888,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         if (new_attr->cls != function_cls) {
             try {
                 Box* descr_r = processDescriptorOrNull(new_attr, None, cls);
-                // TODO do we need to guard here on the class of new_attr (or that it's a class that can't change classes?)
+                // TODO do we need to guard here on the class of new_attr (or that it's a class that can't change
+                // classes?)
                 if (descr_r) {
                     new_attr = descr_r;
                     rewrite_args = NULL;
@@ -2146,7 +2147,7 @@ public:
     static Box* next_capi(Box* _self) noexcept;
 
     static void dealloc(Box* b) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
 };
 
 // A dictionary-like wrapper around the attributes array.
@@ -2601,7 +2602,7 @@ public:
         if (self->isDictBacked()) {
             static BoxedString* clear_str = getStaticString("clear");
             auto rtn = callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), clear_str, LookupScope::CLASS_ONLY,
-                                                         NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+                                                             NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
             assert(rtn == None);
             Py_DECREF(rtn);
             return;
@@ -2923,9 +2924,8 @@ static void typeSetAbstractMethods(Box* _type, PyObject* value, void* context) {
         throwCAPIException();
 }
 
-static PyObject* type_abstractmethods(PyTypeObject *type, void *context) noexcept
-{
-    PyObject *mod = NULL;
+static PyObject* type_abstractmethods(PyTypeObject* type, void* context) noexcept {
+    PyObject* mod = NULL;
     /* type itself has an __abstractmethods__ descriptor (this). Don't return
        that. */
     if (type != &PyType_Type)
@@ -3535,13 +3535,13 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
         *PyObject_GET_WEAKREFS_LISTPTR(op) = NULL;
     }
 
-    // I think CPython defers the dict creation (equivalent of our initUserAttrs) to the
-    // first time that an attribute gets set.
-    // Our HCAttrs object already includes this optimization of no-allocation-if-empty,
-    // but it's nice to initialize the hcls here so we don't have to check it on every getattr/setattr.
-    // TODO It does mean that anything not defering to this function will have to call
-    // initUserAttrs themselves, though.
-    //initUserAttrs(op, tp);
+// I think CPython defers the dict creation (equivalent of our initUserAttrs) to the
+// first time that an attribute gets set.
+// Our HCAttrs object already includes this optimization of no-allocation-if-empty,
+// but it's nice to initialize the hcls here so we don't have to check it on every getattr/setattr.
+// TODO It does mean that anything not defering to this function will have to call
+// initUserAttrs themselves, though.
+// initUserAttrs(op, tp);
 
 #ifndef NDEBUG
     if (tp->tp_flags & Py_TPFLAGS_HEAPTYPE) {
@@ -3745,7 +3745,7 @@ void HiddenClass::dump() noexcept {
             printf("Normal hcls:\n");
         printf("Attrwrapper offset: %d\n", attrwrapper_offset);
         for (auto p : attr_offsets) {
-            //printf("%d: %s\n", p.second, p.first->c_str());
+            // printf("%d: %s\n", p.second, p.first->c_str());
             printf("%d: %p\n", p.second, p.first);
         }
     }
@@ -3773,12 +3773,10 @@ done:
     Py_TRASHCAN_SAFE_END(op)
 }
 
-static int
-tupletraverse(PyTupleObject *o, visitproc visit, void *arg)
-{
+static int tupletraverse(PyTupleObject* o, visitproc visit, void* arg) {
     Py_ssize_t i;
 
-    for (i = Py_SIZE(o); --i >= 0; )
+    for (i = Py_SIZE(o); --i >= 0;)
         Py_VISIT(o->ob_item[i]);
     return 0;
 }
@@ -3808,8 +3806,7 @@ int BoxedModule::traverse(Box* _m, visitproc visit, void* arg) noexcept {
     return 0;
 }
 
-template <typename CM>
-void clearContiguousMap(CM& cm) {
+template <typename CM> void clearContiguousMap(CM& cm) {
     CM tmp;
     std::swap(cm, tmp);
 
@@ -3850,7 +3847,7 @@ void BoxedInstanceMethod::dealloc(Box* b) noexcept {
 
     _PyObject_GC_UNTRACK(im);
     if (im->im_weakreflist != NULL)
-        PyObject_ClearWeakRefs((PyObject *)im);
+        PyObject_ClearWeakRefs((PyObject*)im);
     Py_DECREF(im->func);
     Py_XDECREF(im->obj);
     Py_XDECREF(im->im_class);
@@ -3863,7 +3860,7 @@ void BoxedInstanceMethod::dealloc(Box* b) noexcept {
     }
     else {
 #endif
-        PyObject_GC_Del(im);
+    PyObject_GC_Del(im);
 #if 0
     }
 #endif
@@ -3904,7 +3901,7 @@ void BoxedClass::dealloc(Box* b) noexcept {
     if (!IN_SHUTDOWN)
         Py_TYPE(type)->tp_free(type);
 
-    // Copied in the CPython implementation for reference:
+// Copied in the CPython implementation for reference:
 #if 0
     /* Assert this is a heap-allocated type object */
     assert(type->tp_flags & Py_TPFLAGS_HEAPTYPE);
@@ -3935,9 +3932,7 @@ static int type_is_gc(BoxedClass* type) {
     return type->is_pyston_class || (type->tp_flags & Py_TPFLAGS_HEAPTYPE);
 }
 
-static int
-type_traverse(PyTypeObject *type, visitproc visit, void *arg)
-{
+static int type_traverse(PyTypeObject* type, visitproc visit, void* arg) {
     /* Because of type_is_gc(), the collector only calls this
        for heaptypes. */
     // Pyston change: HEAPTYPE is not about whether it is in GC or not
@@ -3959,9 +3954,7 @@ type_traverse(PyTypeObject *type, visitproc visit, void *arg)
     return 0;
 }
 
-static int
-type_clear(PyTypeObject *type)
-{
+static int type_clear(PyTypeObject* type) {
     /* Because of type_is_gc(), the collector only calls this
        for heaptypes. */
     // Pyston change: HEAPTYPE is not about whether it is in GC or not
@@ -4168,7 +4161,8 @@ void setupRuntime() {
     object_cls->tp_new = object_new;
     type_cls->tp_getattro = type_getattro;
 
-    none_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "NoneType", false, NULL, NULL, /* is_gc */ false);
+    none_cls = new (0)
+        BoxedClass(object_cls, 0, 0, sizeof(Box), false, "NoneType", false, NULL, NULL, /* is_gc */ false);
     None = new (none_cls) Box();
     constants.push_back(None);
     assert(None->cls);
@@ -4212,8 +4206,8 @@ void setupRuntime() {
     pyston_getset_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset_descriptor",
                                            false, BoxedGetsetDescriptor::dealloc, NULL, false);
     attrwrapper_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(AttrWrapper), false, "attrwrapper", false, AttrWrapper::dealloc, NULL,
-                   true, AttrWrapper::traverse, AttrWrapper::tp_clear);
+        BoxedClass(object_cls, 0, 0, sizeof(AttrWrapper), false, "attrwrapper", false, AttrWrapper::dealloc, NULL, true,
+                   AttrWrapper::traverse, AttrWrapper::tp_clear);
     dict_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedDict), false, "dict", true, BoxedDict::dealloc, NULL,
                                   true, BoxedDict::traverse, BoxedDict::clear);
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
@@ -4398,9 +4392,10 @@ void setupRuntime() {
 
     object_cls->giveAttr("__repr__",
                          new BoxedFunction(FunctionMetadata::create((void*)objectRepr, UNKNOWN, 1, false, false)));
-    object_cls->giveAttr("__subclasshook__", boxInstanceMethod(object_cls, autoDecref(new BoxedFunction(FunctionMetadata::create(
-                                                                               (void*)objectSubclasshook, UNKNOWN, 2))),
-                                                               object_cls));
+    object_cls->giveAttr("__subclasshook__",
+                         boxInstanceMethod(object_cls, autoDecref(new BoxedFunction(FunctionMetadata::create(
+                                                           (void*)objectSubclasshook, UNKNOWN, 2))),
+                                           object_cls));
     // __setattr__ was already set to a WrapperDescriptor; it'd be nice to set this to a faster BoxedFunction
     // object_cls->setattr("__setattr__", new BoxedFunction(FunctionMetadata::create((void*)objectSetattr, UNKNOWN, 3)),
     // NULL);
@@ -4770,7 +4765,7 @@ extern "C" void Py_Finalize() noexcept {
         g.func_addr_registry.dumpPerfMap();
 
     call_sys_exitfunc();
-    // initialized = 0;
+// initialized = 0;
 
 #ifdef Py_REF_DEBUG
     IN_SHUTDOWN = true;

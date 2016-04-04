@@ -152,9 +152,7 @@ private:
     bool should_jit;
 
 public:
-    ~ASTInterpreter() {
-        Py_XDECREF(this->created_closure);
-    }
+    ~ASTInterpreter() { Py_XDECREF(this->created_closure); }
 
     llvm::DenseMap<InternedString, int>& getSymVRegMap() {
         assert(source_info->cfg);
@@ -683,8 +681,8 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
         // we may have started JITing because the OSR thresholds got triggered in this case we don't want to jit
         // additional blocks ouside of the loop if the function is cold.
         // XXX reenable this
-        //if (getMD()->times_interpreted < REOPT_THRESHOLD_INTERPRETER)
-            //should_jit = false;
+        // if (getMD()->times_interpreted < REOPT_THRESHOLD_INTERPRETER)
+        // should_jit = false;
     }
 
     if (backedge)
@@ -783,7 +781,8 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
         sorted_symbol_table[source_info->getInternedStrings().get(PASSED_GENERATOR_NAME)] = incref(generator);
 
     if (frame_info.passed_closure)
-        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_CLOSURE_NAME)] = incref(frame_info.passed_closure);
+        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_CLOSURE_NAME)]
+            = incref(frame_info.passed_closure);
 
     if (created_closure)
         sorted_symbol_table[source_info->getInternedStrings().get(CREATED_CLOSURE_NAME)] = created_closure;
@@ -897,7 +896,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& name = ast_str->str_data;
         assert(name.size());
-        BORROWED(BoxedString*) name_boxed = source_info->parent_module->getStringConstant(name, true);
+        BORROWED(BoxedString*)name_boxed = source_info->parent_module->getStringConstant(name, true);
 
         if (jit)
             v.var = jit->emitImportFrom(module, name_boxed);

@@ -48,7 +48,7 @@ public:
     static Box* varnames(Box* b, void*);
     static Box* flags(Box* b, void*);
 
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
     static void dealloc(Box* b) noexcept;
 };
 }

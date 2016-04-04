@@ -33,9 +33,7 @@ public:
     int64_t idx;
     Box* next;
 
-    BoxedSeqIter(Box* b, int64_t start) : b(b), idx(start), next(NULL) {
-        Py_INCREF(b);
-    }
+    BoxedSeqIter(Box* b, int64_t start) : b(b), idx(start), next(NULL) { Py_INCREF(b); }
 
     DEFAULT_CLASS(seqiter_cls);
 
@@ -46,7 +44,7 @@ public:
         o->cls->tp_free(o);
     }
 
-    static int traverse(BoxedSeqIter* self, visitproc visit, void *arg) noexcept {
+    static int traverse(BoxedSeqIter* self, visitproc visit, void* arg) noexcept {
         Py_VISIT(self->b);
         Py_VISIT(self->next);
         return 0;
@@ -61,9 +59,7 @@ public:
     Box* iter;
     Box* next;
 
-    BoxedIterWrapper(Box* iter) : iter(iter), next(NULL) {
-        Py_INCREF(iter);
-    }
+    BoxedIterWrapper(Box* iter) : iter(iter), next(NULL) { Py_INCREF(iter); }
 
     DEFAULT_CLASS(iterwrapper_cls);
 
@@ -74,7 +70,7 @@ public:
         o->cls->tp_free(o);
     }
 
-    static int traverse(BoxedIterWrapper* self, visitproc visit, void *arg) noexcept {
+    static int traverse(BoxedIterWrapper* self, visitproc visit, void* arg) noexcept {
         Py_VISIT(self->iter);
         Py_VISIT(self->next);
         return 0;

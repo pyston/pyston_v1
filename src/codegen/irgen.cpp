@@ -873,7 +873,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 llvm_phi->addIncoming(v->getValue(), llvm_exit_blocks[b->predecessors[j]]);
 
                 if (v->getType()->getBoxType() == v->getType()) {
-                     //llvm::outs() << *v->getValue() << " is getting consumed by phi " << *llvm_phi << '\n';
+                    // llvm::outs() << *v->getValue() << " is getting consumed by phi " << *llvm_phi << '\n';
                     assert(llvm::isa<llvm::BranchInst>(terminator));
                     irstate->getRefcounts()->refConsumed(v->getValue(), terminator);
                 }
@@ -1057,7 +1057,7 @@ CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames
 
     // Make sure that the instruction memory keeps the module object alive.
     // TODO: implement this for real
-    //gc::registerPermanentRoot(source->parent_module, /* allow_duplicates= */ true);
+    // gc::registerPermanentRoot(source->parent_module, /* allow_duplicates= */ true);
 
     llvm::FunctionType* ft = llvm::FunctionType::get(cf->getReturnType()->llvmType(), llvm_arg_types, false /*vararg*/);
 

@@ -211,20 +211,19 @@ private:
         RefType reftype = RefType::UNKNOWN;
         bool nullable = false;
 
-        //llvm::SmallVector<llvm::Instruction*, 2> ref_consumers;
+        // llvm::SmallVector<llvm::Instruction*, 2> ref_consumers;
     };
     llvm::DenseMap<llvm::Instruction*, llvm::SmallVector<llvm::Value*, 4>> refs_consumed;
     llvm::DenseMap<llvm::Instruction*, llvm::SmallVector<llvm::Value*, 4>> refs_used;
     llvm::ValueMap<llvm::Value*, RefcountState> vars;
-public:
 
+public:
     llvm::Value* setType(llvm::Value* v, RefType reftype);
     llvm::Value* setNullable(llvm::Value* v, bool nullable = true);
     void refConsumed(llvm::Value* v, llvm::Instruction*);
     void refUsed(llvm::Value* v, llvm::Instruction*);
     static void addRefcounts(IRGenState* state);
 };
-
 }
 
 #endif

@@ -34,7 +34,7 @@ public:
         o->cls->tp_free(o);
     }
 
-    static int traverse(BoxedDictIterator* self, visitproc visit, void *arg) noexcept {
+    static int traverse(BoxedDictIterator* self, visitproc visit, void* arg) noexcept {
         Py_VISIT(self->d);
         return 0;
     }

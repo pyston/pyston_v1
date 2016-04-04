@@ -140,7 +140,7 @@ public:
 
         self->cls->tp_free(self);
     }
-    static int traverse(Box* s, visitproc visit, void *arg) noexcept {
+    static int traverse(Box* s, visitproc visit, void* arg) noexcept {
         BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
         Py_VISIT(self->xrange);
         return 0;

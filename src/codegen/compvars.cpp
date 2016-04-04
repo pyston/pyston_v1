@@ -406,8 +406,7 @@ public:
         // We don't know the type so we have to check at runtime if __iter__ is implemented
         llvm::Value* null_value = getNullPtr(g.llvm_value_type_ptr);
         emitter.setType(null_value, RefType::BORROWED);
-        llvm::Value* cmp
-            = emitter.getBuilder()->CreateICmpNE(converted_iter_call->getValue(), null_value);
+        llvm::Value* cmp = emitter.getBuilder()->CreateICmpNE(converted_iter_call->getValue(), null_value);
 
         llvm::BasicBlock* bb_has_iter = emitter.createBasicBlock("has_iter");
         bb_has_iter->moveAfter(emitter.currentBasicBlock());
@@ -502,7 +501,8 @@ public:
     }
 
     std::vector<CompilerVariable*> unpack(IREmitter& emitter, const OpInfo& info, VAR* var, int num_into) override {
-        llvm::Value* scratch = emitter.getBuilder()->CreateBitCast(emitter.getScratch(sizeof(Box*)), g.llvm_value_type_ptr_ptr);
+        llvm::Value* scratch
+            = emitter.getBuilder()->CreateBitCast(emitter.getScratch(sizeof(Box*)), g.llvm_value_type_ptr_ptr);
         llvm::Value* unpacked = emitter.createCall3(info.unw_info, g.funcs.unpackIntoArray, var->getValue(),
                                                     getConstantInt(num_into, g.i64), scratch);
         assert(unpacked->getType() == g.llvm_value_type_ptr->getPointerTo());

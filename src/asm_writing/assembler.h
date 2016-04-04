@@ -96,12 +96,8 @@ public:
     Assembler(uint8_t* start, int size) : start_addr(start), end_addr(start + size), addr(start_addr), failed(false) {}
 
 #ifndef NDEBUG
-    inline void comment(const llvm::Twine& msg) {
-        logger.log_comment(msg, addr - start_addr);
-    }
-    inline std::string dump() {
-        return logger.finalize_log(start_addr, addr);
-    }
+    inline void comment(const llvm::Twine& msg) { logger.log_comment(msg, addr - start_addr); }
+    inline std::string dump() { return logger.finalize_log(start_addr, addr); }
     // Dumps the assembly but with the start address overridden, so
     // that we can dump the assembly (with comments) after the code has
     // been relocated.
@@ -218,8 +214,7 @@ public:
 // This class helps generating a forward jump with a relative offset.
 // It keeps track of the current assembler offset at construction time and in the destructor patches the
 // generated conditional jump with the correct offset depending on the number of bytes emitted in between.
-template <int MaxJumpSize=128>
-class ForwardJumpBase {
+template <int MaxJumpSize = 128> class ForwardJumpBase {
 private:
     Assembler& assembler;
     ConditionCode condition;

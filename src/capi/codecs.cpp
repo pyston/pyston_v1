@@ -789,7 +789,6 @@ int _PyCodecRegistry_Deinit(void) {
     Py_CLEAR(interp->codec_error_registry);
     return 0;
 }
-
 }
 
 } // namespace pyston

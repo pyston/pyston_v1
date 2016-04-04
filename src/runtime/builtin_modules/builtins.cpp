@@ -1415,7 +1415,7 @@ public:
         self->cls->tp_free(self);
     }
 
-    static int traverse(Box* b, visitproc visit, void *arg) noexcept {
+    static int traverse(Box* b, visitproc visit, void* arg) noexcept {
         assert(b->cls == enumerate_cls);
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(b);
 
@@ -2396,7 +2396,8 @@ void setupBuiltins() {
                                    "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
                                    "the `nil' object; Ellipsis represents `...' in slices.");
 
-    ellipsis_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "ellipsis", false, NULL, NULL, false);
+    ellipsis_cls
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "ellipsis", false, NULL, NULL, false);
     ellipsis_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)ellipsisRepr, STR, 1)));
     Ellipsis = new (ellipsis_cls) Box();
     assert(Ellipsis->cls);
@@ -2474,8 +2475,9 @@ void setupBuiltins() {
     builtins_module->giveAttr("ord", ord_obj);
     trap_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)trap, UNKNOWN, 0), "trap");
     builtins_module->giveAttr("trap", trap_obj);
-    builtins_module->giveAttr("dump", new BoxedBuiltinFunctionOrMethod(
-                                          FunctionMetadata::create((void*)pydump, UNKNOWN, 2), "dump", { autoDecref(boxInt(0)) }));
+    builtins_module->giveAttr("dump",
+                              new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)pydump, UNKNOWN, 2),
+                                                               "dump", { autoDecref(boxInt(0)) }));
     builtins_module->giveAttr("dumpAddr", new BoxedBuiltinFunctionOrMethod(
                                               FunctionMetadata::create((void*)pydumpAddr, UNKNOWN, 1), "dumpAddr"));
 
@@ -2660,8 +2662,7 @@ void setupBuiltins() {
         { "reload", builtin_reload, METH_O, reload_doc },
     };
     for (auto& md : builtin_methods) {
-        builtins_module->giveAttr(md.ml_name,
-                                  new BoxedCApiFunction(&md, NULL, autoDecref(boxString("__builtin__"))));
+        builtins_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, NULL, autoDecref(boxString("__builtin__"))));
     }
 }
 }

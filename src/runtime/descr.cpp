@@ -458,7 +458,7 @@ void BoxedMethodDescriptor::dealloc(Box* _self) noexcept {
     self->cls->tp_free(self);
 }
 
-int BoxedMethodDescriptor::traverse(Box* _self, visitproc visit, void *arg) noexcept {
+int BoxedMethodDescriptor::traverse(Box* _self, visitproc visit, void* arg) noexcept {
     BoxedMethodDescriptor* self = static_cast<BoxedMethodDescriptor*>(_self);
 
     Py_VISIT(self->type);
@@ -473,7 +473,7 @@ void BoxedWrapperDescriptor::dealloc(Box* _self) noexcept {
     self->cls->tp_free(self);
 }
 
-int BoxedWrapperDescriptor::traverse(Box* _self, visitproc visit, void *arg) noexcept {
+int BoxedWrapperDescriptor::traverse(Box* _self, visitproc visit, void* arg) noexcept {
     BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(_self);
 
     Py_VISIT(self->type);
@@ -489,7 +489,7 @@ void BoxedWrapperObject::dealloc(Box* _self) noexcept {
     self->cls->tp_free(self);
 }
 
-int BoxedWrapperObject::traverse(Box* _self, visitproc visit, void *arg) noexcept {
+int BoxedWrapperObject::traverse(Box* _self, visitproc visit, void* arg) noexcept {
     BoxedWrapperObject* self = static_cast<BoxedWrapperObject*>(_self);
 
     Py_VISIT(self->obj);
@@ -508,7 +508,7 @@ void BoxedProperty::dealloc(Box* _self) noexcept {
     self->cls->tp_free(self);
 }
 
-int BoxedProperty::traverse(Box* _self, visitproc visit, void *arg) noexcept {
+int BoxedProperty::traverse(Box* _self, visitproc visit, void* arg) noexcept {
     BoxedProperty* self = static_cast<BoxedProperty*>(_self);
 
     Py_VISIT(self->prop_get);
@@ -526,7 +526,7 @@ void BoxedStaticmethod::dealloc(Box* _self) noexcept {
     self->cls->tp_free(self);
 }
 
-int BoxedStaticmethod::traverse(Box* _self, visitproc visit, void *arg) noexcept {
+int BoxedStaticmethod::traverse(Box* _self, visitproc visit, void* arg) noexcept {
     BoxedStaticmethod* self = static_cast<BoxedStaticmethod*>(_self);
 
     Py_VISIT(self->sm_callable);
@@ -548,7 +548,7 @@ void BoxedClassmethod::dealloc(Box* _self) noexcept {
     self->cls->tp_free(self);
 }
 
-int BoxedClassmethod::traverse(Box* _self, visitproc visit, void *arg) noexcept {
+int BoxedClassmethod::traverse(Box* _self, visitproc visit, void* arg) noexcept {
     BoxedClassmethod* self = static_cast<BoxedClassmethod*>(_self);
 
     Py_VISIT(self->cm_callable);

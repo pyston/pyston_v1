@@ -298,16 +298,16 @@ public:
     size_t nslots() { return this->ob_size; }
 
     // These functions are the preferred way to construct new types:
-    static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, int attrs_offset,
-                                  int weaklist_offset, int instance_size, bool is_user_defined, BoxedString* name,
-                                  BoxedTuple* bases, size_t nslots);
+    static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, int attrs_offset, int weaklist_offset,
+                                  int instance_size, bool is_user_defined, BoxedString* name, BoxedTuple* bases,
+                                  size_t nslots);
 
 private:
     // These functions are not meant for external callers and will mostly just be called
     // by BoxedHeapClass::create(), but setupRuntime() also needs to do some manual class
     // creation due to bootstrapping issues.
-    BoxedHeapClass(BoxedClass* base, int attrs_offset, int weaklist_offset, int instance_size,
-                   bool is_user_defined, BoxedString* name);
+    BoxedHeapClass(BoxedClass* base, int attrs_offset, int weaklist_offset, int instance_size, bool is_user_defined,
+                   BoxedString* name);
 
     friend void setupRuntime();
     friend void setupSys();
@@ -344,19 +344,13 @@ public:
     operator B*() { return b; }
     B* operator->() { return b; }
     explicit operator intptr_t() { return (intptr_t)b; }
-    bool operator==(B* rhs) {
-        return b == rhs;
-    }
-    bool operator!=(B* rhs) {
-        return b != rhs;
-    }
+    bool operator==(B* rhs) { return b == rhs; }
+    bool operator!=(B* rhs) { return b != rhs; }
 
     // Hacky, but C API macros like to use direct C casts.  At least this is "explicit"
     template <typename B2> explicit operator B2*() { return (B2*)(b); }
 
-    B* get() {
-        return b;
-    }
+    B* get() { return b; }
 
     void operator=(B* new_b) {
         B* old_b = b;
@@ -451,7 +445,8 @@ public:
 };
 // Note: this captures the first three args by value (like AUTO_DECREF) but the array by reference.
 // You can also pass a ParamReceiveSpec instead of an int for num_args
-#define AUTO_DECREF_ARGS(num_args, arg1, arg2, arg3, args) AutoDecrefArgs CAT(_autodecref_, __LINE__)((num_args), (arg1), (arg2), (arg3), (args))
+#define AUTO_DECREF_ARGS(num_args, arg1, arg2, arg3, args)                                                             \
+    AutoDecrefArgs CAT(_autodecref_, __LINE__)((num_args), (arg1), (arg2), (arg3), (args))
 
 template <typename B> B* incref(B* b) {
     Py_INCREF(b);
@@ -467,8 +462,8 @@ template <typename B> B* xincref(B* b) {
 extern "C" int PyInt_ClearFreeList() noexcept;
 class BoxedInt : public Box {
 private:
-    static PyIntObject *free_list;
-    static PyIntObject * fill_free_list() noexcept;
+    static PyIntObject* free_list;
+    static PyIntObject* fill_free_list() noexcept;
 
 public:
     int64_t n;
@@ -481,7 +476,7 @@ public:
     // int uses a customized allocator, so we can't use DEFAULT_CLASS_SIMPLE (which inlines the default allocator)
     void* operator new(size_t size) __attribute__((visibility("default"))) {
 #ifdef DISABLE_INT_FREELIST
-        return Box::operator new (size, int_cls);
+        return Box::operator new(size, int_cls);
 #else
         if (unlikely(free_list == NULL)) {
             free_list = fill_free_list();
@@ -653,7 +648,7 @@ public:
     DEFAULT_CLASS_SIMPLE(instancemethod_cls, true);
 
     static void dealloc(Box* self) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
 };
 
 class GCdArray {
@@ -690,7 +685,7 @@ public:
     DEFAULT_CLASS_SIMPLE(list_cls, true);
 
     static void dealloc(Box* self) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
     static int clear(Box* self) noexcept;
 };
 static_assert(sizeof(BoxedList) <= sizeof(PyListObject), "");
@@ -988,7 +983,7 @@ public:
     iterator end() { return iterator(d.end()); }
 
     static void dealloc(Box* b) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
     static int clear(Box* self) noexcept;
 };
 static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
@@ -1062,7 +1057,7 @@ public:
     BORROWED(Box*) getLongConstant(llvm::StringRef s);
 
     static void dealloc(Box* b) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
     static int clear(Box* b) noexcept;
 
 private:
@@ -1172,7 +1167,7 @@ public:
     }
 
     static void dealloc(Box* b) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
 
     DEFAULT_CLASS_SIMPLE(property_cls, true);
 };
@@ -1181,14 +1176,12 @@ class BoxedStaticmethod : public Box {
 public:
     Box* sm_callable;
 
-    BoxedStaticmethod(Box* callable) : sm_callable(callable) {
-        Py_INCREF(sm_callable);
-    }
+    BoxedStaticmethod(Box* callable) : sm_callable(callable) { Py_INCREF(sm_callable); }
 
     DEFAULT_CLASS_SIMPLE(staticmethod_cls, true);
 
     static void dealloc(Box* b) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
     static int clear(Box* self) noexcept;
 };
 
@@ -1196,14 +1189,12 @@ class BoxedClassmethod : public Box {
 public:
     Box* cm_callable;
 
-    BoxedClassmethod(Box* callable) : cm_callable(callable) {
-        Py_INCREF(cm_callable);
-    }
+    BoxedClassmethod(Box* callable) : cm_callable(callable) { Py_INCREF(cm_callable); }
 
     DEFAULT_CLASS_SIMPLE(classmethod_cls, true);
 
     static void dealloc(Box* b) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
     static int clear(Box* self) noexcept;
 };
 
@@ -1214,22 +1205,21 @@ public:
     size_t nelts;
     Box* elts[0];
 
-    BoxedClosure(BoxedClosure* parent) : parent(parent) {
-        Py_XINCREF(parent);
-    }
+    BoxedClosure(BoxedClosure* parent) : parent(parent) { Py_XINCREF(parent); }
 
     // TODO: convert this to a var-object and use DEFAULT_CLASS_VAR_SIMPLE
     void* operator new(size_t size, size_t nelts) __attribute__((visibility("default"))) {
-        BoxedClosure* rtn = static_cast<BoxedClosure*>(_PyObject_GC_Malloc(sizeof(BoxedClosure) + nelts * sizeof(Box*)));
+        BoxedClosure* rtn
+            = static_cast<BoxedClosure*>(_PyObject_GC_Malloc(sizeof(BoxedClosure) + nelts * sizeof(Box*)));
         rtn->nelts = nelts;
-        PyObject_INIT(rtn, closure_cls);                                                                               \
-        _PyObject_GC_TRACK(rtn);                                                                                   \
+        PyObject_INIT(rtn, closure_cls);
+        _PyObject_GC_TRACK(rtn);
         memset((void*)rtn->elts, 0, sizeof(Box*) * nelts);
         return rtn;
     }
 
     static void dealloc(Box* b) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
     static int clear(Box* self) noexcept;
 };
 
@@ -1286,7 +1276,7 @@ public:
     }
 
     static void dealloc(Box* b) noexcept;
-    static int traverse(Box* _self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* _self, visitproc visit, void* arg) noexcept;
 
     DEFAULT_CLASS(wrapperdescr_cls);
 
@@ -1315,7 +1305,7 @@ public:
                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
 
     static void dealloc(Box* self) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
 };
 
 class BoxedMethodDescriptor : public Box {
@@ -1334,7 +1324,7 @@ public:
                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
 
     static void dealloc(Box* self) noexcept;
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
 };
 
 Box* objectSetattr(Box* obj, Box* attr, Box* value);

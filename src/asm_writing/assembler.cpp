@@ -1202,8 +1202,7 @@ ForwardJumpBase<MaxJumpSize>::ForwardJumpBase(Assembler& assembler, ConditionCod
     jmp_end = assembler.curInstPointer();
 }
 
-template <int MaxJumpSize>
-ForwardJumpBase<MaxJumpSize>::~ForwardJumpBase() {
+template <int MaxJumpSize> ForwardJumpBase<MaxJumpSize>::~ForwardJumpBase() {
     uint8_t* new_pos = assembler.curInstPointer();
     int offset = new_pos - jmp_inst;
     RELEASE_ASSERT(offset < MaxJumpSize, "");

@@ -411,7 +411,7 @@ extern "C" void PyString_InternInPlace(PyObject** p) noexcept {
 }
 
 extern "C" void _Py_ReleaseInternedStrings() noexcept {
-    //printf("%ld interned strings\n", interned_strings.size());
+    // printf("%ld interned strings\n", interned_strings.size());
     for (const auto& p : interned_strings) {
         Py_DECREF(p.second);
     }
@@ -2312,8 +2312,8 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     if (!PyString_Check(self))
         raiseExcHelper(TypeError, "descriptor 'encode' requires a 'str' object but received a '%s'", getTypeName(self));
 
-    BORROWED(BoxedString*) encoding_str = (BoxedString*)encoding;
-    BORROWED(BoxedString*) error_str = (BoxedString*)error;
+    BORROWED(BoxedString*)encoding_str = (BoxedString*)encoding;
+    BORROWED(BoxedString*)error_str = (BoxedString*)error;
 
     if (encoding_str && encoding_str->cls == unicode_cls)
         encoding_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(encoding_str, NULL);
@@ -2451,7 +2451,7 @@ public:
         o->cls->tp_free(o);
     }
 
-    static int traverse(BoxedStringIterator* self, visitproc visit, void *arg) noexcept {
+    static int traverse(BoxedStringIterator* self, visitproc visit, void* arg) noexcept {
         Py_VISIT(self->s);
         return 0;
     }

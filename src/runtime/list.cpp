@@ -1315,8 +1315,7 @@ void BoxedList::dealloc(Box* b) noexcept {
 
     Py_ssize_t i;
     PyObject_GC_UnTrack(op);
-    Py_TRASHCAN_SAFE_BEGIN(op)
-    if (op->elts != NULL) {
+    Py_TRASHCAN_SAFE_BEGIN(op) if (op->elts != NULL) {
         /* Do it backwards, for Christian Tismer.
            There's a simple test case where somehow this reduces
            thrashing when a *very* large list is created and
@@ -1356,7 +1355,7 @@ int BoxedList::traverse(Box* _o, visitproc visit, void* arg) noexcept {
     PyListObject* o = (PyListObject*)_o;
     Py_ssize_t i;
 
-    for (i = Py_SIZE(o); --i >= 0; )
+    for (i = Py_SIZE(o); --i >= 0;)
         Py_VISIT(o->ob_item[i]);
     return 0;
 }
@@ -1365,7 +1364,7 @@ int BoxedList::clear(Box* _a) noexcept {
     BoxedList* a = (BoxedList*)_a;
     Py_ssize_t i;
     if (a->elts) {
-        PyObject **item = a->elts->elts;
+        PyObject** item = a->elts->elts;
         /* Because XDECREF can recursively invoke operations on
            this list, we make it empty first. */
         i = Py_SIZE(a);

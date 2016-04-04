@@ -159,7 +159,7 @@ public:
 class JitFragmentWriter : public Rewriter {
 private:
     struct ExitInfo {
-        int num_bytes; // the number of bytes for the overwriteable jump
+        int num_bytes;    // the number of bytes for the overwriteable jump
         void* exit_start; // where that jump starts
 
         ExitInfo() : num_bytes(0), exit_start(NULL) {}
@@ -308,7 +308,8 @@ private:
                      int slot_size, AST* ast_node);
     void _emitRecordType(RewriterVar* type_recorder_var, RewriterVar* obj_cls_var);
     void _emitReturn(RewriterVar* v);
-    void _emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val_constant, CFGBlock* next_block, RewriterVar* false_path);
+    void _emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val_constant, CFGBlock* next_block,
+                       RewriterVar* false_path);
 };
 }
 

@@ -145,7 +145,8 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
       code_block(code_block),
       interp(0),
       ic_info(std::move(ic_info)) {
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: JitFragmentWriter() start");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: JitFragmentWriter() start");
     interp = createNewVar();
     addLocationToVar(interp, assembler::R13);
     interp->setAttr(ASTInterpreterJitInterface::getCurrentBlockOffset(), imm(block));
@@ -153,7 +154,8 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
     vregs_array = createNewVar();
     addLocationToVar(vregs_array, assembler::R14);
     addAction([=]() { vregs_array->bumpUse(); }, vregs_array, ActionType::NORMAL);
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: JitFragmentWriter() end");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: JitFragmentWriter() end");
 }
 
 RewriterVar* JitFragmentWriter::getInterp() {
@@ -245,7 +247,8 @@ RewriterVar* JitFragmentWriter::emitCreateDict(const llvm::ArrayRef<RewriterVar*
     if (keys.empty())
         return call(false, (void*)createDict)->setType(RefType::OWNED);
     else
-        return call(false, (void*)createDictHelper, imm(keys.size()), allocArgs(keys), allocArgs(values))->setType(RefType::OWNED);
+        return call(false, (void*)createDictHelper, imm(keys.size()), allocArgs(keys), allocArgs(values))
+            ->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitCreateList(const llvm::ArrayRef<RewriterVar*> values) {
@@ -300,7 +303,8 @@ RewriterVar* JitFragmentWriter::emitExceptionMatches(RewriterVar* v, RewriterVar
 }
 
 RewriterVar* JitFragmentWriter::emitGetAttr(RewriterVar* obj, BoxedString* s, AST_expr* node) {
-    return emitPPCall((void*)getattr, { obj, imm(s) }, 2, 512, node, getTypeRecorderForNode(node))->setType(RefType::OWNED);
+    return emitPPCall((void*)getattr, { obj, imm(s) }, 2, 512, node, getTypeRecorderForNode(node))
+        ->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s, int vreg) {
@@ -341,13 +345,15 @@ RewriterVar* JitFragmentWriter::emitGetItem(AST_expr* node, RewriterVar* value, 
 }
 
 RewriterVar* JitFragmentWriter::emitGetLocal(InternedString s, int vreg) {
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitGetLocal start");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitGetLocal start");
     assert(vreg >= 0);
     // TODO Can we use BORROWED here? Not sure if there are cases when we can't rely on borrowing the ref
     // from the vregs array.  Safer like this.
     RewriterVar* val_var = vregs_array->getAttr(vreg * 8)->setType(RefType::OWNED);
     addAction([=]() { _emitGetLocal(val_var, s.c_str()); }, { val_var }, ActionType::NORMAL);
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitGetLocal end");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitGetLocal end");
     return val_var;
 }
 
@@ -492,17 +498,21 @@ void JitFragmentWriter::emitExec(RewriterVar* code, RewriterVar* globals, Rewrit
 }
 
 void JitFragmentWriter::emitJump(CFGBlock* b) {
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitJump() start");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitJump() start");
 
     RewriterVar* next = imm(b);
     addAction([=]() { _emitJump(b, next, exit_info); }, { next }, ActionType::NORMAL);
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitJump() end");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitJump() end");
 }
 
 void JitFragmentWriter::emitOSRPoint(AST_Jump* node) {
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitOSRPoint() start");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitOSRPoint() start");
     addAction([=]() { _emitOSRPoint(); }, { getInterp() }, ActionType::NORMAL);
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitOSRPoint() end");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitOSRPoint() end");
 }
 
 void JitFragmentWriter::emitPendingCallsCheck() {
@@ -512,13 +522,15 @@ void JitFragmentWriter::emitPendingCallsCheck() {
 }
 
 void JitFragmentWriter::emitPrint(RewriterVar* dest, RewriterVar* var, bool nl) {
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPrint() start");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitPrint() start");
     if (!dest)
         dest = imm(0ul);
     if (!var)
         var = imm(0ul);
     call(false, (void*)printHelper, dest, var, imm(nl));
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPrint() end");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitPrint() end");
 }
 
 void JitFragmentWriter::emitRaise0() {
@@ -544,10 +556,12 @@ void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedStrin
 }
 
 void JitFragmentWriter::emitSetBlockLocal(InternedString s, STOLEN(RewriterVar*) v) {
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSetBlockLocal() start");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitSetBlockLocal() start");
     RewriterVar* prev = local_syms[s];
     local_syms[s] = v;
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSetBlockLocal() end");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitSetBlockLocal() end");
 }
 
 void JitFragmentWriter::emitSetCurrentInst(AST_stmt* node) {
@@ -572,7 +586,8 @@ void JitFragmentWriter::emitSetItemName(BoxedString* s, RewriterVar* v) {
 }
 
 void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closure, STOLEN(RewriterVar*) v) {
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSetLocal() start");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitSetLocal() start");
     assert(vreg >= 0);
     if (set_closure) {
         call(false, (void*)ASTInterpreterJitInterface::setLocalClosureHelper, getInterp(), imm(vreg),
@@ -595,11 +610,13 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
         // but I suspect is not that big a deal as long as the llvm jit implements this kind of optimization.
         prev->xdecref();
     }
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSetLocal() end");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitSetLocal() end");
 }
 
 void JitFragmentWriter::emitSideExit(STOLEN(RewriterVar*) v, Box* cmp_value, CFGBlock* next_block) {
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSideExit start");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitSideExit start");
     RewriterVar* var = imm(cmp_value);
     RewriterVar* next_block_var = imm(next_block);
 
@@ -610,7 +627,8 @@ void JitFragmentWriter::emitSideExit(STOLEN(RewriterVar*) v, Box* cmp_value, CFG
 
     addAction([=]() { _emitSideExit(v, var, next_block, next_block_var); }, { v, var, next_block_var },
               ActionType::NORMAL);
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitSideExit end");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitSideExit end");
 }
 
 void JitFragmentWriter::emitUncacheExcInfo() {
@@ -703,7 +721,7 @@ int JitFragmentWriter::finishCompilation() {
 
 #ifndef NDEBUG
     if (LOG_BJIT_ASSEMBLY) {
-        auto s = assembler->dump((uint8_t*)block->code/*, (uint8_t*)block->code + assembler->bytesWritten()*/);
+        auto s = assembler->dump((uint8_t*)block->code /*, (uint8_t*)block->code + assembler->bytesWritten()*/);
         printf("%s\n", s.c_str());
     }
 #endif
@@ -764,7 +782,8 @@ uint64_t JitFragmentWriter::asUInt(InternedString s) {
 
 RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots,
                                            int slot_size, AST* ast_node, TypeRecorder* type_recorder) {
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPPCall() start");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitPPCall() start");
     RewriterVar::SmallVector args_vec(args.begin(), args.end());
 #if ENABLE_BASELINEJIT_ICS
     RewriterVar* result = createNewVar();
@@ -788,13 +807,15 @@ RewriterVar* JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<Rewri
         return result;
     }
     emitPendingCallsCheck();
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPPCall() end");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitPPCall() end");
     return result;
 #else
     assert(args_vec.size() < 7);
     RewriterVar* result = call(false, func_addr, args_vec);
     emitPendingCallsCheck();
-    if (LOG_BJIT_ASSEMBLY) comment("BJIT: emitPPCall() end");
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitPPCall() end");
     return result;
 #endif
 }

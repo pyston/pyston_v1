@@ -181,9 +181,7 @@ public:
         Py_RETURN_TRUE;
     }
 
-    static void dealloc(Box* b) noexcept {
-        Py_FatalError("unimplemented");
-    }
+    static void dealloc(Box* b) noexcept { Py_FatalError("unimplemented"); }
 };
 
 
@@ -227,8 +225,8 @@ void setupThread() {
     thread_module->giveAttr("_count", new BoxedBuiltinFunctionOrMethod(
                                           FunctionMetadata::create((void*)threadCount, BOXED_INT, 0), "_count"));
 
-    thread_lock_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedThreadLock), false, "lock",
-                                         true, BoxedThreadLock::dealloc, NULL, false);
+    thread_lock_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedThreadLock), false, "lock", true,
+                                         BoxedThreadLock::dealloc, NULL, false);
     thread_lock_cls->tp_dealloc = BoxedThreadLock::threadLockDestructor;
     thread_lock_cls->instances_are_nonzero = true;
 

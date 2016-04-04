@@ -50,7 +50,7 @@ public:
 
         Py_TYPE(self)->tp_free(self);
     }
-    static int traverse(Box* self, visitproc visit, void *arg) noexcept {
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept {
         BoxedSuper* su = (BoxedSuper*)self;
 
         Py_VISIT(su->obj);
