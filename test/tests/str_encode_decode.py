@@ -1,4 +1,3 @@
-# expected: reffail
 def test(string, encoding):
  s = string.encode(encoding)
  print encoding, s
