@@ -22,6 +22,7 @@
 #include "llvm/Analysis/Passes.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/IR/DIBuilder.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
 #if LLVMREV < 229094
@@ -1111,7 +1112,9 @@ CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames
 
     RefcountTracker::addRefcounts(&irstate);
 
-    // De-opt handling:
+    int num_instructions = std::distance(llvm::inst_begin(f), llvm::inst_end(f));
+    static StatCounter num_llvm_insts("num_llvm_insts");
+    num_llvm_insts.log(num_instructions);
 
     delete types;
 
