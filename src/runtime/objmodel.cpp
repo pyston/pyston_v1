@@ -118,6 +118,18 @@ static inline Box* callattrInternal3(Box* obj, BoxedString* attr, LookupScope sc
     return callattrInternal<S, rewritable>(obj, attr, scope, rewrite_args, argspec, arg1, arg2, arg3, NULL, NULL);
 }
 
+extern "C" void xdecrefAll(int num, ...) {
+    va_list va;
+    va_start(va, num);
+
+    for (int i = 0; i < num; i++) {
+        Box* b = va_arg(va, Box*);
+        Py_XDECREF(b);
+    }
+
+    va_end(va);
+}
+
 extern "C" Box* deopt(AST_expr* expr, Box* value) {
     STAT_TIMER(t0, "us_timer_deopt", 10);
 

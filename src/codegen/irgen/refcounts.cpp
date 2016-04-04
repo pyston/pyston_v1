@@ -365,14 +365,14 @@ void addCXXFixup(llvm::Instruction* inst, const llvm::SmallVector<llvm::Tracking
     std::tie(exc_type, exc_value, exc_traceback) = createLandingpad(fixup_block);
 
     llvm::IRBuilder<true> builder(fixup_block);
+
+    llvm::SmallVector<llvm::Value*, 4> decref_args;
+    decref_args.push_back(getConstantInt(to_decref.size(), g.i32));
+    decref_args.append(to_decref.begin(), to_decref.end());
+    builder.CreateCall(g.funcs.xdecrefAll, decref_args);
+
     auto rethrow = builder.CreateCall3(g.funcs.rawReraise, exc_type, exc_value, exc_traceback);
     builder.CreateUnreachable();
-
-    // fixup_block->dump();
-
-    for (auto&& v : to_decref) {
-        addDecrefs(v, rt->isNullable(v), 1, rethrow);
-    }
 
     // new_invoke->getParent()->getParent()->dump();
 }
