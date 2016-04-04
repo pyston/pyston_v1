@@ -282,8 +282,7 @@ extern "C" void reraiseCapiExcAsCxx() {
     throw e;
 }
 
-// XXX rename this
-extern "C" void rawThrow(Box* type, Box* value, Box* tb) {
+extern "C" void rawReraise(Box* type, Box* value, Box* tb) {
     startReraise();
     throw ExcInfo(type, value, tb);
 }

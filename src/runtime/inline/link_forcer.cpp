@@ -130,7 +130,7 @@ void force() {
     FORCE(raise0_capi);
     FORCE(raise3);
     FORCE(raise3_capi);
-    FORCE(rawThrow);
+    FORCE(rawReraise);
     FORCE(PyErr_Fetch);
     FORCE(PyErr_NormalizeException);
     FORCE(PyErr_Restore);

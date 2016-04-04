@@ -447,7 +447,7 @@ private:
         if (unw_info.exc_dest == NO_CXX_INTERCEPTION) {
             needs_cxx_interception = false;
         } else {
-            bool needs_refcounting_fixup = true;
+            bool needs_refcounting_fixup = false;
             needs_cxx_interception = (target_exception_style == CXX && (needs_refcounting_fixup || unw_info.hasHandler()
                                                                         || irstate->getExceptionStyle() == CAPI));
         }
@@ -486,6 +486,9 @@ private:
             return rtn;
         } else {
             llvm::CallInst* cs = getBuilder()->CreateCall(callee, args);
+
+            if (target_exception_style == CXX)
+                irstate->getRefcounts()->setMayThrow(cs);
 
             if (target_exception_style == CAPI)
                 checkAndPropagateCapiException(unw_info, cs, capi_exc_value);
@@ -1035,7 +1038,8 @@ private:
 
                 auto inst = emitter.createCall(UnwindInfo::cantUnwind(), g.funcs.setFrameExcInfo,
                                                { frame_info, converted_type->getValue(), converted_value->getValue(),
-                                                 converted_traceback->getValue() });
+                                                 converted_traceback->getValue() },
+                                               NOEXC);
                 emitter.refConsumed(converted_type->getValue(), inst);
                 emitter.refConsumed(converted_value->getValue(), inst);
                 emitter.refConsumed(converted_traceback->getValue(), inst);
@@ -3065,31 +3069,8 @@ public:
 
         emitter.getBuilder()->SetInsertPoint(cxx_exc_dest);
 
-        llvm::Function* _personality_func = g.stdlib_module->getFunction("__gxx_personality_v0");
-        assert(_personality_func);
-        llvm::Value* personality_func
-            = g.cur_module->getOrInsertFunction(_personality_func->getName(), _personality_func->getFunctionType());
-        assert(personality_func);
-        llvm::LandingPadInst* landing_pad = emitter.getBuilder()->CreateLandingPad(
-            llvm::StructType::create(std::vector<llvm::Type*>{ g.i8_ptr, g.i64 }), personality_func, 1);
-        landing_pad->addClause(getNullPtr(g.i8_ptr));
-
-        llvm::Value* cxaexc_pointer = emitter.getBuilder()->CreateExtractValue(landing_pad, { 0 });
-
-        llvm::Function* std_module_catch = g.stdlib_module->getFunction("__cxa_begin_catch");
-        auto begin_catch_func
-            = g.cur_module->getOrInsertFunction(std_module_catch->getName(), std_module_catch->getFunctionType());
-        assert(begin_catch_func);
-
-        llvm::Value* excinfo_pointer = emitter.getBuilder()->CreateCall(begin_catch_func, cxaexc_pointer);
-        llvm::Value* excinfo_pointer_casted
-            = emitter.getBuilder()->CreateBitCast(excinfo_pointer, g.llvm_excinfo_type->getPointerTo());
-
-        auto* builder = emitter.getBuilder();
-        llvm::Value* exc_type = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 0));
-        llvm::Value* exc_value = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 1));
-        llvm::Value* exc_traceback
-            = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
+        llvm::Value* exc_type, *exc_value, *exc_traceback;
+        std::tie(exc_type, exc_value, exc_traceback) = createLandingpad(cxx_exc_dest);
         emitter.setType(exc_type, RefType::OWNED);
         emitter.setType(exc_value, RefType::OWNED);
         emitter.setType(exc_traceback, RefType::OWNED);
@@ -3101,23 +3082,24 @@ public:
                                                      new ConcreteCompilerVariable(UNKNOWN, exc_value),
                                                      new ConcreteCompilerVariable(UNKNOWN, exc_traceback)));
 
-            builder->CreateBr(final_dest);
+            emitter.getBuilder()->CreateBr(final_dest);
         } else if (irstate->getExceptionStyle() == CAPI) {
-            auto call_inst = builder->CreateCall3(g.funcs.PyErr_Restore, exc_type, exc_value, exc_traceback);
+            auto call_inst
+                = emitter.getBuilder()->CreateCall3(g.funcs.PyErr_Restore, exc_type, exc_value, exc_traceback);
             irstate->getRefcounts()->refConsumed(exc_type, call_inst);
             irstate->getRefcounts()->refConsumed(exc_value, call_inst);
             irstate->getRefcounts()->refConsumed(exc_traceback, call_inst);
-            builder->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
-            builder->CreateRet(getNullPtr(g.llvm_value_type_ptr));
+            emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
+            emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
         } else {
             // auto call_inst = emitter.createCall3(UnwindInfo(unw_info.current_stmt, NO_CXX_INTERCEPTION),
-            // g.funcs.rawThrow, exc_type, exc_value, exc_traceback);
-            auto call_inst = emitter.getBuilder()->CreateCall3(g.funcs.rawThrow, exc_type, exc_value, exc_traceback);
+            // g.funcs.rawReraise, exc_type, exc_value, exc_traceback);
+            auto call_inst = emitter.getBuilder()->CreateCall3(g.funcs.rawReraise, exc_type, exc_value, exc_traceback);
             irstate->getRefcounts()->refConsumed(exc_type, call_inst);
             irstate->getRefcounts()->refConsumed(exc_value, call_inst);
             irstate->getRefcounts()->refConsumed(exc_traceback, call_inst);
 
-            builder->CreateUnreachable();
+            emitter.getBuilder()->CreateUnreachable();
         }
 
         emitter.setCurrentBasicBlock(orig_block);
@@ -3134,6 +3116,37 @@ public:
         this->incoming_exc_state = std::move(exc_state);
     }
 };
+
+std::tuple<llvm::Value*, llvm::Value*, llvm::Value*> createLandingpad(llvm::BasicBlock* bb) {
+    assert(bb->begin() == bb->end());
+
+    llvm::IRBuilder<true> builder(bb);
+
+    llvm::Function* _personality_func = g.stdlib_module->getFunction("__gxx_personality_v0");
+    assert(_personality_func);
+    llvm::Value* personality_func
+        = g.cur_module->getOrInsertFunction(_personality_func->getName(), _personality_func->getFunctionType());
+    assert(personality_func);
+    llvm::LandingPadInst* landing_pad = builder.CreateLandingPad(
+        llvm::StructType::create(std::vector<llvm::Type*>{ g.i8_ptr, g.i64 }), personality_func, 1);
+    landing_pad->addClause(getNullPtr(g.i8_ptr));
+
+    llvm::Value* cxaexc_pointer = builder.CreateExtractValue(landing_pad, { 0 });
+
+    llvm::Function* std_module_catch = g.stdlib_module->getFunction("__cxa_begin_catch");
+    auto begin_catch_func
+        = g.cur_module->getOrInsertFunction(std_module_catch->getName(), std_module_catch->getFunctionType());
+    assert(begin_catch_func);
+
+    llvm::Value* excinfo_pointer = builder.CreateCall(begin_catch_func, cxaexc_pointer);
+    llvm::Value* excinfo_pointer_casted = builder.CreateBitCast(excinfo_pointer, g.llvm_excinfo_type->getPointerTo());
+
+    llvm::Value* exc_type = builder.CreateLoad(builder.CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 0));
+    llvm::Value* exc_value = builder.CreateLoad(builder.CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 1));
+    llvm::Value* exc_traceback = builder.CreateLoad(builder.CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
+
+    return std::make_tuple(exc_type, exc_value, exc_traceback);
+}
 
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                                CFGBlock* myblock, TypeAnalysis* types) {

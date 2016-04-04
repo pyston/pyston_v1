@@ -172,6 +172,8 @@ public:
     virtual CFGBlock* getCFGBlock() = 0;
 };
 
+std::tuple<llvm::Value*, llvm::Value*, llvm::Value*> createLandingpad(llvm::BasicBlock*);
+
 class IREmitter;
 class AST_Call;
 IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator = NULL);

@@ -15,6 +15,7 @@
 #ifndef PYSTON_CODEGEN_IRGEN_H
 #define PYSTON_CODEGEN_IRGEN_H
 
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ExecutionEngine/ObjectCache.h"
 #include "llvm/IR/CallSite.h"
@@ -216,13 +217,16 @@ private:
     llvm::DenseMap<llvm::Instruction*, llvm::SmallVector<llvm::Value*, 4>> refs_consumed;
     llvm::DenseMap<llvm::Instruction*, llvm::SmallVector<llvm::Value*, 4>> refs_used;
     llvm::ValueMap<llvm::Value*, RefcountState> vars;
+    llvm::DenseSet<llvm::Instruction*> may_throw;
 
 public:
     llvm::Value* setType(llvm::Value* v, RefType reftype);
     llvm::Value* setNullable(llvm::Value* v, bool nullable = true);
     void refConsumed(llvm::Value* v, llvm::Instruction*);
     void refUsed(llvm::Value* v, llvm::Instruction*);
+    void setMayThrow(llvm::Instruction*);
     static void addRefcounts(IRGenState* state);
+    bool isNullable(llvm::Value* v);
 };
 }
 

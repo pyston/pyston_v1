@@ -70,6 +70,11 @@ llvm::Value* RefcountTracker::setNullable(llvm::Value* v, bool nullable) {
     return v;
 }
 
+bool RefcountTracker::isNullable(llvm::Value* v) {
+    assert(vars.count(v));
+    return vars.lookup(v).nullable;
+}
+
 void RefcountTracker::refConsumed(llvm::Value* v, llvm::Instruction* inst) {
     assert(this->vars[v].reftype != RefType::UNKNOWN);
 
@@ -81,6 +86,12 @@ void RefcountTracker::refUsed(llvm::Value* v, llvm::Instruction* inst) {
 
     this->refs_used[inst].push_back(v);
 }
+
+void RefcountTracker::setMayThrow(llvm::Instruction* inst) {
+    assert(!may_throw.count(inst));
+    this->may_throw.insert(inst);
+}
+
 
 void remapPhis(llvm::BasicBlock* in_block, llvm::BasicBlock* from_block, llvm::BasicBlock* new_from_block) {
     for (llvm::Instruction& i : *in_block) {
@@ -227,6 +238,8 @@ void addDecrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
         raise(SIGTRAP);
     }
 
+    // TODO -- assert that v isn't a constant None?  Implies wasted extra increfs/decrefs
+
     if (isa<ConstantPointerNull>(v)) {
         assert(nullable);
         return;
@@ -317,6 +330,51 @@ void addDecrefs(llvm::Value* v, bool nullable, int num_refs, llvm::Instruction* 
     builder.CreateBr(continue_block);
 
     builder.SetInsertPoint(continue_block);
+}
+
+void addCXXFixup(llvm::Instruction* inst, const llvm::SmallVector<llvm::TrackingVH<llvm::Value>, 4>& to_decref,
+                 RefcountTracker* rt) {
+    // inst->getParent()->getParent()->dump();
+    // inst->dump();
+
+    ASSERT(!llvm::isa<llvm::InvokeInst>(inst),
+           "don't need a fixup here!"); // could either not ask for the fixup or maybe just skip it here
+    assert(llvm::isa<llvm::CallInst>(inst));
+
+    llvm::CallInst* call = llvm::cast<llvm::CallInst>(inst);
+
+    llvm::BasicBlock* cur_block = inst->getParent();
+    llvm::BasicBlock* continue_block = cur_block->splitBasicBlock(inst);
+    llvm::BasicBlock* fixup_block
+        = llvm::BasicBlock::Create(g.context, "cxx_fixup", inst->getParent()->getParent(), continue_block);
+
+    assert(llvm::isa<llvm::BranchInst>(cur_block->getTerminator()));
+    cur_block->getTerminator()->eraseFromParent();
+
+    // llvm::SmallVector<llvm::Value*, 4> args(call->arg_begin(), call->arg_end());
+    llvm::SmallVector<llvm::Value*, 4> args(call->arg_operands().begin(), call->arg_operands().end());
+    llvm::InvokeInst* new_invoke
+        = InvokeInst::Create(call->getCalledValue(), continue_block, fixup_block, args, call->getName(), cur_block);
+    new_invoke->setAttributes(call->getAttributes());
+    new_invoke->setDebugLoc(call->getDebugLoc());
+    assert(!call->hasMetadataOtherThanDebugLoc());
+    call->replaceAllUsesWith(new_invoke);
+    call->eraseFromParent();
+
+    llvm::Value* exc_type, *exc_value, *exc_traceback;
+    std::tie(exc_type, exc_value, exc_traceback) = createLandingpad(fixup_block);
+
+    llvm::IRBuilder<true> builder(fixup_block);
+    auto rethrow = builder.CreateCall3(g.funcs.rawReraise, exc_type, exc_value, exc_traceback);
+    builder.CreateUnreachable();
+
+    // fixup_block->dump();
+
+    for (auto&& v : to_decref) {
+        addDecrefs(v, rt->isNullable(v), 1, rethrow);
+    }
+
+    // new_invoke->getParent()->getParent()->dump();
 }
 
 // TODO: this should be cleaned up and moved to src/core/
@@ -641,7 +699,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 #endif
 
     struct RefOp {
-        llvm::Value* operand;
+        llvm::TrackingVH<llvm::Value> operand;
         bool nullable;
         int num_refs;
 
@@ -660,6 +718,12 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
         llvm::SmallVector<RefOp, 4> increfs;
         llvm::SmallVector<RefOp, 4> decrefs;
+
+        struct CXXFixup {
+            llvm::Instruction* inst;
+            llvm::SmallVector<llvm::TrackingVH<llvm::Value>, 4> to_decref;
+        };
+        llvm::SmallVector<CXXFixup, 4> cxx_fixups;
     };
     llvm::DenseMap<llvm::BasicBlock*, RefState> states;
 
@@ -668,12 +732,13 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         orderer.add(&BB);
     }
 
-    std::vector<llvm::Instruction*> tracked_instructions;
+    std::vector<llvm::InvokeInst*> invokes;
     for (auto&& II : llvm::inst_range(f)) {
         llvm::Instruction* inst = &II;
         if (!rt->vars.count(inst))
             continue;
-        tracked_instructions.push_back(inst);
+        if (auto ii = dyn_cast<InvokeInst>(inst))
+            invokes.push_back(ii);
     }
 
     while (llvm::BasicBlock* bb = orderer.pop()) {
@@ -703,6 +768,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         state.ending_refs.clear();
         state.increfs.clear();
         state.decrefs.clear();
+        state.cxx_fixups.clear();
 
         // Compute the incoming refstate based on the refstate of any successor nodes
         llvm::SmallVector<llvm::BasicBlock*, 4> successors;
@@ -782,8 +848,54 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             // - the phi-node-generator is supposed to handle that by putting a refConsumed on the terminator of the
             // previous block
             // - that refConsumed will caus a use as well.
+            auto inst = &I;
+
+            if (!isa<InvokeInst>(inst) && rt->vars.count(&I)) {
+                const auto&& rstate = rt->vars.lookup(inst);
+                int starting_refs = (rstate.reftype == RefType::OWNED ? 1 : 0);
+                if (state.ending_refs[inst] != starting_refs) {
+                    llvm::Instruction* insertion_pt = NULL;
+                    llvm::BasicBlock* insertion_block = NULL, * insertion_from_block = NULL;
+                    insertion_pt = inst->getNextNode();
+                    while (llvm::isa<llvm::PHINode>(insertion_pt)) {
+                        insertion_pt = insertion_pt->getNextNode();
+                    }
+
+                    if (state.ending_refs[inst] < starting_refs) {
+                        assert(rstate.reftype == RefType::OWNED);
+                        state.decrefs.push_back(RefOp({ inst, rstate.nullable, starting_refs - state.ending_refs[inst],
+                                                        insertion_pt, insertion_block, insertion_from_block }));
+                    } else {
+                        state.increfs.push_back(RefOp({ inst, rstate.nullable, state.ending_refs[inst] - starting_refs,
+                                                        insertion_pt, insertion_block, insertion_from_block }));
+                    }
+                }
+                state.ending_refs.erase(inst);
+            }
+
             if (llvm::isa<llvm::PHINode>(&I))
                 continue;
+
+
+            // If we are about to insert a CXX fixup, do the increfs after the call, rather than trying to push
+            // them before the call and having to insert decrefs on the fixup path.
+            if (rt->may_throw.count(&I)) {
+                llvm::SmallVector<llvm::Value*, 4> to_erase;
+                for (auto&& p : state.ending_refs) {
+                    int needed_refs = (rt->vars.lookup(p.first).reftype == RefType::OWNED ? 1 : 0);
+                    if (p.second > needed_refs) {
+                        state.increfs.push_back(RefOp({ p.first, rt->vars.lookup(p.first).nullable,
+                                                        p.second - needed_refs, I.getNextNode(), NULL, NULL }));
+                    }
+
+                    state.ending_refs[p.first] = needed_refs;
+                    if (needed_refs == 0)
+                        to_erase.push_back(p.first);
+                }
+
+                for (auto v : to_erase)
+                    state.ending_refs.erase(v);
+            }
 
             llvm::DenseMap<llvm::Value*, int> num_consumed_by_inst;
             OrderedMap<llvm::Value*, int> num_times_as_op;
@@ -807,6 +919,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 num_times_as_op[op]++;
             }
 
+            // First, calculate anything we need to keep alive through the end of the function call:
             for (auto&& p : num_times_as_op) {
                 auto& op = p.first;
 
@@ -816,7 +929,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     num_consumed = it->second;
 
                 if (num_times_as_op[op] > num_consumed) {
-                    if (rt->vars[op].reftype == RefType::OWNED) {
+                    if (rt->vars.lookup(op).reftype == RefType::OWNED) {
                         if (state.ending_refs[op] == 0) {
                             // llvm::outs() << "Last use of " << *op << " is at " << I << "; adding a decref after\n";
 
@@ -839,6 +952,34 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                         }
                     }
                 }
+            }
+
+            if (rt->may_throw.count(&I)) {
+                // TODO: pump out any increfs rather than pushing them before this.
+
+                state.cxx_fixups.emplace_back();
+                auto&& fixup = state.cxx_fixups.back();
+                fixup.inst = &I;
+                for (auto&& p : state.ending_refs) {
+                    for (int i = 0; i < p.second; i++) {
+                        assert(rt->vars.count(p.first));
+                        fixup.to_decref.push_back(p.first);
+                    }
+                }
+
+                if (fixup.to_decref.empty())
+                    state.cxx_fixups.pop_back();
+            }
+
+            // Lastly, take care of any stolen refs.  This happens regardless of whether an exception gets thrown,
+            // so it goes after that handling (since we are processing in reverse).
+            for (auto&& p : num_times_as_op) {
+                auto& op = p.first;
+
+                auto&& it = num_consumed_by_inst.find(op);
+                int num_consumed = 0;
+                if (it != num_consumed_by_inst.end())
+                    num_consumed = it->second;
 
                 if (num_consumed)
                     state.ending_refs[op] += num_consumed;
@@ -855,43 +996,32 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         }
 
 
-        // size_t hash = 0;
-        // Handle variables that were defined in this BB:
-        for (auto&& inst : tracked_instructions) {
-            const auto&& rstate = rt->vars.lookup(inst);
+        // Invokes are special.  Handle them here by treating them as if they happened in their normal-dest block.
+        for (InvokeInst* ii : invokes) {
+            const auto&& rstate = rt->vars.lookup(ii);
 
-            // hash = hash * 31 + std::hash<llvm::StringRef>()(inst->getName());
-
-            // Invokes are special.  Handle them here by treating them as if they happened in their normal-dest block.
-            llvm::InvokeInst* ii = llvm::dyn_cast<llvm::InvokeInst>(inst);
-            if ((!ii && inst->getParent() == &BB) || (ii && ii->getNormalDest() == &BB)) {
+            if (ii->getNormalDest() == &BB) {
+                // TODO: duplicated with the non-invoke code
                 int starting_refs = (rstate.reftype == RefType::OWNED ? 1 : 0);
-                if (state.ending_refs[inst] != starting_refs) {
+                if (state.ending_refs[ii] != starting_refs) {
                     llvm::Instruction* insertion_pt = NULL;
                     llvm::BasicBlock* insertion_block = NULL, * insertion_from_block = NULL;
-                    if (ii) {
-                        insertion_block = bb;
-                        insertion_from_block = inst->getParent();
-                    } else {
-                        insertion_pt = inst->getNextNode();
-                        while (llvm::isa<llvm::PHINode>(insertion_pt)) {
-                            insertion_pt = insertion_pt->getNextNode();
-                        }
-                    }
 
-                    if (state.ending_refs[inst] < starting_refs) {
+                    insertion_block = bb;
+                    insertion_from_block = ii->getParent();
+
+                    if (state.ending_refs[ii] < starting_refs) {
                         assert(rstate.reftype == RefType::OWNED);
-                        state.decrefs.push_back(RefOp({ inst, rstate.nullable, starting_refs - state.ending_refs[inst],
+                        state.decrefs.push_back(RefOp({ ii, rstate.nullable, starting_refs - state.ending_refs[ii],
                                                         insertion_pt, insertion_block, insertion_from_block }));
                     } else {
-                        state.increfs.push_back(RefOp({ inst, rstate.nullable, state.ending_refs[inst] - starting_refs,
+                        state.increfs.push_back(RefOp({ ii, rstate.nullable, state.ending_refs[ii] - starting_refs,
                                                         insertion_pt, insertion_block, insertion_from_block }));
                     }
                 }
-                state.ending_refs.erase(inst);
+                state.ending_refs.erase(ii);
             }
         }
-        // errs() << "DETERMINISM: rt.vars name hash: " << hash << '\n';
 
         // If this is the entry block, finish dealing with the ref state rather than handing off to a predecessor
         if (&BB == &BB.getParent()->front()) {
@@ -964,24 +1094,23 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
     for (auto bb : basic_blocks) {
         auto&& state = states[bb];
         for (auto& op : state.increfs) {
+            assert(rt->vars.count(op.operand));
             auto insertion_pt = op.insertion_inst;
             if (!insertion_pt)
                 insertion_pt = findInsertionPoint(op.insertion_bb, op.insertion_from_bb, insertion_pts);
             addIncrefs(op.operand, op.nullable, op.num_refs, insertion_pt);
         }
         for (auto& op : state.decrefs) {
+            assert(rt->vars.count(op.operand));
             auto insertion_pt = op.insertion_inst;
             if (!insertion_pt)
                 insertion_pt = findInsertionPoint(op.insertion_bb, op.insertion_from_bb, insertion_pts);
             addDecrefs(op.operand, op.nullable, op.num_refs, insertion_pt);
         }
-    }
 
-    if (VERBOSITY() >= 2) {
-        fprintf(stderr, "After refcounts:\n");
-        fprintf(stderr, "\033[35m");
-        dumpPrettyIR(f);
-        fprintf(stderr, "\033[0m");
+        for (auto&& fixup : state.cxx_fixups) {
+            addCXXFixup(fixup.inst, fixup.to_decref, rt);
+        }
     }
 
     long us = _t.end();
