@@ -1,4 +1,3 @@
-# expected: reffail
 d = {2:2}
 d[1] = 1
 print d
