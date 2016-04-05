@@ -1,4 +1,3 @@
-# expected: reffail
 class C(object):
     def __init__(self):
         self.t = set([self])

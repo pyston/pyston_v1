@@ -827,6 +827,10 @@ static int subtype_traverse(PyObject* self, visitproc visit, void* arg) noexcept
             Py_VISIT(*dictptr);
     }
 
+    if (type->attrs_offset != base->attrs_offset) {
+        Py_TRAVERSE(*self->getHCAttrsPtr());
+    }
+
     if (type->tp_flags & Py_TPFLAGS_HEAPTYPE)
         /* For a heaptype, the instances count as references
            to the type.          Traverse the type so the collector
@@ -859,6 +863,10 @@ static int subtype_clear(PyObject* self) noexcept {
         PyObject** dictptr = _PyObject_GetDictPtr(self);
         if (dictptr && *dictptr)
             Py_CLEAR(*dictptr);
+    }
+
+    if (type->attrs_offset != base->attrs_offset) {
+        self->getHCAttrsPtr()->clear();
     }
 
     if (baseclear)

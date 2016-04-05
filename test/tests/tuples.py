@@ -1,4 +1,3 @@
-# expected: reffail
 # Some parsing tests:
 print ((1, 2),)
 print (1, 2, 3)
