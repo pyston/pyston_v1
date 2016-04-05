@@ -576,11 +576,10 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
     return new ConcreteCompilerVariable(UNKNOWN, rtn_val);
 }
 
-static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, llvm::Value* func,
-                                       ExceptionStyle target_exception_style, void* func_addr,
-                                       const std::vector<llvm::Value*>& other_args, ArgPassSpec argspec,
-                                       const std::vector<CompilerVariable*>& args,
-                                       const std::vector<BoxedString*>* keyword_names, ConcreteCompilerType* rtn_type) {
+static ConcreteCompilerVariable*
+_call(IREmitter& emitter, const OpInfo& info, llvm::Value* func, ExceptionStyle target_exception_style, void* func_addr,
+      const std::vector<llvm::Value*>& other_args, ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+      const std::vector<BoxedString*>* keyword_names, ConcreteCompilerType* rtn_type, bool nullable_return = false) {
     bool pass_keyword_names = (keyword_names != nullptr);
     assert(pass_keyword_names == (argspec.num_keywords > 0));
 
@@ -683,7 +682,7 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
 
     if (rtn_type->getBoxType() == rtn_type) {
         emitter.setType(rtn, RefType::OWNED);
-        if (target_exception_style == CAPI)
+        if (nullable_return || target_exception_style == CAPI)
             emitter.setNullable(rtn, true);
     }
     assert(rtn->getType() == rtn_type->llvmType());
@@ -759,7 +758,7 @@ CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, 
     other_args.push_back(emitter.setType(embedRelocatablePtr(attr, g.llvm_boxedstring_type_ptr), RefType::BORROWED));
     other_args.push_back(getConstantInt(flags.asInt(), g.i64));
     return _call(emitter, info, func, exception_style, func_ptr, other_args, flags.argspec, args, keyword_names,
-                 UNKNOWN);
+                 UNKNOWN, /* nullable_return = */ flags.null_on_nonexistent);
 }
 
 ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {

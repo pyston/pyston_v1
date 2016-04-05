@@ -1,4 +1,3 @@
-# expected: reffail
 # Regression test: make sure we GC special iterator objects correctly
 
 import gc

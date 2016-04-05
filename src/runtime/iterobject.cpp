@@ -72,7 +72,7 @@ Box* seqiterHasnext(Box* s) {
 }
 
 llvm_compat_bool seqiterHasnextUnboxed(Box* s) {
-    return unboxBool(seqiterHasnext(s));
+    return unboxBool(autoDecref(seqiterHasnext(s)));
 }
 
 Box* seqreviterHasnext_capi(Box* s) noexcept {
