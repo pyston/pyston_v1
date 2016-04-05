@@ -26,6 +26,7 @@
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
+#include "runtime/types.h"
 
 namespace pyston {
 
@@ -135,6 +136,70 @@ static LiveOutSet extractLiveOuts(StackMap::Record* r, llvm::CallingConv::ID cc)
     return live_outs;
 }
 
+#ifdef Py_TRACE_REFS
+#error "trace_refs not supported yet"
+#else
+#ifndef Py_REF_DEBUG
+
+static char decref_code[] =
+    "\x48\xff\x0f"      // decq (%rdi)
+    "\x75\x07"          // jne +7
+    "\x48\x8b\x47\x08"  // mov 0x8(%rdi),%rax
+    "\xff\x50\x30"      // callq *0x30(%rax)
+    ;
+
+static char xdecref_code[] =
+    "\x48\x85\xff"      // test %rdi,%rdi
+    "\x74\x0c"          // je +12
+    "\x48\xff\x0f"      // decq (%rdi)
+    "\x75\x07"          // jne +7
+    "\x48\x8b\x47\x08"  // mov 0x8(%rdi),%rax
+    "\xff\x50\x30"      // callq *0x30(%rax)
+    ;
+
+#else // #ifdef Py_REF_DEBUG:
+static void _decref(Box* b) {
+    Py_DECREF(b);
+}
+static char decref_code[] =
+    "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00"  // movabs $0x00, %rax
+    "\xff\xd0"          // callq *%rax
+    ;
+
+static void _xdecref(Box* b) {
+    Py_XDECREF(b);
+}
+static char xdecref_code[] =
+    "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00"  // movabs $0x00, %rax
+    "\xff\xd0"          // callq *%rax
+    ;
+
+namespace {
+class _Initializer {
+public:
+    _Initializer() {
+        void* p = (void*)&_decref;
+        memcpy(decref_code+2, &p, sizeof(p));
+
+        p = (void*)&_xdecref;
+        memcpy(xdecref_code+2, &p, sizeof(p));
+    }
+} _i;
+}
+#endif
+#endif
+
+const int DECREF_PP_SIZE = sizeof(decref_code) - 1; // -1 for the NUL byte
+const int XDECREF_PP_SIZE = sizeof(xdecref_code) - 1; // -1 for the NUL byte
+
+void emitDecref(void* addr) {
+    memcpy(addr, decref_code, DECREF_PP_SIZE);
+}
+
+void emitXDecref(void* addr) {
+    memcpy(addr, xdecref_code, XDECREF_PP_SIZE);
+}
+
 void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
     int nrecords = stackmap ? stackmap->records.size() : 0;
 
@@ -150,6 +215,15 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         const StackMap::StackSizeRecord& stack_size_record = stackmap->stack_size_records[0];
         int stack_size = stack_size_record.stack_size;
 
+        if (r->id == DECREF_PP_ID) {
+            emitDecref((uint8_t*)cf->code + r->offset);
+            continue;
+        }
+
+        if (r->id == XDECREF_PP_ID) {
+            emitXDecref((uint8_t*)cf->code + r->offset);
+            continue;
+        }
 
         RELEASE_ASSERT(new_patchpoints.size() > r->id, "");
         PatchpointInfo* pp = new_patchpoints[r->id].first;
@@ -282,6 +356,9 @@ PatchpointInfo* PatchpointInfo::create(CompiledFunction* parent_cf, const ICSetu
     auto* r = new PatchpointInfo(parent_cf, icinfo, num_ic_stackmap_args);
     r->id = new_patchpoints.size();
     new_patchpoints.push_back(std::make_pair(r, func_addr));
+
+    assert(r->id != DECREF_PP_ID);
+    assert(r->id != XDECREF_PP_ID);
     return r;
 }
 

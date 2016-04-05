@@ -215,6 +215,10 @@ template <typename I> void remapPatchpoint(I* ii) {
             pp_id = l_pp_id->getSExtValue();
         } else if (i == 2) {
             assert(pp_id != -1);
+
+            if (pp_id == DECREF_PP_ID || pp_id == XDECREF_PP_ID)
+                continue;
+
             void* addr = PatchpointInfo::getSlowpathAddr(pp_id);
 
             bool lookup_success = true;
