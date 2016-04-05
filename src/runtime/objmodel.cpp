@@ -1241,11 +1241,12 @@ void HCAttrs::clear() noexcept {
 
     if (unlikely(hcls->type == HiddenClass::DICT_BACKED)) {
         Box* d = this->attr_list->attrs[0];
-        Py_DECREF(d);
 
         // Skips the attrlist freelist
         PyObject_FREE(this->attr_list);
         this->attr_list = NULL;
+
+        Py_DECREF(d);
 
         return;
     }
@@ -1261,6 +1262,37 @@ void HCAttrs::clear() noexcept {
         decrefArray(old_attr_list->attrs, old_attr_list_size);
 
         freeAttrs(old_attr_list, old_attr_list_size);
+    }
+}
+
+void HCAttrs::moduleClear() noexcept {
+    auto hcls = this->hcls;
+    if (!hcls)
+        return;
+
+    RELEASE_ASSERT(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON, "");
+
+    auto attr_list = this->attr_list;
+    auto attr_list_size = hcls->attributeArraySize();
+
+    for (auto&& p : hcls->getStrAttrOffsets()) {
+        const char* s = p.first->c_str();
+        if (s[0] == '_' && s[1] != '_') {
+            int idx = p.second;
+            Box* b = attr_list->attrs[idx];
+            attr_list->attrs[idx] = incref(None);
+            Py_DECREF(b);
+        }
+    }
+
+    for (auto&& p : hcls->getStrAttrOffsets()) {
+        const char* s = p.first->c_str();
+        if (s[0] != '_' || strcmp(s, "__builtins__") != 0) {
+            int idx = p.second;
+            Box* b = attr_list->attrs[idx];
+            attr_list->attrs[idx] = incref(None);
+            Py_DECREF(b);
+        }
     }
 }
 

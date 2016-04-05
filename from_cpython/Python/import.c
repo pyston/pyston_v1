@@ -441,15 +441,16 @@ static char* sys_files[] = {
 
 /* Un-initialize things, as good as we can */
 // Pyston change: we don't support calling cleanup currently
-#if 0
 void
 PyImport_Cleanup(void)
 {
     Py_ssize_t pos, ndone;
     char *name;
     PyObject *key, *value, *dict;
-    PyInterpreterState *interp = PyThreadState_GET()->interp;
-    PyObject *modules = interp->modules;
+    // Pyston change:
+    //PyInterpreterState *interp = PyThreadState_GET()->interp;
+    //PyObject *modules = interp->modules;
+    PyObject *modules = PySys_GetModulesDict();
 
     if (modules == NULL)
         return; /* Already done */
@@ -568,12 +569,14 @@ PyImport_Cleanup(void)
 
     /* Finally, clear and delete the modules directory */
     PyDict_Clear(modules);
-    interp->modules = NULL;
-    Py_DECREF(modules);
-    Py_CLEAR(interp->modules_reloading);
+    // Pyston change:
+    //interp->modules = NULL;
+    //Py_DECREF(modules);
+    //Py_CLEAR(interp->modules_reloading);
 }
 
 
+#if 0
 /* Helper for pythonrun.c -- return magic number */
 
 long

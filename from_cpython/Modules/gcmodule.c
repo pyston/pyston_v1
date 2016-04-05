@@ -777,6 +777,15 @@ debug_cycle(char *msg, PyObject *op)
     }
 }
 
+PyObject* _PyGC_GetGarbage() {
+    if (garbage == NULL) {
+        garbage = PyList_New(0);
+        if (garbage == NULL)
+            Py_FatalError("gc couldn't create gc.garbage list");
+    }
+    return garbage;
+}
+
 /* Handle uncollectable garbage (cycles with finalizers, and stuff reachable
  * only from such cycles).
  * If DEBUG_SAVEALL, all objects in finalizers are appended to the module
@@ -791,12 +800,9 @@ handle_finalizers(PyGC_Head *finalizers, PyGC_Head *old)
 {
     PyGC_Head *gc = finalizers->gc.gc_next;
 
-    if (garbage == NULL) {
-        garbage = PyList_New(0);
-        if (garbage == NULL)
-            Py_FatalError("gc couldn't create gc.garbage list");
-        PyGC_RegisterStaticConstant(garbage);
-    }
+    if (garbage == NULL)
+        _PyGC_GetGarbage();
+
     for (; gc != finalizers; gc = gc->gc.gc_next) {
         PyObject *op = FROM_GC(gc);
 

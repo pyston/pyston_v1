@@ -1117,24 +1117,61 @@ template Box* slotTpGetattrHookInternal<CXX, NOT_REWRITABLE>(Box* self, BoxedStr
     }
 }
 
-static PyObject* slot_tp_del(PyObject* self) noexcept {
-    static BoxedString* del_str = getStaticString("__del__");
-    try {
-        // TODO: runtime ICs?
-        Box* del_attr = typeLookup(self->cls, del_str);
-        assert(del_attr);
+static void slot_tp_del(PyObject* self) noexcept {
+    static PyObject* del_str = NULL;
+    PyObject* del, *res;
+    PyObject* error_type, *error_value, *error_traceback;
 
-        CallattrFlags flags{.cls_only = false,
-                            .null_on_nonexistent = true,
-                            .argspec = ArgPassSpec(0, 0, false, false) };
-        return callattr(self, del_str, flags, NULL, NULL, NULL, NULL, NULL);
-    } catch (ExcInfo e) {
-        // Python does not support exceptions thrown inside finalizers. Instead, it just
-        // prints a warning that an exception was throw to stderr but ignores it.
-        setCAPIException(e);
-        PyErr_WriteUnraisable(self);
-        return NULL;
+    /* Temporarily resurrect the object. */
+    assert(self->ob_refcnt == 0);
+    self->ob_refcnt = 1;
+
+    /* Save the current exception, if any. */
+    PyErr_Fetch(&error_type, &error_value, &error_traceback);
+
+    /* Execute __del__ method, if any. */
+    del = lookup_maybe(self, "__del__", &del_str);
+    if (del != NULL) {
+        res = PyEval_CallObject(del, NULL);
+        if (res == NULL)
+            PyErr_WriteUnraisable(del);
+        else
+            Py_DECREF(res);
+        Py_DECREF(del);
     }
+
+    /* Restore the saved exception. */
+    PyErr_Restore(error_type, error_value, error_traceback);
+
+    /* Undo the temporary resurrection; can't use DECREF here, it would
+     * cause a recursive call.
+     */
+    assert(self->ob_refcnt > 0);
+    if (--self->ob_refcnt == 0)
+        return; /* this is the normal path out */
+
+    /* __del__ resurrected it!  Make it look like the original Py_DECREF
+     * never happened.
+     */
+    {
+        Py_ssize_t refcnt = self->ob_refcnt;
+        _Py_NewReference(self);
+        self->ob_refcnt = refcnt;
+    }
+    assert(!PyType_IS_GC(Py_TYPE(self)) || _Py_AS_GC(self)->gc.gc_refs != _PyGC_REFS_UNTRACKED);
+    /* If Py_REF_DEBUG, _Py_NewReference bumped _Py_RefTotal, so
+     * we need to undo that. */
+    _Py_DEC_REFTOTAL;
+/* If Py_TRACE_REFS, _Py_NewReference re-added self to the object
+ * chain, so no more to do there.
+ * If COUNT_ALLOCS, the original decref bumped tp_frees, and
+ * _Py_NewReference bumped tp_allocs:  both of those need to be
+ * undone.
+ */
+#ifdef COUNT_ALLOCS
+    --Py_TYPE(self)->tp_frees;
+    --Py_TYPE(self)->tp_allocs;
+#endif
 }
 
 /* Pyston change: static */ int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {

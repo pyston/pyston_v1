@@ -136,6 +136,9 @@ PyAPI_FUNC(void) PyType_SetDict(PyTypeObject*, PyObject*) PYSTON_NOEXCEPT;
 // PyType_Ready calls this automatically.
 PyAPI_FUNC(PyObject*) PyGC_RegisterStaticConstant(PyObject*) PYSTON_NOEXCEPT;
 
+// Gets gc.garbage
+PyAPI_FUNC(PyObject*) _PyGC_GetGarbage() PYSTON_NOEXCEPT;
+
 // Pyston addition:
 PyAPI_FUNC(void) PyGC_Enable() PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyGC_Disable() PYSTON_NOEXCEPT;

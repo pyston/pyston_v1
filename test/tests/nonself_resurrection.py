@@ -1,4 +1,3 @@
-# expected: reffail
 # Objects are allowed to resurrect other objects too, I guess
 from testing_helpers import test_gc
 

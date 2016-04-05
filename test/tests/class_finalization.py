@@ -1,4 +1,3 @@
-# expected: reffail
 from testing_helpers import test_gc
 
 unordered_finalize = {}

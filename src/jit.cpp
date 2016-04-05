@@ -189,7 +189,8 @@ int handleArg(char code) {
     else if (code == 'q')
         GLOBAL_VERBOSITY = 0;
     else if (code == 'v') {
-        Py_VerboseFlag++;
+        if (GLOBAL_VERBOSITY)
+            Py_VerboseFlag++;
         GLOBAL_VERBOSITY++;
     } else if (code == 'd')
         SHOW_DISASM = true;

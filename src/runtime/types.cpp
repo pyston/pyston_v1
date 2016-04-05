@@ -2815,6 +2815,12 @@ BORROWED(Box*) unwrapAttrWrapper(Box* b) {
     return static_cast<AttrWrapper*>(b)->getUnderlying();
 }
 
+void attrwrapperSet(Box* b, Box* k, Box* v) {
+    assert(b->cls == attrwrapper_cls);
+
+    autoDecref(AttrWrapper::setitem(b, k, v));
+}
+
 
 void Box::setDictBacked(STOLEN(Box*) val) {
     // this checks for: v.__dict__ = v.__dict__
@@ -3815,9 +3821,11 @@ template <typename CM> void clearContiguousMap(CM& cm) {
     }
 }
 
-int BoxedModule::clear(Box* b) noexcept {
+extern "C" void _PyModule_Clear(PyObject* b) noexcept {
     BoxedModule* self = static_cast<BoxedModule*>(b);
-    self->clearAttrs();
+
+    HCAttrs* attrs = self->getHCAttrsPtr();
+    attrs->moduleClear();
 
     clearContiguousMap(self->str_constants);
     clearContiguousMap(self->unicode_constants);
@@ -3825,7 +3833,13 @@ int BoxedModule::clear(Box* b) noexcept {
     clearContiguousMap(self->float_constants);
     clearContiguousMap(self->imaginary_constants);
     clearContiguousMap(self->long_constants);
+
     assert(!self->keep_alive.size());
+}
+
+int BoxedModule::clear(Box* b) noexcept {
+    _PyModule_Clear(b);
+    b->clearAttrs();
 
     return 0;
 }
@@ -4765,7 +4779,9 @@ extern "C" void Py_Finalize() noexcept {
         g.func_addr_registry.dumpPerfMap();
 
     call_sys_exitfunc();
-// initialized = 0;
+    // initialized = 0;
+
+    PyImport_Cleanup();
 
 #ifdef Py_REF_DEBUG
     IN_SHUTDOWN = true;
@@ -4810,6 +4826,16 @@ extern "C" void Py_Finalize() noexcept {
     while (PyGC_Collect())
         ;
     assert(!constants.size());
+
+    BoxedList* garbage = static_cast<BoxedList*>(_PyGC_GetGarbage());
+    int num_garbage_objects = garbage->size;
+
+    // Free the garbage list, but let all the elements in it stay alive:
+    for (int i = 0; i < num_garbage_objects; i++) {
+        Py_INCREF(garbage->elts->elts[i]);
+    }
+    Py_DECREF(garbage);
+
 #endif
 
 // PyGC_Collect());
@@ -4868,15 +4894,20 @@ extern "C" void Py_Finalize() noexcept {
 
     teardownCodegen();
 
+#ifdef Py_REF_DEBUG
     if (VERBOSITY())
         PRINT_TOTAL_REFS();
-#ifdef Py_REF_DEBUG
+
+    if (num_garbage_objects == 0) {
 #ifdef Py_TRACE_REFS
-    if (_Py_RefTotal != 0)
-        _Py_PrintReferenceAddressesCapped(stderr, 10);
+        if (_Py_RefTotal != 0)
+            _Py_PrintReferenceAddressesCapped(stderr, 10);
 #endif
 
-    RELEASE_ASSERT(_Py_RefTotal == 0, "%ld refs remaining!", _Py_RefTotal);
+        RELEASE_ASSERT(_Py_RefTotal == 0, "%ld refs remaining!", _Py_RefTotal);
+    } else if (VERBOSITY()) {
+        fprintf(stderr, "[%d garbage objects]\n", num_garbage_objects);
+    }
 #endif
 }
 }

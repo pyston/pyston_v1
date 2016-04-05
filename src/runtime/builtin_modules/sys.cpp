@@ -675,7 +675,7 @@ void setupSys() {
 
     // sys_module is what holds on to all of the other modules:
     Py_INCREF(sys_module);
-    constants.push_back(sys_module);
+    late_constants.push_back(sys_module);
 
     sys_module->giveAttrBorrowed("modules", sys_modules_dict);
 

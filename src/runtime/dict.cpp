@@ -310,18 +310,10 @@ extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) noe
         return 0;
     }
 
-    ASSERT(PyDict_Check(mp) || mp->cls == attrwrapper_cls, "%s", getTypeName(mp));
-
-    assert(mp);
-    Box* b = static_cast<Box*>(mp);
-    Box* key = static_cast<Box*>(_key);
-    Box* item = static_cast<Box*>(_item);
-
-    assert(key);
-    assert(item);
+    ASSERT(mp->cls == attrwrapper_cls, "%s", getTypeName(mp));
 
     try {
-        setitem(b, key, item);
+        attrwrapperSet(mp, _key, _item);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;

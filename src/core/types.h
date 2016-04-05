@@ -650,6 +650,7 @@ public:
 
     int traverse(visitproc visit, void* arg) noexcept;
     void clear() noexcept;
+    void moduleClear() noexcept; // slightly different order of clearing attributes, meant for modules
 };
 static_assert(sizeof(HCAttrs) == sizeof(struct _hcattrs), "");
 

@@ -1040,6 +1040,7 @@ public:
     DEFAULT_CLASS(builtin_function_or_method_cls);
 };
 
+extern "C" void _PyModule_Clear(PyObject*) noexcept;
 class BoxedModule : public Box {
 public:
     HCAttrs attrs;
@@ -1076,6 +1077,8 @@ private:
 
 public:
     DEFAULT_CLASS(module_cls);
+
+    friend void _PyModule_Clear(PyObject*) noexcept;
 };
 
 class BoxedSlice : public Box {
@@ -1334,6 +1337,7 @@ Box* attrwrapperKeys(Box* b);
 void attrwrapperDel(Box* b, llvm::StringRef attr);
 void attrwrapperClear(Box* b);
 BoxedDict* attrwrapperToDict(Box* b);
+void attrwrapperSet(Box* b, Box* k, Box* v);
 
 Box* boxAst(AST* ast);
 AST* unboxAst(Box* b);
