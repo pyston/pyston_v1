@@ -27,6 +27,7 @@
 
 #include "asm_writing/assembler.h"
 #include "asm_writing/icinfo.h"
+#include "asm_writing/types.h"
 #include "core/threading.h"
 #include "core/types.h"
 
@@ -164,7 +165,8 @@ public:
     // This should get called *after* the ref got consumed, ie something like
     //   r_array->setAttr(0, r_val);
     //   r_val->refConsumed()
-    void refConsumed();
+    // if no action is specified it will assume the last action consumed the reference
+    void refConsumed(RewriterAction* action = NULL);
 
 
     template <typename Src, typename Dst> inline RewriterVar* getAttrCast(int offset, Location loc = Location::any());
@@ -202,6 +204,7 @@ private:
     bool isDoneUsing() { return next_use == uses.size(); }
     bool hasScratchAllocation() const { return scratch_allocation.second > 0; }
     void resetHasScratchAllocation() { scratch_allocation = std::make_pair(0, 0); }
+    bool needsDecref();
 
     // Indicates if this variable is an arg, and if so, what location the arg is from.
     bool is_arg;
@@ -287,6 +290,7 @@ public:
 class RewriterAction {
 public:
     SmallFunction<56> action;
+    std::vector<RewriterVar*> consumed_refs;
 
     template <typename F> RewriterAction(F&& action) : action(std::forward<F>(action)) {}
 
@@ -306,7 +310,7 @@ class Rewriter : public ICSlotRewrite::CommitHook {
 private:
     class RegionAllocator {
     public:
-        static const int BLOCK_SIZE = 200; // reserve a bit of space for list/malloc overhead
+        static const int BLOCK_SIZE = 1024; // reserve a bit of space for list/malloc overhead
         std::list<char[BLOCK_SIZE]> blocks;
 
         int cur_offset = BLOCK_SIZE + 1;
@@ -397,7 +401,7 @@ protected:
              bool needs_invalidation_support = true);
 
     std::deque<RewriterAction, RegionAllocatorAdaptor<RewriterAction>> actions;
-    template <typename F> void addAction(F&& action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
+    template <typename F> RewriterAction* addAction(F&& action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
         assertPhaseCollecting();
         for (RewriterVar* var : vars) {
             assert(var != NULL);
@@ -408,7 +412,7 @@ protected:
         } else if (type == ActionType::GUARD) {
             if (added_changing_action) {
                 failed = true;
-                return;
+                return NULL;
             }
             for (RewriterVar* arg : args) {
                 arg->uses.push_back(actions.size());
@@ -417,10 +421,17 @@ protected:
             last_guard_action = (int)actions.size();
         }
         actions.emplace_back(std::forward<F>(action));
+        return &actions.back();
     }
+    RewriterAction* getLastAction() {
+        assert(!actions.empty());
+        return &actions.back();
+    }
+
     bool added_changing_action;
     bool marked_inside_ic;
     std::vector<void*> gc_references;
+    std::vector<std::pair<uint64_t, std::vector<Location>>> decref_infos;
 
     bool done_guarding;
     bool isDoneGuarding() {
@@ -550,6 +561,10 @@ public:
 #else
     void comment(const llvm::Twine& msg) {}
 #endif
+    // returns a vector of locations of variables which need to get decrefed if the last action throwes
+    std::vector<Location> getDecrefLocations();
+    // calls getDecrefLocations and registers the current assembler address with the retrieved decref info
+    void registerDecrefInfoHere();
 
     void trap();
     RewriterVar* loadConst(int64_t val, Location loc = Location::any());

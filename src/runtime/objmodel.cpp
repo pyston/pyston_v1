@@ -2310,6 +2310,7 @@ Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_
                 = rewrite_args->rewriter->call(true, (void*)Helper::call, rewrite_args->obj,
                                                rewrite_args->rewriter->loadConst((intptr_t)attr, Location::forArg(1)),
                                                rewrite_args->rewriter->loadConst(cls_only, Location::forArg(2)));
+            r_rtn->setType(RefType::OWNED);
             rewrite_args->setReturn(r_rtn, ReturnConvention::NOEXC_POSSIBLE);
             return Helper::call(obj, attr, cls_only);
         }
@@ -2580,9 +2581,10 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                     static Box* call(Box* obj, BoxedString* attr) { return xincref(obj->getattr(attr)); }
                 };
 
-                RewriterVar* r_rtn = rewrite_args->rewriter->call(
-                    false, (void*)Helper::call, rewrite_args->obj,
-                    rewrite_args->rewriter->loadConst((intptr_t)attr, Location::forArg(1)));
+                RewriterVar* r_rtn
+                    = rewrite_args->rewriter->call(false, (void*)Helper::call, rewrite_args->obj,
+                                                   rewrite_args->rewriter->loadConst(
+                                                       (intptr_t)attr, Location::forArg(1)))->setType(RefType::OWNED);
                 rewrite_args->setReturn(r_rtn, ReturnConvention::NOEXC_POSSIBLE);
                 return Helper::call(obj, attr);
             }
@@ -2819,7 +2821,7 @@ template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void
 
     if (unlikely(rewriter.get() && rewriter->aggressiveness() < 5)) {
         RewriterVar* r_rtn = rewriter->call(true, (void*)_getattrEntry<S>, rewriter->getArg(0), rewriter->getArg(1),
-                                            rewriter->loadConst(0, Location::forArg(2)));
+                                            rewriter->loadConst(0, Location::forArg(2)))->setType(RefType::OWNED);
         rewriter->commitReturning(r_rtn);
         rewriter.reset(NULL);
     }
