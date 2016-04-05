@@ -952,10 +952,14 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                                 auto next = I.getNextNode();
                                 // while (llvm::isa<llvm::PHINode>(next))
                                 // next = next->getNextNode();
-                                ASSERT(!llvm::isa<llvm::UnreachableInst>(next),
-                                       "Can't add decrefs after this function...");
-                                state.decrefs.push_back(
-                                    RefOp({ op, rt->vars.lookup(op).nullable, 1, next, NULL, NULL }));
+                                if (llvm::isa<llvm::UnreachableInst>(next)) {
+                                    // ASSERT(!llvm::isa<llvm::UnreachableInst>(next),
+                                    //"Can't add decrefs after this function...");
+                                    assert(rt->may_throw.count(&I));
+                                } else {
+                                    state.decrefs.push_back(
+                                        RefOp({ op, rt->vars.lookup(op).nullable, 1, next, NULL, NULL }));
+                                }
                             }
                             state.ending_refs[op] = 1;
                         }
