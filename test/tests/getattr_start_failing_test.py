@@ -1,4 +1,3 @@
-# expected: reffail
 g = 0
 class C(object):
     @property

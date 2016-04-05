@@ -1,4 +1,3 @@
-# expected: reffail
 # Make sure that callattrs handle exceptions (including
 # different exception styles) correctly.
 class C(object):

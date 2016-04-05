@@ -1,4 +1,3 @@
-# expected: reffail
 # Test some weird getattr/hasattr guarding scenarios
 
 

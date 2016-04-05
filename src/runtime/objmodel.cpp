@@ -2017,7 +2017,6 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
         }
 
         if (rewrite_args) {
-            assert(0 && "check refcounting");
             r_descr->addAttrGuard(offsetof(BoxedProperty, prop_get), (intptr_t)prop->prop_get);
 
             RewriterVar* r_prop_get = r_descr->getAttr(offsetof(BoxedProperty, prop_get));
@@ -2460,7 +2459,7 @@ Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rew
                          && attr->interned_state == SSTATE_INTERNED_IMMORTAL)) {
                 class Helper {
                 public:
-                    static Box* call(Box* obj, BoxedString* attr) { return incref(obj->getattr(attr)); }
+                    static Box* call(Box* obj, BoxedString* attr) { return xincref(obj->getattr(attr)); }
                 };
 
                 RewriterVar* r_rtn = rewrite_args->rewriter->call(
