@@ -136,42 +136,36 @@ static LiveOutSet extractLiveOuts(StackMap::Record* r, llvm::CallingConv::ID cc)
     return live_outs;
 }
 
-#ifdef Py_TRACE_REFS
-#error "trace_refs not supported yet"
+#if !defined(Py_REF_DEBUG) && !defined(Py_TRACE_REFS)
+
+static char decref_code[] = "\x48\xff\x0f"     // decq (%rdi)
+                            "\x75\x07"         // jne +7
+                            "\x48\x8b\x47\x08" // mov 0x8(%rdi),%rax
+                            "\xff\x50\x30"     // callq *0x30(%rax)
+    ;
+
+static char xdecref_code[] = "\x48\x85\xff"     // test %rdi,%rdi
+                             "\x74\x0c"         // je +12
+                             "\x48\xff\x0f"     // decq (%rdi)
+                             "\x75\x07"         // jne +7
+                             "\x48\x8b\x47\x08" // mov 0x8(%rdi),%rax
+                             "\xff\x50\x30"     // callq *0x30(%rax)
+    ;
+
 #else
-#ifndef Py_REF_DEBUG
 
-static char decref_code[] =
-    "\x48\xff\x0f"      // decq (%rdi)
-    "\x75\x07"          // jne +7
-    "\x48\x8b\x47\x08"  // mov 0x8(%rdi),%rax
-    "\xff\x50\x30"      // callq *0x30(%rax)
-    ;
-
-static char xdecref_code[] =
-    "\x48\x85\xff"      // test %rdi,%rdi
-    "\x74\x0c"          // je +12
-    "\x48\xff\x0f"      // decq (%rdi)
-    "\x75\x07"          // jne +7
-    "\x48\x8b\x47\x08"  // mov 0x8(%rdi),%rax
-    "\xff\x50\x30"      // callq *0x30(%rax)
-    ;
-
-#else // #ifdef Py_REF_DEBUG:
 static void _decref(Box* b) {
     Py_DECREF(b);
 }
-static char decref_code[] =
-    "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00"  // movabs $0x00, %rax
-    "\xff\xd0"          // callq *%rax
+static char decref_code[] = "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00" // movabs $0x00, %rax
+                            "\xff\xd0"                                 // callq *%rax
     ;
 
 static void _xdecref(Box* b) {
     Py_XDECREF(b);
 }
-static char xdecref_code[] =
-    "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00"  // movabs $0x00, %rax
-    "\xff\xd0"          // callq *%rax
+static char xdecref_code[] = "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00" // movabs $0x00, %rax
+                             "\xff\xd0"                                 // callq *%rax
     ;
 
 namespace {
@@ -179,17 +173,16 @@ class _Initializer {
 public:
     _Initializer() {
         void* p = (void*)&_decref;
-        memcpy(decref_code+2, &p, sizeof(p));
+        memcpy(decref_code + 2, &p, sizeof(p));
 
         p = (void*)&_xdecref;
-        memcpy(xdecref_code+2, &p, sizeof(p));
+        memcpy(xdecref_code + 2, &p, sizeof(p));
     }
 } _i;
 }
 #endif
-#endif
 
-const int DECREF_PP_SIZE = sizeof(decref_code) - 1; // -1 for the NUL byte
+const int DECREF_PP_SIZE = sizeof(decref_code) - 1;   // -1 for the NUL byte
 const int XDECREF_PP_SIZE = sizeof(xdecref_code) - 1; // -1 for the NUL byte
 
 void emitDecref(void* addr) {
