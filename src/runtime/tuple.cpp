@@ -32,8 +32,6 @@ extern "C" Box* createTuple(int64_t nelts, Box** elts) {
 }
 
 Box* _tupleSlice(BoxedTuple* self, i64 start, i64 stop, i64 step, i64 length) {
-    assert(0 && "check refcounting");
-
     i64 size = self->size();
     assert(step != 0);
     if (step > 0) {
@@ -118,23 +116,27 @@ extern "C" int _PyTuple_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
 }
 
 int BoxedTuple::Resize(BoxedTuple** pv, size_t newsize) noexcept {
-    assert(0 && "check refcounting");
     assert((*pv)->cls == tuple_cls);
 
     BoxedTuple* t = static_cast<BoxedTuple*>(*pv);
+    size_t oldsize = t->size();
 
-    if (newsize == t->size())
+    if (newsize == oldsize)
         return 0;
 
-    if (newsize < t->size()) {
+    if (newsize < oldsize) {
         // XXX resize the box (by reallocating) smaller if it makes sense
         t->ob_size = newsize;
+        for (int i = newsize; i < oldsize; i++) {
+            Py_CLEAR((*pv)->elts[i]);
+        }
         return 0;
     }
 
+
     BoxedTuple* resized = new (newsize) BoxedTuple();
-    memmove(resized->elts, t->elts, sizeof(Box*) * t->size());
-    memset(resized->elts + t->size(), 0, sizeof(Box*) * (newsize - t->size()));
+    memmove(resized->elts, t->elts, sizeof(Box*) * oldsize);
+    memset(resized->elts + oldsize, 0, sizeof(Box*) * (newsize - oldsize));
 
     *pv = resized;
     return 0;
@@ -179,7 +181,6 @@ Box* tupleAdd(BoxedTuple* self, Box* rhs) {
 }
 
 Box* tupleMulInt(BoxedTuple* self, int n) {
-    assert(0 && "check refcounting");
     int s = self->size();
 
     if (n < 0)
@@ -190,10 +191,15 @@ Box* tupleMulInt(BoxedTuple* self, int n) {
     } else {
         BoxedTuple* rtn = BoxedTuple::create(n * s);
         int rtn_i = 0;
+
         for (int i = 0; i < n; ++i) {
             memmove(&rtn->elts[rtn_i], &self->elts[0], sizeof(Box*) * s);
             rtn_i += s;
         }
+
+        for (int i = 0; i < rtn->size(); i++)
+            Py_INCREF(rtn->elts[i]);
+
         return rtn;
     }
 }
