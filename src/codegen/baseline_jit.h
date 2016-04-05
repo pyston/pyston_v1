@@ -146,6 +146,9 @@ private:
     assembler::Assembler a;
     bool is_currently_writing;
     bool asm_failed;
+    // this contains all the decref infos the bjit generated inside the memory block,
+    // this allows us to deregister them when we release the code
+    std::vector<DecrefInfo> decref_infos;
 
 public:
     JitCodeBlock(llvm::StringRef name);
@@ -153,7 +156,7 @@ public:
     std::unique_ptr<JitFragmentWriter> newFragment(CFGBlock* block, int patch_jump_offset = 0);
     bool shouldCreateNewBlock() const { return asm_failed || a.bytesLeft() < 128; }
     void fragmentAbort(bool not_enough_space);
-    void fragmentFinished(int bytes_witten, int num_bytes_overlapping, void* next_fragment_start);
+    void fragmentFinished(int bytes_witten, int num_bytes_overlapping, void* next_fragment_start, ICInfo& ic_info);
 };
 
 class JitFragmentWriter : public Rewriter {
@@ -199,6 +202,7 @@ private:
         std::unique_ptr<ICSetupInfo> ic;
         StackInfo stack_info;
         AST* node;
+        std::vector<Location> decref_infos;
     };
 
     llvm::SmallVector<PPInfo, 8> pp_infos;
@@ -284,8 +288,15 @@ private:
     uint64_t asUInt(InternedString s);
 #endif
 
-    RewriterVar* emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots, int slot_size,
-                            AST* ast_node = NULL, TypeRecorder* type_recorder = NULL);
+
+    // use this function when one emits a call where one argument is variable created with allocArgs(vars).
+    // it let's one specify the additional uses the call has which are unknown to the rewriter because it is hidden in
+    // the allocArgs call.
+    RewriterVar* emitCallWithAllocatedArgs(void* func_addr, const llvm::ArrayRef<RewriterVar*> args,
+                                           const llvm::ArrayRef<RewriterVar*> additional_uses);
+    std::pair<RewriterVar*, RewriterAction*> emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args,
+                                                        int num_slots, int slot_size, AST* ast_node = NULL,
+                                                        TypeRecorder* type_recorder = NULL);
 
     static void assertNameDefinedHelper(const char* id);
     static Box* callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, TypeRecorder* type_recorder,

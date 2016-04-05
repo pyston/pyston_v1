@@ -66,7 +66,7 @@ extern "C" Box* executeInnerAndSetupFrame(ASTInterpreter& interpreter, CFGBlock*
  */
 class ASTInterpreter {
 public:
-    ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs);
+    ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs, FrameInfo* deopt_frame_info = NULL);
 
     void initArguments(BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
@@ -183,7 +183,6 @@ public:
     void setPassedClosure(Box* closure);
     void setCreatedClosure(Box* closure);
     void setBoxedLocals(STOLEN(Box*));
-    void setFrameInfo(const FrameInfo* frame_info);
     void setGlobals(Box* globals);
 
     friend struct pyston::ASTInterpreterJitInterface;
@@ -215,7 +214,8 @@ void ASTInterpreter::setPassedClosure(Box* closure) {
 void ASTInterpreter::setCreatedClosure(Box* closure) {
     assert(!this->created_closure); // This should only used for initialization
     assert(closure->cls == closure_cls);
-    this->created_closure = static_cast<BoxedClosure*>(closure);
+    // we have to incref the closure because the interpreter destructor will decref it
+    this->created_closure = static_cast<BoxedClosure*>(incref(closure));
 }
 
 void ASTInterpreter::setBoxedLocals(Box* boxedLocals) {
@@ -223,20 +223,12 @@ void ASTInterpreter::setBoxedLocals(Box* boxedLocals) {
     this->frame_info.boxedLocals = boxedLocals;
 }
 
-void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
-    Box** vregs = this->frame_info.vregs;
-    int num_vregs = this->frame_info.num_vregs;
-    this->frame_info = *frame_info;
-    this->frame_info.vregs = vregs;
-    this->frame_info.num_vregs = num_vregs;
-}
-
 void ASTInterpreter::setGlobals(Box* globals) {
     assert(!this->frame_info.globals);
     this->frame_info.globals = incref(globals);
 }
 
-ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs)
+ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs, FrameInfo* deopt_frame_info)
     : current_block(0),
       frame_info(ExcInfo(NULL, NULL, NULL)),
       edgecount(0),
@@ -251,6 +243,15 @@ ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs)
       should_jit(false) {
 
     scope_info = source_info->getScopeInfo();
+
+    if (deopt_frame_info) {
+        // copy over all fields and clear the deopt frame info
+        frame_info = *deopt_frame_info;
+        for (int i = 0; i < deopt_frame_info->num_vregs; ++i)
+            Py_XDECREF(deopt_frame_info->vregs[i]);
+        memset(deopt_frame_info, 0, sizeof(*deopt_frame_info));
+    }
+
     frame_info.vregs = vregs;
     frame_info.md = md;
     frame_info.num_vregs = num_vregs;
@@ -470,6 +471,8 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
         if (jit) {
             if (!closure) {
                 bool is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
+                // HACK: this disable the 'this variable is dead at the end of this block' optimization
+                is_live = true;
                 if (is_live)
                     jit->emitSetLocal(name, node->vreg, closure, value);
                 else
@@ -2006,9 +2009,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
         memset(vregs, 0, sizeof(Box*) * num_vregs);
     }
 
-    ASTInterpreter interpreter(md, vregs, num_vregs);
-    if (source_info->scoping->areGlobalsFromModule())
-        interpreter.setGlobals(source_info->parent_module);
+    ASTInterpreter interpreter(md, vregs, num_vregs, frame_state.frame_info);
 
     for (const auto& p : *frame_state.locals) {
         assert(p.first->cls == str_cls);
@@ -2016,7 +2017,8 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
         if (name == PASSED_GENERATOR_NAME) {
             interpreter.setGenerator(p.second);
         } else if (name == PASSED_CLOSURE_NAME) {
-            interpreter.setPassedClosure(p.second);
+            // this should have already got set because its stored in the frame info
+            assert(p.second == interpreter.getFrameInfo()->passed_closure);
         } else if (name == CREATED_CLOSURE_NAME) {
             interpreter.setCreatedClosure(p.second);
         } else {
@@ -2024,8 +2026,6 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
             interpreter.addSymbol(interned, p.second, false);
         }
     }
-
-    interpreter.setFrameInfo(frame_state.frame_info);
 
     CFGBlock* start_block = NULL;
     AST_stmt* starting_statement = NULL;
@@ -2043,7 +2043,6 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
             auto expr = ast_cast<AST_Expr>(enclosing_stmt);
             RELEASE_ASSERT(expr->value == after_expr, "%p %p", expr->value, after_expr);
             assert(expr->value == after_expr);
-            assert(0 && "check refcounting");
             break;
         } else if (enclosing_stmt->type == AST_TYPE::Invoke) {
             auto invoke = ast_cast<AST_Invoke>(enclosing_stmt);

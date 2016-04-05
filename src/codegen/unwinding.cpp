@@ -429,6 +429,9 @@ static inline unw_word_t get_cursor_ip(unw_cursor_t* cursor) {
 static inline unw_word_t get_cursor_bp(unw_cursor_t* cursor) {
     return get_cursor_reg(cursor, UNW_TDEP_BP);
 }
+static inline unw_word_t get_cursor_sp(unw_cursor_t* cursor) {
+    return get_cursor_reg(cursor, UNW_REG_SP);
+}
 
 // if the given ip/bp correspond to a jitted frame or
 // ASTInterpreter::execute_inner frame, return true and return the
@@ -507,6 +510,34 @@ static FrameInfo* getTopFrameInfo() {
     return (FrameInfo*)cur_thread_state.frame_info;
 }
 
+llvm::DenseMap<uint64_t /*ip*/, std::vector<Location>> decref_infos;
+void executeDecrefs(unw_cursor_t* cursor) {
+    unw_word_t ip = get_cursor_ip(cursor);
+    auto it = decref_infos.find(ip);
+    if (it == decref_infos.end())
+        return;
+
+    for (Location& l : it->second) {
+        Box* b = NULL;
+        if (l.type == Location::Stack) {
+            unw_word_t sp = get_cursor_sp(cursor);
+            b = ((Box**)sp)[l.stack_offset];
+        } else {
+            RELEASE_ASSERT(0, "not implemented");
+        }
+
+        Py_XDECREF(b);
+    }
+}
+void addDecrefInfoEntry(uint64_t ip, std::vector<Location> location) {
+    assert(!decref_infos.count(ip) && "why is there already an entry??");
+    decref_infos[ip] = std::move(location);
+}
+void removeDecrefInfoEntry(uint64_t ip) {
+    decref_infos.erase(ip);
+}
+
+
 class PythonUnwindSession {
     ExcInfo exc_info;
     PythonStackExtractor pystack_extractor;
@@ -538,6 +569,8 @@ public:
             deinitFrame(prev_frame_info);
             prev_frame_info = NULL;
         }
+
+        executeDecrefs(cursor);
 
         PythonFrameIteratorImpl frame_iter;
         bool found_frame = pystack_extractor.handleCFrame(cursor, &frame_iter);
@@ -830,7 +863,8 @@ DeoptState getDeoptState() {
                 if (!v)
                     continue;
 
-                d->d[incref(p.first.getBox())] = v;
+                assert(!d->d.count(p.first.getBox()));
+                d->d[incref(p.first.getBox())] = incref(v);
             }
 
             for (const auto& p : cf->location_map->names) {
@@ -851,6 +885,7 @@ DeoptState getDeoptState() {
                         vals.push_back(frame_iter->readLocation(loc));
                     }
 
+                    // this returns an owned reference so we don't incref it
                     Box* v = e->type->deserializeFromFrame(vals);
                     // printf("%s: (pp id %ld) %p\n", p.first().c_str(), e._debug_pp_id, v);
                     d->d[boxString(p.first())] = v;
