@@ -49,7 +49,7 @@ struct ASTInterpreterJitInterface {
     static Box* derefHelper(void* interp, InternedString s);
     static Box* landingpadHelper(void* interp);
     static void pendingCallsCheckHelper();
-    static void setExcInfoHelper(void* interp, Box* type, Box* value, Box* traceback);
+    static void setExcInfoHelper(void* interp, STOLEN(Box*) type, STOLEN(Box*) value, STOLEN(Box*) traceback);
     static void setLocalClosureHelper(void* interp, long vreg, InternedString id, Box* v);
     static void uncacheExcInfoHelper(void* interp);
     static void raise0Helper(void* interp) __attribute__((noreturn));

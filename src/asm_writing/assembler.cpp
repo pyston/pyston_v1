@@ -116,26 +116,28 @@ void Assembler::emitArith(Immediate imm, Indirect mem, int opcode) {
         mem_idx -= 8;
     }
 
-    // TODO: needs testing, then remove this trap
-    trap();
-
     emitRex(rex);
 
     bool needssib = (mem_idx == 0b100);
     assert(!needssib && "untested");
     int mode = getModeFromOffset(mem.offset, mem_idx);
+    assert(mode != 0b10 && "not yet supported");
 
     if (-0x80 <= amount && amount < 0x80) {
         emitByte(0x83);
         if (needssib)
             emitSIB(0b00, 0b100, mem_idx);
         emitModRM(mode, opcode, mem_idx);
+        if (mode == 0b01)
+            emitByte(mem.offset);
         emitByte(amount);
     } else {
         emitByte(0x81);
         if (needssib)
             emitSIB(0b00, 0b100, mem_idx);
         emitModRM(mode, opcode, mem_idx);
+        if (mode == 0b01)
+            emitByte(mem.offset);
         emitInt(amount, 4);
     }
 }

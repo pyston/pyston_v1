@@ -542,7 +542,8 @@ void Rewriter::_incref(RewriterVar* var, int num_refs) {
 // llvm::ArrayRef<RewriterVar*>());
 #ifdef Py_REF_DEBUG
     // assembler->trap();
-    assembler->incq(assembler::Immediate(&_Py_RefTotal));
+    for (int i = 0; i < num_refs; ++i)
+        assembler->incq(assembler::Immediate(&_Py_RefTotal));
 #endif
     auto reg = var->getInReg();
 

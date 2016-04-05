@@ -1798,7 +1798,8 @@ void ASTInterpreterJitInterface::pendingCallsCheckHelper() {
 #endif
 }
 
-void ASTInterpreterJitInterface::setExcInfoHelper(void* _interpreter, Box* type, Box* value, Box* traceback) {
+void ASTInterpreterJitInterface::setExcInfoHelper(void* _interpreter, STOLEN(Box*) type, STOLEN(Box*) value,
+                                                  STOLEN(Box*) traceback) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     setFrameExcInfo(interpreter->getFrameInfo(), type, value, traceback);
 }

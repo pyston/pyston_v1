@@ -539,6 +539,9 @@ void JitFragmentWriter::emitRaise0() {
 
 void JitFragmentWriter::emitRaise3(RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2) {
     call(false, (void*)raise3, arg0, arg1, arg2);
+    arg0->refConsumed();
+    arg1->refConsumed();
+    arg2->refConsumed();
 }
 
 void JitFragmentWriter::emitEndBlock() {
@@ -570,6 +573,9 @@ void JitFragmentWriter::emitSetCurrentInst(AST_stmt* node) {
 
 void JitFragmentWriter::emitSetExcInfo(RewriterVar* type, RewriterVar* value, RewriterVar* traceback) {
     call(false, (void*)ASTInterpreterJitInterface::setExcInfoHelper, getInterp(), type, value, traceback);
+    type->refConsumed();
+    value->refConsumed();
+    traceback->refConsumed();
 }
 
 void JitFragmentWriter::emitSetGlobal(Box* global, BoxedString* s, STOLEN(RewriterVar*) v) {
@@ -887,7 +893,6 @@ Box* JitFragmentWriter::runtimeCallHelper(Box* obj, ArgPassSpec argspec, TypeRec
 void JitFragmentWriter::_emitGetLocal(RewriterVar* val_var, const char* name) {
     assembler::Register var_reg = val_var->getInReg();
     assembler->test(var_reg, var_reg);
-    val_var->bumpUse();
 
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
@@ -897,6 +902,7 @@ void JitFragmentWriter::_emitGetLocal(RewriterVar* val_var, const char* name) {
     }
 
     _incref(val_var);
+    val_var->bumpUse();
 }
 
 void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, ExitInfo& exit_info) {
