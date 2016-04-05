@@ -246,25 +246,38 @@ RewriterVar* JitFragmentWriter::emitCreateDict(const llvm::ArrayRef<RewriterVar*
     assert(keys.size() == values.size());
     if (keys.empty())
         return call(false, (void*)createDict)->setType(RefType::OWNED);
-    else
-        return call(false, (void*)createDictHelper, imm(keys.size()), allocArgs(keys), allocArgs(values))
-            ->setType(RefType::OWNED);
+    auto rtn = call(false, (void*)createDictHelper, imm(keys.size()), allocArgs(keys), allocArgs(values))
+                   ->setType(RefType::OWNED);
+    for (RewriterVar* k : keys) {
+        k->refConsumed();
+    }
+    for (RewriterVar* v : values) {
+        v->refConsumed();
+    }
+    return rtn;
 }
 
 RewriterVar* JitFragmentWriter::emitCreateList(const llvm::ArrayRef<RewriterVar*> values) {
     auto num = values.size();
     if (num == 0)
         return call(false, (void*)createList)->setType(RefType::OWNED);
-    else
-        return call(false, (void*)createListHelper, imm(num), allocArgs(values))->setType(RefType::OWNED);
+
+    auto rtn = call(false, (void*)createListHelper, imm(num), allocArgs(values))->setType(RefType::OWNED);
+    for (RewriterVar* v : values) {
+        v->refConsumed();
+    }
+    return rtn;
 }
 
 RewriterVar* JitFragmentWriter::emitCreateSet(const llvm::ArrayRef<RewriterVar*> values) {
     auto num = values.size();
     if (num == 0)
         return call(false, (void*)createSet)->setType(RefType::OWNED);
-    else
-        return call(false, (void*)createSetHelper, imm(num), allocArgs(values))->setType(RefType::OWNED);
+    auto rtn = call(false, (void*)createSetHelper, imm(num), allocArgs(values))->setType(RefType::OWNED);
+    for (RewriterVar* v : values) {
+        v->refConsumed();
+    }
+    return rtn;
 }
 
 RewriterVar* JitFragmentWriter::emitCreateSlice(RewriterVar* start, RewriterVar* stop, RewriterVar* step) {
