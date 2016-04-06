@@ -5,4 +5,4 @@ f.b = 2
 
 i = iter(f.__dict__)
 del f
-print list(i)
+print sorted(list(i))
