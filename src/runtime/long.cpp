@@ -223,6 +223,7 @@ extern "C" PyObject* PyLong_FromString(const char* str, char** pend, int base) n
         *pend = const_cast<char*>(str) + str_ref.size();
     }
     if (r != 0) {
+        Py_DECREF(rtn);
         PyErr_Format(PyExc_ValueError, "invalid literal for long() with base %d: '%s'", base, str);
         return NULL;
     }
@@ -1584,7 +1585,7 @@ extern "C" Box* longTrunc(BoxedLong* self) {
 
 extern "C" Box* longIndex(BoxedLong* v) noexcept {
     if (PyLong_CheckExact(v))
-        return v;
+        return incref(v);
     BoxedLong* rtn = new BoxedLong();
     mpz_init_set(rtn->n, v->n);
     return rtn;

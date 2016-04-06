@@ -1,4 +1,3 @@
-# expected: reffail
 l = 2L
 print l
 print type(l)
