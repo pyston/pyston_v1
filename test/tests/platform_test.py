@@ -1,4 +1,3 @@
-# expected: reffail
 import platform
 
 print type(platform.python_implementation())

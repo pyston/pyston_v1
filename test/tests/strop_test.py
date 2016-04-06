@@ -1,4 +1,3 @@
-# expected: reffail
 import strop
 
 print repr(strop.whitespace)
