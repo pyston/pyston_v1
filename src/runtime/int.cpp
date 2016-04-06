@@ -1036,7 +1036,7 @@ extern "C" Box* intPos(BoxedInt* v) {
         raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'int' object but received a '%s'", getTypeName(v));
 
     if (v->cls == int_cls)
-        return v;
+        return incref(v);
     return boxInt(v->n);
 }
 
