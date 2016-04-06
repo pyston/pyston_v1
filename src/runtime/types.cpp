@@ -4814,7 +4814,6 @@ extern "C" void Py_Finalize() noexcept {
     }
     late_constants.clear();
 
-    _Py_ReleaseInternedStrings();
     for (auto b : classes) {
         if (!PyObject_IS_GC(b)) {
             b->clearAttrs();
@@ -4826,6 +4825,8 @@ extern "C" void Py_Finalize() noexcept {
     while (PyGC_Collect())
         ;
     assert(!constants.size());
+
+    _Py_ReleaseInternedStrings();
 
     BoxedList* garbage = static_cast<BoxedList*>(_PyGC_GetGarbage());
     int num_garbage_objects = garbage->size;

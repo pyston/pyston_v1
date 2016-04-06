@@ -1,4 +1,3 @@
-# expected: reffail
 import uuid
 
 # Hack to get the test passing until we support CTypes.
