@@ -3454,7 +3454,7 @@ BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI
 
     class FixupLenReturn {
     public:
-        static BoxedInt* call(Box* rtn) {
+        static BoxedInt* call(STOLEN(Box*) rtn) {
             // TODO: support returning longs as the length
             if (rtn->cls != int_cls) {
                 Py_DECREF(rtn);
@@ -3516,6 +3516,7 @@ BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI
         if (S == CXX) {
             rewrite_args->out_rtn
                 = rewrite_args->rewriter->call(true, (void*)FixupLenReturn::call, r_rtn)->setType(RefType::OWNED);
+            r_rtn->refConsumed();
             rewrite_args->out_success = true;
         } else {
             // Don't know how to propagate the exception
