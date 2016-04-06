@@ -1751,7 +1751,7 @@ void BoxedInstance::dealloc(Box* b) noexcept {
         }
 
         Py_DECREF(inst->inst_cls);
-        inst->attrs.clear();
+        inst->attrs.clearForDealloc();
         PyObject_GC_Del(inst);
     } else {
         Py_ssize_t refcnt = inst->ob_refcnt;
@@ -1801,7 +1801,7 @@ void BoxedClassobj::dealloc(Box* b) noexcept {
     if (cl->weakreflist)
         PyObject_ClearWeakRefs(cl);
 
-    cl->clearAttrs();
+    cl->clearAttrsForDealloc();
 
     cl->cls->tp_free(cl);
 }

@@ -649,8 +649,11 @@ public:
     HCAttrs(HiddenClass* hcls = NULL) : hcls(hcls), attr_list(nullptr) {}
 
     int traverse(visitproc visit, void* arg) noexcept;
-    void clear() noexcept;
-    void moduleClear() noexcept; // slightly different order of clearing attributes, meant for modules
+
+    void _clearRaw() noexcept;              // Raw clear -- clears out and decrefs all the attrs.
+                                            // Meant for implementing other clear-like functions
+    void clearForDealloc() noexcept;        // meant for normal object deallocation.  converts the attrwrapper
+    void moduleClear() noexcept;            // Meant for _PyModule_Clear.  doesn't clear all attributes.
 };
 static_assert(sizeof(HCAttrs) == sizeof(struct _hcattrs), "");
 
@@ -715,7 +718,7 @@ public:
     }
     void giveAttr(STOLEN(BoxedString*) attr, STOLEN(Box*) val);
 
-    void clearAttrs();
+    void clearAttrsForDealloc();
 
     void giveAttrDescriptor(const char* attr, Box* (*get)(Box*, void*),
             void (*set)(Box*, Box*, void*));

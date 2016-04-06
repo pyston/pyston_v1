@@ -490,7 +490,7 @@ static void subtype_dealloc(Box* self) noexcept {
 
     // Pyston addition: same for hcattrs
     if (type->attrs_offset && !base->attrs_offset) {
-        self->getHCAttrsPtr()->clear();
+        self->getHCAttrsPtr()->clearForDealloc();
     }
 
     /* Extract the type again; tp_del may have changed it */
@@ -866,7 +866,7 @@ static int subtype_clear(PyObject* self) noexcept {
     }
 
     if (type->attrs_offset != base->attrs_offset) {
-        self->getHCAttrsPtr()->clear();
+        self->getHCAttrsPtr()->clearForDealloc();
     }
 
     if (baseclear)
@@ -1233,25 +1233,56 @@ static HCAttrs::AttrList* reallocAttrs(HCAttrs::AttrList* attrs, int old_nattrs,
     return rtn;
 }
 
-void HCAttrs::clear() noexcept {
+void Box::setDictBacked(STOLEN(Box*) val) {
+    // this checks for: v.__dict__ = v.__dict__
+    if (val->cls == attrwrapper_cls && unwrapAttrWrapper(val) == this) {
+        Py_DECREF(val);
+        return;
+    }
+
+    assert(this->cls->instancesHaveHCAttrs());
+    HCAttrs* hcattrs = this->getHCAttrsPtr();
+    RELEASE_ASSERT(PyDict_Check(val) || val->cls == attrwrapper_cls, "");
+
+    if (hcattrs->hcls->type == HiddenClass::DICT_BACKED) {
+        auto old_dict = hcattrs->attr_list->attrs[0];
+        hcattrs->attr_list->attrs[0] = val;
+        Py_DECREF(old_dict);
+        return;
+    }
+
+    // If there is an old attrwrapper it is not allowed to wrap the instance anymore instead it has to switch to a
+    // private dictonary.
+    // e.g.:
+    //     a = v.__dict__
+    //     v.__dict__ = {} # 'a' must switch now from wrapping 'v' to a the private dict.
+    int offset = hcattrs->hcls->getAttrwrapperOffset();
+    if (offset != -1) {
+        Box* wrapper = hcattrs->attr_list->attrs[offset];
+        RELEASE_ASSERT(wrapper->cls == attrwrapper_cls, "");
+        convertAttrwrapperToPrivateDict(wrapper);
+    }
+
+    // assign the dict to the attribute list and switch to the dict backed strategy
+    // Skips the attrlist freelist
+    auto new_attr_list = (HCAttrs::AttrList*)PyObject_MALLOC(sizeof(HCAttrs::AttrList) + sizeof(Box*));
+    new_attr_list->attrs[0] = val;
+
+    auto old_attr_list = hcattrs->attr_list;
+    int old_attr_list_size = hcattrs->hcls->attributeArraySize();
+
+    hcattrs->hcls = HiddenClass::dict_backed;
+    hcattrs->attr_list = new_attr_list;
+
+    decrefArray(old_attr_list->attrs, old_attr_list_size);
+    freeAttrs(old_attr_list, old_attr_list_size);
+}
+
+void HCAttrs::_clearRaw() noexcept {
     HiddenClass* hcls = this->hcls;
 
     if (!hcls)
         return;
-
-    if (unlikely(hcls->type == HiddenClass::DICT_BACKED)) {
-        Box* d = this->attr_list->attrs[0];
-
-        // Skips the attrlist freelist
-        PyObject_FREE(this->attr_list);
-        this->attr_list = NULL;
-
-        Py_DECREF(d);
-
-        return;
-    }
-
-    assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
 
     auto old_attr_list = this->attr_list;
     auto old_attr_list_size = hcls->attributeArraySize();
@@ -1261,8 +1292,30 @@ void HCAttrs::clear() noexcept {
     if (old_attr_list) {
         decrefArray(old_attr_list->attrs, old_attr_list_size);
 
-        freeAttrs(old_attr_list, old_attr_list_size);
+        // DICT_BACKED attrs don't use the freelist:
+        if (hcls->type == HiddenClass::DICT_BACKED)
+            PyObject_FREE(old_attr_list);
+        else
+            freeAttrs(old_attr_list, old_attr_list_size);
     }
+}
+
+void HCAttrs::clearForDealloc() noexcept {
+    HiddenClass* hcls = this->hcls;
+
+    if (!hcls)
+        return;
+
+    if (hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON) {
+        int offset = hcls->getAttrwrapperOffset();
+        if (offset != -1) {
+            Box* attrwrapper = this->attr_list->attrs[offset];
+            if (attrwrapper->ob_refcnt != 1)
+                convertAttrwrapperToPrivateDict(attrwrapper);
+        }
+    }
+
+    _clearRaw();
 }
 
 void HCAttrs::moduleClear() noexcept {

@@ -405,7 +405,7 @@ static void functionDtor(Box* b) {
     self->dependent_ics.invalidateAll();
     self->dependent_ics.~ICInvalidator();
 
-    self->clearAttrs();
+    self->clearAttrsForDealloc();
 
     Py_DECREF(self->doc);
     Py_XDECREF(self->modname);
@@ -2166,10 +2166,17 @@ private:
         if (isDictBacked())
             return;
 
+        // TODO: this means that future accesses to __dict__ will return something other than
+        // this attrwrapper.  We should store the attrwrapper in the attributes array.
+
         HCAttrs* attrs = this->b->getHCAttrsPtr();
         assert(attrs->hcls->type != HiddenClass::DICT_BACKED);
         BoxedDict* d = (BoxedDict*)AttrWrapper::copy(this);
-        b->clearAttrs();
+
+        b->getHCAttrsPtr()->_clearRaw();
+        assert(this->b);
+        assert(!private_dict);
+
         HCAttrs* hcattrs = b->getHCAttrsPtr();
         // Skips the attrlist freelist:
         auto new_attr_list = (HCAttrs::AttrList*)PyObject_MALLOC(sizeof(HCAttrs::AttrList) + sizeof(Box*));
@@ -2211,7 +2218,6 @@ public:
         RELEASE_ASSERT(b, "");
         private_dict = (BoxedDict*)AttrWrapper::copy(this);
         assert(PyDict_CheckExact(private_dict));
-        b->clearAttrs();
         b = NULL;
     }
 
@@ -2610,7 +2616,7 @@ public:
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON, "");
-        attrs->clear();
+        attrs->_clearRaw();
 
         // Add the existing attrwrapper object (ie self) back as the attrwrapper:
         self->b->appendNewHCAttr(self, NULL);
@@ -2730,6 +2736,11 @@ public:
     friend class AttrWrapperIter;
 };
 
+void convertAttrwrapperToPrivateDict(Box* b) {
+    assert(b->cls == attrwrapper_cls);
+    static_cast<AttrWrapper*>(b)->convertToPrivateDict();
+};
+
 AttrWrapperIter::AttrWrapperIter(AttrWrapper* aw) {
     hcls = aw->b->getHCAttrsPtr()->hcls;
     assert(hcls);
@@ -2821,38 +2832,6 @@ void attrwrapperSet(Box* b, Box* k, Box* v) {
     autoDecref(AttrWrapper::setitem(b, k, v));
 }
 
-
-void Box::setDictBacked(STOLEN(Box*) val) {
-    // this checks for: v.__dict__ = v.__dict__
-    if (val->cls == attrwrapper_cls && unwrapAttrWrapper(val) == this) {
-        Py_DECREF(val);
-        return;
-    }
-
-    assert(this->cls->instancesHaveHCAttrs());
-    HCAttrs* hcattrs = this->getHCAttrsPtr();
-    RELEASE_ASSERT(PyDict_Check(val) || val->cls == attrwrapper_cls, "");
-
-    // If there is an old attrwrapper it is not allowed to wrap the instance anymore instead it has to switch to a
-    // private dictonary.
-    // e.g.:
-    //     a = v.__dict__
-    //     v.__dict__ = {} # 'a' must switch now from wrapping 'v' to a the private dict.
-    int offset = hcattrs->hcls->type != HiddenClass::DICT_BACKED ? hcattrs->hcls->getAttrwrapperOffset() : -1;
-    if (offset != -1) {
-        AttrWrapper* wrapper = (AttrWrapper*)hcattrs->attr_list->attrs[offset];
-        RELEASE_ASSERT(wrapper->cls == attrwrapper_cls, "");
-        wrapper->convertToPrivateDict();
-    }
-
-    // assign the dict to the attribute list and switch to the dict backed strategy
-    // Skips the attrlist freelist
-    auto new_attr_list = (HCAttrs::AttrList*)PyObject_MALLOC(sizeof(HCAttrs::AttrList) + sizeof(Box*));
-    new_attr_list->attrs[0] = val;
-
-    hcattrs->hcls = HiddenClass::dict_backed;
-    hcattrs->attr_list = new_attr_list;
-}
 
 Box* attrwrapperKeys(Box* b) {
     return AttrWrapper::keys(b);
@@ -3509,7 +3488,7 @@ extern "C" int PyObject_DelHcAttrString(PyObject* obj, const char* attr) PYSTON_
 }
 
 extern "C" int PyObject_ClearHcAttrs(HCAttrs* attrs) noexcept {
-    attrs->clear();
+    attrs->clearForDealloc();
     return 0;
 }
 
@@ -3729,16 +3708,16 @@ static Box* getsetDelete(Box* self, Box* obj) {
     return getsetSet(self, obj, NULL);
 }
 
-void Box::clearAttrs() {
+void Box::clearAttrsForDealloc() {
     if (cls->instancesHaveHCAttrs()) {
         HCAttrs* attrs = getHCAttrsPtr();
-        attrs->clear();
+        attrs->clearForDealloc();
         return;
     }
 
     if (cls->instancesHaveDictAttrs()) {
-        BoxedDict* d = getDict();
-        PyDict_Clear(d);
+        BoxedDict** d = getDictPtr();
+        Py_CLEAR(*d);
         return;
     }
 }
@@ -3839,7 +3818,7 @@ extern "C" void _PyModule_Clear(PyObject* b) noexcept {
 
 int BoxedModule::clear(Box* b) noexcept {
     _PyModule_Clear(b);
-    b->clearAttrs();
+    b->clearAttrsForDealloc();
 
     return 0;
 }
@@ -3857,7 +3836,7 @@ void BoxedSlice::dealloc(Box* b) noexcept {
 void BoxedInstanceMethod::dealloc(Box* b) noexcept {
     BoxedInstanceMethod* im = static_cast<BoxedInstanceMethod*>(b);
 
-    im->clearAttrs();
+    im->clearAttrsForDealloc();
 
     _PyObject_GC_UNTRACK(im);
     if (im->im_weakreflist != NULL)
@@ -3896,7 +3875,7 @@ void BoxedClass::dealloc(Box* b) noexcept {
 
     if (PyObject_IS_GC(type))
         _PyObject_GC_UNTRACK(type);
-    type->clearAttrs();
+    type->clearAttrsForDealloc();
 
     Py_XDECREF(type->tp_dict);
     Py_XDECREF(type->tp_bases);
@@ -4003,7 +3982,7 @@ static int type_clear(PyTypeObject* type) {
     PyType_Modified(type);
     if (type->tp_dict)
         PyDict_Clear(type->tp_dict);
-    type->attrs.clear();
+    type->attrs.clearForDealloc();
     Py_CLEAR(type->tp_dict);
     Py_CLEAR(type->tp_mro);
 
@@ -4816,7 +4795,7 @@ extern "C" void Py_Finalize() noexcept {
 
     for (auto b : classes) {
         if (!PyObject_IS_GC(b)) {
-            b->clearAttrs();
+            b->getHCAttrsPtr()->_clearRaw();
             Py_CLEAR(b->tp_mro);
         }
         Py_DECREF(b);

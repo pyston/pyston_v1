@@ -1,4 +1,3 @@
-# expected: reffail
 try:
     object().__dict__ = 1
 except AttributeError as e:
