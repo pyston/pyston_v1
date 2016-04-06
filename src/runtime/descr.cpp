@@ -52,6 +52,7 @@ static void propertyDocCopy(BoxedProperty* prop, Box* fget) {
         if (!e.matches(Exception)) {
             throw e;
         }
+        e.clear();
         get_doc = NULL;
     }
 
@@ -60,7 +61,6 @@ static void propertyDocCopy(BoxedProperty* prop, Box* fget) {
             Py_XDECREF(prop->prop_doc);
             prop->prop_doc = get_doc;
         } else {
-            AUTO_DECREF(get_doc);
             /* If this is a property subclass, put __doc__
             in dict of the subclass instance instead,
             otherwise it gets shadowed by __doc__ in the
@@ -122,9 +122,9 @@ static Box* propertySet(Box* self, Box* obj, Box* val) {
     }
 
     if (val == NULL) {
-        runtimeCall(func, ArgPassSpec(1), obj, NULL, NULL, NULL, NULL);
+        autoDecref(runtimeCall(func, ArgPassSpec(1), obj, NULL, NULL, NULL, NULL));
     } else {
-        runtimeCall(func, ArgPassSpec(2), obj, val, NULL, NULL, NULL);
+        autoDecref(runtimeCall(func, ArgPassSpec(2), obj, val, NULL, NULL, NULL));
     }
     return incref(None);
 }
