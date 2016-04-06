@@ -4013,6 +4013,8 @@ void BoxedClosure::dealloc(Box* _o) noexcept {
         Py_XDECREF(o->elts[i]);
     }
 
+    Py_XDECREF(o->parent);
+
     o->cls->tp_free(o);
 }
 

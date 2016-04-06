@@ -1328,6 +1328,7 @@ private:
             llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
             for (int i = 0; i < deref_info.num_parents_from_passed_closure; i++) {
                 closureValue = emitter.getBuilder()->CreateLoad(getClosureParentGep(emitter, closureValue));
+                emitter.setType(closureValue, RefType::BORROWED);
             }
             llvm::Value* lookupResult
                 = emitter.getBuilder()->CreateLoad(getClosureElementGep(emitter, closureValue, deref_info.offset));
