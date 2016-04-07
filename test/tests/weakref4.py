@@ -1,4 +1,3 @@
-# expected: reffail
 import weakref
 
 def doStuff():
@@ -33,5 +32,5 @@ for i in xrange(5):
 
 import gc
 gc.collect()
-assert any(r() is None for r in l2), "object was not collected"
-assert any(w() is None for w in l1), "object was not collected"
+assert any([r() is None for r in l2]), "object was not collected"
+assert any([w() is None for w in l1]), "object was not collected"

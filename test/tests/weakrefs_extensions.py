@@ -1,4 +1,3 @@
-# expected: reffail
 # Make sure we can support weakrefs on extension objects.
 # The _sre.SRE_Pattern type is one of the few builtin types that supports weakrefs natively.
 
@@ -19,4 +18,4 @@ for i in xrange(5):
 import gc
 gc.collect()
 
-assert any(r() is None for r in l)
+assert any([r() is None for r in l])
