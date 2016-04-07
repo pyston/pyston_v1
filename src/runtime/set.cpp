@@ -877,6 +877,8 @@ using namespace pyston::set;
 void BoxedSet::dealloc(Box* _o) noexcept {
     BoxedSet* o = (BoxedSet*)_o;
 
+    PyObject_ClearWeakRefs(o);
+
     PyObject_GC_UnTrack(o);
     for (auto p : o->s) {
         Py_DECREF(p.value);

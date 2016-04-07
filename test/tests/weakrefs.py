@@ -1,4 +1,3 @@
-# expected: reffail
 import weakref
 import array
 import re
