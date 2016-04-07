@@ -1,5 +1,3 @@
-# expected: reffail
-# - locals() returns None for undefined values due to the changes refcounting made to how we store uninitialized variables.
 def f1():
     l = []
     for i in xrange(5):

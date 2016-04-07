@@ -1869,7 +1869,8 @@ private:
     }
 
     template <typename GetLLVMValCB>
-    void _setVRegIfUserVisible(InternedString name, GetLLVMValCB get_llvm_val_cb, CompilerVariable* prev) {
+    void _setVRegIfUserVisible(InternedString name, GetLLVMValCB get_llvm_val_cb, CompilerVariable* prev,
+                               bool potentially_undefined) {
         auto cfg = irstate->getSourceInfo()->cfg;
         if (!cfg->hasVregsAssigned())
             irstate->getMD()->calculateNumVRegs();
@@ -1884,6 +1885,8 @@ private:
             if (prev) {
                 auto* old_value = emitter.getBuilder()->CreateLoad(gep);
                 emitter.setType(old_value, RefType::OWNED);
+                if (potentially_undefined)
+                    emitter.setNullable(old_value, true);
             }
 
             llvm::Value* new_val = get_llvm_val_cb();
@@ -1930,7 +1933,7 @@ private:
             // Clear out the is_defined name since it is now definitely defined:
             assert(!isIsDefinedName(name.s()));
             InternedString defined_name = getIsDefinedName(name);
-            _popFake(defined_name, true);
+            bool maybe_was_undefined = _popFake(defined_name, true);
 
             if (vst == ScopeInfo::VarScopeType::CLOSURE) {
                 size_t offset = scope_info->getClosureOffset(name);
@@ -1949,7 +1952,7 @@ private:
             }
 
             auto&& get_llvm_val = [&]() { return val->makeConverted(emitter, UNKNOWN)->getValue(); };
-            _setVRegIfUserVisible(name, get_llvm_val, prev);
+            _setVRegIfUserVisible(name, get_llvm_val, prev, maybe_was_undefined);
         }
     }
 
@@ -2136,7 +2139,12 @@ private:
         assert(vst == ScopeInfo::VarScopeType::FAST);
 
         CompilerVariable* prev = symbol_table.count(target->id) ? symbol_table[target->id] : NULL;
-        _setVRegIfUserVisible(target->id, []() { return getNullPtr(g.llvm_value_type_ptr); }, prev);
+
+        InternedString defined_name = getIsDefinedName(target->id);
+        ConcreteCompilerVariable* is_defined_var = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
+
+        _setVRegIfUserVisible(target->id, []() { return getNullPtr(g.llvm_value_type_ptr); }, prev,
+                              (bool)is_defined_var);
 
         if (symbol_table.count(target->id) == 0) {
             llvm::CallSite call = emitter.createCall(
@@ -2147,9 +2155,6 @@ private:
             call.setDoesNotReturn();
             return;
         }
-
-        InternedString defined_name = getIsDefinedName(target->id);
-        ConcreteCompilerVariable* is_defined_var = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
 
         if (is_defined_var) {
             emitter.createCall(
@@ -2668,8 +2673,6 @@ private:
                 llvm::Value* v;
                 if (phi_type == phi_type->getBoxType()) {
                     v = emitter.getNone()->getValue();
-                    if (new_state != DEAD)
-                        _setVRegIfUserVisible(*it, [&]() { return v; }, NULL);
                 } else {
                     v = llvm::UndefValue::get(phi_type->llvmType());
                 }
