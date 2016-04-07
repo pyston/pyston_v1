@@ -1,4 +1,3 @@
-# expected: reffail
 # Test a relatively-obscure corner case of multiple inheritance:
 # the metaclass is normally the first base's metaclass, but type_new
 # will specifically delegate to a later base's metaclass if it is more

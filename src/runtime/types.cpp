@@ -1452,6 +1452,7 @@ extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict)
         // But for classes created from Python, we don't have this extra untracked reference.
         // Rather than fix up the plumbing for now, just reach into the other system and remove this
         // class from the list.
+        // This hack also exists in BoxedHeapClass::create
         if (isSubclass(r->cls, type_cls)) {
             RELEASE_ASSERT(classes.back() == r, "");
             classes.pop_back();
@@ -1467,15 +1468,21 @@ extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict)
         if (isSubclass(e.value->cls, BaseException)) {
             static BoxedString* message_str = getStaticString("message");
             msg = getattr(e.value, message_str);
+        } else {
+            incref(msg);
         }
 
         if (PyString_Check(msg)) {
             auto newmsg = PyString_FromFormat("Error when calling the metaclass bases\n"
                                               "    %s",
                                               PyString_AS_STRING(msg));
-            if (newmsg)
+            if (newmsg) {
+                Py_DECREF(e.value);
                 e.value = newmsg;
+            }
         }
+
+        Py_DECREF(msg);
 
         // Go through these routines since they do some normalization:
         PyErr_Restore(e.type, e.value, e.traceback);
@@ -3875,6 +3882,9 @@ void BoxedClass::dealloc(Box* b) noexcept {
 
     if (PyObject_IS_GC(type))
         _PyObject_GC_UNTRACK(type);
+
+    PyObject_ClearWeakRefs((PyObject *)type);
+
     type->clearAttrsForDealloc();
 
     Py_XDECREF(type->tp_dict);

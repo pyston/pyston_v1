@@ -154,7 +154,8 @@ extern "C" void dumpEx(void* p, int levels) {
         if (b->cls->instancesHaveHCAttrs()) {
             printf("Object has hcattrs:\n");
             HCAttrs* attrs = b->getHCAttrsPtr();
-            attrs->hcls->dump();
+            if (attrs->hcls)
+                attrs->hcls->dump();
             // attrs->dump();
         }
 

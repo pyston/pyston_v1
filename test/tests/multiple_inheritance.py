@@ -1,4 +1,3 @@
-# expected: reffail
 # Testing the basic multiple-inheritance rules and functionality:
 
 class C(object):

@@ -915,7 +915,18 @@ BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, 
     assert(!made->tp_bases);
     made->tp_bases = incref(bases);
 
-    made->finishInitialization();
+    try {
+        made->finishInitialization();
+    } catch (ExcInfo e) {
+        // XXX hack -- see comment in createUserClass
+        if (isSubclass(made->cls, type_cls)) {
+            RELEASE_ASSERT(classes.back() == made, "");
+            classes.pop_back();
+        }
+
+        Py_DECREF(made);
+        throw e;
+    }
     assert(made->tp_mro);
 
     return made;
