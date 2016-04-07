@@ -270,7 +270,6 @@ extern "C" Box* max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 extern "C" Box* next(Box* iterator, Box* _default) noexcept {
-    assert(0 && "check refcounting");
     if (!PyIter_Check(iterator)) {
         PyErr_Format(PyExc_TypeError, "%.200s object is not an iterator", iterator->cls->tp_name);
         return NULL;
