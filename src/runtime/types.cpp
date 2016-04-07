@@ -3883,7 +3883,7 @@ void BoxedClass::dealloc(Box* b) noexcept {
     if (PyObject_IS_GC(type))
         _PyObject_GC_UNTRACK(type);
 
-    PyObject_ClearWeakRefs((PyObject *)type);
+    PyObject_ClearWeakRefs((PyObject*)type);
 
     type->clearAttrsForDealloc();
 
