@@ -622,7 +622,7 @@ extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
         Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
         if (i == -1 && PyErr_Occurred())
             throwCAPIException();
-        listSetitemUnboxed(self, i, v);
+        _listSetitem(self, i, v);
         Py_RETURN_NONE;
     } else if (slice->cls == slice_cls) {
         return listSetitemSlice(self, static_cast<BoxedSlice*>(slice), v);
