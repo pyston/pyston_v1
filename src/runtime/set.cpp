@@ -276,8 +276,12 @@ static Box* setRepr(BoxedSet* self) {
 }
 
 static void _setSymmetricDifferenceUpdate(BoxedSet* self, Box* other) {
-    if (!PyAnySet_Check(other))
+    if (!PyAnySet_Check(other)) {
         other = makeNewSet(self->cls, other);
+    } else {
+        Py_INCREF(other);
+    }
+    AUTO_DECREF(other);
 
     BoxedSet* other_set = static_cast<BoxedSet*>(other);
 
@@ -298,8 +302,7 @@ static BoxedSet* setIntersection2(BoxedSet* self, Box* container) {
     BoxedSet* rtn = makeNewSet(self->cls, NULL);
     for (auto elt : container->pyElements()) {
         if (self->s.count(elt)) {
-            rtn->s.insert(elt);
-            // steal the ref
+            _setAddStolen(rtn, elt);
         } else {
             Py_DECREF(elt);
         }
@@ -612,6 +615,7 @@ static Box* setIntersection(BoxedSet* self, BoxedTuple* args) {
 
 static Box* setIntersectionUpdate(BoxedSet* self, BoxedTuple* args) {
     Box* tmp = setIntersection(self, args);
+    AUTO_DECREF(tmp);
     std::swap(self->s, ((BoxedSet*)tmp)->s);
     return incref(None);
 }
@@ -660,6 +664,7 @@ Box* setEq(BoxedSet* self, BoxedSet* rhs) {
 
 Box* setNe(BoxedSet* self, BoxedSet* rhs) {
     Box* r = setEq(self, rhs);
+    AUTO_DECREF(r);
     assert(r->cls == bool_cls);
     return boxBool(r == False);
 }
