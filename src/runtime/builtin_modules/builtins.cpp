@@ -474,7 +474,6 @@ Box* issubclass_func(Box* child, Box* parent) {
 }
 
 Box* intern_func(Box* str) {
-    assert(0 && "check refcounting");
     if (!PyString_CheckExact(str)) // have to use exact check!
         raiseExcHelper(TypeError, "can't intern subclass of string");
     Py_INCREF(str);
