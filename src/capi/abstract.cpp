@@ -1911,6 +1911,7 @@ extern "C" PyObject* PyNumber_Divmod(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::DivMod);
     } catch (ExcInfo e) {
+        e.clear();
         fatalOrError(PyExc_NotImplementedError, "unimplemented");
         return nullptr;
     }

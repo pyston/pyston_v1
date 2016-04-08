@@ -1664,7 +1664,8 @@ extern "C" BORROWED(struct _frame*) PyEval_GetFrame(void) noexcept {
     Box* frame = NULL;
     try {
         frame = getFrame(0);
-    } catch (ExcInfo) {
+    } catch (ExcInfo e) {
+        e.clear();
         RELEASE_ASSERT(0, "untested");
     }
     return (struct _frame*)frame;

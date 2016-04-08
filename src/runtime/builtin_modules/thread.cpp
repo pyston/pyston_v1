@@ -76,6 +76,7 @@ static void* thread_start(Box* target, Box* varargs, Box* kwargs) {
         autoDecref(runtimeCall(target, ArgPassSpec(0, 0, true, kwargs != NULL), varargs, kwargs, NULL, NULL, NULL));
     } catch (ExcInfo e) {
         e.printExcAndTraceback();
+        e.clear();
     }
 
 #if STAT_TIMERS

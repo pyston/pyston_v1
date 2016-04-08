@@ -967,6 +967,8 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
                         throw e;
                 }
 
+                e.clear();
+
                 if (grewrite_args.isSuccessful()) {
                     grewrite_args.getReturn(); // to make the asserts happy
                     grewrite_args.clearReturn();
@@ -1017,6 +1019,7 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
                     } else
                         throw e;
                 }
+                e.clear();
                 res = NULL;
             }
         }

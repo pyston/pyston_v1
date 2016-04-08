@@ -718,6 +718,8 @@ Box* setContains(BoxedSet* self, Box* key) {
             if (!e.matches(TypeError))
                 throw e;
 
+            e.clear();
+
             BoxedSet* tmpKey = makeNewSet(frozenset_cls, key);
             AUTO_DECREF(tmpKey);
             return boxBool(self->s.find(tmpKey) != self->s.end());
@@ -741,6 +743,8 @@ Box* setRemove(BoxedSet* self, Box* key) {
         } catch (ExcInfo e) {
             if (!e.matches(TypeError))
                 throw e;
+
+            e.clear();
 
             BoxedSet* tmpKey = makeNewSet(frozenset_cls, key);
             AUTO_DECREF(tmpKey);
@@ -775,6 +779,8 @@ Box* setDiscard(BoxedSet* self, Box* key) {
         } catch (ExcInfo e) {
             if (!e.matches(TypeError))
                 throw e;
+
+            e.clear();
 
             BoxedSet* tmpKey = makeNewSet(frozenset_cls, key);
             AUTO_DECREF(tmpKey);

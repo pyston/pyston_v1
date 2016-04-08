@@ -673,6 +673,7 @@ Box* instanceNonzero(Box* _inst) {
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
             throw e;
+        e.clear();
     }
 
     if (nonzero_func == NULL) {
@@ -682,6 +683,7 @@ Box* instanceNonzero(Box* _inst) {
         } catch (ExcInfo e) {
             if (!e.matches(AttributeError))
                 throw e;
+            e.clear();
         }
     }
 
@@ -745,6 +747,7 @@ Box* instanceGetslice(Box* _inst, Box* i, Box* j) {
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
             throw e;
+        e.clear();
     }
 
     if (getslice_func == NULL) {
@@ -768,6 +771,7 @@ Box* instanceSetslice(Box* _inst, Box* i, Box* j, Box** sequence) {
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
             throw e;
+        e.clear();
     }
 
     if (setslice_func == NULL) {
@@ -792,6 +796,7 @@ Box* instanceDelslice(Box* _inst, Box* i, Box* j) {
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
             throw e;
+        e.clear();
     }
 
     if (delslice_func == NULL) {

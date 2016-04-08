@@ -1021,8 +1021,9 @@ extern "C" void abort() {
         alarm(1);
         try {
             _printStacktrace();
-        } catch (ExcInfo) {
+        } catch (ExcInfo e) {
             fprintf(stderr, "error printing stack trace during abort()");
+            e.clear();
         }
 
         // Cancel the alarm.

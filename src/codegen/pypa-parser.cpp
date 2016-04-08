@@ -1006,6 +1006,10 @@ pypa::String pypaEscapeDecoder(const pypa::String& s, const pypa::String& encodi
     } catch (ExcInfo e) {
         error = true;
         BoxedString* error_message = str(e.value);
+
+        e.clear();
+        AUTO_DECREF(error_message);
+
         if (error_message && error_message->cls == str_cls)
             return std::string(error_message->s());
         return "Encountered an unknown error inside pypaEscapeDecoder";

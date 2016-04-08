@@ -291,8 +291,10 @@ Box* generatorClose(Box* s) {
         autoDecref(generatorThrow(self, GeneratorExit, nullptr, nullptr));
         raiseExcHelper(RuntimeError, "generator ignored GeneratorExit");
     } catch (ExcInfo e) {
-        if (e.matches(StopIteration) || e.matches(GeneratorExit))
+        if (e.matches(StopIteration) || e.matches(GeneratorExit)) {
+            e.clear();
             return incref(None);
+        }
         throw e;
     }
     assert(0); // unreachable

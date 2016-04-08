@@ -445,6 +445,7 @@ static int main(int argc, char** argv) noexcept {
                     throwCAPIException();
             } catch (ExcInfo e) {
                 e.printExcAndTraceback();
+                e.clear();
                 return 1;
             }
         }

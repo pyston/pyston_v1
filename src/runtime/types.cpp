@@ -3011,7 +3011,8 @@ Box* objectRepr(Box* self) {
         mod = typeModule(type, NULL);
         if (!PyString_Check(mod))
             mod = NULL;
-    } catch (ExcInfo) {
+    } catch (ExcInfo e) {
+        e.clear();
     }
 
     DecrefHandle<Box> name(typeName(type, NULL));
