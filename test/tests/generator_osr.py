@@ -1,4 +1,3 @@
-# expected: reffail
 # This test could really benefit from defined/settable OSR limits
 
 def f(x):

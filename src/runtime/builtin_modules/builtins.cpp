@@ -853,14 +853,15 @@ Box* map(Box* f, BoxedTuple* args) {
 }
 
 Box* reduce(Box* f, Box* container, Box* initial) {
-    assert(0 && "check refcounting");
-    Box* current = initial;
+    Box* current = xincref(initial);
 
     for (Box* e : container->pyElements()) {
         assert(e);
         if (current == NULL) {
             current = e;
         } else {
+            AUTO_DECREF(current);
+            AUTO_DECREF(e);
             current = runtimeCall(f, ArgPassSpec(2), current, e, NULL, NULL, NULL);
         }
     }
@@ -1588,7 +1589,6 @@ static PyObject* builtin_reload(PyObject* self, PyObject* v) noexcept {
 }
 
 Box* getreversed(Box* o) {
-    assert(0 && "check refcounting");
     static BoxedString* reversed_str = getStaticString("__reversed__");
 
     // common case:

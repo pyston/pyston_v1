@@ -1791,8 +1791,15 @@ int BoxedInstance::traverse(Box* o, visitproc visit, void* arg) noexcept {
     return 0;
 }
 
-int BoxedInstance::clear(Box* self) noexcept {
-    Py_FatalError("unimplemented");
+int BoxedInstance::clear(Box* o) noexcept {
+    BoxedInstance* self = static_cast<BoxedInstance*>(o);
+
+    self->attrs.clearForDealloc();
+
+    // I think it is ok to not clear this:
+    // Py_CLEAR(self->inst_cls);
+
+    return 0;
 }
 
 void BoxedClassobj::dealloc(Box* b) noexcept {
@@ -1800,13 +1807,13 @@ void BoxedClassobj::dealloc(Box* b) noexcept {
 
     BoxedClassobj* cl = static_cast<BoxedClassobj*>(b);
 
-    Py_DECREF(cl->bases);
-    Py_DECREF(cl->name);
-
     if (cl->weakreflist)
         PyObject_ClearWeakRefs(cl);
 
     cl->clearAttrsForDealloc();
+
+    Py_DECREF(cl->bases);
+    Py_DECREF(cl->name);
 
     cl->cls->tp_free(cl);
 }
@@ -1821,7 +1828,15 @@ int BoxedClassobj::traverse(Box* o, visitproc visit, void* arg) noexcept {
 }
 
 int BoxedClassobj::clear(Box* self) noexcept {
-    Py_FatalError("unimplemented");
+    BoxedClassobj* cl = static_cast<BoxedClassobj*>(self);
+
+    cl->attrs.clearForDealloc();
+
+    // I think it is ok to not clear these:
+    // Py_CLEAR(cl->bases);
+    // Py_CLEAR(cl->name);
+
+    return 0;
 }
 
 void setupClassobj() {

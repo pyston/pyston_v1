@@ -940,7 +940,7 @@ Box* intRPow(BoxedInt* lhs, Box* rhs, Box* mod) {
     }
     Box* rtn = pow_i64_i64(rhs_int->n, lhs->n, mod);
     if (PyLong_Check(rtn))
-        return longInt(rtn);
+        return longInt(autoDecref(rtn));
     return rtn;
 }
 
@@ -1303,6 +1303,8 @@ template <ExceptionStyle S> Box* intNew(Box* _cls, Box* val, Box* base) noexcept
     if (n->cls == long_cls) {
         if (cls == int_cls)
             return n;
+
+        Py_DECREF(n);
 
         if (S == CAPI) {
             PyErr_SetString(OverflowError, "Python int too large to convert to C long");

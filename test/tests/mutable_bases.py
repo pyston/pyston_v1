@@ -1,4 +1,3 @@
-# expected: reffail
 class A(object):
     def foo(self):
         print "foo"

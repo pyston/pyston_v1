@@ -3054,7 +3054,7 @@ static PyObject* import_copyreg(void) noexcept {
 
     if (!copyreg_str) {
         // this is interned in cpython:
-        copyreg_str = PyString_FromString("copy_reg");
+        copyreg_str = getStaticString("copy_reg");
         if (copyreg_str == NULL)
             return NULL;
     }

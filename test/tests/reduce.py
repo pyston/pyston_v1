@@ -1,4 +1,3 @@
-# expected: reffail
 import operator
 
 print reduce(operator.add, range(50))
@@ -22,4 +21,9 @@ print reduce(f, "abc")
 try:
     print reduce(f, [])
 except TypeError, e:
+    print e
+
+try:
+    print reduce(lambda x, y: x / y, range(-10, 10))
+except Exception as e:
     print e

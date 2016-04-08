@@ -3610,6 +3610,7 @@ extern "C" i64 unboxedLen(Box* obj) {
 
     assert(lobj->cls == int_cls);
     i64 rtn = lobj->n;
+    Py_DECREF(lobj);
 
     if (rewriter.get()) {
         assert(0 && "how do we know this will return an int?");

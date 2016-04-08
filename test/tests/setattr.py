@@ -1,4 +1,3 @@
-# expected: reffail
 class MyDescr(object):
     def __set__(self, inst, val):
         print type(self), type(inst), val

@@ -490,7 +490,10 @@ extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* 
             PyErr_Format(PyExc_TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(name)->tp_name);
             return -1;
         }
+    } else {
+        Py_INCREF(name);
     }
+    AUTO_DECREF(name);
 
     BoxedString* str = static_cast<BoxedString*>(name);
     incref(str);
