@@ -3015,7 +3015,16 @@ void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewrit
     if (descr && _set_) {
         AUTO_DECREF(val);
         Box* set_rtn;
-        if (rewrite_args) {
+
+        // __set__ gets called differently from __get__: __get__ gets called roughly as
+        // descr.__class__.__get__(descr, obj)
+        // But __set__ gets called more like
+        // descr.__set__(obj, val)
+        // This is the same for functions, but for non-functions we have to explicitly run it
+        // through the descriptor protocol.
+        if (rewrite_args && _set_->cls == function_cls) {
+            r_set->addAttrGuard(offsetof(Box, cls), (uint64_t)_set_->cls);
+
             CallRewriteArgs crewrite_args(rewrite_args->rewriter, r_set, Location::any());
             crewrite_args.arg1 = r_descr;
             crewrite_args.arg2 = rewrite_args->obj;
@@ -3026,8 +3035,9 @@ void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewrit
                 rewrite_args->out_success = true;
             }
         } else {
-            set_rtn
-                = runtimeCallInternal<CXX, NOT_REWRITABLE>(_set_, NULL, ArgPassSpec(3), descr, obj, val, NULL, NULL);
+            _set_ = processDescriptor(_set_, descr, descr->cls);
+            AUTO_DECREF(_set_);
+            set_rtn = runtimeCallInternal<CXX, NOT_REWRITABLE>(_set_, NULL, ArgPassSpec(2), obj, val, NULL, NULL, NULL);
         }
         Py_DECREF(set_rtn);
 
@@ -5217,7 +5227,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
                 rewrite_args->obj = r_im_func;
             }
 
-            // TODO: add back this instancemethod checking (see instancemethod_checking.py)
+// TODO: add back this instancemethod checking (see instancemethod_checking.py)
 #if 0
             Box* first_arg = NULL;
             if (argspec.num_args > 0) {
