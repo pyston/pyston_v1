@@ -523,14 +523,16 @@ extern "C" int PyObject_SetAttr(PyObject* obj, PyObject* name, PyObject* value) 
     }
 
     BoxedString* name_str = static_cast<BoxedString*>(name);
+    Py_INCREF(name_str);
     internStringMortalInplace(name_str);
+    AUTO_DECREF(name_str);
 
     assert(PyString_Check(name));
     try {
         if (value == NULL)
             delattr(obj, name_str);
         else
-            setattr(obj, name_str, value);
+            setattr(obj, name_str, incref(value));
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;

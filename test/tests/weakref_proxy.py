@@ -1,4 +1,3 @@
-# expected: reffail
 import weakref
 from testing_helpers import test_gc
 
