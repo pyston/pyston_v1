@@ -82,9 +82,6 @@ uint8_t* ICSlotRewrite::getSlotStart() {
     return (uint8_t*)ic->start_addr + ic_entry->idx * ic->getSlotSize();
 }
 
-// Map of gc pointers -> number of ics that point tot hem.
-static llvm::DenseMap<void*, int> ic_gc_references;
-
 void ICSlotRewrite::commit(CommitHook* hook, std::vector<void*> gc_references) {
     bool still_valid = true;
     for (int i = 0; i < dependencies.size(); i++) {
@@ -121,16 +118,13 @@ void ICSlotRewrite::commit(CommitHook* hook, std::vector<void*> gc_references) {
     // if (VERBOSITY()) printf("Commiting to %p-%p\n", start, start + ic->slot_size);
     memcpy(slot_start, buf, ic->getSlotSize());
 
+    for (auto p : gc_references) {
+        Py_INCREF(p);
+    }
     for (auto p : ic_entry->gc_references) {
-        int& i = ic_gc_references[p];
-        if (i == 1)
-            ic_gc_references.erase(p);
-        else
-            --i;
+        Py_DECREF(p);
     }
     ic_entry->gc_references = std::move(gc_references);
-    for (auto p : ic_entry->gc_references)
-        ic_gc_references[p]++;
 
     ic->times_rewritten++;
 
@@ -231,6 +225,7 @@ ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, S
       start_addr(start_addr),
       slowpath_rtn_addr(slowpath_rtn_addr),
       continue_addr(continue_addr) {
+    slots.reserve(num_slots);
     for (int i = 0; i < num_slots; i++) {
         slots.emplace_back(this, i);
     }
@@ -323,6 +318,10 @@ void ICInfo::clear(ICSlotInfo* icentry) {
     writer.jmp(JumpDestination::fromStart(getSlotSize()));
     assert(writer.bytesWritten() <= IC_INVALDITION_HEADER_SIZE);
 
+    for (auto p : icentry->gc_references) {
+        Py_DECREF(p);
+    }
+
     // std::unique_ptr<MCWriter> writer(createMCWriter(start, getSlotSize(), 0));
     // writer->emitNop();
     // writer->emitGuardFalse();
@@ -357,5 +356,11 @@ ICInfo* ICInfo::getICInfoForNode(AST* node) {
 }
 void ICInfo::associateNodeWithICInfo(AST* node) {
     ics_by_ast_node[node] = this;
+}
+
+void clearAllICs() {
+    for (auto&& p : ics_by_ast_node) {
+        p.second->clearAll();
+    }
 }
 }

@@ -134,6 +134,11 @@ public:
 
     std::unique_ptr<ICSlotRewrite> startRewrite(const char* debug_name);
     void clear(ICSlotInfo* entry);
+    void clearAll() {
+        for (ICSlotInfo& slot_info : slots) {
+            clear(&slot_info);
+        }
+    }
 
     bool shouldAttempt();
     bool isMegamorphic();
@@ -160,6 +165,8 @@ std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t*
 void deregisterCompiledPatchpoint(ICInfo* ic);
 
 ICInfo* getICInfo(void* rtn_addr);
+
+void clearAllICs(); // mostly for refcount debugging
 }
 
 #endif

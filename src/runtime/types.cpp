@@ -4797,6 +4797,7 @@ extern "C" void Py_Finalize() noexcept {
             break;
     }
 
+    clearAllICs();
     PyType_ClearCache();
     PyOS_FiniInterrupts();
     _PyCodecRegistry_Deinit();

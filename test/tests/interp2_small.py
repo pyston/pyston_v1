@@ -1,4 +1,3 @@
-# expected: reffail
 class Random(object):
     def __init__(self, seed):
         self.cur = seed

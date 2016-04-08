@@ -1,4 +1,3 @@
-# expected: reffail
 # Regression test: make sure we guard / invalidate our getattr() rewrites:
 
 class C(object):
