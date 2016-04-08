@@ -53,6 +53,8 @@ extern "C" PyObject* _formatter_field_name_split(PyStringObject* self) noexcept;
 #define RIGHTSTRIP 1
 #define BOTHSTRIP 2
 
+#define PyStringObject_SIZE (offsetof(PyStringObject, ob_sval) + 1)
+
 namespace pyston {
 
 BoxedString* EmptyString;
@@ -1157,8 +1159,8 @@ error:
 
 extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
     Box* rtn = PyString_Format(lhs, rhs);
-    checkAndThrowCAPIException();
-    assert(rtn);
+    if (!rtn)
+        throwCAPIException();
     return rtn;
 }
 
@@ -2536,36 +2538,29 @@ extern "C" Py_ssize_t PyString_Size(PyObject* op) noexcept {
 }
 
 extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
-    // This is only allowed to be called when there is only one user of the string (ie a refcount of 1 in CPython)
-
-    assert(pv);
-    assert(PyString_Check(*pv));
-    BoxedString* s = static_cast<BoxedString*>(*pv);
-
-    if (newsize == s->size())
-        return 0;
-
-    if (PyString_CHECK_INTERNED(s)) {
+    PyObject* v;
+    PyStringObject* sv;
+    v = *pv;
+    if (!PyString_Check(v) || Py_REFCNT(v) != 1 || newsize < 0 || PyString_CHECK_INTERNED(v)) {
         *pv = 0;
+        Py_DECREF(v);
+        PyErr_BadInternalCall();
         return -1;
     }
-
-    if (newsize < s->size()) {
-        // XXX resize the box (by reallocating) smaller if it makes sense
-        s->ob_size = newsize;
-        s->hash = -1; /* invalidate cached hash value */
-        s->data()[newsize] = 0;
-        return 0;
+    /* XXX UNREF/NEWREF interface should be more symmetrical */
+    _Py_DEC_REFTOTAL;
+    _Py_ForgetReference(v);
+    *pv = (PyObject*)PyObject_REALLOC((char*)v, PyStringObject_SIZE + newsize);
+    if (*pv == NULL) {
+        PyObject_Del(v);
+        PyErr_NoMemory();
+        return -1;
     }
-
-    BoxedString* resized;
-    if (s->cls == str_cls)
-        resized = BoxedString::createUninitializedString(newsize);
-    else
-        resized = BoxedString::createUninitializedString(s->cls, newsize);
-    memcpy(resized->data(), s->data(), s->size());
-    resized->data()[newsize] = 0;
-    *pv = resized;
+    _Py_NewReference(*pv);
+    sv = (PyStringObject*)*pv;
+    Py_SIZE(sv) = newsize;
+    sv->ob_sval[newsize] = '\0';
+    sv->ob_shash = -1; /* invalidate cached hash value */
     return 0;
 }
 
@@ -2855,6 +2850,8 @@ void setupStr() {
     str_cls->tp_as_mapping = &str_as_mapping;
 
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
+
+    assert(str_cls->tp_basicsize == PyStringObject_SIZE);
 
     str_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedStringIterator), false, "striterator",
                                           false, (destructor)BoxedStringIterator::dealloc, NULL, true,
