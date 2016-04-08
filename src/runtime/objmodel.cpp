@@ -1923,6 +1923,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
         if (rewrite_args)
             r_descr->addAttrGuard(offsetof(Box, cls), (uint64_t)descr->cls);
 
+        // TODO: we need to change this to support instancemethod_checking.py
         if (!for_call && descr->cls == function_cls) {
             if (rewrite_args) {
                 // return an unbound instancemethod
@@ -4967,6 +4968,82 @@ template Box* callCLFunc<CXX, NOT_REWRITABLE>(FunctionMetadata* f, CallRewriteAr
                                               BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                                               Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
 
+static void getclassname(PyObject* klass, char* buf, int bufsize) noexcept {
+    PyObject* name;
+
+    assert(bufsize > 1);
+    strcpy(buf, "?"); /* Default outcome */
+    if (klass == NULL)
+        return;
+    name = PyObject_GetAttrString(klass, "__name__");
+    if (name == NULL) {
+        /* This function cannot return an exception */
+        PyErr_Clear();
+        return;
+    }
+    if (PyString_Check(name)) {
+        strncpy(buf, PyString_AS_STRING(name), bufsize);
+        buf[bufsize - 1] = '\0';
+    }
+    Py_DECREF(name);
+}
+
+static void getinstclassname(PyObject* inst, char* buf, int bufsize) noexcept {
+    PyObject* klass;
+
+    if (inst == NULL) {
+        assert(bufsize > 0 && (size_t)bufsize > strlen("nothing"));
+        strcpy(buf, "nothing");
+        return;
+    }
+
+    klass = PyObject_GetAttrString(inst, "__class__");
+    if (klass == NULL) {
+        /* This function cannot return an exception */
+        PyErr_Clear();
+        klass = (PyObject*)(inst->cls);
+        Py_INCREF(klass);
+    }
+    getclassname(klass, buf, bufsize);
+    Py_XDECREF(klass);
+}
+
+const char* PyEval_GetFuncName(PyObject* func) noexcept {
+    if (PyMethod_Check(func))
+        return PyEval_GetFuncName(PyMethod_GET_FUNCTION(func));
+    else if (PyFunction_Check(func)) {
+        auto name = ((BoxedFunction*)func)->name;
+        if (!name)
+            return "<unknown name>";
+        return PyString_AsString(name);
+    } else if (PyCFunction_Check(func))
+        return ((PyCFunctionObject*)func)->m_ml->ml_name;
+    else if (PyClass_Check(func))
+        return PyString_AsString(((BoxedClassobj*)func)->name);
+    else if (PyInstance_Check(func)) {
+        return PyString_AsString(((BoxedInstance*)func)->inst_cls->name);
+    } else {
+        return func->cls->tp_name;
+    }
+}
+
+const char* PyEval_GetFuncDesc(PyObject* func) noexcept {
+    if (PyMethod_Check(func))
+        return "()";
+    else if (PyFunction_Check(func))
+        return "()";
+    else if (PyCFunction_Check(func))
+        return "()";
+    else if (PyClass_Check(func))
+        return " constructor";
+    else if (PyInstance_Check(func)) {
+        return " instance";
+    } else {
+        return " object";
+    }
+}
+
+
 template <ExceptionStyle S, Rewritable rewritable>
 Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                          Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
@@ -5139,6 +5216,46 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             if (rewrite_args) {
                 rewrite_args->obj = r_im_func;
             }
+
+            // TODO: add back this instancemethod checking (see instancemethod_checking.py)
+#if 0
+            Box* first_arg = NULL;
+            if (argspec.num_args > 0) {
+                first_arg = arg1;
+            } else if (argspec.has_starargs) {
+                Box* varargs = getArg(argspec.starargsIndex(), arg1, arg2, arg3, args);
+                assert(varargs->cls == tuple_cls);
+                auto t_varargs = static_cast<BoxedTuple*>(varargs);
+                if (t_varargs->ob_size > 0)
+                    first_arg = t_varargs->elts[0];
+            }
+
+            int ok;
+            if (first_arg == NULL)
+                ok = 0;
+            else {
+                ok = PyObject_IsInstance(first_arg, im->im_class);
+                if (ok < 0)
+                    return NULL;
+            }
+
+            if (!ok) {
+                char clsbuf[256];
+                char instbuf[256];
+                getclassname(im->im_class, clsbuf, sizeof(clsbuf));
+                getinstclassname(first_arg, instbuf, sizeof(instbuf));
+                PyErr_Format(PyExc_TypeError, "unbound method %s%s must be called with "
+                                              "%s instance as first argument "
+                                              "(got %s%s instead)",
+                             PyEval_GetFuncName(f), PyEval_GetFuncDesc(f), clsbuf, instbuf,
+                             first_arg == NULL ? "" : " instance");
+                if (S == CAPI)
+                    return NULL;
+                else
+                    throwCAPIException();
+            }
+#endif
+
             Box* res
                 = runtimeCallInternal<S, rewritable>(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
             return res;

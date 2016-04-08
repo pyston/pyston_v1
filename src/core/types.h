@@ -191,6 +191,11 @@ struct ArgPassSpec {
 
     int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
 
+    int starargsIndex() const {
+        assert(has_starargs);
+        return num_args + num_keywords;
+    }
+
     int kwargsIndex() const {
         assert(has_kwargs);
         return num_args + num_keywords + (has_starargs ? 1 : 0);
