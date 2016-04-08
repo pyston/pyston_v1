@@ -1,4 +1,3 @@
-# expected: reffail
 # TODO This is a hodgepodge of stuff, should probably organize it better
 # maybe merge some of it into dunder_descriptors?
 

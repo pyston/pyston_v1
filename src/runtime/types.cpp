@@ -3443,8 +3443,10 @@ static void typeSetName(Box* b, Box* v, void*) {
     }
 
     BoxedHeapClass* ht = static_cast<BoxedHeapClass*>(type);
+    auto old_name = ht->ht_name;
     ht->ht_name = incref(s);
     ht->tp_name = s->data();
+    Py_DECREF(old_name);
 }
 
 static Box* typeBases(Box* b, void*) {

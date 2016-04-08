@@ -1395,7 +1395,7 @@ static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type,
 
 static Box* intIntGetset(Box* b, void*) {
     if (b->cls == int_cls) {
-        return b;
+        return incref(b);
     } else {
         assert(PyInt_Check(b));
         return boxInt(static_cast<BoxedInt*>(b)->n);

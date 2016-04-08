@@ -2056,7 +2056,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
     case BoxedMemberDescriptor::TYPE: {                                                                                \
         if (rewrite_args) {                                                                                            \
             RewriterVar* r_unboxed_val = rewrite_args->obj->getAttrCast<type, cast>(member_desc->offset);              \
-            RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)boxFn, r_unboxed_val);                      \
+            RewriterVar* r_rtn                                                                                         \
+                = rewrite_args->rewriter->call(true, (void*)boxFn, r_unboxed_val)->setType(RefType::OWNED);            \
             /* XXX assuming that none of these throw a capi error! */                                                  \
             rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);                                              \
         }                                                                                                              \

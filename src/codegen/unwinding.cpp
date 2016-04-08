@@ -696,11 +696,14 @@ ExcInfo* getFrameExcInfo() {
 
     if (!copy_from_exc->type) {
         // No exceptions found:
-        *copy_from_exc = ExcInfo(None, None, NULL);
+        *copy_from_exc = ExcInfo(incref(None), incref(None), NULL);
     }
 
     for (auto* ex : to_update) {
         *ex = *copy_from_exc;
+        Py_INCREF(ex->type);
+        Py_INCREF(ex->value);
+        Py_XINCREF(ex->traceback);
     }
     assert(cur_exc);
     return cur_exc;
