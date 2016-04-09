@@ -919,6 +919,7 @@ BORROWED(Box*) FrameInfo::updateBoxedLocals() {
             PyDict_SetItem(d, boxedName, val);
         } else {
             PyDict_DelItem(d, boxedName);
+            PyErr_Clear();
         }
     }
 

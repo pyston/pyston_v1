@@ -438,10 +438,11 @@ Box* dictDelitem(BoxedDict* self, Box* k) {
         raiseExcHelper(KeyError, k);
     }
 
+    Box* old_k = it->first.value;
     Box* v = it->second;
     self->d.erase(it);
     Py_DECREF(v);
-    Py_DECREF(k);
+    Py_DECREF(old_k);
 
     Py_RETURN_NONE;
 }

@@ -1,4 +1,3 @@
-# expected: reffail
 # The use of c makes sure a closure gets passed through all 4 functions.
 # The use of a in g makes sure that a is in f's closure.
 # The a in j should refer to the a in h, thus throwing an exception since
