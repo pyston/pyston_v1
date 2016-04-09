@@ -896,30 +896,15 @@ public:
     }
 };
 
-void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
-    assert(PyList_Check(self));
-
-    if (cmp == None)
-        cmp = NULL;
-
-    if (key == None)
-        key = NULL;
-
-    RELEASE_ASSERT(!cmp || !key, "Specifying both the 'cmp' and 'key' keywords is currently not supported");
-
-    // TODO(kmod): maybe we should just switch to CPython's sort.  not sure how the algorithms compare,
-    // but they specifically try to support cases where __lt__ or the cmp function might end up inspecting
-    // the current list being sorted.
-    // I also don't know if std::stable_sort is exception-safe.
-
+void _sortArray(Box** elts, long num_elts, Box* cmp, Box* key) {
     if (cmp) {
         assert(!key);
-        std::stable_sort<Box**, PyCmpComparer>(self->elts->elts, self->elts->elts + self->size, PyCmpComparer(cmp));
+        std::stable_sort<Box**, PyCmpComparer>(elts, elts + num_elts, PyCmpComparer(cmp));
     } else {
         int num_keys_added = 0;
         auto remove_keys = [&]() {
             for (int i = 0; i < num_keys_added; i++) {
-                Box** obj_loc = &self->elts->elts[i];
+                Box** obj_loc = &elts[i];
                 assert((*obj_loc)->cls == tuple_cls);
                 BoxedTuple* t = static_cast<BoxedTuple*>(*obj_loc);
                 *obj_loc = t->elts[2];
@@ -929,8 +914,8 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
 
         try {
             if (key) {
-                for (int i = 0; i < self->size; i++) {
-                    Box** obj_loc = &self->elts->elts[i];
+                for (int i = 0; i < num_elts; i++) {
+                    Box** obj_loc = &elts[i];
 
                     Box* key_val = runtimeCall(key, ArgPassSpec(1), *obj_loc, NULL, NULL, NULL, NULL);
                     AUTO_DECREF(key_val);
@@ -950,7 +935,7 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
             // as part of the sort key.
             // But we might want to get rid of that approach?  CPython doesn't do that (they create special
             // wrapper objects that compare only based on the key).
-            std::stable_sort<Box**, PyLt>(self->elts->elts, self->elts->elts + self->size, PyLt());
+            std::stable_sort<Box**, PyLt>(elts, elts + num_elts, PyLt());
         } catch (ExcInfo e) {
             remove_keys();
             throw e;
@@ -958,6 +943,42 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
 
         remove_keys();
     }
+}
+
+void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
+    assert(PyList_Check(self));
+
+    if (cmp == None)
+        cmp = NULL;
+
+    if (key == None)
+        key = NULL;
+
+    RELEASE_ASSERT(!cmp || !key, "Specifying both the 'cmp' and 'key' keywords is currently not supported");
+
+    // TODO(kmod): maybe we should just switch to CPython's sort.  not sure how the algorithms compare,
+    // but they specifically try to support cases where __lt__ or the cmp function might end up inspecting
+    // the current list being sorted.
+    // I also don't know if std::stable_sort is exception-safe.
+
+    auto orig_size = self->size;
+    auto orig_elts = self->elts;
+
+    self->elts = new (0) GCdArray();
+    self->size = 0;
+
+    try {
+        _sortArray(orig_elts->elts, orig_size, cmp, key);
+    } catch (ExcInfo e) {
+        delete self->elts;
+        self->elts = orig_elts;
+        self->size = orig_size;
+        throw e;
+    }
+
+    delete self->elts;
+    self->elts = orig_elts;
+    self->size = orig_size;
 
     if (nonzero(reverse)) {
         Box* r = listReverse(self);
