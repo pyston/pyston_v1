@@ -1,4 +1,3 @@
-# expected: reffail
 import subprocess
 
 subprocess.check_call(["true"])

@@ -1,4 +1,3 @@
-# expected: reffail
 class Indexable(object):
     def __getitem__(self, idx):
         print "called getitem on object", idx

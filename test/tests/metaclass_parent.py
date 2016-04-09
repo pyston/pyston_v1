@@ -1,4 +1,3 @@
-# expected: reffail
 # This would make a good Python quiz:
 
 sl = slice(1,2)

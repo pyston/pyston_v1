@@ -1,4 +1,3 @@
-# expected: reffail
 
 # This throws an exception in the import machinery when we try to access __path__,
 # but that should get caught.

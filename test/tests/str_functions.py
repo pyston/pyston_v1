@@ -1,4 +1,3 @@
-# expected: reffail
 print "-".join(["hello", "world"])
 print "-".join(("hello", "world"))
 

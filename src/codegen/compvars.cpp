@@ -350,6 +350,7 @@ public:
                     llvm::Value* r = emitter.createCall3(info.unw_info, g.funcs.apply_slice, var->getValue(), cstart,
                                                          cstop, CAPI, getNullPtr(g.llvm_value_type_ptr));
                     emitter.setType(r, RefType::OWNED);
+                    emitter.setNullable(r, true);
 
                     return new ConcreteCompilerVariable(static_cast<ConcreteCompilerType*>(return_type), r);
                 } else {
