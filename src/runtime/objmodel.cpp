@@ -1821,7 +1821,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
 
             if (rewrite_args) {
                 r_im_self = r_im_class;
-                r_im_func = r_descr->getAttr(offsetof(BoxedClassmethod, cm_callable));
+                r_im_func = r_descr->getAttr(offsetof(BoxedClassmethod, cm_callable))->setType(RefType::BORROWED);
                 r_im_func->addGuardNotEq(0);
             }
         } else if (descr->cls == instancemethod_cls) {
@@ -1871,7 +1871,8 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
         }
 
         if (rewrite_args) {
-            RewriterVar* r_sm_callable = r_descr->getAttr(offsetof(BoxedStaticmethod, sm_callable));
+            RewriterVar* r_sm_callable
+                = r_descr->getAttr(offsetof(BoxedStaticmethod, sm_callable))->setType(RefType::BORROWED);
             r_sm_callable->addGuardNotEq(0);
             rewrite_args->setReturn(r_sm_callable, ReturnConvention::HAS_RETURN);
         }
