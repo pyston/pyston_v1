@@ -77,11 +77,19 @@ static Box* propertyInit(Box* _self, Box* fget, Box* fset, Box** args) {
     Box* doc = args[1];
 
     BoxedProperty* self = static_cast<BoxedProperty*>(_self);
+    Box* prev_get = self->prop_get;
+    Box* prev_set = self->prop_set;
+    Box* prev_del = self->prop_del;
+    Box* prev_doc = self->prop_doc;
     self->prop_get = fget == None ? NULL : incref(fget);
     self->prop_set = fset == None ? NULL : incref(fset);
     self->prop_del = fdel == None ? NULL : incref(fdel);
     self->prop_doc = xincref(doc);
     self->getter_doc = false;
+    Py_XDECREF(prev_get);
+    Py_XDECREF(prev_set);
+    Py_XDECREF(prev_del);
+    Py_XDECREF(prev_doc);
 
     /* if no docstring given and the getter has one, use that one */
     if ((doc == NULL || doc == None) && fget != NULL) {
@@ -215,7 +223,9 @@ extern "C" PyObject* PyClassMethod_New(PyObject* callable) noexcept {
 static Box* classmethodInit(Box* _self, Box* f) {
     RELEASE_ASSERT(isSubclass(_self->cls, classmethod_cls), "");
     BoxedClassmethod* self = static_cast<BoxedClassmethod*>(_self);
+    Box* prev = self->cm_callable;
     self->cm_callable = incref(f);
+    Py_XDECREF(prev);
 
     return incref(None);
 }

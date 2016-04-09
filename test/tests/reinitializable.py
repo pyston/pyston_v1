@@ -1,4 +1,3 @@
-# expected: reffail
 # Not sure if these are important or not:
 
 p = property(1, 2, 3)
