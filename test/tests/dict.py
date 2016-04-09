@@ -235,3 +235,8 @@ print sorted(l)
 d = dict()
 d['two'] = d
 print d
+
+
+# Remove an item using a different key:
+d = {1:1}
+d.pop(1L)

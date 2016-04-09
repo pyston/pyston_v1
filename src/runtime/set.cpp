@@ -102,10 +102,14 @@ static void _setAdd(BoxedSet* self, BoxAndHash val) {
     _setAddStolen(self, val);
 }
 
-static void _setRemove(BoxedSet* self, BoxAndHash val) {
-    bool erased = self->s.erase(val);
-    if (erased)
-        Py_DECREF(val.value);
+static bool _setRemove(BoxedSet* self, BoxAndHash val) {
+    auto it = self->s.find(val);
+    if (it == self->s.end())
+        return false;
+    Box* to_decref = it->value;
+    self->s.erase(it);
+    Py_DECREF(to_decref);
+    return true;
 }
 
 // Creates a set of type 'cls' from 'container' (NULL to get an empty set).
@@ -288,8 +292,7 @@ static void _setSymmetricDifferenceUpdate(BoxedSet* self, Box* other) {
     for (auto elt : other_set->s) {
         auto&& p = self->s.insert(elt);
         if (!p.second /* already exists */) {
-            self->s.erase(p.first);
-            Py_DECREF(elt.value);
+            _setRemove(self, elt);
         } else {
             Py_INCREF(elt.value);
         }
@@ -364,9 +367,7 @@ Box* setISub(BoxedSet* lhs, BoxedSet* rhs) {
 
     // TODO: write and call setDifferenceUpdate2
     for (auto&& elt : rhs->s) {
-        bool found = lhs->s.erase(elt);
-        if (found)
-            Py_DECREF(elt.value);
+        _setRemove(lhs, elt);
     }
     return incref(lhs);
 }
@@ -734,12 +735,9 @@ Box* setRemove(BoxedSet* self, Box* key) {
 
     if (PySet_Check(key)) {
         try {
-            BoxAndHash k_hash(key);
-            if (self->s.find(k_hash) != self->s.end()) {
-                bool existed = self->s.erase(k_hash);
-                if (existed)
-                    return incref(None);
-            }
+            bool existed = _setRemove(self, key);
+            if (existed)
+                return incref(None);
         } catch (ExcInfo e) {
             if (!e.matches(TypeError))
                 throw e;
@@ -748,23 +746,17 @@ Box* setRemove(BoxedSet* self, Box* key) {
 
             BoxedSet* tmpKey = makeNewSet(frozenset_cls, key);
             AUTO_DECREF(tmpKey);
-            if (self->s.find(tmpKey) != self->s.end()) {
-                bool existed = self->s.erase(tmpKey);
-                if (existed)
-                    return incref(None);
-            }
+            bool existed = _setRemove(self, tmpKey);
+            if (existed)
+                return incref(None);
         }
         raiseExcHelper(KeyError, key);
     }
 
-    auto it = self->s.find(key);
-    if (it == self->s.end()) {
-        raiseExcHelper(KeyError, key);
-    }
-
-    self->s.erase(it);
-    Py_DECREF(key);
-    return incref(None);
+    bool existed = _setRemove(self, key);
+    if (existed)
+        return incref(None);
+    raiseExcHelper(KeyError, key);
 }
 
 Box* setDiscard(BoxedSet* self, Box* key) {
@@ -772,10 +764,7 @@ Box* setDiscard(BoxedSet* self, Box* key) {
 
     if (PySet_Check(key)) {
         try {
-            BoxAndHash k_hash(key);
-            if (self->s.find(k_hash) != self->s.end()) {
-                self->s.erase(k_hash);
-            }
+            _setRemove(self, key);
         } catch (ExcInfo e) {
             if (!e.matches(TypeError))
                 throw e;
@@ -784,18 +773,12 @@ Box* setDiscard(BoxedSet* self, Box* key) {
 
             BoxedSet* tmpKey = makeNewSet(frozenset_cls, key);
             AUTO_DECREF(tmpKey);
-            if (self->s.find(tmpKey) != self->s.end()) {
-                self->s.erase(tmpKey);
-            }
+            _setRemove(self, tmpKey);
         }
         return incref(None);
     }
 
-    auto it = self->s.find(key);
-    if (it != self->s.end()) {
-        self->s.erase(it);
-        Py_DECREF(key);
-    }
+    _setRemove(self, key);
 
     return incref(None);
 }

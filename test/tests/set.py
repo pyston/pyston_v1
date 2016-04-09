@@ -1,4 +1,3 @@
-# expected: reffail
 s1 = {1}
 
 def sorted(s):
@@ -251,3 +250,13 @@ a = set()
 a.add(foo)
 print(a.remove(foo))
 print(foo in set())
+
+
+# Remove an item using a different key:
+s = set()
+s.add(1)
+s.remove(1L)
+
+s = set([1, 2, 3, 4])
+s2 = set([3L, 4L, 5L, 6L])
+s.symmetric_difference_update(s2)
