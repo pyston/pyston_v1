@@ -607,6 +607,7 @@ public:
         if (!finished)
             this->abort();
         assert(finished);
+        assert(gc_references.empty());
     }
 
     Location getReturnDestination();

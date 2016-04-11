@@ -865,6 +865,7 @@ void Rewriter::_trap() {
 }
 
 void Rewriter::addGCReference(void* obj) {
+    Py_INCREF((Box*)obj);
     gc_references.push_back(obj);
 }
 
@@ -1197,6 +1198,11 @@ void Rewriter::abort() {
     finished = true;
     rewrite->abort();
 
+    for (auto p : gc_references) {
+        Py_DECREF(p);
+    }
+    gc_references.clear();
+
     static StatCounter ic_rewrites_aborted("ic_rewrites_aborted");
     ic_rewrites_aborted.log();
 }
@@ -1302,6 +1308,16 @@ void Rewriter::commit() {
         ic_rewrites_aborted_failed.log();
         this->abort();
         return;
+    }
+
+    for (auto p : gc_references) {
+        if (Py_REFCNT(p) == 1) {
+            // we hold the only ref to this object
+            assert(0 && "untested");
+
+            this->abort();
+            return;
+        }
     }
 
     auto on_assemblyfail = [&]() {
@@ -1539,6 +1555,7 @@ void Rewriter::commit() {
 #endif
 
     rewrite->commit(this, std::move(gc_references));
+    assert(gc_references.empty());
 
     if (assembler->hasFailed()) {
         on_assemblyfail();

@@ -118,9 +118,6 @@ void ICSlotRewrite::commit(CommitHook* hook, std::vector<void*> gc_references) {
     // if (VERBOSITY()) printf("Commiting to %p-%p\n", start, start + ic->slot_size);
     memcpy(slot_start, buf, ic->getSlotSize());
 
-    for (auto p : gc_references) {
-        Py_INCREF(p);
-    }
     for (auto p : ic_entry->gc_references) {
         Py_DECREF(p);
     }
@@ -321,6 +318,7 @@ void ICInfo::clear(ICSlotInfo* icentry) {
     for (auto p : icentry->gc_references) {
         Py_DECREF(p);
     }
+    icentry->gc_references.clear();
 
     // std::unique_ptr<MCWriter> writer(createMCWriter(start, getSlotSize(), 0));
     // writer->emitNop();
