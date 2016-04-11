@@ -410,7 +410,7 @@ static void functionDtor(Box* b) {
 
     self->clearAttrsForDealloc();
 
-    Py_DECREF(self->doc);
+    Py_XDECREF(self->doc);
     Py_XDECREF(self->modname);
     Py_XDECREF(self->name);
     Py_XDECREF(self->closure);
@@ -439,6 +439,25 @@ static int func_traverse(BoxedFunction* f, visitproc visit, void* arg) noexcept 
 
     // Py_VISIT(f->func_dict);
     Py_TRAVERSE(f->attrs);
+    return 0;
+}
+
+static int func_clear(Box* b) noexcept {
+    assert(isSubclass(b->cls, function_cls));
+
+    BoxedFunction* f = static_cast<BoxedFunction*>(b);
+
+    Py_CLEAR(f->globals);
+    Py_CLEAR(f->modname);
+    Py_CLEAR(f->defaults);
+    Py_CLEAR(f->doc);
+    Py_CLEAR(f->name);
+    Py_CLEAR(f->closure);
+
+    // I think it's ok to not clear the parent_module?
+
+    b->clearAttrsForDealloc();
+
     return 0;
 }
 
@@ -4241,7 +4260,7 @@ void setupRuntime() {
         BoxedClass(object_cls, 0, 0, sizeof(BoxedFloat), false, "float", true, BoxedFloat::tp_dealloc, NULL, false);
     function_cls = new (0) BoxedClass(object_cls, offsetof(BoxedFunction, attrs), offsetof(BoxedFunction, weakreflist),
                                       sizeof(BoxedFunction), false, "function", false, functionDtor, NULL, true,
-                                      (traverseproc)func_traverse, NOCLEAR);
+                                      (traverseproc)func_traverse, func_clear);
     builtin_function_or_method_cls = new (0) BoxedClass(
         object_cls, 0, offsetof(BoxedBuiltinFunctionOrMethod, weakreflist), sizeof(BoxedBuiltinFunctionOrMethod), false,
         "builtin_function_or_method", false, functionDtor, NULL, true, (traverseproc)builtin_func_traverse, NOCLEAR);
