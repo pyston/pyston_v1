@@ -1,4 +1,3 @@
-# expected: reffail
 # A test of both the tracebacks we generate and the traceback module
 #
 # (We keep fixing tracebacks in one case to break them in another, so it's time for a test.)

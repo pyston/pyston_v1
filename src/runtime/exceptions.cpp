@@ -176,21 +176,22 @@ extern "C" void raise0(ExcInfo* frame_exc_info) {
 }
 
 extern "C" void raise0_capi(ExcInfo* frame_exc_info) noexcept {
-    assert(0 && "check refcounting");
     updateFrameExcInfoIfNeeded(frame_exc_info);
     assert(frame_exc_info->type);
 
     // TODO need to clean up when we call normalize, do_raise, etc
     if (frame_exc_info->type == None) {
-        assert(0 && "check refcounting");
-        frame_exc_info->type = TypeError;
-        frame_exc_info->value
-            = boxString("exceptions must be old-style classes or derived from BaseException, not NoneType");
-        frame_exc_info->traceback = NULL;
-        PyErr_NormalizeException(&frame_exc_info->type, &frame_exc_info->value, &frame_exc_info->traceback);
+        PyErr_SetString(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
+        return;
     }
 
     startReraise();
+    assert(!PyErr_Occurred());
+
+    Py_INCREF(frame_exc_info->type);
+    Py_INCREF(frame_exc_info->value);
+    Py_INCREF(frame_exc_info->traceback);
+
     PyErr_Restore(frame_exc_info->type, frame_exc_info->value, frame_exc_info->traceback);
 }
 
