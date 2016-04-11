@@ -338,6 +338,9 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initi
     }
 
     if (md->source) {
+        auto parent_module = md->source->parent_module;
+        Py_INCREF(parent_module);
+
         Box* globals_for_name = globals;
         if (!globals_for_name) {
             assert(md->source->scoping->areGlobalsFromModule());
@@ -412,6 +415,10 @@ static void functionDtor(Box* b) {
     Py_XDECREF(self->name);
     Py_XDECREF(self->closure);
     Py_XDECREF(self->globals);
+    if (self->md->source) {
+        auto parent_module = self->md->source->parent_module;
+        Py_DECREF(parent_module);
+    }
     Py_XDECREF(self->defaults);
 
     self->cls->tp_free(self);
@@ -426,6 +433,10 @@ static int func_traverse(BoxedFunction* f, visitproc visit, void* arg) noexcept 
     Py_VISIT(f->name);
     Py_VISIT(f->closure);
 
+    if (f->md->source) {
+        Py_VISIT(f->md->source->parent_module);
+    }
+
     // Py_VISIT(f->func_dict);
     Py_TRAVERSE(f->attrs);
     return 0;
@@ -439,6 +450,10 @@ static int builtin_func_traverse(BoxedBuiltinFunctionOrMethod* f, visitproc visi
     Py_VISIT(f->doc);
     Py_VISIT(f->name);
     Py_VISIT(f->closure);
+
+    if (f->md->source) {
+        Py_VISIT(f->md->source->parent_module);
+    }
 
     return 0;
 }

@@ -251,6 +251,8 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
         Py_CLEAR(frame_info->exc.value);
         Py_CLEAR(frame_info->exc.traceback);
     }
+
+    Py_CLEAR(frame_info->globals);
 }
 
 int frameinfo_traverse(FrameInfo* frame_info, visitproc visit, void* arg) noexcept {

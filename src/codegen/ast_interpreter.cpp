@@ -233,7 +233,7 @@ void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
 
 void ASTInterpreter::setGlobals(Box* globals) {
     assert(!this->frame_info.globals);
-    this->frame_info.globals = globals;
+    this->frame_info.globals = incref(globals);
 }
 
 ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs)

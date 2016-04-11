@@ -285,7 +285,8 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         // set  frame_info.passed_closure
         builder.CreateStore(passed_closure, getPassedClosureGep(builder, al));
         // set frame_info.globals
-        builder.CreateStore(passed_globals, getGlobalsGep(builder, al));
+        auto globals_store = builder.CreateStore(passed_globals, getGlobalsGep(builder, al));
+        getRefcounts()->refConsumed(passed_globals, globals_store);
         // set frame_info.vregs
         builder.CreateStore(vregs, getVRegsGep(builder, al));
         builder.CreateStore(getConstantInt(num_user_visible_vregs, g.i32), getNumVRegsGep(builder, al));
