@@ -159,7 +159,6 @@ ExcInfo excInfoForRaise(STOLEN(Box*) type, STOLEN(Box*) value, STOLEN(Box*) tb) 
 }
 
 extern "C" void raise0(ExcInfo* frame_exc_info) {
-    assert(0 && "check refcounting");
     updateFrameExcInfoIfNeeded(frame_exc_info);
     assert(frame_exc_info->type);
 
@@ -169,6 +168,10 @@ extern "C" void raise0(ExcInfo* frame_exc_info) {
 
     startReraise();
     assert(!PyErr_Occurred());
+
+    Py_INCREF(frame_exc_info->type);
+    Py_INCREF(frame_exc_info->value);
+    Py_INCREF(frame_exc_info->traceback);
     throw * frame_exc_info;
 }
 

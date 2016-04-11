@@ -1,4 +1,3 @@
-# expected: reffail
 import imp
 print len(imp.find_module("os"))
 e = imp.find_module("encodings")

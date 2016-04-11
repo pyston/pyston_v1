@@ -681,6 +681,9 @@ ExcInfo* getFrameExcInfo() {
 
     FrameInfo* frame_info = getTopFrameInfo();
     while (frame_info) {
+        if (copy_from_exc)
+            to_update.push_back(copy_from_exc);
+
         copy_from_exc = &frame_info->exc;
         if (!cur_exc)
             cur_exc = copy_from_exc;
@@ -688,7 +691,6 @@ ExcInfo* getFrameExcInfo() {
         if (copy_from_exc->type)
             break;
 
-        to_update.push_back(copy_from_exc);
         frame_info = frame_info->back;
     };
 
@@ -700,6 +702,7 @@ ExcInfo* getFrameExcInfo() {
     }
 
     for (auto* ex : to_update) {
+        assert(ex != copy_from_exc);
         *ex = *copy_from_exc;
         Py_INCREF(ex->type);
         Py_INCREF(ex->value);

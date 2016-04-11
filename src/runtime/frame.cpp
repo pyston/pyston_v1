@@ -285,7 +285,7 @@ extern "C" void setFrameExcInfo(FrameInfo* frame_info, STOLEN(Box*) type, STOLEN
     if (old_type) {
         Py_DECREF(old_type);
         Py_DECREF(old_value);
-        Py_DECREF(old_traceback);
+        Py_XDECREF(old_traceback);
     }
 }
 

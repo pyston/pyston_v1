@@ -1,4 +1,3 @@
-# expected: reffail
 # try-finally support
 
 import sys

@@ -1,4 +1,3 @@
-# expected: reffail
 # This is the same as incremental_tb_bjit.py but tests the baseline JIT.
 try:
     import __pyston__
