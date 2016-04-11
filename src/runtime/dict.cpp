@@ -255,7 +255,6 @@ template <enum ExceptionStyle S> Box* dictGetitem(BoxedDict* self, Box* k) noexc
             // Special-case defaultdict, assuming that it's the main time we will actually hit this.
             // We could just use a single runtime IC here, or have a small cache that maps type->runtimeic.
             // Or use a polymorphic runtime ic.
-            assert(0 && "check refcounting");
             static BoxedClass* defaultdict_cls = NULL;
             static CallattrIC defaultdict_ic;
             if (defaultdict_cls == NULL && strcmp(self->cls->tp_name, "collections.defaultdict") == 0) {

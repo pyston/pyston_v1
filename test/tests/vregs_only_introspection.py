@@ -1,4 +1,3 @@
-# expected: reffail
 import sys
 def f():
     # By the time of the f_locals call, x will only be alive because
@@ -6,7 +5,7 @@ def f():
     x = 100.0 ** 10
     for i in xrange(10000):
         200.0 * 200.0
-    print sys._getframe(0).f_locals
+    print sorted(sys._getframe(0).f_locals.items())
 
     # Avoid testing the lifetime of i by keeping it alive here:
     print i
@@ -18,9 +17,8 @@ def f():
     y = 100 * 100
     for i in xrange(10000):
         200 * 200
-    print sys._getframe(0).f_locals
+    print sorted(sys._getframe(0).f_locals.items())
 
     # Avoid testing the lifetime of i by keeping it alive here:
     print i
-trap()
 f()
