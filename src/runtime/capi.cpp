@@ -986,6 +986,8 @@ extern "C" int PyRun_InteractiveOneFlags(FILE* fp, const char* filename, PyCompi
     // Pyston change:
     // d = PyModule_GetDict(m);
     // v = run_mod(mod, filename, d, d, flags, arena);
+    v = None;
+    Py_INCREF(v);
     assert(PyModule_Check(m));
     bool failed = false;
     try {
