@@ -168,6 +168,7 @@ Box* superRepr(Box* _s) {
 
 
 // Ported from the CPython version:
+// TODO: this returns an owned ref in cpython
 template <ExceptionStyle S> BORROWED(BoxedClass*) superCheck(BoxedClass* type, Box* obj) noexcept(S == CAPI) {
     if (PyType_Check(obj) && isSubclass(static_cast<BoxedClass*>(obj), type))
         return static_cast<BoxedClass*>(obj);
@@ -223,15 +224,22 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
     BoxedClass* obj_type = NULL;
     if (obj == None)
         obj = NULL;
-    if (obj != NULL)
+    if (obj != NULL) {
         obj_type = superCheck<CXX>(type, obj);
+
+        if (!obj_type)
+            throwCAPIException();
+
+        incref(obj);
+        incref(obj_type);
+    }
 
     Box* old_type = self->type;
     Box* old_obj = self->obj;
     Box* old_obj_type = self->obj_type;
     self->type = incref(type);
-    self->obj = incref(obj);
-    self->obj_type = incref(obj_type);
+    self->obj = obj;
+    self->obj_type = obj_type;
     Py_XDECREF(old_type);
     Py_XDECREF(old_obj);
     Py_XDECREF(old_obj_type);

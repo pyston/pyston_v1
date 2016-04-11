@@ -1,4 +1,3 @@
-# expected: reffail
 # this test is a modfied version of a testcase inside test_descr
 
 class C:
