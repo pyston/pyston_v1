@@ -3126,7 +3126,7 @@ std::tuple<llvm::Value*, llvm::Value*, llvm::Value*> createLandingpad(llvm::Basi
 
     llvm::IRBuilder<true> builder(bb);
 
-    llvm::Function* _personality_func = g.stdlib_module->getFunction("__gxx_personality_v0");
+    static llvm::Function* _personality_func = g.stdlib_module->getFunction("__gxx_personality_v0");
     assert(_personality_func);
     llvm::Value* personality_func
         = g.cur_module->getOrInsertFunction(_personality_func->getName(), _personality_func->getFunctionType());
@@ -3137,7 +3137,7 @@ std::tuple<llvm::Value*, llvm::Value*, llvm::Value*> createLandingpad(llvm::Basi
 
     llvm::Value* cxaexc_pointer = builder.CreateExtractValue(landing_pad, { 0 });
 
-    llvm::Function* std_module_catch = g.stdlib_module->getFunction("__cxa_begin_catch");
+    static llvm::Function* std_module_catch = g.stdlib_module->getFunction("__cxa_begin_catch");
     auto begin_catch_func
         = g.cur_module->getOrInsertFunction(std_module_catch->getName(), std_module_catch->getFunctionType());
     assert(begin_catch_func);

@@ -787,7 +787,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         }
         if (successors.size()) {
             std::vector<llvm::Value*> tracked_values;
-            std::unordered_set<llvm::Value*> in_tracked_values;
+            llvm::DenseSet<llvm::Value*> in_tracked_values;
             for (auto SBB : successors) {
                 // errs() << "DETERMINISM: successor " << SBB->getName() << '\n';
                 assert(states.count(SBB));
@@ -801,6 +801,11 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 }
             }
 
+            llvm::SmallVector<std::pair<BlockMap*, llvm::BasicBlock*>, 4> successor_info;
+            for (auto SBB : successors) {
+                successor_info.emplace_back(&states[SBB].ending_refs, SBB);
+            }
+
             // size_t hash = 0;
             for (auto v : tracked_values) {
                 // hash = hash * 31 + std::hash<llvm::StringRef>()(v->getName());
@@ -808,12 +813,11 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 const auto refstate = rt->vars.lookup(v);
 
                 int min_refs = 1000000000;
-                for (auto SBB : successors) {
-                    auto&& ending_refs = states[SBB].ending_refs;
-                    if (ending_refs.count(v)) {
+                for (auto&& s_info : successor_info) {
+                    if (s_info.first->count(v)) {
                         // llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName() << ", have "
                         //<< it->second << " refs on " << *v << '\n';
-                        min_refs = std::min(ending_refs[v], min_refs);
+                        min_refs = std::min((*s_info.first)[v], min_refs);
                     } else {
                         // llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName()
                         //<< ", have 0 (missing) refs on " << *v << '\n';
@@ -824,19 +828,20 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 if (refstate.reftype == RefType::OWNED)
                     min_refs = std::max(1, min_refs);
 
-                for (auto SBB : successors) {
+                for (auto&& s_info : successor_info) {
                     int this_refs = 0;
-                    auto&& ending_refs = states[SBB].ending_refs;
-                    if (ending_refs.count(v))
-                        this_refs = ending_refs[v];
+                    if (s_info.first->count(v))
+                        this_refs = (*s_info.first)[v];
 
                     if (this_refs > min_refs) {
                         // llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName() << ", need to add "
                         //<< (this_refs - min_refs) << " refs to " << *v << '\n';
-                        state.increfs.push_back(RefOp({ v, refstate.nullable, this_refs - min_refs, NULL, SBB, bb }));
+                        state.increfs.push_back(
+                            RefOp({ v, refstate.nullable, this_refs - min_refs, NULL, s_info.second, bb }));
                     } else if (this_refs < min_refs) {
                         assert(refstate.reftype == RefType::OWNED);
-                        state.decrefs.push_back(RefOp({ v, refstate.nullable, min_refs - this_refs, NULL, SBB, bb }));
+                        state.decrefs.push_back(
+                            RefOp({ v, refstate.nullable, min_refs - this_refs, NULL, s_info.second, bb }));
                     }
                 }
 
