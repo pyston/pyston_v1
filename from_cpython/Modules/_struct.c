@@ -1819,6 +1819,7 @@ cache_struct(PyObject *fmt)
         cache = PyDict_New();
         if (cache == NULL)
             return NULL;
+        PyGC_RegisterStaticConstant(cache);
     }
 
     s_object = PyDict_GetItem(cache, fmt);
@@ -1844,6 +1845,9 @@ PyDoc_STRVAR(clearcache_doc,
 static PyObject *
 clearcache(PyObject *self)
 {
+    // `cache` is already registered as a static root; we would need to unregister it.
+    Py_FatalError("_struct.clearcache dosen't currently work well with Pyston");
+    abort();
     Py_CLEAR(cache);
     Py_RETURN_NONE;
 }

@@ -1,4 +1,3 @@
-# expected: reffail
 from StringIO import StringIO
 import json
 
