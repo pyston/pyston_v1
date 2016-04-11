@@ -593,6 +593,9 @@ PyErr_NewException(const char *name, PyObject *base, PyObject *dict)
     /* Create a real new-style class. */
     result = PyObject_CallFunction((PyObject *)&PyType_Type, "sOO",
                                    dot+1, bases, dict);
+    // Pyston change:
+    // This should probably be the responsibility of the caller, but just do it here for now:
+    PyGC_RegisterStaticConstant(result);
   failure:
     Py_XDECREF(bases);
     Py_XDECREF(mydict);

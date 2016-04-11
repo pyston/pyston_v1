@@ -6926,6 +6926,17 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
                                                   bases, total_slots);
     made->tp_dictoffset = dict_offset;
 
+    // XXX Hack: the classes vector lists all classes that have untracked references to them.
+    // This is pretty much any class created in C code, since the C code will tend to hold on
+    // to a reference to the created class.  So in the BoxedClass constructor we add the new class to
+    // "classes", which will cause the class to get decref'd at the end.
+    // But for classes created from Python, we don't have this extra untracked reference.
+    // Rather than fix up the plumbing for now, just reach into the other system and remove this
+    // class from the list.
+    // This hack also exists in BoxedHeapClass::create
+    RELEASE_ASSERT(classes.back() == made, "");
+    classes.pop_back();
+
     if (boxedSlots) {
         // Set ht_slots
         BoxedTuple* slotsTuple = BoxedTuple::create(final_slot_names.size());

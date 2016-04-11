@@ -1,4 +1,3 @@
-# expected: reffail
 print 'basic test'
 class C(object):
     __slots__ = ['a', 'b', '__private_var']

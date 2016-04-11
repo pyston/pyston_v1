@@ -1,4 +1,3 @@
-# expected: reffail
 import gc
 
 # Dynamically create new classes and instances of those classes in such a way

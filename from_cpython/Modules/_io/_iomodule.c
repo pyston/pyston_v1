@@ -653,6 +653,7 @@ init_io(void)
     // Pyston change: during init we have to supply the module name by ourself.
     _PyIO_unsupported_operation = PyObject_CallFunction((PyObject *)&PyType_Type, "s(OO){s:s}",
           "UnsupportedOperation", PyExc_ValueError, PyExc_IOError, "__module__", "io");
+    PyGC_RegisterStaticConstant(_PyIO_unsupported_operation);
     // _PyIO_unsupported_operation = PyObject_CallFunction(
     //    (PyObject *)&PyType_Type, "s(OO){}",
     //    "UnsupportedOperation", PyExc_ValueError, PyExc_IOError);

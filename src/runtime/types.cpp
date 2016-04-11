@@ -633,6 +633,31 @@ static Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args
     return typeCallInner<S>(rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 }
 
+// This function only exists for the corner case in typeCallInternal that should get removed anyway:
+Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
+    assert(vararg->cls == tuple_cls);
+
+    bool pass_kwargs = (kwargs && kwargs->d.size());
+
+    int n = vararg->size();
+    int args_to_pass = n + 1 + (pass_kwargs ? 1 : 0); // 1 for obj, 1 for kwargs
+
+    Box** args = NULL;
+    if (args_to_pass > 3)
+        args = (Box**)alloca(sizeof(Box*) * (args_to_pass - 3));
+
+    Box* arg1, *arg2, *arg3;
+    arg1 = obj;
+    for (int i = 0; i < n; i++) {
+        getArg(i + 1, arg1, arg2, arg3, args) = vararg->elts[i];
+    }
+
+    if (pass_kwargs)
+        getArg(n + 1, arg1, arg2, arg3, args) = kwargs;
+
+    return typeCallInternal<CXX>(NULL, NULL, ArgPassSpec(n + 1, 0, false, pass_kwargs), arg1, arg2, arg3, args, NULL);
+}
+
 // For use on __init__ return values
 static Box* assertInitNone(STOLEN(Box*) rtn, STOLEN(Box*) obj) {
     AUTO_DECREF(rtn);
@@ -1339,32 +1364,6 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     return made;
 }
 
-Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
-    RELEASE_ASSERT(0, "this shouldn't get called any more");
-
-    assert(vararg->cls == tuple_cls);
-
-    bool pass_kwargs = (kwargs && kwargs->d.size());
-
-    int n = vararg->size();
-    int args_to_pass = n + 1 + (pass_kwargs ? 1 : 0); // 1 for obj, 1 for kwargs
-
-    Box** args = NULL;
-    if (args_to_pass > 3)
-        args = (Box**)alloca(sizeof(Box*) * (args_to_pass - 3));
-
-    Box* arg1, *arg2, *arg3;
-    arg1 = obj;
-    for (int i = 0; i < n; i++) {
-        getArg(i + 1, arg1, arg2, arg3, args) = vararg->elts[i];
-    }
-
-    if (pass_kwargs)
-        getArg(n + 1, arg1, arg2, arg3, args) = kwargs;
-
-    return typeCallInternal<CXX>(NULL, NULL, ArgPassSpec(n + 1, 0, false, pass_kwargs), arg1, arg2, arg3, args, NULL);
-}
-
 static Box* typeDict(Box* obj, void* context) {
     if (obj->cls->instancesHaveHCAttrs())
         return PyDictProxy_New(obj->getAttrWrapper());
@@ -1445,18 +1444,8 @@ extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict)
         Box* r = runtimeCall(metaclass, ArgPassSpec(3), name, _bases, _attr_dict, NULL, NULL);
         RELEASE_ASSERT(r, "");
 
-        // XXX Hack: the classes vector lists all classes that have untracked references to them.
-        // This is pretty much any class created in C code, since the C code will tend to hold on
-        // to a reference to the created class.  So in the BoxedClass constructor we add the new class to
-        // "classes", which will cause the class to get decref'd at the end.
-        // But for classes created from Python, we don't have this extra untracked reference.
-        // Rather than fix up the plumbing for now, just reach into the other system and remove this
-        // class from the list.
-        // This hack also exists in BoxedHeapClass::create
-        if (isSubclass(r->cls, type_cls)) {
-            RELEASE_ASSERT(classes.back() == r, "");
-            classes.pop_back();
-        }
+        if (isSubclass(r->cls, type_cls))
+            assert(classes.back() != r);
 
         return r;
     } catch (ExcInfo e) {
@@ -4070,6 +4059,12 @@ std::vector<Box*> constants;
 std::vector<Box*> late_constants;
 extern "C" PyObject* PyGC_RegisterStaticConstant(Box* b) noexcept {
     constants.push_back(b);
+    return b;
+}
+
+extern "C" PyObject* PyGC_RegisterStaticClass(Box* b) noexcept {
+    assert(PyType_Check(b));
+    classes.push_back(static_cast<BoxedClass*>(b));
     return b;
 }
 
