@@ -1,4 +1,3 @@
-# expected: reffail
 # Test the behavior of tuple unpacking in the face of exceptions being thrown at certain points.
 # - If an exception gets thrown in the "unpack to a given size" part, none of the targets get set
 # - If setting a target throws an exception, then the previous targets had been set, but not the future ones

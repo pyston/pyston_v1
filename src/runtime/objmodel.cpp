@@ -315,41 +315,53 @@ static void _checkUnpackingLength(i64 expected, i64 given) {
 }
 
 extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size, Box** out_keep_alive) {
-    if (obj->cls != tuple_cls && obj->cls != list_cls) {
-        Box* converted = PySequence_Fast(obj, "Invalid type for tuple unpacking");
-        if (!converted)
-            throwCAPIException();
-        *out_keep_alive = converted;
-        obj = converted;
-    } else {
-        *out_keep_alive = incref(obj);
-    }
-
     if (obj->cls == tuple_cls) {
         BoxedTuple* t = static_cast<BoxedTuple*>(obj);
 
         auto got_size = t->size();
-        if (expected_size != got_size)
-            Py_DECREF(*out_keep_alive);
         _checkUnpackingLength(expected_size, got_size);
 
+        *out_keep_alive = incref(t);
         for (auto e : *t)
             Py_INCREF(e);
         return &t->elts[0];
-    } else {
+    } else if (obj->cls == list_cls) {
         assert(obj->cls == list_cls);
 
         BoxedList* l = static_cast<BoxedList*>(obj);
 
         auto got_size = l->size;
-        if (expected_size != got_size)
-            Py_DECREF(*out_keep_alive);
         _checkUnpackingLength(expected_size, got_size);
 
+        *out_keep_alive = incref(l);
         for (size_t i = 0; i < l->size; i++)
             Py_INCREF(l->elts->elts[i]);
         return &l->elts->elts[0];
+    } else {
+        BoxedTuple* keep_alive = BoxedTuple::create(expected_size);
+        AUTO_DECREF(keep_alive);
+
+        int i = 0;
+        for (auto e : obj->pyElements()) {
+            if (i >= expected_size) {
+                Py_DECREF(e);
+                _checkUnpackingLength(expected_size, i + 1);
+                // unreachable:
+                abort();
+            }
+
+            keep_alive->elts[i] = e;
+            i++;
+        }
+        _checkUnpackingLength(expected_size, i);
+
+        *out_keep_alive = incref(keep_alive);
+        for (auto e : *keep_alive)
+            Py_INCREF(e);
+        return &keep_alive->elts[0];
     }
+
+    abort();
 }
 
 static void clear_slots(PyTypeObject* type, PyObject* self) noexcept {
