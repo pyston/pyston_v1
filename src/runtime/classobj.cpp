@@ -195,11 +195,15 @@ Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
     if (init_func) {
         Box* init_rtn = runtimeCall(init_func, ArgPassSpec(1, 0, true, true), made, args, kwargs, NULL, NULL);
         AUTO_DECREF(init_rtn);
-        if (init_rtn != None)
+        if (init_rtn != None) {
+            Py_DECREF(made);
             raiseExcHelper(TypeError, "__init__() should return None");
+        }
     } else {
-        if (args->size() || (kwargs && kwargs->d.size()))
+        if (args->size() || (kwargs && kwargs->d.size())) {
+            Py_DECREF(made);
             raiseExcHelper(TypeError, "this constructor takes no arguments");
+        }
     }
     return made;
 }
@@ -1575,7 +1579,6 @@ Box* instanceLong(Box* _inst) {
     static BoxedString* long_str = getStaticString("__long__");
     if (PyObject_HasAttr((PyObject*)inst, long_str)) {
         Box* long_func = _instanceGetattribute(inst, long_str, true);
-        AUTO_DECREF(long_func);
         return runtimeCall(autoDecref(long_func), ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     }
 
