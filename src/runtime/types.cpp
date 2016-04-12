@@ -3164,6 +3164,7 @@ static PyObject* reduce_2(PyObject* obj) noexcept {
             if (state->cls == attrwrapper_cls) {
                 PyObject* real_dict = PyDict_New();
                 PyDict_Update(real_dict, state);
+                Py_DECREF(state);
                 state = real_dict;
             }
         }

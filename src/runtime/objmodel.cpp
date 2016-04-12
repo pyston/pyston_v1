@@ -4324,7 +4324,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                     (void*)BoxedTuple::create5, //
                     (void*)BoxedTuple::create6, //
                 };
-                varargs_val = rewrite_args->rewriter->call(false, create_ptrs[varargs_size], unused_positional_rvars)
+                varargs_val = rewrite_args->rewriter->call(true, create_ptrs[varargs_size], unused_positional_rvars)
                                   ->setType(RefType::OWNED);
                 is_owned = true;
             }

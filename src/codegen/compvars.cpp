@@ -1822,7 +1822,7 @@ public:
         if (!canStaticallyResolveGetattrs())
             return NULL;
 
-        Box* rtattr = cls->getattr(attr);
+        Box* rtattr = typeLookup(cls, attr);
         if (rtattr == NULL) {
             if (no_attribute) {
                 *no_attribute = true;

@@ -320,6 +320,13 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     }
     bool oargs_owned[1];
 
+    bool arg1_class_guarded = false;
+    if (rewrite_args && argspec.num_args >= 1) {
+        // Try to do the guard before rearrangeArguments if possible:
+        rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (intptr_t)arg1->cls);
+        arg1_class_guarded = true;
+    }
+
     bool rewrite_success = false;
     rearrangeArguments(paramspec, NULL, self->method->ml_name, defaults, rewrite_args, rewrite_success, argspec, arg1,
                        arg2, arg3, args, oargs, keyword_names, oargs_owned);
@@ -340,7 +347,7 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
                            getFullNameOfClass(self->type).c_str(), getFullTypeName(arg1).c_str());
     }
 
-    if (rewrite_args) {
+    if (rewrite_args && !arg1_class_guarded) {
         rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (intptr_t)arg1->cls);
     }
 

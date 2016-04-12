@@ -41,7 +41,7 @@ static Box* toComplex(Box* self) noexcept {
     } else if (PyInt_Check(self)) {
         r = new BoxedComplex(static_cast<BoxedInt*>(self)->n, 0.0);
     } else if (PyFloat_Check(self)) {
-        r = new BoxedComplex((static_cast<BoxedFloat*>(PyNumber_Float(self)))->d, 0.0);
+        r = new BoxedComplex((static_cast<BoxedFloat*>(autoDecref(PyNumber_Float(self))))->d, 0.0);
     } else if (PyLong_Check(self)) {
         double real = PyLong_AsDouble(self);
         if (real == -1 && PyErr_Occurred())
@@ -427,7 +427,7 @@ Box* complexGetnewargs(BoxedComplex* self) {
     if (!PyComplex_Check(self))
         raiseExcHelper(TypeError, "descriptor '__getnewargs__' requires a 'complex' object but received a '%s'",
                        getTypeName(self));
-    return BoxedTuple::create({ boxFloat(self->real), boxFloat(self->imag) });
+    return BoxedTuple::create({ autoDecref(boxFloat(self->real)), autoDecref(boxFloat(self->imag)) });
 }
 
 Box* complexNonzero(BoxedComplex* self) {

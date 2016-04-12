@@ -2354,8 +2354,10 @@ extern "C" PyObject* PyNumber_Float(PyObject* o) noexcept {
     if (o == NULL)
         return null_error();
 
-    if (o->cls == float_cls)
+    if (o->cls == float_cls) {
+        Py_INCREF(o);
         return o;
+    }
 
     PyNumberMethods* m;
     m = o->cls->tp_as_number;
