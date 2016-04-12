@@ -198,7 +198,7 @@ extern "C" void printHelper(Box* w, Box* v, bool nl) {
         }
     }
 
-    if (nl) {
+    if (err == 0 && nl) {
         if (w != NULL) {
             err = PyFile_WriteString("\n", w);
             if (err == 0)
