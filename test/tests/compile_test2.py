@@ -1,4 +1,3 @@
-# expected: reffail
 # this tests are from cpythons test_compile.py
 import unittest
 from test import test_support

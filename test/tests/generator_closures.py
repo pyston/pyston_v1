@@ -1,4 +1,3 @@
-# expected: reffail
 # Test to make sure that generators create and receive closures as appropriate.
 
 def f(E, N, M):

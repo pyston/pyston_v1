@@ -1,3 +1,6 @@
+# skip-if: '-n' not in EXTRA_JIT_ARGS and '-O' not in EXTRA_JIT_ARGS
+# disable this test because the interpreter (with disabled bjit) currently uses too much stack
+
 # Make sure we can recurse at least 900 times on the three different types
 # of stacks that we have:
 

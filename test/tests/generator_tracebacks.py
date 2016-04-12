@@ -1,4 +1,3 @@
-# expected: reffail
 # Generators participate in the notional Python stack just like normal function calls do,
 # even if we implement them using separate C stacks.
 #

@@ -1,4 +1,3 @@
-# expected: reffail
 import threading
 import traceback, sys
 
