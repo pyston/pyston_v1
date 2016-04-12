@@ -723,6 +723,7 @@ void checkAndThrowCAPIException() {
                 value = runtimeCall(type, ArgPassSpec(0, 0, true, false), autoDecref(value), NULL, NULL, NULL, NULL);
             } else if (value == None) {
                 value = runtimeCall(type, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+                Py_DECREF(None);
             } else {
                 value = runtimeCall(type, ArgPassSpec(1), autoDecref(value), NULL, NULL, NULL, NULL);
             }
