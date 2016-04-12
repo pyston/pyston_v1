@@ -239,7 +239,7 @@ static PyTypeObject localdummytype = {
     /* tp_name           */ "_thread._localdummy",
     /* tp_basicsize      */ sizeof(localdummyobject),
     /* tp_itemsize       */ 0,
-    /* tp_dealloc        */ (destructor)/*localdummy_dealloc*/ NULL,
+    /* tp_dealloc        */ (destructor)localdummy_dealloc,
     /* tp_print          */ 0,
     /* tp_getattr        */ 0,
     /* tp_setattr        */ 0,
@@ -392,16 +392,13 @@ local_traverse(localobject *self, visitproc visit, void *arg)
 static int
 local_clear(localobject *self)
 {
-    // Pyston change:
-    Py_FatalError("unexpected call to local_clear()");
-    abort();
-#if 0
     PyThreadState *tstate;
     Py_CLEAR(self->args);
     Py_CLEAR(self->kw);
     Py_CLEAR(self->dummies);
     Py_CLEAR(self->wr_callback);
     /* Remove all strong references to dummies from the thread states */
+    /*
     if (self->key
         && (tstate = PyThreadState_Get())
         && tstate->interp) {
@@ -412,8 +409,9 @@ local_clear(localobject *self)
                 PyDict_GetItem(tstate->dict, self->key))
                 PyDict_DelItem(tstate->dict, self->key);
     }
+    */
+    printf("threadmodule.c:413: can't really free up the thread-specific dummy storage\n");
     return 0;
-#endif
 }
 
 static void
@@ -498,7 +496,7 @@ static PyTypeObject localtype = {
     /* tp_name           */ "thread._local",
     /* tp_basicsize      */ sizeof(localobject),
     /* tp_itemsize       */ 0,
-    /* tp_dealloc        */ (destructor)/*local_dealloc*/ NULL,
+    /* tp_dealloc        */ (destructor)local_dealloc,
     /* tp_print          */ 0,
     /* tp_getattr        */ 0,
     /* tp_setattr        */ 0,

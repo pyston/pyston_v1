@@ -1296,7 +1296,7 @@ extern "C" char* Py_GetPythonHome(void) noexcept {
     return home;
 }
 
-extern "C" PyObject* PyThreadState_GetDict(void) noexcept {
+extern "C" BORROWED(PyObject*) PyThreadState_GetDict(void) noexcept {
     Box* dict = cur_thread_state.dict;
     if (!dict) {
         dict = cur_thread_state.dict = new BoxedDict();
@@ -1306,7 +1306,11 @@ extern "C" PyObject* PyThreadState_GetDict(void) noexcept {
 
 extern "C" void PyThreadState_Clear(PyThreadState* tstate) noexcept {
     assert(tstate == NULL);
+
     Py_CLEAR(cur_thread_state.dict);
+    Py_CLEAR(cur_thread_state.curexc_type);
+    Py_CLEAR(cur_thread_state.curexc_value);
+    Py_CLEAR(cur_thread_state.curexc_traceback);
 }
 
 extern "C" int _PyOS_URandom(void* buffer, Py_ssize_t size) noexcept {

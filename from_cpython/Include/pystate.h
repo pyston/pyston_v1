@@ -144,7 +144,7 @@ PyAPI_FUNC(void) PyThreadState_DeleteCurrent(void) PYSTON_NOEXCEPT;
 
 PyAPI_FUNC(PyThreadState *) PyThreadState_Get(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyThreadState *) PyThreadState_Swap(PyThreadState *) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject *) PyThreadState_GetDict(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PyThreadState_GetDict(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyThreadState_SetAsyncExc(long, PyObject *) PYSTON_NOEXCEPT;
 
 
