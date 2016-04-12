@@ -1057,6 +1057,7 @@ private:
                 assert(exc_info->getType() == g.llvm_excinfo_type->getPointerTo());
 
                 llvm::Constant* v = getNullPtr(g.llvm_value_type_ptr);
+                emitter.setType(v, RefType::BORROWED);
                 builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 0));
                 builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 1));
                 builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
@@ -2053,7 +2054,7 @@ private:
             converted_msg = msg->makeConverted(emitter, msg->getBoxType());
             llvm_args.push_back(converted_msg->getValue());
         } else {
-            llvm_args.push_back(getNullPtr(g.llvm_value_type_ptr));
+            llvm_args.push_back(emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED));
         }
         llvm::CallSite call = emitter.createCall(unw_info, g.funcs.assertFail, llvm_args);
         call.setDoesNotReturn();

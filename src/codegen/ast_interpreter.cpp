@@ -785,7 +785,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
             = incref(frame_info.passed_closure);
 
     if (created_closure)
-        sorted_symbol_table[source_info->getInternedStrings().get(CREATED_CLOSURE_NAME)] = created_closure;
+        sorted_symbol_table[source_info->getInternedStrings().get(CREATED_CLOSURE_NAME)] = incref(created_closure);
 
     sorted_symbol_table[source_info->getInternedStrings().get(FRAME_INFO_PTR_NAME)] = (Box*)&frame_info;
 
