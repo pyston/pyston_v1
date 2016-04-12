@@ -76,7 +76,6 @@ for i in xrange(2):
 print (1, 2) < (1, 3)
 print (1, 4) < (1, 3)
 print [1, 2] < [1, 3]
-print {1:2} < {1:3}
 
 class Reverse(object):
     def __init__(self, n):
