@@ -1,4 +1,3 @@
-# expected: reffail
 # This is a copy of cpythons test with the recursive repr test disabled
 # remove this test when we can pass cpythons test
 

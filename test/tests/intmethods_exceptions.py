@@ -1,6 +1,3 @@
-# expected: reffail
-# - throws exceptions out of ICs
-
 # TODO: move this back to intmethods.py once this is working
 for b in range(26):
     try:

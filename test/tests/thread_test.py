@@ -1,4 +1,3 @@
-# expected: reffail
 from thread import start_new_thread, allocate_lock, _count
 import time
 
