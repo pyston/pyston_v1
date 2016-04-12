@@ -1054,14 +1054,10 @@ private:
                 auto* builder = emitter.getBuilder();
 
                 llvm::Value* frame_info = irstate->getFrameInfoVar();
-                llvm::Value* exc_info = builder->CreateConstInBoundsGEP2_32(frame_info, 0, 0);
-                assert(exc_info->getType() == g.llvm_excinfo_type->getPointerTo());
-
                 llvm::Constant* v = getNullPtr(g.llvm_value_type_ptr);
                 emitter.setType(v, RefType::BORROWED);
-                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 0));
-                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 1));
-                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
+
+                emitter.createCall(UnwindInfo::cantUnwind(), g.funcs.setFrameExcInfo, { frame_info, v, v, v }, NOEXC);
 
                 return emitter.getNone();
             }
