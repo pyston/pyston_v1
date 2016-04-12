@@ -59,9 +59,13 @@ static size_t _pythread_stacksize = 0;
 
 namespace pyston {
 
-static void* thread_start(Box* target, Box* varargs, Box* kwargs) {
+static void* thread_start(STOLEN(Box*) target, STOLEN(Box*) varargs, STOLEN(Box*) kwargs) {
     assert(target);
     assert(varargs);
+
+    AUTO_DECREF(target);
+    AUTO_DECREF(varargs);
+    AUTO_XDECREF(kwargs);
 
 #if STAT_TIMERS
     // TODO: maybe we should just not log anything for threads...
@@ -90,7 +94,7 @@ static void* thread_start(Box* target, Box* varargs, Box* kwargs) {
 
 // TODO this should take kwargs, which defaults to empty
 Box* startNewThread(Box* target, Box* args, Box* kw) {
-    intptr_t thread_id = start_thread(&thread_start, target, args, kw);
+    intptr_t thread_id = start_thread(&thread_start, incref(target), incref(args), xincref(kw));
     return boxInt(thread_id);
 }
 
