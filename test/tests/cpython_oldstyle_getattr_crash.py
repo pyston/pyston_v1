@@ -1,4 +1,3 @@
-# expected: reffail
 # This segfaults under python-dbg
 # (In a release build it "works" since the use-after-free happens without penalty.)
 
@@ -7,7 +6,7 @@ class C:
         del self
         print "C.__getattr__", attr
         del D.__get__
-        raise AttributeError()
+        raise AttributeError("our attribute error")
 
 class D(object):
     __get__ = C()

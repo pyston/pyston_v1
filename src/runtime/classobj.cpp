@@ -472,10 +472,18 @@ static Box* _instanceGetattribute(Box* _inst, BoxedString* attr_str, bool raise_
             return incref(inst->inst_cls);
     }
 
-    Box* attr = instanceGetattributeWithFallback<rewritable>(inst, attr_str, rewrite_args);
-    if (attr) {
-        return attr;
-    } else if (!raise_on_missing) {
+    try {
+        Box* attr = instanceGetattributeWithFallback<rewritable>(inst, attr_str, rewrite_args);
+        if (attr)
+            return attr;
+    } catch (ExcInfo e) {
+        if (!raise_on_missing && e.matches(AttributeError)) {
+            e.clear();
+            return NULL;
+        }
+        throw e;
+    }
+    if (!raise_on_missing) {
         return NULL;
     } else {
         raiseExcHelper(AttributeError, "%s instance has no attribute '%s'", inst->inst_cls->name->data(),

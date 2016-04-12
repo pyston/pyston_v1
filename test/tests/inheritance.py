@@ -1,4 +1,3 @@
-# expected: reffail
 
 def f1():
     class C(object):
