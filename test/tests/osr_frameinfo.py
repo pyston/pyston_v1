@@ -1,4 +1,3 @@
-# expected: reffail
 try:
     import __pyston__
     __pyston__.setOption("OSR_THRESHOLD_BASELINE", 50)

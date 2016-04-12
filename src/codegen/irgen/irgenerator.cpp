@@ -235,6 +235,7 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         if (getScopeInfo()->usesNameLookup()) {
             // load frame_info.boxedLocals
             this->boxed_locals = builder.CreateLoad(getBoxedLocalsGep(builder, this->frame_info));
+            getRefcounts()->setType(this->boxed_locals, RefType::BORROWED);
         }
 
     } else {
@@ -1914,10 +1915,11 @@ private:
                 module->setattr(emitter, getEmptyOpInfo(unw_info), name.getBox(), val);
             } else {
                 auto converted = val->makeConverted(emitter, val->getBoxType());
-                emitter.createCall3(
+                auto cs = emitter.createCall3(
                     unw_info, g.funcs.setGlobal, irstate->getGlobals(),
                     emitter.setType(embedRelocatablePtr(name.getBox(), g.llvm_boxedstring_type_ptr), RefType::BORROWED),
                     converted->getValue());
+                emitter.refConsumed(converted->getValue(), cs);
             }
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             // TODO inefficient

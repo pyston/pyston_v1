@@ -516,7 +516,7 @@ static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
             PyDict_SetItemString(globals_dict, "__builtins__", builtins_module);
         else
             RELEASE_ASSERT(requested_builtins == builtins_module
-                               || requested_builtins == autoDecref(builtins_module->getAttrWrapper()),
+                               || requested_builtins == builtins_module->getAttrWrapper(),
                            "we don't support overriding __builtins__");
     }
 }

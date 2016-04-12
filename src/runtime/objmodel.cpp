@@ -7245,7 +7245,6 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
 
 extern "C" void setGlobal(Box* globals, BoxedString* name, STOLEN(Box*) value) {
     if (globals->cls == attrwrapper_cls) {
-        assert(0 && "check refcounting");
         globals = unwrapAttrWrapper(globals);
         RELEASE_ASSERT(globals->cls == module_cls, "%s", globals->cls->tp_name);
     }
@@ -7262,6 +7261,7 @@ extern "C" void setGlobal(Box* globals, BoxedString* name, STOLEN(Box*) value) {
     } else {
         RELEASE_ASSERT(globals->cls == dict_cls, "%s", globals->cls->tp_name);
         int r = PyDict_SetItem(globals, name, value);
+        Py_DECREF(value);
         if (r == -1)
             throwCAPIException();
     }
