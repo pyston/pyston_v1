@@ -869,13 +869,11 @@ static int half_cmp(PyObject* v, PyObject* w) noexcept {
 
     args = PyTuple_Pack(1, w);
     if (args == NULL) {
-        Py_DECREF(cmp_func);
         return -2;
     }
 
     result = PyEval_CallObject(cmp_func, args);
     Py_DECREF(args);
-    Py_DECREF(cmp_func);
 
     if (result == NULL)
         return -2;

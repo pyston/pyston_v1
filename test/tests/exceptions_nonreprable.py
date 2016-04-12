@@ -1,4 +1,3 @@
-# expected: reffail
 # should_error
 class BadException(Exception):
     def __str__(self):
