@@ -1,9 +1,8 @@
-# expected: reffail
 import sys
 import subprocess
 
 me = sys.executable
 
-p = subprocess.Popen([me, "-c", "1/0"], stdout=subprocess.PIPE)
+p = subprocess.Popen([me, "-Sc", "1/0"], stdout=subprocess.PIPE)
 
 print p.stdout.read()

@@ -463,7 +463,7 @@ static int main(int argc, char** argv) noexcept {
         // if the user invoked `pyston -c command`
         if (command != NULL) {
             try {
-                main_module = createModule(boxString("__main__"), "<string>");
+                main_module = createModule(autoDecref(boxString("__main__")), "<string>");
                 AST_Module* m = parse_string(command, /* future_flags = */ 0);
                 compileAndRunModule(m, main_module);
                 rtncode = 0;
