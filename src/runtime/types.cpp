@@ -4102,12 +4102,6 @@ extern "C" PyObject* PyGC_RegisterStaticConstant(Box* b) noexcept {
     return b;
 }
 
-extern "C" PyObject* PyGC_RegisterStaticClass(Box* b) noexcept {
-    assert(PyType_Check(b));
-    classes.push_back(static_cast<BoxedClass*>(b));
-    return b;
-}
-
 extern "C" void _PyUnicode_Fini(void);
 
 static int _check_and_flush(FILE* stream) {

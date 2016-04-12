@@ -1,4 +1,3 @@
-# expected: reffail
 import io
 filename = "io_test_.txt"
 

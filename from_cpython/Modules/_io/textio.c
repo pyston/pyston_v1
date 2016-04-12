@@ -871,7 +871,7 @@ textiowrapper_init(textio *self, PyObject *args, PyObject *kwds)
 
     if (encoding == NULL && self->encoding == NULL) {
         if (_PyIO_locale_module == NULL) {
-            _PyIO_locale_module = PyImport_ImportModule("locale");
+            _PyIO_locale_module = PyGC_RegisterStaticConstant(PyImport_ImportModule("locale"));
             if (_PyIO_locale_module == NULL)
                 goto catch_ImportError;
             else
