@@ -355,7 +355,6 @@ extern "C" Box* unichr(Box* arg) {
 }
 
 Box* coerceFunc(Box* vv, Box* ww) {
-    assert(0 && "check refcounting");
     Box* res;
 
     if (PyErr_WarnPy3k("coerce() not supported in 3.x", 1) < 0)
@@ -364,6 +363,8 @@ Box* coerceFunc(Box* vv, Box* ww) {
     if (PyNumber_Coerce(&vv, &ww) < 0)
         throwCAPIException();
     res = PyTuple_Pack(2, vv, ww);
+    Py_DECREF(vv);
+    Py_DECREF(ww);
     return res;
 }
 

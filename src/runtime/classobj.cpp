@@ -192,16 +192,18 @@ Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
     Box* init_func = classLookup(cls, init_str);
 
     BoxedInstance* made = new BoxedInstance(cls);
+    AUTO_DECREF(made);
     if (init_func) {
         Box* init_rtn = runtimeCall(init_func, ArgPassSpec(1, 0, true, true), made, args, kwargs, NULL, NULL);
         AUTO_DECREF(init_rtn);
         if (init_rtn != None)
             raiseExcHelper(TypeError, "__init__() should return None");
     } else {
-        if (args->size() || (kwargs && kwargs->d.size()))
+        if (args->size() || (kwargs && kwargs->d.size())) {
             raiseExcHelper(TypeError, "this constructor takes no arguments");
+        }
     }
-    return made;
+    return incref(made);
 }
 
 extern "C" PyObject* PyInstance_New(PyObject* klass, PyObject* arg, PyObject* kw) noexcept {
@@ -252,7 +254,7 @@ static Box* classobj_getattro(Box* cls, Box* attr) noexcept {
     }
 }
 
-static const char* set_bases(PyClassObject* c, PyObject* v) {
+static const char* set_bases(BoxedClassobj* c, PyObject* v) {
     Py_ssize_t i, n;
 
     if (v == NULL || !PyTuple_Check(v))
@@ -268,7 +270,9 @@ static const char* set_bases(PyClassObject* c, PyObject* v) {
     // Pyston change:
     // set_slot(&c->cl_bases, v);
     // set_attr_slots(c);
-    ((BoxedClassobj*)c)->bases = (BoxedTuple*)v;
+    auto old_bases = c->bases;
+    ((BoxedClassobj*)c)->bases = (BoxedTuple*)incref(v);
+    Py_DECREF(old_bases);
     return "";
 }
 
@@ -282,15 +286,16 @@ static void _classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
     if (attr->s() == "__bases__") {
         RELEASE_ASSERT(_value, "can't delete __bases__");
 
-        const char* error_str = set_bases((PyClassObject*)cls, _value);
+        const char* error_str = set_bases(cls, _value);
         if (error_str && error_str[0] != '\0')
             raiseExcHelper(TypeError, "%s", error_str);
         static BoxedString* bases_str = getStaticString("__bases__");
         cls->setattr(bases_str, _value, NULL);
         return;
     }
-    PyObject_GenericSetAttr(cls, _attr, _value);
-    checkAndThrowCAPIException();
+    int r = PyObject_GenericSetAttr(cls, _attr, _value);
+    if (r)
+        throwCAPIException();
 }
 
 static Box* classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
@@ -554,6 +559,7 @@ void instanceSetattroInternal(Box* _inst, Box* _attr, STOLEN(Box*) value, Setatt
 
         if (setattr) {
             setattr = processDescriptor(setattr, inst, inst->inst_cls);
+            AUTO_DECREF(setattr);
             autoDecref(runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL));
             return;
         }
@@ -567,6 +573,7 @@ void instanceSetattroInternal(Box* _inst, Box* _attr, STOLEN(Box*) value, Setatt
         Box* setattr = classLookup(inst->inst_cls, setattr_str);
         if (setattr) {
             setattr = processDescriptor(setattr, inst, inst->inst_cls);
+            AUTO_DECREF(setattr);
             autoDecref(runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL));
             return;
         }
@@ -597,6 +604,7 @@ Box* instanceDelattr(Box* _inst, Box* _attr) {
 
     if (delattr) {
         delattr = processDescriptor(delattr, inst, inst->inst_cls);
+        AUTO_DECREF(delattr);
         return runtimeCall(delattr, ArgPassSpec(1), _attr, NULL, NULL, NULL, NULL);
     }
 
@@ -638,6 +646,7 @@ Box* instanceRepr(Box* _inst) {
     } else {
         Box* class_str = classobjStr(inst->inst_cls);
         assert(class_str->cls == str_cls);
+        AUTO_DECREF(class_str);
 
         char buf[80];
         snprintf(buf, 80, "<%s instance at %p>", static_cast<BoxedString*>(class_str)->data(), inst);
@@ -657,7 +666,6 @@ Box* instanceStr(Box* _inst) {
         return runtimeCall(str_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     } else {
         return instanceRepr(inst);
-        return objectStr(_inst);
     }
 }
 
@@ -1576,7 +1584,7 @@ Box* instanceLong(Box* _inst) {
     if (PyObject_HasAttr((PyObject*)inst, long_str)) {
         Box* long_func = _instanceGetattribute(inst, long_str, true);
         AUTO_DECREF(long_func);
-        return runtimeCall(autoDecref(long_func), ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        return runtimeCall(long_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     }
 
     Box* res = instanceInt(inst);
