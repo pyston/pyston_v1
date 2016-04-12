@@ -135,6 +135,7 @@ PyAPI_FUNC(void) PyType_SetDict(PyTypeObject*, PyObject*) PYSTON_NOEXCEPT;
 // get decref'd when the interpreter shuts down.  This functions returns its argument.
 // PyType_Ready calls this automatically.
 PyAPI_FUNC(PyObject*) PyGC_RegisterStaticConstant(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyGC_RegisterStaticConstantLocation(PyObject**) PYSTON_NOEXCEPT;
 
 // Gets gc.garbage
 PyAPI_FUNC(PyObject*) _PyGC_GetGarbage(void) PYSTON_NOEXCEPT;

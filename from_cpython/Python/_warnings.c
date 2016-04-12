@@ -538,8 +538,8 @@ setup_context(Py_ssize_t stack_level, PyObject **filename, int *lineno,
                     goto handle_error;
                 }
                 else if (!is_true) {
-                     Py_DECREF(*filename);
-                     *filename = PyString_FromString("__main__");
+                    Py_DECREF(*filename);
+                    *filename = PyString_FromString("__main__");
                     if (*filename == NULL)
                         goto handle_error;
                 }
@@ -901,7 +901,7 @@ _PyWarnings_Init(void)
     _filters = init_filters();
     if (_filters == NULL)
         return;
-    PyGC_RegisterStaticConstant(_filters);
+    PyGC_RegisterStaticConstantLocation(&_filters);
     Py_INCREF(_filters);
     if (PyModule_AddObject(m, "filters", _filters) < 0)
         return;

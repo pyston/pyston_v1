@@ -4091,7 +4091,12 @@ void BoxedGetsetDescriptor::dealloc(Box* _o) noexcept {
 #endif
 
 std::vector<Box*> constants;
+std::vector<Box**> constant_locations;
 std::vector<Box*> late_constants;
+extern "C" void PyGC_RegisterStaticConstantLocation(Box** ptr) noexcept {
+    constant_locations.push_back(ptr);
+}
+
 extern "C" PyObject* PyGC_RegisterStaticConstant(Box* b) noexcept {
     constants.push_back(b);
     return b;
@@ -4827,6 +4832,11 @@ extern "C" void Py_Finalize() noexcept {
             break;
     }
 
+    for (auto p : constant_locations) {
+        Py_DECREF(*p);
+    }
+    constant_locations.clear();
+
     clearAllICs();
     PyType_ClearCache();
     PyOS_FiniInterrupts();
@@ -4851,6 +4861,7 @@ extern "C" void Py_Finalize() noexcept {
     while (PyGC_Collect())
         ;
     assert(!constants.size());
+    assert(!constant_locations.size());
 
     _Py_ReleaseInternedStrings();
 
