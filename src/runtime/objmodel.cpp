@@ -1267,7 +1267,11 @@ void Box::setDictBacked(STOLEN(Box*) val) {
     HCAttrs* hcattrs = this->getHCAttrsPtr();
     RELEASE_ASSERT(PyDict_Check(val) || val->cls == attrwrapper_cls, "");
 
-    if (hcattrs->hcls->type == HiddenClass::DICT_BACKED) {
+    HiddenClass* hcls = hcattrs->hcls;
+    if (!hcls)
+        hcls = root_hcls;
+
+    if (hcls->type == HiddenClass::DICT_BACKED) {
         auto old_dict = hcattrs->attr_list->attrs[0];
         hcattrs->attr_list->attrs[0] = val;
         Py_DECREF(old_dict);
@@ -1279,7 +1283,7 @@ void Box::setDictBacked(STOLEN(Box*) val) {
     // e.g.:
     //     a = v.__dict__
     //     v.__dict__ = {} # 'a' must switch now from wrapping 'v' to a the private dict.
-    int offset = hcattrs->hcls->getAttrwrapperOffset();
+    int offset = hcls->getAttrwrapperOffset();
     if (offset != -1) {
         Box* wrapper = hcattrs->attr_list->attrs[offset];
         RELEASE_ASSERT(wrapper->cls == attrwrapper_cls, "");
@@ -1292,13 +1296,16 @@ void Box::setDictBacked(STOLEN(Box*) val) {
     new_attr_list->attrs[0] = val;
 
     auto old_attr_list = hcattrs->attr_list;
-    int old_attr_list_size = hcattrs->hcls->attributeArraySize();
+    int old_attr_list_size = hcls->attributeArraySize();
 
     hcattrs->hcls = HiddenClass::dict_backed;
     hcattrs->attr_list = new_attr_list;
 
-    decrefArray(old_attr_list->attrs, old_attr_list_size);
-    freeAttrs(old_attr_list, old_attr_list_size);
+    assert((bool)old_attr_list == (bool)old_attr_list_size);
+    if (old_attr_list_size) {
+        decrefArray(old_attr_list->attrs, old_attr_list_size);
+        freeAttrs(old_attr_list, old_attr_list_size);
+    }
 }
 
 void HCAttrs::_clearRaw() noexcept {
