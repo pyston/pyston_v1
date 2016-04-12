@@ -1,4 +1,3 @@
-# expected: reffail
 # Simple datetime test
 # Doesn't test much of the functionality, but even importing the module is tough:
 

@@ -545,12 +545,19 @@ void Rewriter::_incref(RewriterVar* var, int num_refs) {
     for (int i = 0; i < num_refs; ++i)
         assembler->incq(assembler::Immediate(&_Py_RefTotal));
 #endif
-    auto reg = var->getInReg();
 
-    if (num_refs == 1)
-        assembler->incq(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
-    else
-        assembler->add(assembler::Immediate(num_refs), assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+    if (var->isConstant() && !Rewriter::isLargeConstant(var->constant_value)) {
+        for (int i = 0; i < num_refs; i++) {
+            assembler->incq(assembler::Immediate(var->constant_value));
+        }
+    } else {
+        auto reg = var->getInReg();
+
+        if (num_refs == 1)
+            assembler->incq(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+        else
+            assembler->add(assembler::Immediate(num_refs), assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+    }
 
     // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
     // (ie the caller should call bumpUse)
