@@ -1,4 +1,3 @@
-# expected: reffail
 import basic_test
 
 print type(basic_test)
@@ -19,5 +18,4 @@ class C(object):
 for i in xrange(100000):
     C()
 
-print "This will break"
 print basic_test.load()
