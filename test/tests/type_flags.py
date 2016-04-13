@@ -1,4 +1,3 @@
-# expected: reffail
 import slots_test
 
 HEAPTYPE = 1<<9
