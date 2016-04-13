@@ -4827,7 +4827,7 @@ extern "C" void Py_Finalize() noexcept {
     }
 
     for (auto p : constant_locations) {
-        Py_DECREF(*p);
+        Py_XDECREF(*p);
     }
     constant_locations.clear();
 

@@ -159,7 +159,7 @@ get_handler_name(struct HandlerInfo *hinfo)
 {
     PyObject *name = hinfo->nameobj;
     if (name == NULL) {
-        name = PyGC_AddRoot(PyString_FromString(hinfo->name));
+        name = PyString_FromString(hinfo->name);
         hinfo->nameobj = name;
     }
     Py_XINCREF(name);
@@ -1891,7 +1891,7 @@ MODULE_INITFUNC(void)
 
     /* Add some symbolic constants to the module */
     if (ErrorObject == NULL) {
-        ErrorObject = PyGC_AddRoot(PyErr_NewException("xml.parsers.expat.ExpatError",
+        ErrorObject = PyGC_RegisterStaticConstant(PyErr_NewException("xml.parsers.expat.ExpatError",
                                          NULL, NULL));
         if (ErrorObject == NULL)
             return;

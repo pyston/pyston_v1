@@ -141,8 +141,8 @@ PyAPI_FUNC(void) PyGC_RegisterStaticConstantLocation(PyObject**) PYSTON_NOEXCEPT
 PyAPI_FUNC(PyObject*) _PyGC_GetGarbage(void) PYSTON_NOEXCEPT;
 
 // Pyston addition:
-PyAPI_FUNC(void) PyGC_Enable() PYSTON_NOEXCEPT;
-PyAPI_FUNC(void) PyGC_Disable() PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyGC_Enable(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyGC_Disable(void) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

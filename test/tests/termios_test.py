@@ -1,4 +1,3 @@
-# expected: reffail
 import termios, sys
 fd = sys.stdout.fileno()
 try:
