@@ -2916,6 +2916,7 @@ bool dataDescriptorSetSpecialCases(Box* obj, STOLEN(Box*) val, Box* descr, Setat
         // TODO type checking goes here
         if (getset_descr->set == NULL) {
             assert(attr_name->data()[attr_name->size()] == '\0');
+            Py_DECREF(val);
             raiseExcHelper(AttributeError, "attribute '%s' of '%s' objects is not writable", attr_name->data(),
                            getTypeName(obj));
         }
