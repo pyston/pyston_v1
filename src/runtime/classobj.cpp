@@ -1675,10 +1675,10 @@ extern "C" PyObject* PyClass_New(PyObject* bases, PyObject* dict, PyObject* name
     }
 }
 
-extern "C" PyObject* PyClass_Name(PyObject* _classobj) noexcept {
+extern "C" BORROWED(PyObject*) PyClass_Name(PyObject* _classobj) noexcept {
     RELEASE_ASSERT(PyClass_Check(_classobj), "");
     BoxedClassobj* classobj = (BoxedClassobj*)_classobj;
-    return incref(classobj->name);
+    return classobj->name;
 }
 
 extern "C" PyObject* PyMethod_New(PyObject* func, PyObject* self, PyObject* klass) noexcept {

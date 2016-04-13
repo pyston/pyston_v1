@@ -60,7 +60,7 @@ PyAPI_DATA(PyTypeObject*) instancemethod_cls;
 PyAPI_FUNC(PyObject *) PyClass_New(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
 
 // Pyston change: pyston addition returns PyClassObject->cl_name
-PyAPI_FUNC(PyObject *) PyClass_Name(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PyClass_Name(PyObject *) PYSTON_NOEXCEPT;
 
 PyAPI_FUNC(PyObject *) PyInstance_New(PyObject *, PyObject *,
                                             PyObject *) PYSTON_NOEXCEPT;
