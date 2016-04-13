@@ -1945,6 +1945,8 @@ private:
                 if (prev) {
                     auto load = emitter.getBuilder()->CreateLoad(gep);
                     emitter.setType(load, RefType::OWNED);
+                    if (maybe_was_undefined)
+                        emitter.setNullable(load, true);
                 }
                 llvm::Value* v = val->makeConverted(emitter, UNKNOWN)->getValue();
                 auto store = emitter.getBuilder()->CreateStore(v, gep);

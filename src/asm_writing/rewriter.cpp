@@ -548,7 +548,7 @@ void Rewriter::_incref(RewriterVar* var, int num_refs) {
 
     if (var->isConstant() && !Rewriter::isLargeConstant(var->constant_value)) {
         for (int i = 0; i < num_refs; i++) {
-            assembler->incq(assembler::Immediate(var->constant_value));
+            assembler->incq(assembler::Immediate((uint64_t)var->constant_value + offsetof(Box, ob_refcnt)));
         }
     } else {
         auto reg = var->getInReg();

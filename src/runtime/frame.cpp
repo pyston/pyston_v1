@@ -222,8 +222,7 @@ BORROWED(Box*) getFrame(int depth) {
 
 void frameInvalidateBack(BoxedFrame* frame) {
     RELEASE_ASSERT(!frame->hasExited(), "should not happen");
-    assert(!frame->_back && "have to decref it");
-    frame->_back = NULL;
+    Py_CLEAR(frame->_back);
 }
 
 extern "C" void initFrame(FrameInfo* frame_info) {

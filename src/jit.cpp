@@ -443,6 +443,7 @@ static int main(int argc, char** argv) noexcept {
                 Box* module = PyImport_ImportModule("site");
                 if (!module)
                     throwCAPIException();
+                Py_DECREF(module);
             } catch (ExcInfo e) {
                 e.printExcAndTraceback();
                 e.clear();
