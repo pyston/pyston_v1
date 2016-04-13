@@ -42,5 +42,4 @@ bool InternedString::isCompilerCreatedName() const {
     char c = _str->s()[0];
     return c == '!' || c == '#';
 }
-
 }

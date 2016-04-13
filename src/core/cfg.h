@@ -67,9 +67,7 @@ public:
 
     void push_back(AST_stmt* node) { body.push_back(node); }
     void print(llvm::raw_ostream& stream = llvm::outs());
-    void _print() {
-        print();
-    }
+    void _print() { print(); }
 };
 
 // Control Flow Graph

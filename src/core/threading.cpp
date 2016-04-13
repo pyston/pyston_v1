@@ -460,7 +460,6 @@ extern "C" void PyEval_ReInitThreads() noexcept {
     else
         Py_DECREF(result);
     Py_DECREF(threading);
-
 }
 
 void acquireGLWrite() {
@@ -599,7 +598,7 @@ extern "C" void PyThread_delete_key_value(int key) noexcept {
 }
 
 
-extern "C" PyObject *_PyThread_CurrentFrames(void) noexcept {
+extern "C" PyObject* _PyThread_CurrentFrames(void) noexcept {
     assert(0 && "check refcounting");
     try {
         LOCK_REGION(&threading_lock);
@@ -611,9 +610,9 @@ extern "C" PyObject *_PyThread_CurrentFrames(void) noexcept {
             result->d[boxInt(pair.first)] = frame;
         }
         return result;
-   } catch (ExcInfo) {
+    } catch (ExcInfo) {
         RELEASE_ASSERT(0, "not implemented");
-   }
+    }
 }
 
 

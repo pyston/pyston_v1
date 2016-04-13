@@ -84,8 +84,7 @@ template <typename T1, typename T2, typename T3> struct hash<tuple<T1, T2, T3>> 
 }
 
 namespace pyston {
-template <typename T>
-constexpr bool fitsInto(int64_t x) {
+template <typename T> constexpr bool fitsInto(int64_t x) {
     return std::numeric_limits<T>::min() <= x && x <= std::numeric_limits<T>::max();
 }
 }

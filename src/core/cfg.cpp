@@ -271,7 +271,8 @@ private:
             }
         }
 
-        raiseSyntaxError("'continue' not properly in loop", value->lineno, value->col_offset, source->getFn()->s(), "", true);
+        raiseSyntaxError("'continue' not properly in loop", value->lineno, value->col_offset, source->getFn()->s(), "",
+                         true);
     }
 
     void doBreak(AST* value) {
@@ -2527,7 +2528,8 @@ public:
     llvm::DenseMap<InternedString, int> sym_vreg_map;
     ScopeInfo* scope_info;
 
-    AssignVRegsVisitor(ScopeInfo* scope_info, bool only_user_visible) : only_user_visible(only_user_visible), scope_info(scope_info) {}
+    AssignVRegsVisitor(ScopeInfo* scope_info, bool only_user_visible)
+        : only_user_visible(only_user_visible), scope_info(scope_info) {}
 
     bool visit_arguments(AST_arguments* node) override {
         for (AST_expr* d : node->defaults)
@@ -2586,8 +2588,9 @@ void CFG::assignVRegs(const ParamNames& param_names, ScopeInfo* scope_info) {
 
     AssignVRegsVisitor visitor(scope_info, true);
 
-    // we need todo two passes: first we assign the user visible vars a vreg and then the compiler created get there value.
-    for (int i=0; i<2; ++i) {
+    // we need todo two passes: first we assign the user visible vars a vreg and then the compiler created get there
+    // value.
+    for (int i = 0; i < 2; ++i) {
         for (CFGBlock* b : blocks) {
             for (AST_stmt* stmt : b->body) {
                 stmt->accept(&visitor);

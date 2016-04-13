@@ -78,10 +78,10 @@ enum Rewritable {
 enum class RefType {
     UNKNOWN
 #ifndef NDEBUG
-        // Set this to non-zero to make it possible for the debugger to
-        = 1
+    // Set this to non-zero to make it possible for the debugger to
+    = 1
 #endif
-        ,
+    ,
     OWNED,
     BORROWED,
 };
@@ -314,7 +314,8 @@ class JitCodeBlock;
 extern std::vector<Box*> constants;
 extern std::vector<Box*> late_constants; // constants that should be freed after normal constants
 
-// A specific compilation of a FunctionMetadata.  Usually these will be created by the LLVM JIT, which will take a FunctionMetadata
+// A specific compilation of a FunctionMetadata.  Usually these will be created by the LLVM JIT, which will take a
+// FunctionMetadata
 // and some compilation settings, and produce a CompiledFunction
 // CompiledFunctions can also be created from raw function pointers, using FunctionMetadata::create.
 // A single FunctionMetadata can have multiple CompiledFunctions associated with it, if they have different settings.
@@ -655,10 +656,10 @@ public:
 
     int traverse(visitproc visit, void* arg) noexcept;
 
-    void _clearRaw() noexcept;              // Raw clear -- clears out and decrefs all the attrs.
-                                            // Meant for implementing other clear-like functions
-    void clearForDealloc() noexcept;        // meant for normal object deallocation.  converts the attrwrapper
-    void moduleClear() noexcept;            // Meant for _PyModule_Clear.  doesn't clear all attributes.
+    void _clearRaw() noexcept;       // Raw clear -- clears out and decrefs all the attrs.
+                                     // Meant for implementing other clear-like functions
+    void clearForDealloc() noexcept; // meant for normal object deallocation.  converts the attrwrapper
+    void moduleClear() noexcept;     // Meant for _PyModule_Clear.  doesn't clear all attributes.
 };
 static_assert(sizeof(HCAttrs) == sizeof(struct _hcattrs), "");
 
@@ -694,7 +695,7 @@ public:
 
     _PyObject_HEAD_EXTRA
 
-    Py_ssize_t ob_refcnt;
+        Py_ssize_t ob_refcnt;
 
     // Note: cls gets initialized in the new() function.
     BoxedClass* cls;
@@ -898,13 +899,13 @@ static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size),
     }                                                                                                                  \
     void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {                            \
         ALLOC_STATS_VAR(default_cls)                                                                                   \
-        assert(default_cls->tp_alloc == PyType_GenericAlloc);                                                      \
+        assert(default_cls->tp_alloc == PyType_GenericAlloc);                                                          \
         assert(default_cls->tp_itemsize == itemsize);                                                                  \
         assert(default_cls->tp_basicsize == size);                                                                     \
         assert(default_cls->is_pyston_class);                                                                          \
         assert(default_cls->attrs_offset == 0);                                                                        \
                                                                                                                        \
-        void* mem = PyObject_MALLOC(size + nitems * itemsize);                                            \
+        void* mem = PyObject_MALLOC(size + nitems * itemsize);                                                         \
         assert(mem);                                                                                                   \
                                                                                                                        \
         BoxVar* rtn = static_cast<BoxVar*>(mem);                                                                       \
