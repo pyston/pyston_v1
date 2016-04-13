@@ -290,6 +290,8 @@ link_directories(${LLVM_LIBRARY_DIRS})
 
 ADD_PROFILE_FLAGS()
 
+include(sysconfigdata)
+
 add_subdirectory(lib_pyston)
 add_subdirectory(from_cpython)
 add_subdirectory(src)

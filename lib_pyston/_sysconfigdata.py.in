@@ -3,8 +3,8 @@
 build_time_vars = {
         "CC": "gcc -pthread",
         "CXX": "g++ -pthread",
-        "OPT": "-DNDEBUG -g -fwrapv -O3 -Wall -Wstrict-prototypes",
-        "CFLAGS": "-fno-strict-aliasing -g -O3 -DNDEBUG -g -fwrapv -O3 -Wall -Wstrict-prototypes",
+        "OPT": "@EXT_BUILD_FLAGS@ -fwrapv -Wall -Wstrict-prototypes",
+        "CFLAGS": "-fno-strict-aliasing @EXT_BUILD_FLAGS@  -fwrapv -Wall -Wstrict-prototypes",
         "CCSHARED": "-fPIC",
         "LDSHARED": "gcc -pthread -shared",
         "SO": ".pyston.so",
