@@ -2527,7 +2527,7 @@ void setupBuiltins() {
         "__import__", new BoxedBuiltinFunctionOrMethod(import_func, "__import__",
                                                        { NULL, NULL, NULL, autoDecref(boxInt(-1)) }, NULL, import_doc));
 
-    enumerate_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedEnumerate), false, "enumerate", false,
+    enumerate_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedEnumerate), false, "enumerate", true,
                                        BoxedEnumerate::dealloc, NULL, true, BoxedEnumerate::traverse, NOCLEAR);
     enumerate_cls->giveAttr("__new__",
                             new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::new_, UNKNOWN, 3,

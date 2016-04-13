@@ -207,7 +207,7 @@ void setupIter() {
     seqiter_cls->tp_iter = PyObject_SelfIter;
     seqiter_cls->tp_iternext = seqiter_next;
 
-    seqreviter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter), false, "reversed", false,
+    seqreviter_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSeqIter), false, "reversed", true,
                                         (destructor)BoxedSeqIter::dealloc, NULL, true,
                                         (traverseproc)BoxedSeqIter::traverse, NOCLEAR);
 

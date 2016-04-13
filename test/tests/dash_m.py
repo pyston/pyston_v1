@@ -1,4 +1,5 @@
 # expected: reffail
+# - cleaning up a paused generator?
 import os
 import sys
 import subprocess

@@ -4269,7 +4269,7 @@ void setupRuntime() {
     module_cls = new (0) BoxedClass(object_cls, offsetof(BoxedModule, attrs), 0, sizeof(BoxedModule), false, "module",
                                     true, BoxedModule::dealloc, NULL, true, BoxedModule::traverse, BoxedModule::clear);
     member_descriptor_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedMemberDescriptor), false,
-                                               "member_descriptor", true, NULL, NULL, false);
+                                               "member_descriptor", false, NULL, NULL, false);
     capifunc_cls = new (0)
         BoxedClass(object_cls, 0, 0, sizeof(BoxedCApiFunction), false, "capifunc", true, BoxedCApiFunction::dealloc,
                    NULL, true, BoxedCApiFunction::traverse, BoxedCApiFunction::clear);

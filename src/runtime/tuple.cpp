@@ -708,7 +708,7 @@ void setupTuple() {
     tuple_cls->tp_as_mapping = &tuple_as_mapping;
 
     tuple_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedTupleIterator), false,
-                                            "tupleiterator", true, (destructor)BoxedTupleIterator::dealloc, NULL, true,
+                                            "tupleiterator", false, (destructor)BoxedTupleIterator::dealloc, NULL, true,
                                             (traverseproc)BoxedTupleIterator::traverse, NOCLEAR);
 
     tuple_cls->giveAttr("__new__",
