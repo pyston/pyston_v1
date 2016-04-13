@@ -398,7 +398,6 @@ local_clear(localobject *self)
     Py_CLEAR(self->dummies);
     Py_CLEAR(self->wr_callback);
     /* Remove all strong references to dummies from the thread states */
-    /*
     if (self->key
         && (tstate = PyThreadState_Get())
         && tstate->interp) {
@@ -409,8 +408,6 @@ local_clear(localobject *self)
                 PyDict_GetItem(tstate->dict, self->key))
                 PyDict_DelItem(tstate->dict, self->key);
     }
-    */
-    printf("threadmodule.c:413: can't really free up the thread-specific dummy storage\n");
     return 0;
 }
 

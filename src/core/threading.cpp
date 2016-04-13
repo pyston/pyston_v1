@@ -36,11 +36,33 @@
 namespace pyston {
 namespace threading {
 
+
+#ifdef WITH_THREAD
+#include "pythread.h"
+static PyThread_type_lock head_mutex = NULL; /* Protects interp->tstate_head */
+#define HEAD_INIT() (void)(head_mutex || (head_mutex = PyThread_allocate_lock()))
+#define HEAD_LOCK() PyThread_acquire_lock(head_mutex, WAIT_LOCK)
+#define HEAD_UNLOCK() PyThread_release_lock(head_mutex)
+
+/* The single PyInterpreterState used by this process'
+   GILState implementation
+*/
+// Pyston change:
+// static PyInterpreterState *autoInterpreterState = NULL;
+// static int autoTLSkey = 0;
+#else
+#define HEAD_INIT()   /* Nothing */
+#define HEAD_LOCK()   /* Nothing */
+#define HEAD_UNLOCK() /* Nothing */
+#endif
+
+PyInterpreterState interpreter_state;
+
 std::unordered_set<PerThreadSetBase*> PerThreadSetBase::all_instances;
 
 extern "C" {
-__thread PyThreadState cur_thread_state
-    = { NULL, 0, 1, NULL, NULL, NULL, NULL, 0, NULL }; // not sure if we need to explicitly request zero-initialization
+__thread PyThreadState cur_thread_state = { NULL, &interpreter_state, NULL, 0, 1, NULL, NULL, NULL, NULL, 0,
+                                            NULL }; // not sure if we need to explicitly request zero-initialization
 }
 
 PthreadFastMutex threading_lock;
@@ -83,8 +105,13 @@ public:
 
     PyThreadState* public_thread_state;
 
-    ThreadStateInternal(void* stack_start, pthread_t pthread_id, PyThreadState* public_thread_state)
-        : saved(false), stack_start(stack_start), pthread_id(pthread_id), public_thread_state(public_thread_state) {}
+    ThreadStateInternal(void* stack_start, pthread_t pthread_id, PyThreadState* tstate)
+        : saved(false), stack_start(stack_start), pthread_id(pthread_id), public_thread_state(tstate) {
+        HEAD_LOCK();
+        tstate->next = interpreter_state.tstate_head;
+        interpreter_state.tstate_head = tstate;
+        HEAD_UNLOCK();
+    }
 
     void saveCurrent() {
         assert(!saved);
@@ -181,8 +208,46 @@ static void registerThread(bool is_starting_thread) {
         printf("child initialized; tid=%ld\n", current_thread);
 }
 
+/* Common code for PyThreadState_Delete() and PyThreadState_DeleteCurrent() */
+static void tstate_delete_common(PyThreadState* tstate) {
+    PyInterpreterState* interp;
+    PyThreadState** p;
+    PyThreadState* prev_p = NULL;
+    if (tstate == NULL)
+        Py_FatalError("PyThreadState_Delete: NULL tstate");
+    interp = tstate->interp;
+    if (interp == NULL)
+        Py_FatalError("PyThreadState_Delete: NULL interp");
+    HEAD_LOCK();
+    for (p = &interp->tstate_head;; p = &(*p)->next) {
+        if (*p == NULL)
+            Py_FatalError("PyThreadState_Delete: invalid tstate");
+        if (*p == tstate)
+            break;
+        /* Sanity check.  These states should never happen but if
+         * they do we must abort.  Otherwise we'll end up spinning in
+         * in a tight loop with the lock held.  A similar check is done
+         * in thread.c find_key().  */
+        if (*p == prev_p)
+            Py_FatalError("PyThreadState_Delete: small circular list(!)"
+                          " and tstate not found.");
+        prev_p = *p;
+        if ((*p)->next == interp->tstate_head)
+            Py_FatalError("PyThreadState_Delete: circular list(!) and"
+                          " tstate not found.");
+    }
+    *p = tstate->next;
+    HEAD_UNLOCK();
+    // Pyston change:
+    // free(tstate);
+}
+
 static void unregisterThread() {
     current_internal_thread_state->assertNoGenerators();
+
+    tstate_delete_common(current_internal_thread_state->public_thread_state);
+    PyThreadState_Clear(current_internal_thread_state->public_thread_state);
+
     {
         pthread_t current_thread = pthread_self();
         LOCK_REGION(&threading_lock);
@@ -191,6 +256,7 @@ static void unregisterThread() {
         if (VERBOSITY() >= 2)
             printf("thread tid=%ld exited\n", current_thread);
     }
+    delete current_internal_thread_state;
     current_internal_thread_state = 0;
 }
 
@@ -228,6 +294,7 @@ extern "C" void PyGILState_Release(PyGILState_STATE oldstate) noexcept {
     if (cur_thread_state.gilstate_counter == 0) {
         assert(oldstate == PyGILState_UNLOCKED);
         RELEASE_ASSERT(0, "this is currently untested");
+        // Pyston change:
         unregisterThread();
     }
 }
@@ -336,8 +403,11 @@ static long main_thread_id;
 void registerMainThread() {
     LOCK_REGION(&threading_lock);
 
+    HEAD_INIT();
+
     main_thread_id = pthread_self();
 
+    assert(!interpreter_state.tstate_head);
     assert(!current_internal_thread_state);
     current_internal_thread_state = new ThreadStateInternal(find_stack(), pthread_self(), &cur_thread_state);
     current_threads[pthread_self()] = current_internal_thread_state;
@@ -428,6 +498,9 @@ extern "C" void PyEval_ReInitThreads() noexcept {
         if (it->second->pthread_id == current_thread) {
             ++it;
         } else {
+            PyThreadState_Clear(it->second->public_thread_state);
+            tstate_delete_common(it->second->public_thread_state);
+            delete it->second;
             it = current_threads.erase(it);
         }
     }
@@ -613,6 +686,43 @@ extern "C" PyObject* _PyThread_CurrentFrames(void) noexcept {
     } catch (ExcInfo) {
         RELEASE_ASSERT(0, "not implemented");
     }
+}
+
+extern "C" void PyInterpreterState_Clear(PyInterpreterState* interp) noexcept {
+    PyThreadState* p;
+    HEAD_LOCK();
+    for (p = interp->tstate_head; p != NULL; p = p->next)
+        PyThreadState_Clear(p);
+    HEAD_UNLOCK();
+    // Py_CLEAR(interp->codec_search_path);
+    // Py_CLEAR(interp->codec_search_cache);
+    // Py_CLEAR(interp->codec_error_registry);
+    // Py_CLEAR(interp->modules);
+    // Py_CLEAR(interp->modules_reloading);
+    // Py_CLEAR(interp->sysdict);
+    // Py_CLEAR(interp->builtins);
+}
+
+extern "C" void PyThreadState_Clear(PyThreadState* tstate) noexcept {
+    assert(tstate);
+
+    assert(!tstate->trash_delete_later);
+    // TODO: should we try to clean this up at all?
+    // CPython decrefs the frame object:
+    // assert(!tstate->frame_info);
+
+    Py_CLEAR(tstate->dict);
+    Py_CLEAR(tstate->curexc_type);
+    Py_CLEAR(tstate->curexc_value);
+    Py_CLEAR(tstate->curexc_traceback);
+}
+
+extern "C" PyThreadState* PyInterpreterState_ThreadHead(PyInterpreterState* interp) noexcept {
+    return interp->tstate_head;
+}
+
+extern "C" PyThreadState* PyThreadState_Next(PyThreadState* tstate) noexcept {
+    return tstate->next;
 }
 
 

@@ -4834,7 +4834,7 @@ extern "C" void Py_Finalize() noexcept {
     _PyCodecRegistry_Deinit();
     // TODO: we might have to do this in a loop:
     _PyUnicode_Fini();
-    PyThreadState_Clear(NULL);
+    PyInterpreterState_Clear(PyThreadState_GET()->interp);
 
     for (auto b : late_constants) {
         Py_DECREF(b);
@@ -4864,6 +4864,9 @@ extern "C" void Py_Finalize() noexcept {
         Py_INCREF(garbage->elts->elts[i]);
     }
     Py_DECREF(garbage);
+
+    auto ts = PyThreadState_GET();
+    bool other_threads = ((bool)ts->next) || (ts != ts->interp->tstate_head);
 
 #endif
 
@@ -4927,15 +4930,19 @@ extern "C" void Py_Finalize() noexcept {
     if (VERBOSITY())
         PRINT_TOTAL_REFS();
 
-    if (num_garbage_objects == 0) {
+    if (num_garbage_objects) {
+        if (VERBOSITY())
+            fprintf(stderr, "[%d garbage objects]\n", num_garbage_objects);
+    } else if (other_threads) {
+        if (VERBOSITY())
+            fprintf(stderr, "[Other threads alive, can't free their refs]\n");
+    } else {
 #ifdef Py_TRACE_REFS
         if (_Py_RefTotal != 0)
             _Py_PrintReferenceAddressesCapped(stderr, 10);
 #endif
 
         RELEASE_ASSERT(_Py_RefTotal == 0, "%ld refs remaining!", _Py_RefTotal);
-    } else if (VERBOSITY()) {
-        fprintf(stderr, "[%d garbage objects]\n", num_garbage_objects);
     }
 #endif
 }

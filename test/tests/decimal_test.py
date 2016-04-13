@@ -1,4 +1,3 @@
-# expected: reffail
 from decimal import Decimal
 
 for d in (Decimal("0.5"), Decimal("0"), Decimal(0), Decimal(1.0)):
