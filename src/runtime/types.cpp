@@ -2815,6 +2815,11 @@ void Box::giveAttrDescriptor(const char* attr, Box* (*get)(Box*, void*), void (*
     giveAttr(bstr, new (pyston_getset_cls) BoxedGetsetDescriptor(bstr, get, set, NULL));
 }
 
+void Box::giveCapiAttrDescriptor(const char* attr, Box* (*get)(Box*, void*), int (*set)(Box*, Box*, void*)) {
+    BoxedString* bstr = internStringMortal(attr);
+    giveAttr(bstr, new (capi_getset_cls) BoxedGetsetDescriptor(bstr, get, set, NULL));
+}
+
 BORROWED(Box*) Box::getAttrWrapper() {
     assert(cls->instancesHaveHCAttrs());
     HCAttrs* attrs = getHCAttrsPtr();
@@ -3376,47 +3381,37 @@ done:
     return result;
 }
 
-static Box* objectClass(Box* obj, void* context) {
-    assert(obj->cls != instance_cls); // should override __class__ in classobj
-    return incref(obj->cls);
+static PyObject* object_get_class(PyObject* self, void* closure) noexcept {
+    Py_INCREF(Py_TYPE(self));
+    return (PyObject*)(Py_TYPE(self));
 }
 
-static void objectSetClass(Box* obj, Box* val, void* context) {
-    RELEASE_ASSERT(0, "check refcounting");
+static int object_set_class(PyObject* self, PyObject* value, void* closure) noexcept {
+    PyTypeObject* oldto = Py_TYPE(self);
+    PyTypeObject* newto;
 
-    if (!PyType_Check(val))
-        raiseExcHelper(TypeError, "__class__ must be set to new-style class, not '%s' object", val->cls->tp_name);
-
-    auto new_cls = static_cast<BoxedClass*>(val);
-
-    // Conservative Pyston checks: make sure that both classes are derived only from Pyston types,
-    // and that they don't define any extra C-level fields
-    RELEASE_ASSERT(val->cls == type_cls, "");
-    RELEASE_ASSERT(obj->cls->cls == type_cls, "");
-    for (auto b : *static_cast<BoxedTuple*>(obj->cls->tp_mro)) {
-        BoxedClass* base = static_cast<BoxedClass*>(b);
-        RELEASE_ASSERT(base->is_pyston_class, "");
+    if (value == NULL) {
+        PyErr_SetString(PyExc_TypeError, "can't delete __class__ attribute");
+        return -1;
     }
-    for (auto b : *static_cast<BoxedTuple*>(new_cls->tp_mro)) {
-        BoxedClass* base = static_cast<BoxedClass*>(b);
-        RELEASE_ASSERT(base->is_pyston_class, "");
+    if (!PyType_Check(value)) {
+        PyErr_Format(PyExc_TypeError, "__class__ must be set to new-style class, not '%s' object",
+                     Py_TYPE(value)->tp_name);
+        return -1;
     }
-
-    RELEASE_ASSERT(obj->cls->tp_basicsize == object_cls->tp_basicsize + sizeof(HCAttrs) + sizeof(Box**), "");
-    RELEASE_ASSERT(new_cls->tp_basicsize == object_cls->tp_basicsize + sizeof(HCAttrs) + sizeof(Box**), "");
-    RELEASE_ASSERT(obj->cls->attrs_offset != 0, "");
-    RELEASE_ASSERT(new_cls->attrs_offset != 0, "");
-    RELEASE_ASSERT(obj->cls->tp_weaklistoffset != 0, "");
-    RELEASE_ASSERT(new_cls->tp_weaklistoffset != 0, "");
-
-    // Normal Python checks.
-    // TODO there are more checks to add here, and they should throw errors not asserts
-    RELEASE_ASSERT(obj->cls->tp_basicsize == new_cls->tp_basicsize, "");
-    RELEASE_ASSERT(obj->cls->tp_dictoffset == new_cls->tp_dictoffset, "");
-    RELEASE_ASSERT(obj->cls->tp_weaklistoffset == new_cls->tp_weaklistoffset, "");
-    RELEASE_ASSERT(obj->cls->attrs_offset == new_cls->attrs_offset, "");
-
-    obj->cls = new_cls;
+    newto = (PyTypeObject*)value;
+    if (!(newto->tp_flags & Py_TPFLAGS_HEAPTYPE) || !(oldto->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
+        PyErr_Format(PyExc_TypeError, "__class__ assignment: only for heap types");
+        return -1;
+    }
+    if (compatible_for_assignment(newto, oldto, "__class__")) {
+        Py_INCREF(newto);
+        Py_TYPE(self) = newto;
+        Py_DECREF(oldto);
+        return 0;
+    } else {
+        return -1;
+    }
 }
 
 static PyMethodDef object_methods[] = {
@@ -3729,12 +3724,13 @@ static Box* getsetSet(Box* self, Box* obj, Box* val) {
     }
 
     if (isSubclass(self->cls, pyston_getset_cls)) {
-        getset_descr->set(obj, val, getset_descr->closure);
+        getset_descr->set_pyston(obj, val, getset_descr->closure);
         return incref(None);
     } else {
         RELEASE_ASSERT(isSubclass(self->cls, capi_getset_cls), "");
-        getset_descr->set(obj, val, getset_descr->closure);
-        checkAndThrowCAPIException();
+        int r = getset_descr->set_capi(obj, val, getset_descr->closure);
+        if (r)
+            throwCAPIException();
         return incref(None);
     }
 }
@@ -4495,7 +4491,7 @@ void setupRuntime() {
     for (auto& md : object_methods) {
         object_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, object_cls));
     }
-    object_cls->giveAttrDescriptor("__class__", objectClass, objectSetClass);
+    object_cls->giveCapiAttrDescriptor("__class__", object_get_class, object_set_class);
 
     object_cls->tp_str = object_str;
     add_operators(object_cls);

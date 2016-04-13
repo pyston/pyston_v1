@@ -827,8 +827,8 @@ extern "C" PyObject* PyDescr_NewMember(PyTypeObject* x, struct PyMemberDef* y) n
 
 extern "C" PyObject* PyDescr_NewGetSet(PyTypeObject* x, struct PyGetSetDef* y) noexcept {
     // TODO do something with __doc__
-    return new (capi_getset_cls) BoxedGetsetDescriptor(autoDecref(internStringMortal(y->name)), y->get,
-                                                       (void (*)(Box*, Box*, void*))y->set, y->closure);
+    return new (capi_getset_cls)
+        BoxedGetsetDescriptor(autoDecref(internStringMortal(y->name)), y->get, y->set, y->closure);
 }
 
 extern "C" PyObject* PyDescr_NewClassMethod(PyTypeObject* type, PyMethodDef* method) noexcept {

@@ -1137,12 +1137,23 @@ public:
 class BoxedGetsetDescriptor : public Box {
 public:
     Box* (*get)(Box*, void*);
-    void (*set)(Box*, Box*, void*);
+    union {
+        void* set;
+        void (*set_pyston)(Box*, Box*, void*);
+        int (*set_capi)(Box*, Box*, void*);
+    };
     void* closure;
     BoxedString* name;
 
     BoxedGetsetDescriptor(BoxedString* name, Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*), void* closure)
-        : get(get), set(set), closure(closure), name(name) {
+        : get(get), set_pyston(set), closure(closure), name(name) {
+        assert(this->cls == pyston_getset_cls);
+        Py_INCREF(name);
+    }
+
+    BoxedGetsetDescriptor(BoxedString* name, Box* (*get)(Box*, void*), int (*set)(Box*, Box*, void*), void* closure)
+        : get(get), set_capi(set), closure(closure), name(name) {
+        assert(this->cls == capi_getset_cls);
         Py_INCREF(name);
     }
 

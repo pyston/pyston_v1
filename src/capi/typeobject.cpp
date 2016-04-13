@@ -3150,7 +3150,7 @@ static int same_slots_added(PyTypeObject* a, PyTypeObject* b) noexcept {
     return size == a->tp_basicsize && size == b->tp_basicsize;
 }
 
-static int compatible_for_assignment(PyTypeObject* oldto, PyTypeObject* newto, const char* attr) noexcept {
+int compatible_for_assignment(PyTypeObject* oldto, PyTypeObject* newto, const char* attr) noexcept {
     PyTypeObject* newbase, *oldbase;
 
     if (newto->tp_dealloc != oldto->tp_dealloc || newto->tp_free != oldto->tp_free) {

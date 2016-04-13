@@ -2940,8 +2940,13 @@ bool dataDescriptorSetSpecialCases(Box* obj, STOLEN(Box*) val, Box* descr, Setat
         }
 
         AUTO_DECREF(val);
-        getset_descr->set(obj, val, getset_descr->closure);
-        checkAndThrowCAPIException();
+        if (descr->cls == pyston_getset_cls) {
+            getset_descr->set_pyston(obj, val, getset_descr->closure);
+        } else {
+            int r = getset_descr->set_capi(obj, val, getset_descr->closure);
+            if (r)
+                throwCAPIException();
+        }
 
         return true;
     } else if (descr->cls == member_descriptor_cls) {

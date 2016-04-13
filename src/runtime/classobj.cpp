@@ -539,8 +539,10 @@ void instanceSetattroInternal(Box* _inst, Box* _attr, STOLEN(Box*) value, Setatt
             Py_FatalError("unimplemented");
 
         if (attr->s() == "__class__") {
-            if (value->cls != classobj_cls)
+            if (value->cls != classobj_cls) {
+                Py_DECREF(value);
                 raiseExcHelper(TypeError, "__class__ must be set to a class");
+            }
 
             auto old_cls = inst->inst_cls;
             inst->inst_cls = static_cast<BoxedClassobj*>(value);
