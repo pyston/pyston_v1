@@ -324,7 +324,7 @@ add_test(NAME check-format COMMAND ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${L
 add_test(NAME analysis_unittest COMMAND analysis_unittest)
 
 macro(add_pyston_test testname directory)
-  add_test(NAME pyston_${testname}_${directory} COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -k -a=-S ${ARGV2} ${ARGV3} ${ARGV4} ${CMAKE_SOURCE_DIR}/test/${directory})
+  add_test(NAME pyston_${testname}_${directory} COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -q -k -a=-S ${ARGV2} ${ARGV3} ${ARGV4} ${CMAKE_SOURCE_DIR}/test/${directory})
 endmacro()
 
 # tests         testname directory arguments

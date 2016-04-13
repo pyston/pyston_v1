@@ -42,6 +42,14 @@ EXIT_CODE_ONLY = False
 SKIP_FAILING_TESTS = False
 VERBOSE = 1
 
+DISPLAY_SKIPS = False
+DISPLAY_SUCCESSES = True
+
+def success_message(msg):
+    if DISPLAY_SUCCESSES:
+        return msg
+    return ""
+
 PYTHONIOENCODING = 'utf-8'
 
 # For fun, can test pypy.
@@ -145,7 +153,7 @@ def run_test(fn, check_stats, run_memcheck):
     del check_stats, run_memcheck
 
     if opts.skip:
-        return "(skipped: %s)" % opts.skip
+        return ("(skipped: %s)" % opts.skip) if DISPLAY_SKIPS else ""
 
     env = dict(os.environ)
     env["PYTHONPATH"] = EXTMODULE_DIR_PYSTON
@@ -266,7 +274,7 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
                 color = 31
                 msg = "no stats available"
                 if opts.expected == "fail":
-                    return "Expected failure (no stats found)"
+                    return success_message("Expected failure (no stats found)")
                 elif KEEP_GOING:
                     failed.append(fn)
                     if VERBOSE >= 1:
@@ -316,7 +324,7 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
             msg = "Exited with code %d (expected code %d)" % (code, expected_code)
 
         if opts.expected == "fail":
-            return "Expected failure (got code %d, should be %d)" % (code, expected_code)
+            return success_message("Expected failure (got code %d, should be %d)" % (code, expected_code))
         elif KEEP_GOING:
             failed.append(fn)
             if VERBOSE >= 1:
@@ -342,7 +350,7 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
 
     elif out != expected_out:
         if opts.expected == "fail":
-            return "Expected failure (bad output)"
+            return success_message("Expected failure (bad output)")
         else:
             diff = diff_output(expected_out, out, "expected_", "received_")
             if KEEP_GOING:
@@ -356,7 +364,7 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
                 raise Exception("Failed on %s:\n%s" % (fn, diff))
     elif not TEST_PYPY and canonicalize_stderr(stderr) != canonicalize_stderr(expected_err):
         if opts.expected == "fail":
-            return "Expected failure (bad stderr)"
+            return success_message("Expected failure (bad stderr)")
         else:
             diff = diff_output(expected_err, stderr, "expectederr_", "receivederr_")
             if KEEP_GOING:
@@ -437,7 +445,7 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
         else:
             r += ("(Skipping memchecks)",)
 
-    return r
+    return success_message(r)
 
 q = Queue.Queue()
 cv = threading.Condition()
@@ -485,6 +493,8 @@ parser.add_argument('-s', '--skip-tests', type=str, default='',
                     help='tests to skip (comma-separated)')
 parser.add_argument('-e', '--exit-code-only', action='store_true',
                     help="only check exit code; don't run CPython to get expected output to compare against")
+parser.add_argument('-q', '--quiet', action='store_true',
+                    help="Only display failing tests")
 parser.add_argument('--skip-failing', action='store_true',
                     help="skip tests expected to fail")
 parser.add_argument('--order-by-mtime', action='store_true',
@@ -506,6 +516,7 @@ def main(orig_dir):
     global VERBOSE
     global EXTMODULE_DIR_PYSTON
     global EXTMODULE_DIR
+    global DISPLAY_SUCCESSES
 
     run_memcheck = False
 
@@ -520,6 +531,9 @@ def main(orig_dir):
     TESTS_TO_SKIP = filter(bool, TESTS_TO_SKIP) # "".split(',') == ['']
     EXIT_CODE_ONLY = opts.exit_code_only
     SKIP_FAILING_TESTS = opts.skip_failing
+
+    if opts.quiet:
+        DISPLAY_SUCCESSES = False
 
     TEST_DIR = os.path.join(orig_dir, opts.test_dir)
     EXTMODULE_DIR_PYSTON = os.path.abspath(os.path.dirname(os.path.realpath(IMAGE)) + "/test/test_extension/")
@@ -607,11 +621,13 @@ def main(orig_dir):
                 print "(%s also failed)" % fn
             sys.exit(1)
             break
-        name = os.path.basename(fn).rjust(FN_JUST_SIZE)
-        msgs = results[fn]
-        if isinstance(msgs,str):
-            msgs = [msgs]
-        print '    '.join([name] + list(msgs))
+
+        if results[fn]:
+            name = os.path.basename(fn).rjust(FN_JUST_SIZE)
+            msgs = results[fn]
+            if isinstance(msgs,str):
+                msgs = [msgs]
+            print '    '.join([name] + list(msgs))
 
     for t in threads:
         t.join()
