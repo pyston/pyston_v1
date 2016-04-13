@@ -1429,10 +1429,11 @@ static void typeSubSetDict(BORROWED(Box*) obj, BORROWED(Box*) val, void* context
     abort();
 }
 
-extern "C" void PyType_SetDict(PyTypeObject* type, PyObject* dict) noexcept {
-    assert(0 && "check refcounting");
+extern "C" void PyType_SetDict(PyTypeObject* type, STOLEN(PyObject*) dict) noexcept {
     typeSubSetDict(type, dict, NULL);
+    Box* old_dict = type->tp_dict;
     type->tp_dict = dict;
+    Py_DECREF(old_dict);
 }
 
 Box* dict_descr = NULL;

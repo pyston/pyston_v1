@@ -129,7 +129,7 @@ PyAPI_FUNC(int) PyObject_ClearHcAttrs(PyHcAttrs*) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyObject_TraverseHcAttrs(PyHcAttrs*, visitproc visit, void* arg) PYSTON_NOEXCEPT;
 
 // Workaround: call this instead of setting tp_dict.
-PyAPI_FUNC(void) PyType_SetDict(PyTypeObject*, PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyType_SetDict(PyTypeObject*, STOLEN(PyObject*)) PYSTON_NOEXCEPT;
 
 // Pyston addition: register an object as a "static constant".  Current purpose is that this will
 // get decref'd when the interpreter shuts down.  This functions returns its argument.

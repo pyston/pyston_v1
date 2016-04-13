@@ -1,4 +1,3 @@
-# expected: reffail
 from ctypes import *
 s = "tmp"
 ap = create_string_buffer(s)
