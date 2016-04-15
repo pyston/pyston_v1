@@ -488,6 +488,7 @@ static pthread_mutex_t gil = PTHREAD_MUTEX_INITIALIZER;
 
 std::atomic<int> threads_waiting_on_gil(0);
 static pthread_cond_t gil_acquired = PTHREAD_COND_INITIALIZER;
+bool forgot_refs_via_fork = false;
 
 extern "C" void PyEval_ReInitThreads() noexcept {
     pthread_t current_thread = pthread_self();
@@ -502,6 +503,11 @@ extern "C" void PyEval_ReInitThreads() noexcept {
             tstate_delete_common(it->second->public_thread_state);
             delete it->second;
             it = current_threads.erase(it);
+
+            // Like CPython, we make no effort to try to clean anything referenced via other
+            // threads.  Set this variable to know that that we won't be able to do much leak
+            // checking after this happens.
+            forgot_refs_via_fork = true;
         }
     }
 

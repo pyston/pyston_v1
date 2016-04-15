@@ -172,6 +172,7 @@ extern "C" inline void allowGLReadPreemption() {
 }
 #endif
 
+extern bool forgot_refs_via_fork;
 
 } // namespace threading
 } // namespace pyston

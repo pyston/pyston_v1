@@ -1,4 +1,3 @@
-# expected: reffail
 # no-collect-stats
 
 from thread import start_new_thread

@@ -4930,13 +4930,26 @@ extern "C" void Py_Finalize() noexcept {
     if (VERBOSITY())
         PRINT_TOTAL_REFS();
 
+    bool assert_refs = true;
     if (num_garbage_objects) {
         if (VERBOSITY())
             fprintf(stderr, "[%d garbage objects]\n", num_garbage_objects);
-    } else if (other_threads) {
+        assert_refs = false;
+    }
+
+    if (other_threads) {
         if (VERBOSITY())
             fprintf(stderr, "[Other threads alive, can't free their refs]\n");
-    } else {
+        assert_refs = false;
+    }
+
+    if (threading::forgot_refs_via_fork) {
+        if (VERBOSITY())
+            fprintf(stderr, "[Leaked refs via multithreaded fork]\n");
+        assert_refs = false;
+    }
+
+    if (assert_refs) {
 #ifdef Py_TRACE_REFS
         if (_Py_RefTotal != 0)
             _Py_PrintReferenceAddressesCapped(stderr, 10);
@@ -4944,6 +4957,6 @@ extern "C" void Py_Finalize() noexcept {
 
         RELEASE_ASSERT(_Py_RefTotal == 0, "%ld refs remaining!", _Py_RefTotal);
     }
-#endif
+#endif // Py_REF_DEBUG
 }
 }
