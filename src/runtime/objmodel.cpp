@@ -2065,7 +2065,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                     RewriterVar::SmallVector normal_args;
                     RewriterVar::SmallVector float_args;
                     float_args.push_back(r_unboxed_val);
-                    RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)boxFloat, normal_args, float_args);
+                    RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)boxFloat, normal_args, float_args)
+                                             ->setType(RefType::OWNED);
                     rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
@@ -2102,7 +2103,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
             case BoxedMemberDescriptor::STRING: {
                 if (rewrite_args) {
                     RewriterVar* r_interm = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
-                    RewriterVar* r_rtn = rewrite_args->rewriter->call(true, (void*)boxStringOrNone, r_interm);
+                    RewriterVar* r_rtn
+                        = rewrite_args->rewriter->call(true, (void*)boxStringOrNone, r_interm)->setType(RefType::OWNED);
                     rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
@@ -2111,9 +2113,11 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
             }
             case BoxedMemberDescriptor::STRING_INPLACE: {
                 if (rewrite_args) {
-                    RewriterVar* r_rtn = rewrite_args->rewriter->call(
-                        true, (void*)boxStringFromCharPtr,
-                        rewrite_args->rewriter->add(rewrite_args->obj, member_desc->offset, rewrite_args->destination));
+                    RewriterVar* r_rtn
+                        = rewrite_args->rewriter->call(true, (void*)boxStringFromCharPtr,
+                                                       rewrite_args->rewriter->add(
+                                                           rewrite_args->obj, member_desc->offset,
+                                                           rewrite_args->destination))->setType(RefType::OWNED);
                     rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
@@ -2819,7 +2823,7 @@ template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void
 
     if (unlikely(rewriter.get() && rewriter->aggressiveness() < 5)) {
         RewriterVar* r_rtn = rewriter->call(true, (void*)_getattrEntry<S>, rewriter->getArg(0), rewriter->getArg(1),
-                                            rewriter->loadConst(0, Location::forArg(2)));
+                                            rewriter->loadConst(0, Location::forArg(2)))->setType(RefType::OWNED);
         rewriter->commitReturning(r_rtn);
         rewriter.reset(NULL);
     }

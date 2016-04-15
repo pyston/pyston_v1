@@ -57,7 +57,7 @@ static struct PyMemberDef descr_memberlist[] = {
 static void
 descr_tester_dealloc(descr_tester_object *mc)
 {
-    printf("dealloc");
+    printf("dealloc\n");
     if (mc->member_object)
         Py_DECREF(mc->member_object);
         
@@ -66,7 +66,7 @@ descr_tester_dealloc(descr_tester_object *mc)
 
     PyObject_GC_UnTrack(mc);
     PyObject_GC_Del(mc);
-    printf("done dealloc");
+    printf("done dealloc\n");
 }
 
 PyDoc_STRVAR(descr_tester_doc, "descr_tester doc");
@@ -154,7 +154,7 @@ initdescr_test(void)
         return;
     Py_INCREF(&descr_tester);
 
-    descr_tester_object* o1 = PyObject_New(descr_tester_object, &descr_tester);
+    descr_tester_object* o1 = PyObject_GC_New(descr_tester_object, &descr_tester);
     if (o1 == NULL)
         return;
     o1->member_short = SHRT_MAX;
@@ -171,14 +171,11 @@ initdescr_test(void)
     o1->member_uint = UINT_MAX;
     o1->member_ulong = ULONG_MAX;
     o1->member_bool = 1;
-    o1->member_object = PyInt_FromLong(15);
-    o1->member_object_ex = PyInt_FromLong(16);
+    o1->member_object = PyInt_FromLong(1500);
+    o1->member_object_ex = PyInt_FromLong(1600);
     o1->member_long_long = LLONG_MAX;
     o1->member_ulong_long = ULLONG_MAX;
     o1->member_pyssizet = (Py_ssize_t)((1ULL << (8 * sizeof(Py_ssize_t) - 1)) - 1); // max Py_ssize_t
-    Py_INCREF(o1);
-    Py_INCREF(o1->member_object);
-    Py_INCREF(o1->member_object_ex);
 
     descr_tester_object* o2 = PyObject_GC_New(descr_tester_object, &descr_tester);
 
@@ -204,7 +201,6 @@ initdescr_test(void)
     o2->member_ulong_long = 0;
     o2->member_pyssizet = o1->member_pyssizet + 1; // min Py_ssize_t
 
-    Py_INCREF(o2);
 
     PyObject *m;
     m = Py_InitModule("descr_test", DescrTestMethods);
