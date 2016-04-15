@@ -1,3 +1,5 @@
+# expected: reffail
+# - generator abandonment
 import cPickle
 import cStringIO
 import io

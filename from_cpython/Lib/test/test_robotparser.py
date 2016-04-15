@@ -1,3 +1,5 @@
+# expected: reffail
+# - generator abandonment
 import unittest, StringIO, robotparser
 from test import test_support
 from urllib2 import urlopen, HTTPError

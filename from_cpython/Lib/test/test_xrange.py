@@ -1,3 +1,5 @@
+# expected: reffail
+# - generator abandonment
 # Python test set -- built-in functions
 
 import test.test_support, unittest

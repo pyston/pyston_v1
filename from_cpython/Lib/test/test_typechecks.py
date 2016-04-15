@@ -1,3 +1,5 @@
+# expected: reffail
+# - generator abandonment
 """Unit tests for __instancecheck__ and __subclasscheck__."""
 
 import unittest

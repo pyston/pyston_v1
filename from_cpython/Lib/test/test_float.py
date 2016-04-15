@@ -1,3 +1,5 @@
+# expected: reffail
+# - generator abandonment
 import unittest, struct
 import os
 from test import test_support

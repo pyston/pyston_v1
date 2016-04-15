@@ -1,3 +1,4 @@
+# expected: reffail
 # Python test set -- math module
 # XXXX Should not do tests around zero only
 

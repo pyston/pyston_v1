@@ -1,3 +1,4 @@
+# expected: reffail
 import unittest
 from test import test_support
 

@@ -1,3 +1,5 @@
+# expected: reffail
+# - generator abandonment
 from test import test_support
 import unittest
 import urlparse

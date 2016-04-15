@@ -1,3 +1,4 @@
+# expected: reffail
 # XXX TypeErrors on calling handlers, or on bad return values from a
 # handler, are obscure and unhelpful.
 

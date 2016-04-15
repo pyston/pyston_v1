@@ -1,3 +1,4 @@
+# expected: reffail
 from DocXMLRPCServer import DocXMLRPCServer
 import httplib
 import sys

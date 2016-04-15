@@ -1,3 +1,4 @@
+# expected: reffail
 """Test the arraymodule.
    Roger E. Masse
 """

@@ -1,3 +1,4 @@
+# expected: reffail
 from test.test_support import verbose, run_unittest, import_module
 from test.test_support import precisionbigmemtest, _2G, cpython_only
 from test.test_support import captured_stdout

@@ -1,3 +1,4 @@
+# expected: reffail
 "Test posix functions"
 
 from test import test_support

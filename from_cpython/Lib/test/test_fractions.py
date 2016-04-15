@@ -1,3 +1,5 @@
+# expected: reffail
+# - generator abandonment
 """Tests for Lib/fractions.py."""
 
 from decimal import Decimal

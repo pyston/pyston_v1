@@ -1,3 +1,4 @@
+# expected: reffail
 # test for xml.dom.minidom
 
 import pickle

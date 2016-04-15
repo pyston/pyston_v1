@@ -1,3 +1,4 @@
+# expected: reffail
 import urlparse
 import urllib2
 import BaseHTTPServer

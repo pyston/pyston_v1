@@ -1,3 +1,4 @@
+# expected: reffail
 """
 These tests only check url parsing for now.
 We don't want to require the 'network' resource.

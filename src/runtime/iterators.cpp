@@ -39,7 +39,7 @@ public:
     }
 
     ~BoxIteratorGeneric() {
-        assert(!value);
+        Py_XDECREF(value);
         Py_XDECREF(iterator);
     }
 

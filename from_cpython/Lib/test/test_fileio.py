@@ -1,3 +1,4 @@
+# expected: reffail
 # Adapted from test_file.py by Daniel Stutzbach
 
 from __future__ import unicode_literals

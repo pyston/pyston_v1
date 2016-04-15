@@ -1,3 +1,4 @@
+# expected: reffail
 """Test script for the gzip module.
 """
 

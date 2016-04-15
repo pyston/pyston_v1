@@ -1,3 +1,4 @@
+# expected: reffail
 import socket
 import telnetlib
 import time

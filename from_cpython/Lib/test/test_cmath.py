@@ -1,3 +1,4 @@
+# expected: reffail
 from test.test_support import run_unittest
 from test.test_math import parse_testfile
 import unittest

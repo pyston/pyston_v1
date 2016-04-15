@@ -1,3 +1,4 @@
+# expected: reffail
 import mimetypes
 import StringIO
 import unittest

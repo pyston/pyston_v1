@@ -1,3 +1,4 @@
+# expected: reffail
 import unittest
 import sys
 

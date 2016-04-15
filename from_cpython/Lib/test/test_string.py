@@ -1,3 +1,4 @@
+# expected: reffail
 import unittest, string
 from test import test_support, string_tests
 from UserList import UserList
