@@ -194,12 +194,11 @@ public:
     }
 
     static Box* createFrame(Box* back, BoxedCode* code, Box* globals, Box* locals) {
-        assert(0 && "check refcounting");
         BoxedFrame* frame = new BoxedFrame(NULL);
-        frame->_back = incref(back);
-        frame->_code = (Box*)incref(code);
-        frame->_globals = incref(globals);
-        frame->_locals = incref(locals);
+        frame->_back = xincref(back);
+        frame->_code = (Box*)xincref(code);
+        frame->_globals = xincref(globals);
+        frame->_locals = xincref(locals);
         frame->_linenumber = -1;
         return frame;
     }
