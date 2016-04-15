@@ -678,15 +678,14 @@ extern "C" void PyThread_delete_key_value(int key) noexcept {
 
 
 extern "C" PyObject* _PyThread_CurrentFrames(void) noexcept {
-    assert(0 && "check refcounting");
     try {
         LOCK_REGION(&threading_lock);
-        BoxedDict* result = new BoxedDict;
+        BoxedDict* result = new BoxedDict();
         for (auto& pair : current_threads) {
             FrameInfo* frame_info = (FrameInfo*)pair.second->public_thread_state->frame_info;
             Box* frame = getFrame(frame_info);
             assert(frame);
-            result->d[boxInt(pair.first)] = frame;
+            PyDict_SetItem(result, autoDecref(boxInt(pair.first)), frame);
         }
         return result;
     } catch (ExcInfo) {

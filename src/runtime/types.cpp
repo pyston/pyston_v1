@@ -4836,6 +4836,10 @@ extern "C" void Py_Finalize() noexcept {
     _PyUnicode_Fini();
     PyInterpreterState_Clear(PyThreadState_GET()->interp);
 
+    for (auto b : constants) {
+        Py_DECREF(b);
+    }
+    constants.clear();
     for (auto b : late_constants) {
         Py_DECREF(b);
     }

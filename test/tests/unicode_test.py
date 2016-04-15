@@ -1,4 +1,3 @@
-# expected: reffail
 print repr(unicode())
 print repr(unicode('hello world'))
 print unicode('hello world')
