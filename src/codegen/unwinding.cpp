@@ -1003,7 +1003,14 @@ void _printStacktrace() {
     recursive = true;
     Box* file = PySys_GetObject("stderr");
     PyTracebackObject* tb = NULL;
-    PyTraceBack_Here_Tb((struct _frame*)getFrame(0), &tb);
+    int i = 0;
+    while (true) {
+        auto frame = getFrame(i);
+        if (!frame)
+            break;
+        PyTraceBack_Here_Tb((struct _frame*)frame, &tb);
+        i++;
+    }
     PyTraceBack_Print((Box*)tb, file);
     recursive = false;
 }
