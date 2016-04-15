@@ -1186,6 +1186,9 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
         assert(assembler->hasFailed() || asm_address == (uint64_t)assembler->curInstPointer());
     }
 
+    // TODO: we don't need to generate the decref info for calls which can't throw
+    registerDecrefInfoHere();
+
     if (!failed) {
         assert(vars_by_location.count(assembler::RAX) == 0);
 
@@ -1196,6 +1199,33 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
 
     if (result)
         result->releaseIfNoUses();
+}
+
+std::vector<Location> Rewriter::getDecrefLocations() {
+    std::vector<Location> decref_infos;
+    for (RewriterVar& var : vars) {
+        if (var.locations.size() && var.needsDecref()) {
+            // TODO: add code to handle other location types and choose best location if there are several
+            Location l = *var.locations.begin();
+            if (l.type == Location::Scratch) {
+                // convert to stack based location because later on we may not know the offset of the scratch area from
+                // the SP.
+                assert(indirectFor(l).offset % 8 == 0);
+                decref_infos.emplace_back(Location::Stack, indirectFor(l).offset / 8);
+            } else if (l.type == Location::Register) {
+                decref_infos.emplace_back(l);
+            } else
+                RELEASE_ASSERT(0, "not implemented");
+        }
+    }
+    return decref_infos;
+}
+
+void Rewriter::registerDecrefInfoHere() {
+    std::vector<Location> decref_locations = getDecrefLocations();
+    auto call_offset = assembler->bytesWritten();
+    uint64_t ip = (uint64_t)rewrite->getSlotStart() + call_offset;
+    decref_infos.emplace_back(std::make_pair(ip, std::move(decref_locations)));
 }
 
 void Rewriter::abort() {
@@ -1224,23 +1254,6 @@ RewriterVar* RewriterVar::setType(RefType type) {
     assert(this->reftype == RefType::UNKNOWN || this->reftype == type);
 
     if (this->reftype == RefType::UNKNOWN) {
-        rewriter->addAction(
-            [=]() {
-                int num_needed_refs = this->num_refs_consumed - (this->refHandedOff() ? 1 : 0);
-                assert(num_needed_refs >= 0);
-                if (num_needed_refs > 0) {
-                    if (rewriter->isDoneGuarding()) {
-                        this->rewriter->_incref(this, num_needed_refs);
-                    } else {
-                        rewriter->pending_increfs.push_back(std::make_pair(this, num_needed_refs));
-                    }
-                }
-
-                this->bumpUse();
-                // Register this as a NORMAL (ie non-MUTATION) action since we will be careful to not do any mutations
-                // if we are still in the guarding phase.
-            },
-            { this }, ActionType::NORMAL);
         this->reftype = type;
     }
 
@@ -1272,9 +1285,17 @@ void RewriterVar::_release() {
     this->locations.clear();
 }
 
-void RewriterVar::refConsumed() {
+void RewriterVar::refConsumed(RewriterAction* action) {
+    assert(reftype != RefType::UNKNOWN || (isConstant() && constant_value == 0));
     num_refs_consumed++;
     last_refconsumed_numuses = uses.size();
+    if (!action)
+        action = rewriter->getLastAction();
+    action->consumed_refs.emplace_back(this);
+}
+
+bool RewriterVar::needsDecref() {
+    return reftype == RefType::OWNED && !this->refHandedOff();
 }
 
 void RewriterVar::bumpUse() {
@@ -1374,12 +1395,6 @@ void Rewriter::commit() {
             }
         }
 
-        for (auto&& p : pending_increfs) {
-            // TODO use a single add rather than N inc's
-            for (int i = 0; i < p.second; i++) {
-                _incref(p.first);
-            }
-        }
         assertConsistent();
     };
 
@@ -1395,6 +1410,21 @@ void Rewriter::commit() {
 
     // Now, start emitting assembly; check if we're dong guarding after each.
     for (int i = 0; i < actions.size(); i++) {
+        // add increfs if required
+        for (auto&& var : actions[i].consumed_refs) {
+            if (var->refHandedOff()) {
+                // if this action is the one which the variable gets handed off we don't need todo anything
+                assert(var->last_refconsumed_numuses > 0 && var->last_refconsumed_numuses <= var->uses.size());
+                int last_used_action_id = var->uses[var->last_refconsumed_numuses - 1];
+                if (last_used_action_id == i)
+                    continue;
+                assert(last_used_action_id >= i);
+            }
+
+            assert(isDoneGuarding());
+            _incref(var, 1);
+        }
+
         actions[i].action();
 
         if (failed) {
@@ -1561,7 +1591,7 @@ void Rewriter::commit() {
     }
 #endif
 
-    rewrite->commit(this, std::move(gc_references));
+    rewrite->commit(this, std::move(gc_references), std::move(decref_infos));
     assert(gc_references.empty());
 
     if (assembler->hasFailed()) {
@@ -1827,6 +1857,8 @@ void Rewriter::_checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val) {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
         assembler->mov(assembler::Immediate((void*)throwCAPIException), assembler::R11);
         assembler->callq(assembler::R11);
+
+        registerDecrefInfoHere();
     }
 
     r->bumpUse();
