@@ -55,9 +55,7 @@ typedef struct BLOCK {
     struct BLOCK *leftlink;
 } block;
 
-// Pyston change: disable free block cache
-// #define MAXFREEBLOCKS 10
-#define MAXFREEBLOCKS 0
+#define MAXFREEBLOCKS 10
 static Py_ssize_t numfreeblocks = 0;
 static block *freeblocks[MAXFREEBLOCKS];
 

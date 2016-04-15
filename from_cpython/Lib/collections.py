@@ -1,10 +1,9 @@
 __all__ = ['Counter', 'deque', 'defaultdict', 'namedtuple', 'OrderedDict']
 # For bootstrapping reasons, the collection ABCs are defined in _abcoll.py.
 # They should however be considered an integral part of collections.py.
-# Pyston change: disable using the _abcoll module for now.
 from _abcoll import *
 import _abcoll
-# __all__ += _abcoll.__all__
+__all__ += _abcoll.__all__
 
 from _collections import deque, defaultdict
 from operator import itemgetter as _itemgetter, eq as _eq
@@ -124,34 +123,7 @@ class OrderedDict(dict):
         for k in self:
             yield (k, self[k])
 
-    # Pyston change: copied the code in from _abcoll rather than calling "update = MutableMapping.update"
-    def update(*args, **kwds):
-        ''' D.update([E, ]**F) -> None.  Update D from mapping/iterable E and F.
-            If E present and has a .keys() method, does:     for k in E: D[k] = E[k]
-            If E present and lacks .keys() method, does:     for (k, v) in E: D[k] = v
-            In either case, this is followed by: for k, v in F.items(): D[k] = v
-        '''
-        if len(args) > 2:
-            raise TypeError("update() takes at most 2 positional "
-                            "arguments ({} given)".format(len(args)))
-        elif not args:
-            raise TypeError("update() takes at least 1 argument (0 given)")
-        self = args[0]
-        other = args[1] if len(args) >= 2 else ()
-
-        # Pyston change: changed this from "Mapping" to "dict"
-        if isinstance(other, dict):
-            for key in other:
-                self[key] = other[key]
-        elif hasattr(other, "keys"):
-            for key in other.keys():
-                self[key] = other[key]
-        else:
-            for key, value in other:
-                self[key] = value
-        for key, value in kwds.items():
-            self[key] = value
-
+    update = MutableMapping.update
 
     __update = update # let subclasses override update without breaking __init__
 
@@ -406,6 +378,7 @@ def namedtuple(typename, field_names, verbose=False, rename=False):
         pass
 
     return result
+
 
 ########################################################################
 ###  Counter

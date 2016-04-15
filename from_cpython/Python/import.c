@@ -440,7 +440,6 @@ static char* sys_files[] = {
 
 
 /* Un-initialize things, as good as we can */
-// Pyston change: we don't support calling cleanup currently
 void
 PyImport_Cleanup(void)
 {

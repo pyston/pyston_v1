@@ -71,16 +71,13 @@ try:
 except TypeError:
     tb = sys.exc_info()[2]
     TracebackType = type(tb)
-    # Pyston change (we don't support tb_frame yet):
-    FrameType = type(sys._getframe(0))
-    # FrameType = type(tb.tb_frame)
+    FrameType = type(tb.tb_frame)
     del tb
 
 SliceType = slice
 EllipsisType = type(Ellipsis)
 
-# Pyston change: don't support this yet
-# DictProxyType = type(TypeType.__dict__)
+DictProxyType = type(TypeType.__dict__)
 NotImplementedType = type(NotImplemented)
 
 # Pyston change:

@@ -53,8 +53,7 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 /* Limit for the Unicode object free list */
 
-// Pyston change: set this to 0 (was 1024) to disable the free list since we can't track that through our GC.
-#define PyUnicode_MAXFREELIST       0
+#define PyUnicode_MAXFREELIST       1024
 
 /* Limit for the Unicode object free list stay alive optimization.
 
@@ -356,7 +355,7 @@ int _PyUnicode_Resize(PyUnicodeObject **unicode, Py_ssize_t length)
         return -1;
     }
     v = *unicode;
-    if (v == NULL || !PyUnicode_Check(v) || /* Pyston change, can't check this: Py_REFCNT(v) != 1 || */ length < 0) {
+    if (v == NULL || !PyUnicode_Check(v) || Py_REFCNT(v) != 1 || length < 0) {
         PyErr_BadInternalCall();
         return -1;
     }

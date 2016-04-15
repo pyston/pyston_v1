@@ -5955,6 +5955,7 @@ init_stuff(PyObject *module_dict)
     if (!( t=PyImport_ImportModule("__builtin__")))  return -1;
     if (PyDict_SetItemString(module_dict, "__builtins__", t) < 0)
         return -1;
+    // Pyston change: I think you need this
     Py_DECREF(t);
 
     if (!( t=PyDict_New()))  return -1;
