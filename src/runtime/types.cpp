@@ -4779,6 +4779,8 @@ static void call_sys_exitfunc(void) {
                 PySys_WriteStderr("Error in sys.exitfunc:\n");
             }
             PyErr_Print();
+        } else {
+            Py_DECREF(res);
         }
         Py_DECREF(exitfunc);
     }
