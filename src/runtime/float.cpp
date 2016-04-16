@@ -157,6 +157,7 @@ extern "C" double PyFloat_AsDouble(PyObject* o) noexcept {
     fo = (BoxedFloat*)(*nb->nb_float)(o);
     if (fo == NULL)
         return -1;
+    AUTO_DECREF(fo);
     if (!PyFloat_Check(fo)) {
         PyErr_SetString(PyExc_TypeError, "nb_float should return float object");
         return -1;

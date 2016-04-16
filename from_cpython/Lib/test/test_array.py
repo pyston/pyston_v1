@@ -1,4 +1,5 @@
 # expected: reffail
+# - fails in interpreter due to keeping refcounts a bit too long
 """Test the arraymodule.
    Roger E. Masse
 """
