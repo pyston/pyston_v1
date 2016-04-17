@@ -998,6 +998,7 @@ void JitFragmentWriter::_emitGetLocal(RewriterVar* val_var, const char* name) {
     assembler::Register var_reg = val_var->getInReg();
     assembler->test(var_reg, var_reg);
 
+    _setupCall(false, RewriterVar::SmallVector(), RewriterVar::SmallVector());
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
         assembler->mov(assembler::Immediate((uint64_t)name), assembler::RDI);

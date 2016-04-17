@@ -1219,7 +1219,8 @@ std::vector<Location> Rewriter::getDecrefLocations() {
                 assert(indirectFor(l).offset % 8 == 0);
                 decref_infos.emplace_back(Location::Stack, indirectFor(l).offset / 8);
             } else if (l.type == Location::Register) {
-                decref_infos.emplace_back(l);
+                // CSRs shouldn't be getting allocated, and we should only be calling this at a callsite:
+                RELEASE_ASSERT(0, "we shouldn't be trying to decref anything in a register");
             } else
                 RELEASE_ASSERT(0, "not implemented");
         }
@@ -1864,6 +1865,7 @@ void Rewriter::_checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val) {
     else
         assembler->cmp(var_reg, assembler::Immediate(exc_val));
 
+    _setupCall(false, RewriterVar::SmallVector(), RewriterVar::SmallVector());
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
         assembler->mov(assembler::Immediate((void*)throwCAPIException), assembler::R11);

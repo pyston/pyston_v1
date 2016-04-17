@@ -522,6 +522,12 @@ void executeDecrefs(unw_cursor_t* cursor) {
         if (l.type == Location::Stack) {
             unw_word_t sp = get_cursor_sp(cursor);
             b = ((Box**)sp)[l.stack_offset];
+        } else if (l.type == Location::Register) {
+            RELEASE_ASSERT(0, "untested");
+            // This branch should never get hit since we shouldn't generate Register locations,
+            // since we don't allow allocating callee-save registers.
+            // If we did, this code might be right:
+            // b = (Box*)get_cursor_reg(cursor, l.regnum);
         } else {
             RELEASE_ASSERT(0, "not implemented");
         }
