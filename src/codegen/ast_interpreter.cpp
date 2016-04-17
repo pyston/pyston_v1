@@ -1083,6 +1083,7 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
     FunctionMetadata* md = wrapFunction(node, args, body, source_info);
 
     std::vector<Box*> defaults;
+    llvm::SmallVector<RewriterVar*, 4> defaults_vars;
 
     RewriterVar* defaults_var = NULL;
     if (jit)
@@ -1091,8 +1092,10 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
     for (AST_expr* d : args->defaults) {
         Value v = visit_expr(d);
         defaults.push_back(v.o);
-        if (jit)
+        if (jit) {
             defaults_var->setAttr(i++ * sizeof(void*), v);
+            defaults_vars.push_back(v.var);
+        }
     }
     defaults.push_back(0);
     AUTO_XDECREF_ARRAY(defaults.data(), defaults.size());
@@ -1156,6 +1159,10 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
             passed_globals_var = jit->imm(0ul);
         rtn.var = jit->call(false, (void*)createFunctionFromMetadata, jit->imm(md), closure_var, passed_globals_var,
                             defaults_var, jit->imm(args->defaults.size()))->setType(RefType::OWNED);
+
+        for (auto d_var : defaults_vars) {
+            d_var->refUsed();
+        }
     }
 
     rtn.o = createFunctionFromMetadata(md, closure, passed_globals, u.il);

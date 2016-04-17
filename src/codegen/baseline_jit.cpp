@@ -211,7 +211,11 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
     if (keyword_names)
         call_args.push_back(imm(keyword_names));
 
-    return emitPPCall((void*)callattr, call_args, 2, 640, node, type_recorder).first->setType(RefType::OWNED);
+    auto r = emitPPCall((void*)callattr, call_args, 2, 640, node, type_recorder).first->setType(RefType::OWNED);
+    for (int i = 3; i < args.size(); i++) {
+        args[i]->refUsed();
+    }
+    return r;
 #else
     // We could make this faster but for now: keep it simple, stupid...
     RewriterVar* attr_var = imm(attr);
@@ -236,7 +240,11 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
     if (keyword_names_var)
         call_args.push_back(keyword_names_var);
 
-    return emitCallWithAllocatedArgs((void*)callattrHelper, call_args, args)->setType(RefType::OWNED);
+    auto r = emitCallWithAllocatedArgs((void*)callattrHelper, call_args, args)->setType(RefType::OWNED);
+    for (int i = 0; i < args.size(); i++) {
+        args[i]->refUsed();
+    }
+    return r;
 #endif
 }
 
@@ -257,9 +265,11 @@ RewriterVar* JitFragmentWriter::emitCreateDict(const llvm::ArrayRef<RewriterVar*
         = emitCallWithAllocatedArgs((void*)createDictHelper, { imm(keys.size()), allocArgs(keys), allocArgs(values) },
                                     additional_uses)->setType(RefType::OWNED);
     for (RewriterVar* k : keys) {
+        assert(0 && "these need to be kept alive");
         k->refConsumed();
     }
     for (RewriterVar* v : values) {
+        assert(0 && "these need to be kept alive");
         v->refConsumed();
     }
     return rtn;
@@ -310,6 +320,7 @@ RewriterVar* JitFragmentWriter::emitCreateList(const llvm::ArrayRef<RewriterVar*
     auto rtn = emitCallWithAllocatedArgs((void*)createListHelper, { imm(num), allocArgs(values) }, values)
                    ->setType(RefType::OWNED);
     for (RewriterVar* v : values) {
+        assert(0 && "these need to be kept alive");
         v->refConsumed();
     }
     return rtn;
@@ -322,6 +333,7 @@ RewriterVar* JitFragmentWriter::emitCreateSet(const llvm::ArrayRef<RewriterVar*>
     auto rtn = emitCallWithAllocatedArgs((void*)createSetHelper, { imm(num), allocArgs(values) }, values)
                    ->setType(RefType::OWNED);
     for (RewriterVar* v : values) {
+        assert(0 && "these need to be kept alive");
         v->refConsumed();
     }
     return rtn;
@@ -342,9 +354,12 @@ RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar
         r = call(false, (void*)BoxedTuple::create2, values[0], values[1])->setType(RefType::OWNED);
     else if (num == 3)
         r = call(false, (void*)BoxedTuple::create3, values[0], values[1], values[2])->setType(RefType::OWNED);
-    else
+    else {
         r = emitCallWithAllocatedArgs((void*)createTupleHelper, { imm(num), allocArgs(values) }, values)
                 ->setType(RefType::OWNED);
+        for (auto a : values)
+            a->refUsed();
+    }
     return r;
 }
 
@@ -480,7 +495,11 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj
     if (keyword_names)
         call_args.push_back(imm(keyword_names));
 
-    return emitPPCall((void*)runtimeCall, call_args, 2, 640, node, type_recorder).first->setType(RefType::OWNED);
+    auto r = emitPPCall((void*)runtimeCall, call_args, 2, 640, node, type_recorder).first->setType(RefType::OWNED);
+    for (int i = 3; i < args.size(); i++) {
+        args[i]->refUsed();
+    }
+    return r;
 #else
     RewriterVar* argspec_var = imm(argspec.asInt());
     RewriterVar* keyword_names_var = keyword_names ? imm(keyword_names) : nullptr;
@@ -500,7 +519,11 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj
     if (keyword_names_var)
         call_args.push_back(keyword_names_var);
 
-    return emitCallWithAllocatedArgs((void*)runtimeCallHelper, call_args, args)->setType(RefType::OWNED);
+    auto r = emitCallWithAllocatedArgs((void*)runtimeCallHelper, call_args, args)->setType(RefType::OWNED);
+    for (int i = 0; i < args.size(); i++) {
+        args[i]->refUsed();
+    }
+    return r;
 #endif
 }
 

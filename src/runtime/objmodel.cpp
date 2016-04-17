@@ -4900,6 +4900,15 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
                 else
                     rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelperCapi, arg_vec)
                                                 ->setType(RefType::OWNED);
+
+                if (num_output_args >= 1)
+                    rewrite_args->arg1->refUsed();
+                if (num_output_args >= 2)
+                    rewrite_args->arg2->refUsed();
+                if (num_output_args >= 3)
+                    rewrite_args->arg3->refUsed();
+                if (num_output_args >= 4)
+                    rewrite_args->args->refUsed();
             }
 
             rewrite_args->out_success = true;

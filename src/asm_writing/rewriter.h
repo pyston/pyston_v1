@@ -168,6 +168,8 @@ public:
     // if no action is specified it will assume the last action consumed the reference
     void refConsumed(RewriterAction* action = NULL);
 
+    void refUsed();
+
 
     template <typename Src, typename Dst> inline RewriterVar* getAttrCast(int offset, Location loc = Location::any());
 

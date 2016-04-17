@@ -1294,6 +1294,11 @@ void RewriterVar::refConsumed(RewriterAction* action) {
     action->consumed_refs.emplace_back(this);
 }
 
+void RewriterVar::refUsed() {
+    // TODO: This is a pretty silly implementation that might prevent other optimizations?
+    rewriter->addAction([=]() { this->bumpUse(); }, { this }, ActionType::NORMAL);
+}
+
 bool RewriterVar::needsDecref() {
     return reftype == RefType::OWNED && !this->refHandedOff();
 }
