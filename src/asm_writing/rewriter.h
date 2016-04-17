@@ -149,7 +149,12 @@ public:
     // getAttrFloat casts to double (maybe I should make that separate?)
     RewriterVar* getAttrFloat(int offset, Location loc = Location::any());
     RewriterVar* getAttrDouble(int offset, Location loc = Location::any());
-    void setAttr(int offset, RewriterVar* other);
+    enum class SetattrType {
+        UNKNOWN,
+        HANDED_OFF,
+        REFUSED,
+    };
+    void setAttr(int offset, RewriterVar* other, SetattrType type = SetattrType::UNKNOWN);
     RewriterVar* cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location loc = Location::any());
     RewriterVar* toBool(Location loc = Location::any());
 

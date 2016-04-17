@@ -202,7 +202,7 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
     if (args.size() > 3) {
         RewriterVar* scratch = allocate(args.size() - 3);
         for (int i = 0; i < args.size() - 3; ++i)
-            scratch->setAttr(i * sizeof(void*), args[i + 3]);
+            scratch->setAttr(i * sizeof(void*), args[i + 3], RewriterVar::SetattrType::REFUSED);
         call_args.push_back(scratch);
     } else if (keyword_names) {
         call_args.push_back(imm(0ul));
@@ -261,15 +261,17 @@ RewriterVar* JitFragmentWriter::emitCreateDict(const llvm::ArrayRef<RewriterVar*
     RewriterVar::SmallVector additional_uses;
     additional_uses.insert(additional_uses.end(), keys.begin(), keys.end());
     additional_uses.insert(additional_uses.end(), values.begin(), values.end());
-    auto rtn
-        = emitCallWithAllocatedArgs((void*)createDictHelper, { imm(keys.size()), allocArgs(keys), allocArgs(values) },
-                                    additional_uses)->setType(RefType::OWNED);
+    auto rtn = emitCallWithAllocatedArgs((void*)createDictHelper,
+                                         { imm(keys.size()), allocArgs(keys, RewriterVar::SetattrType::REFUSED),
+                                           allocArgs(values, RewriterVar::SetattrType::REFUSED) },
+                                         additional_uses)->setType(RefType::OWNED);
     for (RewriterVar* k : keys) {
-        assert(0 && "these need to be kept alive");
+        // XXX: should refConsumed also act as a use?
+        k->refUsed();
         k->refConsumed();
     }
     for (RewriterVar* v : values) {
-        assert(0 && "these need to be kept alive");
+        v->refUsed();
         v->refConsumed();
     }
     return rtn;
@@ -317,10 +319,11 @@ RewriterVar* JitFragmentWriter::emitCreateList(const llvm::ArrayRef<RewriterVar*
     if (num == 0)
         return call(false, (void*)createList)->setType(RefType::OWNED);
 
-    auto rtn = emitCallWithAllocatedArgs((void*)createListHelper, { imm(num), allocArgs(values) }, values)
-                   ->setType(RefType::OWNED);
+    auto rtn = emitCallWithAllocatedArgs((void*)createListHelper,
+                                         { imm(num), allocArgs(values, RewriterVar::SetattrType::REFUSED) },
+                                         values)->setType(RefType::OWNED);
     for (RewriterVar* v : values) {
-        assert(0 && "these need to be kept alive");
+        v->refUsed();
         v->refConsumed();
     }
     return rtn;
@@ -330,10 +333,11 @@ RewriterVar* JitFragmentWriter::emitCreateSet(const llvm::ArrayRef<RewriterVar*>
     auto num = values.size();
     if (num == 0)
         return call(false, (void*)createSet)->setType(RefType::OWNED);
-    auto rtn = emitCallWithAllocatedArgs((void*)createSetHelper, { imm(num), allocArgs(values) }, values)
-                   ->setType(RefType::OWNED);
+    auto rtn = emitCallWithAllocatedArgs((void*)createSetHelper,
+                                         { imm(num), allocArgs(values, RewriterVar::SetattrType::REFUSED) },
+                                         values)->setType(RefType::OWNED);
     for (RewriterVar* v : values) {
-        assert(0 && "these need to be kept alive");
+        v->refUsed();
         v->refConsumed();
     }
     return rtn;
@@ -355,8 +359,9 @@ RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar
     else if (num == 3)
         r = call(false, (void*)BoxedTuple::create3, values[0], values[1], values[2])->setType(RefType::OWNED);
     else {
-        r = emitCallWithAllocatedArgs((void*)createTupleHelper, { imm(num), allocArgs(values) }, values)
-                ->setType(RefType::OWNED);
+        r = emitCallWithAllocatedArgs((void*)createTupleHelper,
+                                      { imm(num), allocArgs(values, RewriterVar::SetattrType::REFUSED) },
+                                      values)->setType(RefType::OWNED);
         for (auto a : values)
             a->refUsed();
     }
@@ -488,7 +493,7 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj
     if (args.size() > 3) {
         RewriterVar* scratch = allocate(args.size() - 3);
         for (int i = 0; i < args.size() - 3; ++i)
-            scratch->setAttr(i * sizeof(void*), args[i + 3]);
+            scratch->setAttr(i * sizeof(void*), args[i + 3], RewriterVar::SetattrType::REFUSED);
         call_args.push_back(scratch);
     } else
         call_args.push_back(imm(0ul));
@@ -506,7 +511,7 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj
 
     RewriterVar* args_array = nullptr;
     if (args.size()) {
-        args_array = allocArgs(args);
+        args_array = allocArgs(args, RewriterVar::SetattrType::REFUSED);
     } else
         RELEASE_ASSERT(!keyword_names_var, "0 args but keyword names are set");
 
@@ -689,7 +694,7 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
         v->refConsumed();
     } else {
         RewriterVar* prev = vregs_array->getAttr(8 * vreg)->setNullable(true);
-        vregs_array->setAttr(8 * vreg, v);
+        vregs_array->setAttr(8 * vreg, v, RewriterVar::SetattrType::HANDED_OFF);
         v->refConsumed();
 
         // TODO With definedness analysis, we could know whether we can skip this check (definitely defined)
@@ -838,12 +843,13 @@ bool JitFragmentWriter::finishAssembly(int continue_offset) {
 }
 
 
-RewriterVar* JitFragmentWriter::allocArgs(const llvm::ArrayRef<RewriterVar*> args) {
+RewriterVar* JitFragmentWriter::allocArgs(const llvm::ArrayRef<RewriterVar*> args,
+                                          RewriterVar::SetattrType setattr_type) {
     auto num = args.size();
     assert(num);
     RewriterVar* array = allocate(num);
     for (int i = 0; i < num; ++i)
-        array->setAttr(sizeof(void*) * i, args[i]);
+        array->setAttr(sizeof(void*) * i, args[i], setattr_type);
     return array;
 }
 

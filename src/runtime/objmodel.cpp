@@ -1422,7 +1422,8 @@ void Box::appendNewHCAttr(BORROWED(Box*) new_attr, SetattrRewriteArgs* rewrite_a
         if (!new_array)
             r_array = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list));
 
-        r_array->setAttr(numattrs * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs), rewrite_args->attrval);
+        r_array->setAttr(numattrs * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs), rewrite_args->attrval,
+                         RewriterVar::SetattrType::HANDED_OFF);
         rewrite_args->attrval->refConsumed();
 
         if (new_array)
@@ -1515,8 +1516,8 @@ void Box::setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rew
                     // will tell the auto-refcount system to decref it.
                     r_hattrs->getAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs))
                         ->setType(RefType::OWNED);
-                    r_hattrs->setAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs),
-                                      rewrite_args->attrval);
+                    r_hattrs->setAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs), rewrite_args->attrval,
+                                      RewriterVar::SetattrType::HANDED_OFF);
                     rewrite_args->attrval->refConsumed();
 
                     rewrite_args->out_success = true;
@@ -4357,7 +4358,9 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                 if (varargs_idx == 2)
                     rewrite_args->arg3 = varargs_val;
                 if (varargs_idx >= 3) {
-                    rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), varargs_val);
+                    rewrite_args->args->setAttr(
+                        (varargs_idx - 3) * sizeof(Box*), varargs_val,
+                        (is_owned ? RewriterVar::SetattrType::HANDED_OFF : RewriterVar::SetattrType::UNKNOWN));
                     if (is_owned) {
                         oargs_owned[varargs_idx - 3] = true;
                         varargs_val->refConsumed();
@@ -4886,13 +4889,13 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
                 RewriterVar* arg_array = rewrite_args->rewriter->allocate(4);
                 arg_vec.push_back(arg_array);
                 if (num_output_args >= 1)
-                    arg_array->setAttr(0, rewrite_args->arg1);
+                    arg_array->setAttr(0, rewrite_args->arg1, RewriterVar::SetattrType::REFUSED);
                 if (num_output_args >= 2)
-                    arg_array->setAttr(8, rewrite_args->arg2);
+                    arg_array->setAttr(8, rewrite_args->arg2, RewriterVar::SetattrType::REFUSED);
                 if (num_output_args >= 3)
-                    arg_array->setAttr(16, rewrite_args->arg3);
+                    arg_array->setAttr(16, rewrite_args->arg3, RewriterVar::SetattrType::REFUSED);
                 if (num_output_args >= 4)
-                    arg_array->setAttr(24, rewrite_args->args);
+                    arg_array->setAttr(24, rewrite_args->args, RewriterVar::SetattrType::REFUSED);
 
                 if (S == CXX)
                     rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelper, arg_vec)

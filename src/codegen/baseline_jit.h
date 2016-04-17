@@ -281,7 +281,7 @@ public:
     bool finishAssembly(int continue_offset) override;
 
 private:
-    RewriterVar* allocArgs(const llvm::ArrayRef<RewriterVar*> args);
+    RewriterVar* allocArgs(const llvm::ArrayRef<RewriterVar*> args, RewriterVar::SetattrType);
 #ifndef NDEBUG
     std::pair<uint64_t, uint64_t> asUInt(InternedString s);
 #else

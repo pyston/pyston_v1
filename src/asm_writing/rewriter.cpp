@@ -681,9 +681,15 @@ void Rewriter::_toBool(RewriterVar* result, RewriterVar* var, Location dest) {
     assertConsistent();
 }
 
-void RewriterVar::setAttr(int offset, RewriterVar* val) {
+void RewriterVar::setAttr(int offset, RewriterVar* val, SetattrType type) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
+    // Check that the caller promises to handle lifetimes appropriately.
+    // We're only interested in OWNED references, since we are trying to
+    // prevent store-in-array-and-pass situations where the refcounter will
+    // decref between the store and the pass.
+    if (val->reftype == RefType::OWNED)
+        assert(type != SetattrType::UNKNOWN);
     rewriter->addAction([=]() { rewriter->_setAttr(this, offset, val); }, { this, val }, ActionType::MUTATION);
 }
 

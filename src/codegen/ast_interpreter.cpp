@@ -1093,7 +1093,7 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
         Value v = visit_expr(d);
         defaults.push_back(v.o);
         if (jit) {
-            defaults_var->setAttr(i++ * sizeof(void*), v);
+            defaults_var->setAttr(i++ * sizeof(void*), v, RewriterVar::SetattrType::REFUSED);
             defaults_vars.push_back(v.var);
         }
     }
