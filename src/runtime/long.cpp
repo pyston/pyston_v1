@@ -841,6 +841,39 @@ Box* longStr(BoxedLong* v) {
     return _PyLong_Format(v, 10, 0 /* no L */, 0);
 }
 
+Box* long__format__(BoxedLong* self, Box* format_spec) noexcept {
+    if (PyBytes_Check(format_spec))
+        return _PyLong_FormatAdvanced(self, PyBytes_AS_STRING(format_spec), PyBytes_GET_SIZE(format_spec));
+    if (PyUnicode_Check(format_spec)) {
+        /* Convert format_spec to a str */
+        PyObject* result;
+        PyObject* str_spec = PyObject_Str(format_spec);
+
+        if (str_spec == NULL)
+            return NULL;
+
+        result = _PyLong_FormatAdvanced(self, PyBytes_AS_STRING(str_spec), PyBytes_GET_SIZE(str_spec));
+
+        Py_DECREF(str_spec);
+        return result;
+    }
+    PyErr_SetString(PyExc_TypeError, "__format__ requires str or unicode");
+    return NULL;
+}
+
+Box* longFormat(BoxedLong* self, Box* format_spec) {
+    if (!PyLong_Check(self))
+        raiseExcHelper(TypeError, "descriptor '__format__' requires a 'long' object but received a '%s'",
+                       getTypeName(self));
+
+    Box* res = long__format__(self, format_spec);
+
+    if (res == NULL)
+        throwCAPIException();
+
+    return res;
+}
+
 Box* longBin(BoxedLong* v) {
     if (!PyLong_Check(v))
         raiseExcHelper(TypeError, "descriptor '__bin__' requires a 'long' object but received a '%s'", getTypeName(v));
@@ -1713,6 +1746,7 @@ void setupLong() {
     long_cls->giveAttr("__float__", new BoxedFunction(FunctionMetadata::create((void*)longFloat, UNKNOWN, 1)));
     long_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)longRepr, STR, 1)));
     long_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)longStr, STR, 1)));
+    long_cls->giveAttr("__format__", new BoxedFunction(FunctionMetadata::create((void*)longFormat, STR, 2)));
     long_cls->giveAttr("__bin__", new BoxedFunction(FunctionMetadata::create((void*)longBin, STR, 1)));
     long_cls->giveAttr("__hex__", new BoxedFunction(FunctionMetadata::create((void*)longHex, STR, 1)));
     long_cls->giveAttr("__oct__", new BoxedFunction(FunctionMetadata::create((void*)longOct, STR, 1)));
