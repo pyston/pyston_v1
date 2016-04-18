@@ -141,3 +141,35 @@ for x in data:
                                                                arg2=y)))
             except Exception as e:
                 print(e.message)
+
+
+class Foo1(float):
+    def __rdiv__(self, other):
+        print("float custom operation called")
+        return self / other
+
+
+class Foo2(long):
+    def __rdiv__(self, other):
+        print("long custom operation called")
+        return self / other
+
+
+class Foo3(int):
+    def __rdiv__(self, other):
+        print("int custom operation called")
+        return self / other
+
+a = Foo1(1.5)
+b = Foo2(1L)
+c = Foo3(1)
+
+print(1.5 / a)
+print(1.5 / b)
+print(1.5 / c)
+print(1 / a)
+print(1 / b)
+print(1 / c)
+print(1L / a)
+print(1L / b)
+print(1L / c)
