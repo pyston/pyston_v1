@@ -919,59 +919,15 @@ Box* floatNonzero(BoxedFloat* self) {
     return boxBool(floatNonzeroUnboxed(self));
 }
 
-template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* a) noexcept(S == CAPI) {
-    if (a->cls == float_cls) {
-        return static_cast<BoxedFloat*>(incref(a));
-    } else if (PyInt_Check(a)) {
-        return new BoxedFloat(static_cast<BoxedInt*>(a)->n);
-
-    } else if (PyLong_Check(a)) {
-        double a_f = PyLong_AsDouble(a);
-        if (a_f == -1.0 && PyErr_Occurred()) {
-            if (S == CAPI)
-                return NULL;
-            else
-                throwCAPIException();
-        }
-
-        // Make sure that we're not in an error state when we return a non-NULL value.
-        assert(!PyErr_Occurred());
-        return new BoxedFloat(a_f);
-    } else if (a->cls == str_cls || a->cls == unicode_cls) {
-        BoxedFloat* res = (BoxedFloat*)PyFloat_FromString(a, NULL);
-
-        if (!res) {
-            if (S == CAPI)
-                return NULL;
-            else
-                throwCAPIException();
-        }
-
-        return res;
-    } else {
-        static BoxedString* float_str = getStaticString("__float__");
-        Box* r = callattrInternal<S, NOT_REWRITABLE>(a, float_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL,
-                                                     NULL, NULL);
-
-        if (!r) {
-            if (S == CAPI) {
-                if (!PyErr_Occurred())
-                    PyErr_SetString(PyExc_TypeError, "float() argument must be a string or a number");
-                return NULL;
-            } else {
-                raiseExcHelper(TypeError, "float() argument must be a string or a number");
-            }
-        }
-
-        if (!PyFloat_Check(r)) {
-            if (S == CAPI) {
-                PyErr_Format(TypeError, "__float__ returned non-float (type %s)", r->cls->tp_name);
-                return NULL;
-            } else
-                raiseExcHelper(TypeError, "__float__ returned non-float (type %s)", r->cls->tp_name);
-        }
-        return static_cast<BoxedFloat*>(r);
-    }
+template <ExceptionStyle S> static BoxedFloat* _floatNew(Box* x) noexcept(S == CAPI) {
+    Box* rtn;
+    if (PyString_CheckExact(x))
+        rtn = PyFloat_FromString(x, NULL);
+    else
+        rtn = PyNumber_Float(x);
+    if (!rtn && S == CXX)
+        throwCAPIException();
+    return static_cast<BoxedFloat*>(rtn);
 }
 
 template <ExceptionStyle S> Box* floatNew(BoxedClass* _cls, Box* a) noexcept(S == CAPI) {
