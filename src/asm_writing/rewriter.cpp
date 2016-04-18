@@ -19,8 +19,8 @@
 #include "codegen/unwinding.h"
 #include "core/common.h"
 #include "core/stats.h"
-#include "runtime/types.h"
 #include "runtime/objmodel.h"
+#include "runtime/types.h"
 
 namespace pyston {
 

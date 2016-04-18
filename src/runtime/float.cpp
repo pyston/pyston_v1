@@ -164,7 +164,6 @@ extern "C" double PyFloat_AsDouble(PyObject* o) noexcept {
     }
 
     val = static_cast<BoxedFloat*>(fo)->d;
-    Py_DECREF(fo);
 
     return val;
 }
