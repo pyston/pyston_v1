@@ -712,11 +712,11 @@ template <ExceptionStyle S> Box* _longNew(Box* val, Box* _base) noexcept(S == CA
             Box* srepr = PyObject_Repr(val);
             if (S == CAPI) {
                 PyErr_Format(PyExc_ValueError, "invalid literal for long() with base %d: '%s'", base,
-                             PyString_AS_STRING(srepr));
+                             PyString_AS_STRING(autoDecref(srepr)));
                 return NULL;
             } else {
                 raiseExcHelper(ValueError, "invalid literal for long() with base %d: '%s'", base,
-                               PyString_AS_STRING(srepr));
+                               PyString_AS_STRING(autoDecref(srepr)));
             }
         }
         Box* r = PyLong_FromString(s->data(), NULL, base);
