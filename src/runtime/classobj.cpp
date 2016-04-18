@@ -1575,7 +1575,6 @@ Box* instanceInt(Box* _inst) {
     }
 
     Box* truncated = instanceTrunc(inst);
-    AUTO_DECREF(truncated);
     /* __trunc__ is specified to return an Integral type, but
        int() needs to return an int. */
     Box* res = _PyNumber_ConvertIntegralToInt(truncated, "__trunc__ returned non-Integral (type %.200s)");
