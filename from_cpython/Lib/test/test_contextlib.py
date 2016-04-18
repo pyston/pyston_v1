@@ -1,5 +1,3 @@
-# expected: reffail
-# - generator abandonment
 """Unit tests for contextlib.py, and other context managers."""
 
 import sys

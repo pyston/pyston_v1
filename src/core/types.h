@@ -23,6 +23,7 @@
 #include <stddef.h>
 #include <vector>
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/iterator_range.h"
 #include "Python.h"
 

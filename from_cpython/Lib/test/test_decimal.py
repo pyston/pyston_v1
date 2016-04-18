@@ -1,5 +1,4 @@
 # expected: reffail
-# - generator abandonment
 # Copyright (c) 2004 Python Software Foundation.
 # All rights reserved.
 

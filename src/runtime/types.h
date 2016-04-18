@@ -1257,6 +1257,8 @@ public:
     FrameInfo* paused_frame_info; // The FrameInfo the generator was on when it called yield (or NULL if the generator
                                   // hasn't started or has exited).
 
+    llvm::ArrayRef<Box*> live_values;
+
 #if STAT_TIMERS
     StatTimer* prev_stack;
     StatTimer my_timer;

@@ -655,8 +655,10 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             if (source->getScopeInfo()->takesClosure())
                 names.insert(source->getInternedStrings().get(PASSED_CLOSURE_NAME));
 
-            if (source->is_generator)
+            if (source->is_generator) {
+                assert(0 && "not sure if this is correct");
                 names.insert(source->getInternedStrings().get(PASSED_GENERATOR_NAME));
+            }
 
             for (const InternedString& s : names) {
                 // printf("adding guessed phi for %s\n", s.c_str());

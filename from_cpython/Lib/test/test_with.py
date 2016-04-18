@@ -1,5 +1,3 @@
-# expected: reffail
-# - generator abandonment
 """Unit tests for the with statement specified in PEP 343."""
 
 

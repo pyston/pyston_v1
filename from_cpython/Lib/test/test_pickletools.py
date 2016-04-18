@@ -1,5 +1,3 @@
-# expected: reffail
-# - generator abandonment
 import pickle
 import pickletools
 from test import test_support

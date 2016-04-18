@@ -1,5 +1,3 @@
-# expected: reffail
-# - generator abandonment
 import os
 import sys
 import time

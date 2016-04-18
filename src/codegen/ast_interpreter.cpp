@@ -2065,6 +2065,11 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
         memset(vregs, 0, sizeof(Box*) * num_vregs);
     }
 
+    // We need to remove the old python frame created in the LLVM tier otherwise we would have a duplicate frame because
+    // the interpreter will set the new state before executing the first statement.
+    RELEASE_ASSERT(cur_thread_state.frame_info == frame_state.frame_info, "");
+    cur_thread_state.frame_info = frame_state.frame_info->back;
+
     ASTInterpreter interpreter(md, vregs, num_vregs, frame_state.frame_info);
 
     for (const auto& p : *frame_state.locals) {
@@ -2131,11 +2136,6 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
         ASSERT(start_block, "was unable to find the starting block??");
         assert(starting_statement);
     }
-
-    // We need to remove the old python frame created in the LLVM tier otherwise we would have a duplicate frame because
-    // the interpreter will set the new state before executing the first statement.
-    RELEASE_ASSERT(cur_thread_state.frame_info == frame_state.frame_info, "");
-    cur_thread_state.frame_info = interpreter.getFrameInfo()->back;
 
     Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
     return v ? v : incref(None);

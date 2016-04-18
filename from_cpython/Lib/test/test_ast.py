@@ -1,5 +1,3 @@
-# expected: reffail
-# - generator abandonment
 import sys, itertools, unittest
 from test import test_support
 import ast
