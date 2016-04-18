@@ -491,7 +491,7 @@ extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
     if (PyInt_Check(rhs)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return add_i64_i64(lhs->n, rhs_int->n);
-    } else if (PyFloat_Check(rhs)) {
+    } else if (PyFloat_CheckExact(rhs)) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return boxFloat(lhs->n + rhs_float->d);
     } else {
@@ -620,7 +620,7 @@ extern "C" Box* intDiv(BoxedInt* lhs, Box* rhs) {
 
     if (PyInt_Check(rhs)) {
         return intDivInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (PyFloat_Check(rhs)) {
+    } else if (PyFloat_CheckExact(rhs)) {
         return intDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
         return incref(NotImplemented);
@@ -662,7 +662,7 @@ extern "C" Box* intFloordiv(BoxedInt* lhs, Box* rhs) {
 
     if (PyInt_Check(rhs)) {
         return intFloordivInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (PyFloat_Check(rhs)) {
+    } else if (PyFloat_CheckExact(rhs)) {
         return intFloordivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
         return incref(NotImplemented);
@@ -708,7 +708,7 @@ extern "C" Box* intTruediv(BoxedInt* lhs, Box* rhs) {
 
     if (PyInt_Check(rhs)) {
         return intTruedivInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (PyFloat_Check(rhs)) {
+    } else if (PyFloat_CheckExact(rhs)) {
         return intTruedivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
         return incref(NotImplemented);
@@ -855,7 +855,7 @@ extern "C" Box* intMul(BoxedInt* lhs, Box* rhs) {
     if (PyInt_Check(rhs)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return intMulInt(lhs, rhs_int);
-    } else if (PyFloat_Check(rhs)) {
+    } else if (PyFloat_CheckExact(rhs)) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return intMulFloat(lhs, rhs_float);
     } else {
@@ -907,7 +907,7 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs, Box* mod) {
 
     if (PyLong_Check(rhs))
         return intPowLong(lhs, static_cast<BoxedLong*>(rhs), mod);
-    else if (PyFloat_Check(rhs))
+    else if (PyFloat_CheckExact(rhs))
         return intPowFloat(lhs, static_cast<BoxedFloat*>(rhs), mod);
     else if (!PyInt_Check(rhs))
         return incref(NotImplemented);
@@ -1002,7 +1002,7 @@ extern "C" Box* intSub(BoxedInt* lhs, Box* rhs) {
     if (PyInt_Check(rhs)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return intSubInt(lhs, rhs_int);
-    } else if (PyFloat_Check(rhs)) {
+    } else if (PyFloat_CheckExact(rhs)) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return intSubFloat(lhs, rhs_float);
     } else {
