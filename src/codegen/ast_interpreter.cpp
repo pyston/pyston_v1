@@ -476,16 +476,13 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
     } else {
         bool closure = vst == ScopeInfo::VarScopeType::CLOSURE;
         if (jit) {
-            if (!closure) {
-                bool is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
-                // HACK: this disable the 'this variable is dead at the end of this block' optimization
-                is_live = true;
-                if (is_live)
-                    jit->emitSetLocal(name, node->vreg, closure, value);
-                else
-                    jit->emitSetBlockLocal(name, value);
-            } else
+            bool is_live = true;
+            if (!closure)
+                is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
+            if (is_live)
                 jit->emitSetLocal(name, node->vreg, closure, value);
+            else
+                jit->emitSetBlockLocal(name, value);
         }
 
         if (closure) {
@@ -1658,7 +1655,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
         case ScopeInfo::VarScopeType::CLOSURE: {
             Value v;
             if (jit) {
-                bool is_live = false;
+                bool is_live = true;
                 if (node->lookup_type == ScopeInfo::VarScopeType::FAST)
                     is_live = source_info->getLiveness()->isLiveAtEnd(node->id, current_block);
 
