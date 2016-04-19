@@ -2,16 +2,18 @@ language: cpp
 
 branches:
   except:
-    - refcounting
+      # - refcounting
 
 compiler:
   - clang
-  - gcc
+# XXX: temporarily disable
+# - gcc
 
 env:
   matrix:
     - TRAVIS_BUILD_TYPE=Debug CCACHE_DIR=$HOME/.ccache_debug
-    - TRAVIS_BUILD_TYPE=Release CCACHE_DIR=$HOME/.ccache_release
+# XXX: temporarily disable
+# - TRAVIS_BUILD_TYPE=Release CCACHE_DIR=$HOME/.ccache_release
   global:
     - PYSTON_RUN_ARGS=G
 

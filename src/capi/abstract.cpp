@@ -2151,7 +2151,7 @@ extern "C" int PyNumber_CoerceEx(PyObject** pv, PyObject** pw) noexcept {
     return 1;
 }
 
-extern "C" PyObject* _PyNumber_ConvertIntegralToInt(PyObject* integral, const char* error_format) noexcept {
+extern "C" PyObject* _PyNumber_ConvertIntegralToInt(STOLEN(PyObject*) integral, const char* error_format) noexcept {
     const char* type_name;
     static PyObject* int_name = NULL;
     if (int_name == NULL) {
