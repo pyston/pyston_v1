@@ -841,6 +841,9 @@ private:
         curblock = deopt_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
         llvm::Value* v = emitter.createDeopt(current_statement, (AST_expr*)node, node_value);
+        // TODO: this might not be necessary since it should never fire?
+        if (!irstate->getCurFunction()->entry_descriptor)
+            emitter.getBuilder()->CreateCall(g.funcs.deinitFrameMaybe, irstate->getFrameInfoVar());
         llvm::Instruction* ret_inst = emitter.getBuilder()->CreateRet(v);
         irstate->getRefcounts()->refConsumed(v, ret_inst);
 
@@ -2426,6 +2429,8 @@ private:
             emitter.getBuilder()->CreateCall(l_free, malloc_save);
         }
 
+        if (!irstate->getCurFunction()->entry_descriptor)
+            emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
         emitter.getBuilder()->CreateRet(rtn);
 
         emitter.getBuilder()->SetInsertPoint(starting_block);
@@ -3006,7 +3011,8 @@ public:
                     emitter.getBuilder()->CreateCall(g.funcs.reraiseCapiExcAsCxx);
                     emitter.getBuilder()->CreateUnreachable();
                 } else {
-                    emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
+                    if (!irstate->getCurFunction()->entry_descriptor)
+                        emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
                     emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
                 }
             } else {
@@ -3095,7 +3101,8 @@ public:
             irstate->getRefcounts()->refConsumed(exc_type, call_inst);
             irstate->getRefcounts()->refConsumed(exc_value, call_inst);
             irstate->getRefcounts()->refConsumed(exc_traceback, call_inst);
-            emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
+            if (!irstate->getCurFunction()->entry_descriptor)
+                emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
             emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
         } else {
             // auto call_inst = emitter.createCall3(UnwindInfo(unw_info.current_stmt, NO_CXX_INTERCEPTION),

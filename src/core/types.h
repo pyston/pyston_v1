@@ -1001,6 +1001,12 @@ struct FrameInfo {
 
     BORROWED(Box*) updateBoxedLocals();
 
+    static FrameInfo* const NO_DEINIT;
+
+    // Calling disableDeinit makes future deinitFrameMaybe() frames not call deinitFrame().
+    // For use by deopt(), which takes over deinit responsibility for its caller.
+    void disableDeinit(FrameInfo* replacement_frame);
+
     FrameInfo(ExcInfo exc)
         : exc(exc),
           boxedLocals(NULL),

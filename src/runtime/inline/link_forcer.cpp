@@ -73,6 +73,7 @@ void force() {
     FORCE(decodeUTF8StringPtr);
     FORCE(initFrame);
     FORCE(deinitFrame);
+    FORCE(deinitFrameMaybe);
     FORCE(makePendingCalls);
     FORCE(setFrameExcInfo);
 

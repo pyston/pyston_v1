@@ -247,9 +247,16 @@ ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs,
     if (deopt_frame_info) {
         // copy over all fields and clear the deopt frame info
         frame_info = *deopt_frame_info;
+
+        // Well, don't actually copy over the vregs.  We'll deal with them separately
+        // (using the locals dict), so just clear out and decref the old ones:
+        frame_info.vregs = NULL;
+        frame_info.num_vregs = 0;
         for (int i = 0; i < deopt_frame_info->num_vregs; ++i)
             Py_XDECREF(deopt_frame_info->vregs[i]);
-        memset(deopt_frame_info, 0, sizeof(*deopt_frame_info));
+
+        // We are taking responsibility for calling deinit:
+        deopt_frame_info->disableDeinit(&this->frame_info);
     }
 
     frame_info.vregs = vregs;
@@ -1853,7 +1860,7 @@ const void* interpreter_instr_addr = (void*)&executeInnerAndSetupFrame;
 extern "C" Box* executeInnerFromASM(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     initFrame(interpreter.getFrameInfo());
     Box* rtn = ASTInterpreter::executeInner(interpreter, start_block, start_at);
-    deinitFrame(interpreter.getFrameInfo());
+    deinitFrameMaybe(interpreter.getFrameInfo());
     return rtn;
 }
 
@@ -2086,7 +2093,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
     // We need to remove the old python frame created in the LLVM tier otherwise we would have a duplicate frame because
     // the interpreter will set the new state before executing the first statement.
     RELEASE_ASSERT(cur_thread_state.frame_info == frame_state.frame_info, "");
-    cur_thread_state.frame_info = frame_state.frame_info->back;
+    cur_thread_state.frame_info = interpreter.getFrameInfo()->back;
 
     Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
     return v ? v : incref(None);
