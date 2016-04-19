@@ -163,7 +163,10 @@ extern "C" double PyFloat_AsDouble(PyObject* o) noexcept {
         return -1;
     }
 
-    return static_cast<BoxedFloat*>(fo)->d;
+    val = static_cast<BoxedFloat*>(fo)->d;
+    Py_DECREF(fo);
+
+    return val;
 }
 
 template <typename T> static inline void raiseDivZeroExcIfZero(T var) {
