@@ -95,6 +95,11 @@ bool isUnwinding() {
     return is_unwinding;
 }
 
+void setUnwinding(bool b) {
+    assert(!in_cleanup_code);
+    is_unwinding = b;
+}
+
 extern "C" {
 
 static NORETURN void panic(void) {

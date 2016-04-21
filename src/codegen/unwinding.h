@@ -33,6 +33,7 @@ struct FrameInfo;
 void registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size);
 uint64_t getCXXUnwindSymbolAddress(llvm::StringRef sym);
 bool isUnwinding(); // use this instead of std::uncaught_exception
+void setUnwinding(bool);
 
 void setupUnwinding();
 BORROWED(BoxedModule*) getCurrentModule();

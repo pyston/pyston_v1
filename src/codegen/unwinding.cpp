@@ -511,30 +511,6 @@ static FrameInfo* getTopFrameInfo() {
 }
 
 llvm::DenseMap<uint64_t /*ip*/, std::vector<Location>> decref_infos;
-void executeDecrefs(unw_cursor_t* cursor) {
-    unw_word_t ip = get_cursor_ip(cursor);
-    auto it = decref_infos.find(ip);
-    if (it == decref_infos.end())
-        return;
-
-    for (Location& l : it->second) {
-        Box* b = NULL;
-        if (l.type == Location::Stack) {
-            unw_word_t sp = get_cursor_sp(cursor);
-            b = ((Box**)sp)[l.stack_offset];
-        } else if (l.type == Location::Register) {
-            RELEASE_ASSERT(0, "untested");
-            // This branch should never get hit since we shouldn't generate Register locations,
-            // since we don't allow allocating callee-save registers.
-            // If we did, this code might be right:
-            // b = (Box*)get_cursor_reg(cursor, l.regnum);
-        } else {
-            RELEASE_ASSERT(0, "not implemented");
-        }
-
-        Py_XDECREF(b);
-    }
-}
 void addDecrefInfoEntry(uint64_t ip, std::vector<Location> location) {
     assert(!decref_infos.count(ip) && "why is there already an entry??");
     decref_infos[ip] = std::move(location);
@@ -565,18 +541,67 @@ public:
         static StatCounter stat("unwind_sessions");
         stat.log();
     }
+
+    std::tuple<FrameInfo*, ExcInfo, PythonStackExtractor> pause() {
+        t.end();
+        assert(isUnwinding());
+        setUnwinding(false);
+        return std::make_tuple(std::move(prev_frame_info), std::move(exc_info), std::move(pystack_extractor));
+    }
+
+    void resume(std::tuple<FrameInfo*, ExcInfo, PythonStackExtractor>&& state) {
+        std::tie(prev_frame_info, exc_info, pystack_extractor) = state;
+        assert(!isUnwinding());
+        setUnwinding(true);
+        t.restart();
+    }
+
     void end() {
         static StatCounter stat("us_unwind_session");
         stat.log(t.end());
     }
 
     void handleCFrame(unw_cursor_t* cursor) {
-        if (prev_frame_info) {
-            deinitFrame(prev_frame_info);
-            prev_frame_info = NULL;
-        }
+        // deinit the previous frame and do decrefs if neccessary
+        // but we need to pause unwinding because decrefing objects can cause finalizers to get run (and they can use
+        // exceptions).
+        unw_word_t ip = get_cursor_ip(cursor);
+        auto decref_info_iter = decref_infos.find(ip);
+        bool need_to_pause_unwinding = prev_frame_info || decref_info_iter != decref_infos.end();
+        if (need_to_pause_unwinding) {
+            try {
+                auto unwind_session_state = pause();
 
-        executeDecrefs(cursor);
+                if (prev_frame_info)
+                    deinitFrame(prev_frame_info);
+
+                // check decref info and decref locations when available
+                if (decref_info_iter != decref_infos.end()) {
+                    for (const Location& l : decref_info_iter->second) {
+                        Box* b = NULL;
+                        if (l.type == Location::Stack) {
+                            unw_word_t sp = get_cursor_sp(cursor);
+                            b = ((Box**)sp)[l.stack_offset];
+                        } else if (l.type == Location::Register) {
+                            RELEASE_ASSERT(0, "untested");
+                            // This branch should never get hit since we shouldn't generate Register locations,
+                            // since we don't allow allocating callee-save registers.
+                            // If we did, this code might be right:
+                            // b = (Box*)get_cursor_reg(cursor, l.regnum);
+                        } else {
+                            RELEASE_ASSERT(0, "not implemented");
+                        }
+
+                        Py_XDECREF(b);
+                    }
+                }
+
+                resume(std::move(unwind_session_state));
+                prev_frame_info = NULL;
+            } catch (ExcInfo) {
+                RELEASE_ASSERT(0, "we should never get here");
+            }
+        }
 
         PythonFrameIteratorImpl frame_iter;
         bool found_frame = pystack_extractor.handleCFrame(cursor, &frame_iter);
