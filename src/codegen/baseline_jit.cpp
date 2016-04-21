@@ -537,7 +537,9 @@ std::vector<RewriterVar*> JitFragmentWriter::emitUnpackIntoArray(RewriterVar* v,
 
 RewriterVar* JitFragmentWriter::emitYield(RewriterVar* v) {
     RewriterVar* generator = getInterp()->getAttr(ASTInterpreterJitInterface::getGeneratorOffset());
-    return call(false, (void*)yield, generator, v)->setType(RefType::OWNED);
+    auto rtn = call(false, (void*)yield, generator, v)->setType(RefType::OWNED);
+    v->refConsumed();
+    return rtn;
 }
 
 void JitFragmentWriter::emitDelAttr(RewriterVar* target, BoxedString* attr) {

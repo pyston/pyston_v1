@@ -332,13 +332,13 @@ Box* generatorHasnext(Box* s) {
 }
 
 
-extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
+extern "C" Box* yield(BoxedGenerator* obj, STOLEN(Box*) value) {
     STAT_TIMER(t0, "us_timer_generator_switching", 0);
 
     assert(obj->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(obj);
     assert(!self->returnValue);
-    self->returnValue = incref(value);
+    self->returnValue = value;
 
     threading::popGenerator();
 
@@ -371,6 +371,7 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
     if (self->exception.type) {
         ExcInfo e = self->exception;
         self->exception = ExcInfo(NULL, NULL, NULL);
+        Py_CLEAR(self->returnValue);
         throw e;
     }
 

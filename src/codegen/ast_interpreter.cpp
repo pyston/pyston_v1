@@ -993,7 +993,6 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
 
 Value ASTInterpreter::visit_yield(AST_Yield* node) {
     Value value = node->value ? visit_expr(node->value) : getNone();
-    AUTO_DECREF(value.o);
     assert(generator && generator->cls == generator_cls);
 
     return Value(yield(generator, value.o), jit ? jit->emitYield(value) : NULL);

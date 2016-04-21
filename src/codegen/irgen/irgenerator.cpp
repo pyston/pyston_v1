@@ -1544,8 +1544,9 @@ private:
         CompilerVariable* value = node->value ? evalExpr(node->value, unw_info) : emitter.getNone();
         ConcreteCompilerVariable* convertedValue = value->makeConverted(emitter, value->getBoxType());
 
-        llvm::Value* rtn
+        llvm::Instruction* rtn
             = emitter.createCall2(unw_info, g.funcs.yield, convertedGenerator->getValue(), convertedValue->getValue());
+        emitter.refConsumed(convertedValue->getValue(), rtn);
         emitter.setType(rtn, RefType::OWNED);
 
         return new ConcreteCompilerVariable(UNKNOWN, rtn);
