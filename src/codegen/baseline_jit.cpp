@@ -854,7 +854,9 @@ Box* JitFragmentWriter::callattrHelper(Box* obj, BoxedString* attr, CallattrFlag
 Box* JitFragmentWriter::createDictHelper(uint64_t num, Box** keys, Box** values) {
     BoxedDict* dict = (BoxedDict*)createDict();
     for (uint64_t i = 0; i < num; ++i) {
-        dict->d[keys[i]] = values[i];
+        int ret = PyDict_SetItem(dict, autoDecref(keys[i]), autoDecref(values[i]));
+        if (ret == -1)
+            throwCAPIException();
     }
     return dict;
 }
@@ -870,8 +872,13 @@ Box* JitFragmentWriter::createListHelper(uint64_t num, Box** data) {
 
 Box* JitFragmentWriter::createSetHelper(uint64_t num, Box** data) {
     BoxedSet* set = (BoxedSet*)createSet();
-    for (int i = 0; i < num; ++i)
-        set->s.insert(data[i]);
+    for (int i = 0; i < num; ++i) {
+        auto&& p = set->s.insert(data[i]);
+        if (!p.second /* already exists */) {
+            Py_DECREF(p.first->value);
+            *p.first = data[i];
+        }
+    }
     return set;
 }
 

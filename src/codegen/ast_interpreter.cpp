@@ -1574,8 +1574,13 @@ Value ASTInterpreter::visit_dict(AST_Dict* node) {
     BoxedDict* dict = new BoxedDict();
     for (size_t i = 0; i < node->keys.size(); ++i) {
         Value v = visit_expr(node->values[i]);
+        AUTO_DECREF(v.o);
         Value k = visit_expr(node->keys[i]);
-        dict->d[k.o] = v.o;
+        AUTO_DECREF(k.o);
+
+        int ret = PyDict_SetItem(dict, k.o, v.o);
+        if (ret == -1)
+            throwCAPIException();
 
         values.push_back(v);
         keys.push_back(k);
@@ -1590,7 +1595,11 @@ Value ASTInterpreter::visit_set(AST_Set* node) {
     BoxedSet::Set set;
     for (AST_expr* e : node->elts) {
         Value v = visit_expr(e);
-        set.insert(v.o);
+        auto&& p = set.insert(v.o);
+        if (!p.second /* already exists */) {
+            Py_DECREF(p.first->value);
+            *p.first = v.o;
+        }
         items.push_back(v);
     }
 

@@ -1,4 +1,4 @@
-s1 = {1}
+s1 = {1, 1}
 
 def sorted(s):
     l = list(s)
