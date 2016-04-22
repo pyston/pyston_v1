@@ -987,8 +987,6 @@ extern "C" int PyRun_InteractiveOneFlags(FILE* fp, const char* filename, PyCompi
     // Pyston change:
     // d = PyModule_GetDict(m);
     // v = run_mod(mod, filename, d, d, flags, arena);
-    v = None;
-    Py_INCREF(v);
     assert(PyModule_Check(m));
     bool failed = false;
     try {
@@ -1005,7 +1003,9 @@ extern "C" int PyRun_InteractiveOneFlags(FILE* fp, const char* filename, PyCompi
         PyErr_Print();
         return -1;
     }
-    Py_DECREF(v);
+    // Pyston change: we dont't have v
+    // Py_DECREF(v);
+
     if (Py_FlushLine())
         PyErr_Clear();
     return 0;

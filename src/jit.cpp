@@ -476,7 +476,7 @@ static int main(int argc, char** argv) noexcept {
             }
         } else if (module != NULL) {
             // TODO: CPython uses the same main module for all code paths
-            main_module = createModule(boxString("__main__"), "<string>");
+            main_module = createModule(autoDecref(boxString("__main__")), "<string>");
             rtncode = (RunModule(module, 1) != 0);
         } else {
             main_module = createModule(autoDecref(boxString("__main__")), fn ? fn : "<stdin>");
@@ -526,6 +526,8 @@ static int main(int argc, char** argv) noexcept {
             PyObject* v = PyImport_ImportModule("readline");
             if (!v)
                 PyErr_Clear();
+            else
+                Py_CLEAR(v);
 
             printf("Pyston v%d.%d.%d (rev " STRINGIFY(GITREV) ")", PYSTON_VERSION_MAJOR, PYSTON_VERSION_MINOR,
                    PYSTON_VERSION_MICRO);

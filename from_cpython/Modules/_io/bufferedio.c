@@ -732,6 +732,9 @@ _PyIO_trap_eintr(void)
     if (eintr_int == NULL) {
         eintr_int = PyLong_FromLong(EINTR);
         assert(eintr_int != NULL);
+
+        // Pyston change:
+        PyGC_RegisterStaticConstant(eintr_int);
     }
     if (!PyErr_ExceptionMatches(PyExc_EnvironmentError))
         return 0;
