@@ -3120,6 +3120,7 @@ extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) {
         STAT_TIMER(t1, "us_timer_slowpath_tpsetattr", 10);
 
         assert(attr->data()[attr->size()] == '\0');
+        AUTO_DECREF(attr_val);
         int rtn = obj->cls->tp_setattr(obj, const_cast<char*>(attr->data()), attr_val);
         if (rtn)
             throwCAPIException();
