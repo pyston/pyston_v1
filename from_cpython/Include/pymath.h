@@ -118,7 +118,11 @@ PyAPI_FUNC(void) _Py_set_387controlword(unsigned short) PYSTON_NOEXCEPT;
  */
 #ifndef Py_IS_INFINITY
 #  if defined HAVE_DECL_ISINF && HAVE_DECL_ISINF == 1
-#    define Py_IS_INFINITY(X) isinf(X)
+#    ifdef __cplusplus
+#      define Py_IS_INFINITY(X) std::isinf(X)
+#    else
+#      define Py_IS_INFINITY(X) isinf(X)
+#    endif
 #  else
 #    define Py_IS_INFINITY(X) ((X) &&                                   \
                                (Py_FORCE_DOUBLE(X)*0.5 == Py_FORCE_DOUBLE(X)))

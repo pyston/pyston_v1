@@ -1,5 +1,5 @@
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/build/lib.linux-x86_64-2.7/basic_test.so
-                   COMMAND python setup.py build --build-lib ${CMAKE_CURRENT_BINARY_DIR}/build/lib.linux-x86_64-2.7
+                   COMMAND python2 setup.py build --build-lib ${CMAKE_CURRENT_BINARY_DIR}/build/lib.linux-x86_64-2.7
                    DEPENDS basic_test.c descr_test.c slots_test.c
                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
