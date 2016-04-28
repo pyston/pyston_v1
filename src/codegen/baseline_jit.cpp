@@ -389,8 +389,14 @@ RewriterVar* JitFragmentWriter::emitGetAttr(RewriterVar* obj, BoxedString* s, AS
 
 RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s, int vreg) {
     auto it = local_syms.find(s);
-    if (it == local_syms.end())
-        return emitGetLocal(s, vreg);
+    if (it == local_syms.end()) {
+        auto r = emitGetLocal(s, vreg);
+        // TODO: clear out the vreg?
+        // assert(r->reftype == RefType::OWNED);
+        // emitSetLocal(s, vreg, false, imm(nullptr));
+        // emitSetBlockLocal(s, r);
+        return r;
+    }
     return it->second;
 }
 
