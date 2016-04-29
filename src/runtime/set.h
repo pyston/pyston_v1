@@ -41,6 +41,8 @@ public:
     static int traverse(Box* self, visitproc visit, void* arg) noexcept;
     static int clear(Box* self) noexcept;
 };
+
+void _setAddStolen(BoxedSet* self, STOLEN(BoxAndHash) val);
 }
 
 #endif

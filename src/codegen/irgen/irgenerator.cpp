@@ -1445,8 +1445,10 @@ private:
 
         static BoxedString* add_str = getStaticString("add");
 
-        for (int i = 0; i < node->elts.size(); i++) {
-            CompilerVariable* elt = elts[i];
+        // insert the elements in reverse like cpython does
+        // important for {1, 1L}
+        for (auto it = elts.rbegin(), it_end = elts.rend(); it != it_end; ++it) {
+            CompilerVariable* elt = *it;
             CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
             CompilerVariable* r
                 = rtn->callattr(emitter, getOpInfoForNode(node, unw_info), add_str, flags, { elt }, NULL);

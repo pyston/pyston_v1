@@ -1590,20 +1590,20 @@ Value ASTInterpreter::visit_dict(AST_Dict* node) {
 }
 
 Value ASTInterpreter::visit_set(AST_Set* node) {
-    llvm::SmallVector<RewriterVar*, 8> items;
-
-    BoxedSet::Set set;
-    for (AST_expr* e : node->elts) {
-        Value v = visit_expr(e);
-        auto&& p = set.insert(v.o);
-        if (!p.second /* already exists */) {
-            Py_DECREF(p.first->value);
-            *p.first = v.o;
+    try {
+        // insert the elements in reverse like cpython does
+        // important for {1, 1L}
+        llvm::SmallVector<RewriterVar*, 8> items;
+        BoxedSet* set = (BoxedSet*)createSet();
+        for (auto it = node->elts.rbegin(), it_end = node->elts.rend(); it != it_end; ++it) {
+            Value v = visit_expr(*it);
+            _setAddStolen(set, v.o);
+            items.push_back(v);
         }
-        items.push_back(v);
+        return Value(set, jit ? jit->emitCreateSet(items) : NULL);
+    } catch (ExcInfo e) {
+        RELEASE_ASSERT(0, "this leaks in case of an exception");
     }
-
-    return Value(new BoxedSet(std::move(set)), jit ? jit->emitCreateSet(items) : NULL);
 }
 
 Value ASTInterpreter::visit_str(AST_Str* node) {

@@ -24,6 +24,14 @@ extern "C" Box* createSet() {
     return new BoxedSet();
 }
 
+void _setAddStolen(BoxedSet* self, STOLEN(BoxAndHash) val) {
+    auto&& p = self->s.insert(val);
+    if (!p.second /* already exists */) {
+        // keep the original key
+        Py_DECREF(val.value);
+    }
+}
+
 namespace set {
 
 class BoxedSetIterator : public Box {
@@ -87,14 +95,6 @@ Box* setiter_next(Box* _self) noexcept {
 Box* setiteratorIter(BoxedSetIterator* self) {
     RELEASE_ASSERT(self->cls == set_iterator_cls, "");
     return incref(self);
-}
-
-static void _setAddStolen(BoxedSet* self, STOLEN(BoxAndHash) val) {
-    auto&& p = self->s.insert(val);
-    if (!p.second /* already exists */) {
-        Py_DECREF(p.first->value);
-        *p.first = val;
-    }
 }
 
 static void _setAdd(BoxedSet* self, BoxAndHash val) {
