@@ -1,4 +1,3 @@
-# expected: reffail
 '''
 Tests for fileinput module.
 Nick Mathewson

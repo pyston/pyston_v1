@@ -1,4 +1,5 @@
 # expected: reffail
+# - unknown segfault
 doctests = """
 
 Unpack tuple

@@ -1,4 +1,3 @@
-# expected: reffail
 # Test the support for SSL and sockets
 
 import sys

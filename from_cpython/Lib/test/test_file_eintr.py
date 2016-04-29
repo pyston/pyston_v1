@@ -1,4 +1,3 @@
-# expected: reffail
 # Written to test interrupted system calls interfering with our many buffered
 # IO implementations.  http://bugs.python.org/issue12268
 #

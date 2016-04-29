@@ -1,4 +1,5 @@
 # expected: reffail
+# - unknown unwinding issue
 from test import test_support, seq_tests
 
 import gc
