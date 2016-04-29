@@ -1583,25 +1583,19 @@ Value ASTInterpreter::visit_lambda(AST_Lambda* node) {
 Value ASTInterpreter::visit_dict(AST_Dict* node) {
     RELEASE_ASSERT(node->keys.size() == node->values.size(), "not implemented");
 
-    llvm::SmallVector<RewriterVar*, 8> keys;
-    llvm::SmallVector<RewriterVar*, 8> values;
-
     BoxedDict* dict = new BoxedDict();
+    RewriterVar* r_dict = jit ? jit->emitCreateDict() : NULL;
     for (size_t i = 0; i < node->keys.size(); ++i) {
         Value v = visit_expr(node->values[i]);
-        AUTO_DECREF(v.o);
         Value k = visit_expr(node->keys[i]);
-        AUTO_DECREF(k.o);
 
-        int ret = PyDict_SetItem(dict, k.o, v.o);
-        if (ret == -1)
-            throwCAPIException();
-
-        values.push_back(v);
-        keys.push_back(k);
+        dictSetInternal(dict, k.o, v.o);
+        if (jit) {
+            jit->emitDictSet(r_dict, k, v);
+        }
     }
 
-    return Value(dict, jit ? jit->emitCreateDict(keys, values) : NULL);
+    return Value(dict, r_dict);
 }
 
 Value ASTInterpreter::visit_set(AST_Set* node) {

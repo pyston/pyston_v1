@@ -249,25 +249,14 @@ RewriterVar* JitFragmentWriter::emitCompare(AST_expr* node, RewriterVar* lhs, Re
     return emitPPCall((void*)compare, { lhs, rhs, imm(op_type) }, 2, 240, node).first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitCreateDict(const llvm::ArrayRef<RewriterVar*> keys,
-                                               const llvm::ArrayRef<RewriterVar*> values) {
-    assert(keys.size() == values.size());
-    if (keys.empty())
-        return call(false, (void*)createDict)->setType(RefType::OWNED);
-    RewriterVar::SmallVector additional_uses;
-    additional_uses.insert(additional_uses.end(), keys.begin(), keys.end());
-    additional_uses.insert(additional_uses.end(), values.begin(), values.end());
-    auto rtn = emitCallWithAllocatedArgs((void*)createDictHelper,
-                                         { imm(keys.size()), allocArgs(keys, RewriterVar::SetattrType::REFUSED),
-                                           allocArgs(values, RewriterVar::SetattrType::REFUSED) },
-                                         additional_uses)->setType(RefType::OWNED);
-    for (RewriterVar* k : keys) {
-        k->refConsumed();
-    }
-    for (RewriterVar* v : values) {
-        v->refConsumed();
-    }
-    return rtn;
+RewriterVar* JitFragmentWriter::emitCreateDict() {
+    return call(false, (void*)createDict)->setType(RefType::OWNED);
+}
+
+void JitFragmentWriter::emitDictSet(RewriterVar* dict, RewriterVar* k, RewriterVar* v) {
+    call(true, (void*)dictSetInternal, dict, k, v);
+    k->refConsumed();
+    v->refConsumed();
 }
 
 // TODO: merge this function's functionality with refUsed

@@ -121,6 +121,7 @@ void force() {
     FORCE(printHelper);
 
     FORCE(listAppendInternal);
+    FORCE(dictSetInternal);
 
     FORCE(runtimeCall);
     FORCE(runtimeCallCapi);

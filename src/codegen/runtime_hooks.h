@@ -43,7 +43,7 @@ struct GlobalFuncs {
     llvm::Value* unpackIntoArray, *raiseAttributeError, *raiseAttributeErrorStr, *raiseAttributeErrorCapi,
         *raiseAttributeErrorStrCapi, *raiseNotIterableError, *raiseIndexErrorStr, *raiseIndexErrorStrCapi,
         *assertNameDefined, *assertFail, *assertFailDerefNameDefined, *printExprHelper, *printHelper;
-    llvm::Value* listAppendInternal;
+    llvm::Value* listAppendInternal, *dictSetInternal;
     ExceptionSwitchable<llvm::Value*> runtimeCall0, runtimeCall1, runtimeCall2, runtimeCall3, runtimeCall, runtimeCallN;
     ExceptionSwitchable<llvm::Value*> callattr0, callattr1, callattr2, callattr3, callattr, callattrN;
     llvm::Value* reoptCompiledFunc, *compilePartialFunc;
