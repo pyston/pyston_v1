@@ -27,6 +27,7 @@
 
 #include "asm_writing/assembler.h"
 #include "asm_writing/icinfo.h"
+#include "asm_writing/types.h"
 #include "core/threading.h"
 #include "core/types.h"
 
@@ -40,82 +41,6 @@ class ICSlotRewrite;
 class ICInvalidator;
 
 class RewriterVar;
-
-struct Location {
-public:
-    enum LocationType : uint8_t {
-        Register,
-        XMMRegister,
-        Stack,
-        Scratch, // stack location, relative to the scratch start
-
-        // For representing constants that fit in 32-bits, that can be encoded as immediates
-        AnyReg,        // special type for use when specifying a location as a destination
-        None,          // special type that represents the lack of a location, ex where a "ret void" gets returned
-        Uninitialized, // special type for an uninitialized (and invalid) location
-    };
-
-public:
-    LocationType type;
-
-    union {
-        // only valid if type==Register; uses X86 numbering, not dwarf numbering.
-        // also valid if type==XMMRegister
-        int32_t regnum;
-        // only valid if type==Stack; this is the offset from bottom of the original frame.
-        // ie argument #6 will have a stack_offset of 0, #7 will have a stack offset of 8, etc
-        int32_t stack_offset;
-        // only valid if type == Scratch; offset from the beginning of the scratch area
-        int32_t scratch_offset;
-
-        int32_t _data;
-    };
-
-    constexpr Location() noexcept : type(Uninitialized), _data(-1) {}
-    constexpr Location(const Location& r) = default;
-    Location& operator=(const Location& r) = default;
-
-    constexpr Location(LocationType type, int32_t data) : type(type), _data(data) {}
-
-    constexpr Location(assembler::Register reg) : type(Register), regnum(reg.regnum) {}
-
-    constexpr Location(assembler::XMMRegister reg) : type(XMMRegister), regnum(reg.regnum) {}
-
-    constexpr Location(assembler::GenericRegister reg)
-        : type(reg.type == assembler::GenericRegister::GP ? Register : reg.type == assembler::GenericRegister::XMM
-                                                                           ? XMMRegister
-                                                                           : None),
-          regnum(reg.type == assembler::GenericRegister::GP ? reg.gp.regnum : reg.xmm.regnum) {}
-
-    assembler::Register asRegister() const;
-    assembler::XMMRegister asXMMRegister() const;
-    bool isClobberedByCall() const;
-
-    static constexpr Location any() { return Location(AnyReg, 0); }
-    static constexpr Location none() { return Location(None, 0); }
-    static Location forArg(int argnum);
-    static Location forXMMArg(int argnum);
-
-    bool operator==(const Location rhs) const { return this->asInt() == rhs.asInt(); }
-
-    bool operator!=(const Location rhs) const { return !(*this == rhs); }
-
-    bool operator<(const Location& rhs) const { return this->asInt() < rhs.asInt(); }
-
-    uint64_t asInt() const { return (int)type + ((uint64_t)_data << 4); }
-
-    void dump() const;
-};
-static_assert(sizeof(Location) <= 8, "");
-}
-
-namespace std {
-template <> struct hash<pyston::Location> {
-    size_t operator()(const pyston::Location p) const { return p.asInt(); }
-};
-}
-
-namespace pyston {
 
 // Replacement for unordered_map<Location, T>
 template <class T> class LocMap {
@@ -224,7 +149,12 @@ public:
     // getAttrFloat casts to double (maybe I should make that separate?)
     RewriterVar* getAttrFloat(int offset, Location loc = Location::any());
     RewriterVar* getAttrDouble(int offset, Location loc = Location::any());
-    void setAttr(int offset, RewriterVar* other);
+    enum class SetattrType {
+        UNKNOWN,
+        HANDED_OFF,
+        REFUSED,
+    };
+    void setAttr(int offset, RewriterVar* other, SetattrType type = SetattrType::UNKNOWN);
     RewriterVar* cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location loc = Location::any());
     RewriterVar* toBool(Location loc = Location::any());
 
@@ -240,7 +170,10 @@ public:
     // This should get called *after* the ref got consumed, ie something like
     //   r_array->setAttr(0, r_val);
     //   r_val->refConsumed()
-    void refConsumed();
+    // if no action is specified it will assume the last action consumed the reference
+    void refConsumed(RewriterAction* action = NULL);
+
+    void refUsed();
 
 
     template <typename Src, typename Dst> inline RewriterVar* getAttrCast(int offset, Location loc = Location::any());
@@ -278,6 +211,7 @@ private:
     bool isDoneUsing() { return next_use == uses.size(); }
     bool hasScratchAllocation() const { return scratch_allocation.second > 0; }
     void resetHasScratchAllocation() { scratch_allocation = std::make_pair(0, 0); }
+    bool needsDecref();
 
     // Indicates if this variable is an arg, and if so, what location the arg is from.
     bool is_arg;
@@ -363,6 +297,7 @@ public:
 class RewriterAction {
 public:
     SmallFunction<56> action;
+    std::vector<RewriterVar*> consumed_refs;
 
     template <typename F> RewriterAction(F&& action) : action(std::forward<F>(action)) {}
 
@@ -382,7 +317,7 @@ class Rewriter : public ICSlotRewrite::CommitHook {
 private:
     class RegionAllocator {
     public:
-        static const int BLOCK_SIZE = 200; // reserve a bit of space for list/malloc overhead
+        static const int BLOCK_SIZE = 1024; // reserve a bit of space for list/malloc overhead
         std::list<char[BLOCK_SIZE]> blocks;
 
         int cur_offset = BLOCK_SIZE + 1;
@@ -473,7 +408,7 @@ protected:
              bool needs_invalidation_support = true);
 
     std::deque<RewriterAction, RegionAllocatorAdaptor<RewriterAction>> actions;
-    template <typename F> void addAction(F&& action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
+    template <typename F> RewriterAction* addAction(F&& action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
         assertPhaseCollecting();
         for (RewriterVar* var : vars) {
             assert(var != NULL);
@@ -484,7 +419,7 @@ protected:
         } else if (type == ActionType::GUARD) {
             if (added_changing_action) {
                 failed = true;
-                return;
+                return NULL;
             }
             for (RewriterVar* arg : args) {
                 arg->uses.push_back(actions.size());
@@ -493,10 +428,17 @@ protected:
             last_guard_action = (int)actions.size();
         }
         actions.emplace_back(std::forward<F>(action));
+        return &actions.back();
     }
+    RewriterAction* getLastAction() {
+        assert(!actions.empty());
+        return &actions.back();
+    }
+
     bool added_changing_action;
     bool marked_inside_ic;
     std::vector<void*> gc_references;
+    std::vector<std::pair<uint64_t, std::vector<Location>>> decref_infos;
 
     bool done_guarding;
     bool isDoneGuarding() {
@@ -626,6 +568,10 @@ public:
 #else
     void comment(const llvm::Twine& msg) {}
 #endif
+    // returns a vector of locations of variables which need to get decrefed if the last action throwes
+    std::vector<Location> getDecrefLocations();
+    // calls getDecrefLocations and registers the current assembler address with the retrieved decref info
+    void registerDecrefInfoHere();
 
     void trap();
     RewriterVar* loadConst(int64_t val, Location loc = Location::any());

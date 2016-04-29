@@ -651,8 +651,12 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         while (s->elements().size() > 0 && llvm::isa<llvm::StructType>(s->elements()[0]))
             s = llvm::cast<llvm::StructType>(s->elements()[0]);
 
+        if (isa<ConstantPointerNull>(v))
+            return;
+
         bool ok_type = false;
-        if (s->elements().size() >= 2 && s->elements()[0] == g.i64 && s->elements()[1] == g.llvm_class_type_ptr) {
+        if (s->elements().size() >= 2 + REFCOUNT_IDX && s->elements()[REFCOUNT_IDX] == g.i64
+            && s->elements()[REFCOUNT_IDX + 1] == g.llvm_class_type_ptr) {
             // printf("This looks likes a class\n");
             ok_type = true;
         }

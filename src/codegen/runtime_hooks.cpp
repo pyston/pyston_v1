@@ -198,6 +198,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createSet);
     GET(initFrame);
     GET(deinitFrame);
+    GET(deinitFrameMaybe);
     GET(makePendingCalls);
     GET(setFrameExcInfo);
 

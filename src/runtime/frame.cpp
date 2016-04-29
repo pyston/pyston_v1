@@ -229,7 +229,37 @@ extern "C" void initFrame(FrameInfo* frame_info) {
     cur_thread_state.frame_info = frame_info;
 }
 
+FrameInfo* const FrameInfo::NO_DEINIT = (FrameInfo*)-2; // not -1 to not match memset(-1)
+
+void FrameInfo::disableDeinit(FrameInfo* replacement_frame) {
+    assert(replacement_frame->back == this->back);
+    assert(replacement_frame->frame_obj == this->frame_obj);
+
+    if (this->frame_obj) {
+        assert(this->frame_obj->frame_info == this);
+        this->frame_obj->frame_info = replacement_frame;
+    }
+
+#ifndef NDEBUG
+    // First, make sure this doesn't get used for anything else:
+    memset(this, -1, sizeof(*this));
+#endif
+
+    // Kinda hacky but maybe worth it to not store any extra bits:
+    back = NO_DEINIT;
+}
+
+extern "C" void deinitFrameMaybe(FrameInfo* frame_info) {
+    // Note: this has to match FrameInfo::disableDeinit
+    if (frame_info->back != FrameInfo::NO_DEINIT)
+        deinitFrame(frame_info);
+}
+
 extern "C" void deinitFrame(FrameInfo* frame_info) {
+    // This can fire if we have a call to deinitFrame() that should be to deinitFrameMaybe() instead
+    assert(frame_info->back != FrameInfo::NO_DEINIT);
+
+    assert(cur_thread_state.frame_info == frame_info);
     cur_thread_state.frame_info = frame_info->back;
     BoxedFrame* frame = frame_info->frame_obj;
     if (frame) {
@@ -239,6 +269,7 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
 
     assert(frame_info->vregs || frame_info->num_vregs == 0);
     int num_vregs = frame_info->num_vregs;
+    assert(num_vregs >= 0);
 
     decrefArray<true>(frame_info->vregs, num_vregs);
 

@@ -66,7 +66,7 @@ extern "C" Box* executeInnerAndSetupFrame(ASTInterpreter& interpreter, CFGBlock*
  */
 class ASTInterpreter {
 public:
-    ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs);
+    ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs, FrameInfo* deopt_frame_info = NULL);
 
     void initArguments(BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
@@ -183,7 +183,6 @@ public:
     void setPassedClosure(Box* closure);
     void setCreatedClosure(Box* closure);
     void setBoxedLocals(STOLEN(Box*));
-    void setFrameInfo(const FrameInfo* frame_info);
     void setGlobals(Box* globals);
 
     friend struct pyston::ASTInterpreterJitInterface;
@@ -215,7 +214,8 @@ void ASTInterpreter::setPassedClosure(Box* closure) {
 void ASTInterpreter::setCreatedClosure(Box* closure) {
     assert(!this->created_closure); // This should only used for initialization
     assert(closure->cls == closure_cls);
-    this->created_closure = static_cast<BoxedClosure*>(closure);
+    // we have to incref the closure because the interpreter destructor will decref it
+    this->created_closure = static_cast<BoxedClosure*>(incref(closure));
 }
 
 void ASTInterpreter::setBoxedLocals(Box* boxedLocals) {
@@ -223,20 +223,12 @@ void ASTInterpreter::setBoxedLocals(Box* boxedLocals) {
     this->frame_info.boxedLocals = boxedLocals;
 }
 
-void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
-    Box** vregs = this->frame_info.vregs;
-    int num_vregs = this->frame_info.num_vregs;
-    this->frame_info = *frame_info;
-    this->frame_info.vregs = vregs;
-    this->frame_info.num_vregs = num_vregs;
-}
-
 void ASTInterpreter::setGlobals(Box* globals) {
     assert(!this->frame_info.globals);
     this->frame_info.globals = incref(globals);
 }
 
-ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs)
+ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs, FrameInfo* deopt_frame_info)
     : current_block(0),
       frame_info(ExcInfo(NULL, NULL, NULL)),
       edgecount(0),
@@ -251,6 +243,22 @@ ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs)
       should_jit(false) {
 
     scope_info = source_info->getScopeInfo();
+
+    if (deopt_frame_info) {
+        // copy over all fields and clear the deopt frame info
+        frame_info = *deopt_frame_info;
+
+        // Well, don't actually copy over the vregs.  We'll deal with them separately
+        // (using the locals dict), so just clear out and decref the old ones:
+        frame_info.vregs = NULL;
+        frame_info.num_vregs = 0;
+        for (int i = 0; i < deopt_frame_info->num_vregs; ++i)
+            Py_XDECREF(deopt_frame_info->vregs[i]);
+
+        // We are taking responsibility for calling deinit:
+        deopt_frame_info->disableDeinit(&this->frame_info);
+    }
+
     frame_info.vregs = vregs;
     frame_info.md = md;
     frame_info.num_vregs = num_vregs;
@@ -468,14 +476,14 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
     } else {
         bool closure = vst == ScopeInfo::VarScopeType::CLOSURE;
         if (jit) {
-            if (!closure) {
-                bool is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
-                if (is_live)
-                    jit->emitSetLocal(name, node->vreg, closure, value);
-                else
-                    jit->emitSetBlockLocal(name, value);
-            } else
+            bool is_live = true;
+            // TODO: turn this optimization back on.
+            // if (!closure)
+            // is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
+            if (is_live)
                 jit->emitSetLocal(name, node->vreg, closure, value);
+            else
+                jit->emitSetBlockLocal(name, value);
         }
 
         if (closure) {
@@ -1080,6 +1088,7 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
     FunctionMetadata* md = wrapFunction(node, args, body, source_info);
 
     std::vector<Box*> defaults;
+    llvm::SmallVector<RewriterVar*, 4> defaults_vars;
 
     RewriterVar* defaults_var = NULL;
     if (jit)
@@ -1088,8 +1097,10 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
     for (AST_expr* d : args->defaults) {
         Value v = visit_expr(d);
         defaults.push_back(v.o);
-        if (jit)
-            defaults_var->setAttr(i++ * sizeof(void*), v);
+        if (jit) {
+            defaults_var->setAttr(i++ * sizeof(void*), v, RewriterVar::SetattrType::REFUSED);
+            defaults_vars.push_back(v.var);
+        }
     }
     defaults.push_back(0);
     AUTO_XDECREF_ARRAY(defaults.data(), defaults.size());
@@ -1153,6 +1164,10 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
             passed_globals_var = jit->imm(0ul);
         rtn.var = jit->call(false, (void*)createFunctionFromMetadata, jit->imm(md), closure_var, passed_globals_var,
                             defaults_var, jit->imm(args->defaults.size()))->setType(RefType::OWNED);
+
+        for (auto d_var : defaults_vars) {
+            d_var->refUsed();
+        }
     }
 
     rtn.o = createFunctionFromMetadata(md, closure, passed_globals, u.il);
@@ -1641,7 +1656,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
         case ScopeInfo::VarScopeType::CLOSURE: {
             Value v;
             if (jit) {
-                bool is_live = false;
+                bool is_live = true;
                 if (node->lookup_type == ScopeInfo::VarScopeType::FAST)
                     is_live = source_info->getLiveness()->isLiveAtEnd(node->id, current_block);
 
@@ -1843,7 +1858,7 @@ const void* interpreter_instr_addr = (void*)&executeInnerAndSetupFrame;
 extern "C" Box* executeInnerFromASM(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     initFrame(interpreter.getFrameInfo());
     Box* rtn = ASTInterpreter::executeInner(interpreter, start_block, start_at);
-    deinitFrame(interpreter.getFrameInfo());
+    deinitFrameMaybe(interpreter.getFrameInfo());
     return rtn;
 }
 
@@ -2006,9 +2021,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
         memset(vregs, 0, sizeof(Box*) * num_vregs);
     }
 
-    ASTInterpreter interpreter(md, vregs, num_vregs);
-    if (source_info->scoping->areGlobalsFromModule())
-        interpreter.setGlobals(source_info->parent_module);
+    ASTInterpreter interpreter(md, vregs, num_vregs, frame_state.frame_info);
 
     for (const auto& p : *frame_state.locals) {
         assert(p.first->cls == str_cls);
@@ -2016,7 +2029,8 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
         if (name == PASSED_GENERATOR_NAME) {
             interpreter.setGenerator(p.second);
         } else if (name == PASSED_CLOSURE_NAME) {
-            interpreter.setPassedClosure(p.second);
+            // this should have already got set because its stored in the frame info
+            assert(p.second == interpreter.getFrameInfo()->passed_closure);
         } else if (name == CREATED_CLOSURE_NAME) {
             interpreter.setCreatedClosure(p.second);
         } else {
@@ -2024,8 +2038,6 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
             interpreter.addSymbol(interned, p.second, false);
         }
     }
-
-    interpreter.setFrameInfo(frame_state.frame_info);
 
     CFGBlock* start_block = NULL;
     AST_stmt* starting_statement = NULL;
@@ -2043,7 +2055,6 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
             auto expr = ast_cast<AST_Expr>(enclosing_stmt);
             RELEASE_ASSERT(expr->value == after_expr, "%p %p", expr->value, after_expr);
             assert(expr->value == after_expr);
-            assert(0 && "check refcounting");
             break;
         } else if (enclosing_stmt->type == AST_TYPE::Invoke) {
             auto invoke = ast_cast<AST_Invoke>(enclosing_stmt);
@@ -2080,7 +2091,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
     // We need to remove the old python frame created in the LLVM tier otherwise we would have a duplicate frame because
     // the interpreter will set the new state before executing the first statement.
     RELEASE_ASSERT(cur_thread_state.frame_info == frame_state.frame_info, "");
-    cur_thread_state.frame_info = frame_state.frame_info->back;
+    cur_thread_state.frame_info = interpreter.getFrameInfo()->back;
 
     Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
     return v ? v : incref(None);

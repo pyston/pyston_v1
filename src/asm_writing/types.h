@@ -176,6 +176,79 @@ struct JumpDestination {
     static JumpDestination fromStart(int offset) { return JumpDestination(FROM_START, offset); }
 };
 }
+
+struct Location {
+public:
+    enum LocationType : uint8_t {
+        Register,
+        XMMRegister,
+        Stack,
+        Scratch, // stack location, relative to the scratch start
+
+        // For representing constants that fit in 32-bits, that can be encoded as immediates
+        AnyReg,        // special type for use when specifying a location as a destination
+        None,          // special type that represents the lack of a location, ex where a "ret void" gets returned
+        Uninitialized, // special type for an uninitialized (and invalid) location
+    };
+
+public:
+    LocationType type;
+
+    union {
+        // only valid if type==Register; uses X86 numbering, not dwarf numbering.
+        // also valid if type==XMMRegister
+        int32_t regnum;
+        // only valid if type==Stack; this is the offset from bottom of the original frame.
+        // ie argument #6 will have a stack_offset of 0, #7 will have a stack offset of 8, etc
+        int32_t stack_offset;
+        // only valid if type == Scratch; offset from the beginning of the scratch area
+        int32_t scratch_offset;
+
+        int32_t _data;
+    };
+
+    constexpr Location() noexcept : type(Uninitialized), _data(-1) {}
+    constexpr Location(const Location& r) = default;
+    Location& operator=(const Location& r) = default;
+
+    constexpr Location(LocationType type, int32_t data) : type(type), _data(data) {}
+
+    constexpr Location(assembler::Register reg) : type(Register), regnum(reg.regnum) {}
+
+    constexpr Location(assembler::XMMRegister reg) : type(XMMRegister), regnum(reg.regnum) {}
+
+    constexpr Location(assembler::GenericRegister reg)
+        : type(reg.type == assembler::GenericRegister::GP ? Register : reg.type == assembler::GenericRegister::XMM
+                                                                           ? XMMRegister
+                                                                           : None),
+          regnum(reg.type == assembler::GenericRegister::GP ? reg.gp.regnum : reg.xmm.regnum) {}
+
+    assembler::Register asRegister() const;
+    assembler::XMMRegister asXMMRegister() const;
+    bool isClobberedByCall() const;
+
+    static constexpr Location any() { return Location(AnyReg, 0); }
+    static constexpr Location none() { return Location(None, 0); }
+    static Location forArg(int argnum);
+    static Location forXMMArg(int argnum);
+
+    bool operator==(const Location rhs) const { return this->asInt() == rhs.asInt(); }
+
+    bool operator!=(const Location rhs) const { return !(*this == rhs); }
+
+    bool operator<(const Location& rhs) const { return this->asInt() < rhs.asInt(); }
+
+    uint64_t asInt() const { return (int)type + ((uint64_t)_data << 4); }
+
+    void dump() const;
+};
+static_assert(sizeof(Location) <= 8, "");
+}
+
+namespace std {
+template <> struct hash<pyston::Location> {
+    size_t operator()(const pyston::Location p) const { return p.asInt(); }
+};
 }
 
 #endif

@@ -498,7 +498,7 @@ public:
 
     Box* deserializeFromFrame(const FrameVals& vals) override {
         assert(vals.size() == 1);
-        return reinterpret_cast<Box*>(vals[0]);
+        return incref(reinterpret_cast<Box*>(vals[0]));
     }
 
     std::vector<CompilerVariable*> unpack(IREmitter& emitter, const OpInfo& info, VAR* var, int num_into) override {
@@ -1615,6 +1615,7 @@ public:
     std::string debugName() override { return "phony(" + ConcreteCompilerType::debugName() + ")"; }
 
     CompilerType* getUsableType() override { return usable_type; }
+    ConcreteCompilerType* getBoxType() override { return getUsableType()->getBoxType(); }
 
     llvm::Type* llvmType() override { return t; }
 
@@ -2190,7 +2191,7 @@ public:
 
     Box* deserializeFromFrame(const FrameVals& vals) override {
         assert(vals.size() == 1);
-        return reinterpret_cast<Box*>(vals[0]);
+        return incref(reinterpret_cast<Box*>(vals[0]));
     }
 };
 std::unordered_map<BoxedClass*, NormalObjectType*> NormalObjectType::made;
@@ -2221,7 +2222,7 @@ public:
 
     Box* deserializeFromFrame(const FrameVals& vals) override {
         assert(vals.size() == 1);
-        return reinterpret_cast<Box*>(vals[0]);
+        return incref(reinterpret_cast<Box*>(vals[0]));
     }
 } _CLOSURE;
 ConcreteCompilerType* CLOSURE = &_CLOSURE;
@@ -2236,7 +2237,7 @@ public:
 
     Box* deserializeFromFrame(const FrameVals& vals) override {
         assert(vals.size() == numFrameArgs());
-        return reinterpret_cast<Box*>(vals[0]);
+        return incref(reinterpret_cast<Box*>(vals[0]));
     }
 } _GENERATOR;
 ConcreteCompilerType* GENERATOR = &_GENERATOR;
