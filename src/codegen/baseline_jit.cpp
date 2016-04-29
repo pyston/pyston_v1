@@ -240,11 +240,7 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
     if (keyword_names_var)
         call_args.push_back(keyword_names_var);
 
-    auto r = emitCallWithAllocatedArgs((void*)callattrHelper, call_args, args)->setType(RefType::OWNED);
-    for (int i = 0; i < args.size(); i++) {
-        args[i]->refUsed();
-    }
-    return r;
+    return emitCallWithAllocatedArgs((void*)callattrHelper, call_args, args)->setType(RefType::OWNED);
 #endif
 }
 
@@ -266,17 +262,15 @@ RewriterVar* JitFragmentWriter::emitCreateDict(const llvm::ArrayRef<RewriterVar*
                                            allocArgs(values, RewriterVar::SetattrType::REFUSED) },
                                          additional_uses)->setType(RefType::OWNED);
     for (RewriterVar* k : keys) {
-        // XXX: should refConsumed also act as a use?
-        k->refUsed();
         k->refConsumed();
     }
     for (RewriterVar* v : values) {
-        v->refUsed();
         v->refConsumed();
     }
     return rtn;
 }
 
+// TODO: merge this function's functionality with refUsed
 RewriterVar* JitFragmentWriter::emitCallWithAllocatedArgs(void* func_addr, const llvm::ArrayRef<RewriterVar*> args,
                                                           const llvm::ArrayRef<RewriterVar*> additional_uses) {
     RewriterVar* result = createNewVar();
@@ -323,7 +317,6 @@ RewriterVar* JitFragmentWriter::emitCreateList(const llvm::ArrayRef<RewriterVar*
                                          { imm(num), allocArgs(values, RewriterVar::SetattrType::REFUSED) },
                                          values)->setType(RefType::OWNED);
     for (RewriterVar* v : values) {
-        v->refUsed();
         v->refConsumed();
     }
     return rtn;
@@ -337,7 +330,6 @@ RewriterVar* JitFragmentWriter::emitCreateSet(const llvm::ArrayRef<RewriterVar*>
                                          { imm(num), allocArgs(values, RewriterVar::SetattrType::REFUSED) },
                                          values)->setType(RefType::OWNED);
     for (RewriterVar* v : values) {
-        v->refUsed();
         v->refConsumed();
     }
     return rtn;
@@ -362,8 +354,6 @@ RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar
         r = emitCallWithAllocatedArgs((void*)createTupleHelper,
                                       { imm(num), allocArgs(values, RewriterVar::SetattrType::REFUSED) },
                                       values)->setType(RefType::OWNED);
-        for (auto a : values)
-            a->refUsed();
     }
     return r;
 }
@@ -530,11 +520,7 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj
     if (keyword_names_var)
         call_args.push_back(keyword_names_var);
 
-    auto r = emitCallWithAllocatedArgs((void*)runtimeCallHelper, call_args, args)->setType(RefType::OWNED);
-    for (int i = 0; i < args.size(); i++) {
-        args[i]->refUsed();
-    }
-    return r;
+    return emitCallWithAllocatedArgs((void*)runtimeCallHelper, call_args, args)->setType(RefType::OWNED);
 #endif
 }
 
