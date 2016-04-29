@@ -871,15 +871,15 @@ Box* JitFragmentWriter::createListHelper(uint64_t num, Box** data) {
 }
 
 Box* JitFragmentWriter::createSetHelper(uint64_t num, Box** data) {
-    BoxedSet* set = (BoxedSet*)createSet();
-    for (int i = 0; i < num; ++i) {
-        auto&& p = set->s.insert(data[i]);
-        if (!p.second /* already exists */) {
-            Py_DECREF(p.first->value);
-            *p.first = data[i];
+    try {
+        BoxedSet* set = (BoxedSet*)createSet();
+        for (int i = 0; i < num; ++i) {
+            _setAddStolen(set, data[i]);
         }
+        return set;
+    } catch (ExcInfo e) {
+        RELEASE_ASSERT(0, "this leaks in case of an exception");
     }
-    return set;
 }
 
 Box* JitFragmentWriter::createTupleHelper(uint64_t num, Box** data) {
