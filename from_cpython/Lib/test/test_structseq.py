@@ -1,4 +1,5 @@
 # expected: reffail
+# - unknown segfault
 import unittest
 from test import test_support
 

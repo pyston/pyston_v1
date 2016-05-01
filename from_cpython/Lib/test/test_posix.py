@@ -1,4 +1,5 @@
 # expected: reffail
+# - leaked refs
 "Test posix functions"
 
 from test import test_support

@@ -1,4 +1,5 @@
 # expected: reffail
+# - negative ref
 import sys
 import os
 import unittest

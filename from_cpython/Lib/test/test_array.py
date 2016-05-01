@@ -1,5 +1,5 @@
 # expected: reffail
-# - fails in interpreter due to keeping refcounts a bit too long
+# - fails in interpreter due to keeping refcounts a bit too long (does manual sys.getrefcount checking)
 """Test the arraymodule.
    Roger E. Masse
 """

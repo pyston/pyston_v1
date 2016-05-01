@@ -220,7 +220,8 @@ public:
     RewriterVar* emitCallattr(AST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
                               const llvm::ArrayRef<RewriterVar*> args, std::vector<BoxedString*>* keyword_names);
     RewriterVar* emitCompare(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type);
-    RewriterVar* emitCreateDict(const llvm::ArrayRef<RewriterVar*> keys, const llvm::ArrayRef<RewriterVar*> values);
+    RewriterVar* emitCreateDict();
+    void emitDictSet(RewriterVar* dict, RewriterVar* k, RewriterVar* v);
     RewriterVar* emitCreateList(const llvm::ArrayRef<STOLEN(RewriterVar*)> values);
     RewriterVar* emitCreateSet(const llvm::ArrayRef<RewriterVar*> values);
     RewriterVar* emitCreateSlice(RewriterVar* start, RewriterVar* stop, RewriterVar* step);

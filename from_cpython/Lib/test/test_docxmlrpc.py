@@ -1,4 +1,5 @@
 # expected: reffail
+# - negative ref
 from DocXMLRPCServer import DocXMLRPCServer
 import httplib
 import sys

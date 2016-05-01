@@ -1,4 +1,3 @@
-# expected: reffail
 import unittest
 from test import test_support
 from contextlib import closing

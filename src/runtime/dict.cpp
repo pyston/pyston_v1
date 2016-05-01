@@ -52,6 +52,14 @@ static void _dictSet(BoxedDict* self, BoxAndHash k, Box* v) {
     _dictSetStolen(self, k, incref(v));
 }
 
+extern "C" void dictSetInternal(Box* self, STOLEN(Box*) k, STOLEN(Box*) v) {
+    assert(self->cls == dict_cls);
+    AUTO_DECREF(v);
+    AUTO_DECREF(k);
+
+    _dictSet(static_cast<BoxedDict*>(self), k, v);
+}
+
 Box* dictRepr(BoxedDict* self) {
     std::vector<char> chars;
     int status = Py_ReprEnter((PyObject*)self);

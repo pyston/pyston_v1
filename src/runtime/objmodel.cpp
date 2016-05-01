@@ -1861,7 +1861,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
                 if (rewrite_args) {
                     r_descr->addAttrGuard(offsetof(BoxedInstanceMethod, obj), 0, /* negate */ false);
                     r_im_self = rewrite_args->obj;
-                    r_im_func = r_descr->getAttr(offsetof(BoxedInstanceMethod, func));
+                    r_im_func = r_descr->getAttr(offsetof(BoxedInstanceMethod, func))->setType(RefType::BORROWED);
                 }
             }
         } else {
