@@ -6911,8 +6911,11 @@ posix_fdopen(PyObject *self, PyObject *args)
 #endif
     Py_END_ALLOW_THREADS
     PyMem_FREE(mode);
-    if (fp == NULL)
+    // Pyston change: decref the file object when throw exception
+    if (fp == NULL) {
+        Py_DECREF(f);
         return posix_error();
+    }
     /* We now know we will succeed, so initialize the file object. */
     ((PyFileObject *)f)->f_fp = fp;
     PyFile_SetBufSize(f, bufsize);
