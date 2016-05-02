@@ -116,7 +116,7 @@ Box* seqiter_next(Box* s) noexcept {
             hasnext = seqreviterHasnext_capi(s);
         else
             RELEASE_ASSERT(0, "");
-        AUTO_DECREF(hasnext);
+        AUTO_XDECREF(hasnext);
         if (hasnext != True)
             return NULL;
     }

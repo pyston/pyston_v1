@@ -116,29 +116,53 @@ extern "C" int _PyTuple_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
 }
 
 int BoxedTuple::Resize(BoxedTuple** pv, size_t newsize) noexcept {
-    assert((*pv)->cls == tuple_cls);
+    // cpythons _PyTuple_Resize with small s/PyTupleObject/BoxedTuple modifications
+    BoxedTuple* v;
+    BoxedTuple* sv;
+    Py_ssize_t i;
+    Py_ssize_t oldsize;
 
-    BoxedTuple* t = static_cast<BoxedTuple*>(*pv);
-    size_t oldsize = t->size();
-
-    if (newsize == oldsize)
+    v = *pv;
+    if (v == NULL || v->cls != &PyTuple_Type || (Py_SIZE(v) != 0 && Py_REFCNT(v) != 1)) {
+        *pv = 0;
+        Py_XDECREF(v);
+        PyErr_BadInternalCall();
+        return -1;
+    }
+    oldsize = Py_SIZE(v);
+    if (oldsize == newsize)
         return 0;
 
-    if (newsize < oldsize) {
-        // XXX resize the box (by reallocating) smaller if it makes sense
-        t->ob_size = newsize;
-        for (int i = newsize; i < oldsize; i++) {
-            Py_CLEAR((*pv)->elts[i]);
-        }
-        return 0;
+    if (oldsize == 0) {
+        /* Empty tuples are often shared, so we should never
+           resize them in-place even if we do own the only
+           (current) reference */
+        Py_DECREF(v);
+        *pv = (BoxedTuple*)PyTuple_New(newsize);
+        return *pv == NULL ? -1 : 0;
     }
 
-
-    BoxedTuple* resized = new (newsize) BoxedTuple();
-    memmove(resized->elts, t->elts, sizeof(Box*) * oldsize);
-    memset(resized->elts + oldsize, 0, sizeof(Box*) * (newsize - oldsize));
-
-    *pv = resized;
+    /* XXX UNREF/NEWREF interface should be more symmetrical */
+    _Py_DEC_REFTOTAL;
+    if (_PyObject_GC_IS_TRACKED(v))
+        _PyObject_GC_UNTRACK(v);
+    _Py_ForgetReference((PyObject*)v);
+    /* DECREF items deleted by shrinkage */
+    for (i = newsize; i < oldsize; i++) {
+        Py_CLEAR(v->elts[i]);
+    }
+    sv = PyObject_GC_Resize(BoxedTuple, v, newsize);
+    if (sv == NULL) {
+        *pv = NULL;
+        PyObject_GC_Del(v);
+        return -1;
+    }
+    _Py_NewReference((PyObject*)sv);
+    /* Zero out items added by growing */
+    if (newsize > oldsize)
+        memset(&sv->elts[oldsize], 0, sizeof(*sv->elts) * (newsize - oldsize));
+    *pv = sv;
+    _PyObject_GC_TRACK(sv);
     return 0;
 }
 

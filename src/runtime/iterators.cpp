@@ -19,8 +19,6 @@
 namespace pyston {
 namespace {
 
-static std::string next_str("next");
-
 class BoxIteratorGeneric : public BoxIteratorImpl {
 private:
     Box* iterator;
@@ -31,9 +29,17 @@ public:
         if (container) {
             // TODO: this should probably call getPystonIter
             iterator = getiter(container);
-            if (iterator)
-                next();
-            else
+            if (iterator) {
+                // try catch block to manually decref the iterator because if the constructor throwes the destructor
+                // won't get called
+                // but we should probably just change the code to not call next inside the constructor...
+                try {
+                    next();
+                } catch (ExcInfo e) {
+                    Py_CLEAR(iterator);
+                    throw e;
+                }
+            } else
                 *this = *end();
         }
     }

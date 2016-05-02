@@ -24,12 +24,19 @@ extern "C" Box* createSet() {
     return new BoxedSet();
 }
 
-void _setAddStolen(BoxedSet* self, STOLEN(BoxAndHash) val) {
+static void _setAddStolen(BoxedSet* self, STOLEN(BoxAndHash) val) {
     auto&& p = self->s.insert(val);
     if (!p.second /* already exists */) {
         // keep the original key
         Py_DECREF(val.value);
     }
+}
+
+void _setAddStolen(BoxedSet* self, STOLEN(Box*) val) {
+    AUTO_DECREF(val);
+    BoxAndHash val_hashed(val); // this can throw!
+    incref(val_hashed);
+    _setAddStolen(self, val_hashed);
 }
 
 namespace set {
@@ -118,8 +125,8 @@ BoxedSet* makeNewSet(BoxedClass* cls, Box* container) {
     assert(isSubclass(cls, frozenset_cls) || isSubclass(cls, set_cls));
 
     BoxedSet* rtn = new (cls) BoxedSet();
-
     if (container) {
+        AUTO_DECREF(rtn);
         if (PyAnySet_Check(container)) {
             for (auto&& elt : ((BoxedSet*)container)->s) {
                 rtn->s.insert(incref(elt));
@@ -133,6 +140,7 @@ BoxedSet* makeNewSet(BoxedClass* cls, Box* container) {
                 _setAddStolen(rtn, elt);
             }
         }
+        return incref(rtn);
     }
     return rtn;
 }
@@ -303,14 +311,14 @@ static BoxedSet* setIntersection2(BoxedSet* self, Box* container) {
     RELEASE_ASSERT(PyAnySet_Check(self), "");
 
     BoxedSet* rtn = makeNewSet(self->cls, NULL);
+    AUTO_DECREF(rtn);
     for (auto elt : container->pyElements()) {
-        if (self->s.count(elt)) {
-            _setAddStolen(rtn, elt);
-        } else {
-            Py_DECREF(elt);
-        }
+        AUTO_DECREF(elt);
+        BoxAndHash elt_hashed(elt); // this can throw!
+        if (self->s.count(elt_hashed))
+            _setAdd(rtn, elt_hashed);
     }
-    return rtn;
+    return incref(rtn);
 }
 
 static Box* setIntersectionUpdate2(BoxedSet* self, Box* other) {
@@ -480,6 +488,8 @@ Box* setUnion(BoxedSet* self, BoxedTuple* args) {
         raiseExcHelper(TypeError, "descriptor 'union' requires a 'set' object but received a '%s'", getTypeName(self));
 
     BoxedSet* rtn = makeNewSet(self->cls, self);
+    AUTO_DECREF(rtn);
+
     for (auto&& p : self->s)
         _setAdd(rtn, p);
 
@@ -489,8 +499,7 @@ Box* setUnion(BoxedSet* self, BoxedTuple* args) {
             _setAddStolen(rtn, elt);
         }
     }
-
-    return rtn;
+    return incref(rtn);
 }
 
 static void _setDifferenceUpdate(BoxedSet* self, BoxedTuple* args) {
@@ -528,8 +537,9 @@ Box* setDifference(BoxedSet* self, BoxedTuple* args) {
                        getTypeName(self));
 
     BoxedSet* rtn = makeNewSet(self->cls, self);
+    AUTO_DECREF(rtn);
     _setDifferenceUpdate(rtn, args);
-    return rtn;
+    return incref(rtn);
 }
 
 Box* setSymmetricDifferenceUpdate(BoxedSet* self, Box* other) {
@@ -548,8 +558,9 @@ Box* setSymmetricDifference(BoxedSet* self, Box* other) {
                        getTypeName(self));
 
     BoxedSet* rtn = makeNewSet(self->cls, self);
+    AUTO_DECREF(rtn);
     _setSymmetricDifferenceUpdate(rtn, other);
-    return rtn;
+    return incref(rtn);
 }
 
 static Box* setIssubset(BoxedSet* self, Box* container) {

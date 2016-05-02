@@ -2425,8 +2425,9 @@ public:
 
         Box* r = self->b->getattr(key);
         if (r) {
+            Py_INCREF(r);
             self->b->delattr(key, NULL);
-            return incref(r);
+            return r;
         } else {
             if (default_)
                 return incref(default_);

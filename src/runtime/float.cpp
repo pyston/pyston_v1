@@ -1122,7 +1122,7 @@ static Box* floatConjugate(Box* b, void*) {
         raiseExcHelper(TypeError, "descriptor 'conjugate' requires a 'float' object but received a '%s'",
                        getTypeName(b));
     if (b->cls == float_cls) {
-        return b;
+        return incref(b);
     } else {
         assert(PyFloat_Check(b));
         return boxFloat(static_cast<BoxedFloat*>(b)->d);

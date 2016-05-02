@@ -1,5 +1,3 @@
-# expected: reffail
-# - leaked refs
 import parser
 import unittest
 import sys

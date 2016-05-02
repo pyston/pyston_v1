@@ -42,7 +42,7 @@ public:
     static int clear(Box* self) noexcept;
 };
 
-void _setAddStolen(BoxedSet* self, STOLEN(BoxAndHash) val);
+void _setAddStolen(BoxedSet* self, STOLEN(Box*) val);
 }
 
 #endif
