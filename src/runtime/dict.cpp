@@ -48,6 +48,17 @@ static void _dictSetStolen(BoxedDict* self, BoxAndHash k, STOLEN(Box*) v) {
     }
 }
 
+static void _dictSetStolen(BoxedDict* self, Box* k, STOLEN(Box*) v) {
+    BoxAndHash hashed_key;
+    try {
+        hashed_key = BoxAndHash(k);
+    } catch (ExcInfo e) {
+        Py_DECREF(v);
+        throw e;
+    }
+    return _dictSetStolen(self, hashed_key, v);
+}
+
 static void _dictSet(BoxedDict* self, BoxAndHash k, Box* v) {
     _dictSetStolen(self, k, incref(v));
 }

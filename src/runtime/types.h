@@ -920,6 +920,7 @@ struct BoxAndHash {
     Box* value;
     size_t hash;
 
+    BoxAndHash() {}
     BoxAndHash(Box* value) : value(value), hash(PyHasher()(value)) {}
     BoxAndHash(Box* value, size_t hash) : value(value), hash(hash) {}
 
