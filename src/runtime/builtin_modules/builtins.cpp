@@ -803,15 +803,15 @@ Box* map(Box* f, BoxedTuple* args) {
     if (num_iterable == 1)
         return map2(f, args->elts[0]);
 
-    std::vector<BoxIteratorRange> ranges;
+    std::deque<BoxIteratorRange> ranges;
     std::vector<BoxIterator> args_it;
     std::vector<BoxIterator> args_end;
 
     for (auto e : *args) {
         auto range = e->pyElements();
-        args_it.emplace_back(range.begin());
-        args_end.emplace_back(range.end());
         ranges.push_back(std::move(range));
+        args_it.emplace_back(ranges.back().begin());
+        args_end.emplace_back(ranges.back().end());
     }
     assert(args_it.size() == num_iterable);
     assert(args_end.size() == num_iterable);
@@ -1221,11 +1221,13 @@ Box* zip(BoxedTuple* containers) {
         return incref(rtn);
 
     std::vector<BoxIteratorRange> ranges;
+    ranges.reserve(containers->size());
     for (auto container : *containers) {
-        ranges.push_back(std::move(container->pyElements()));
+        ranges.push_back(container->pyElements());
     }
 
     std::vector<BoxIterator> iterators;
+    iterators.reserve(containers->size());
     for (auto&& range : ranges) {
         iterators.push_back(std::move(range.begin()));
     }

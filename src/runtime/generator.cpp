@@ -45,7 +45,7 @@ static std::deque<uint64_t> available_addrs;
 #define STACK_REDZONE_SIZE PAGE_SIZE
 #define MAX_STACK_SIZE (4 * 1024 * 1024)
 
-static std::unordered_map<void*, BoxedGenerator*> s_generator_map;
+static llvm::DenseMap<void*, BoxedGenerator*> s_generator_map;
 static_assert(THREADING_USE_GIL, "have to make the generator map thread safe!");
 
 class RegisterHelper {
