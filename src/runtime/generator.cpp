@@ -107,7 +107,6 @@ void generatorEntry(BoxedGenerator* g) {
             auto r = callCLFunc<ExceptionStyle::CXX, NOT_REWRITABLE>(func->md, nullptr, func->md->numReceivedArgs(),
                                                                      func->closure, g, func->globals, g->arg1, g->arg2,
                                                                      g->arg3, args);
-            assert(r == None);
             Py_DECREF(r);
         } catch (ExcInfo e) {
             // unhandled exception: propagate the exception to the caller
