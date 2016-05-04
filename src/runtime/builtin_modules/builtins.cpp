@@ -803,9 +803,13 @@ Box* map(Box* f, BoxedTuple* args) {
     if (num_iterable == 1)
         return map2(f, args->elts[0]);
 
-    std::deque<BoxIteratorRange> ranges;
+    std::vector<BoxIteratorRange> ranges;
     std::vector<BoxIterator> args_it;
     std::vector<BoxIterator> args_end;
+
+    ranges.reserve(args->size());
+    args_it.reserve(args->size());
+    args_end.reserve(args->size());
 
     for (auto e : *args) {
         auto range = e->pyElements();
