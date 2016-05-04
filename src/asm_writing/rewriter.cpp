@@ -693,6 +693,19 @@ void RewriterVar::setAttr(int offset, RewriterVar* val, SetattrType type) {
     rewriter->addAction([=]() { rewriter->_setAttr(this, offset, val); }, { this, val }, ActionType::MUTATION);
 }
 
+void RewriterVar::replaceAttr(int offset, RewriterVar* val, bool prev_nullable) {
+    RewriterVar* prev = this->getAttr(offset);
+
+    this->setAttr(offset, val, SetattrType::HANDED_OFF);
+    val->refConsumed();
+
+    if (prev_nullable) {
+        prev->setNullable(true);
+        prev->xdecref();
+    } else
+        prev->decref();
+}
+
 void Rewriter::_setAttr(RewriterVar* ptr, int offset, RewriterVar* val) {
     if (LOG_IC_ASSEMBLY)
         assembler->comment("_setAttr");

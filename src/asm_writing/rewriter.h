@@ -155,6 +155,15 @@ public:
         REFUSED,
     };
     void setAttr(int offset, RewriterVar* other, SetattrType type = SetattrType::UNKNOWN);
+
+    // Replaces an owned ref with another one.  Does the equivalent of:
+    // Box* prev = this[offset];
+    // this[offset] = new_val;
+    // Py_[X]DECREF(prev);
+    //
+    // Calls new_val->refConsumed() for you.
+    void replaceAttr(int offset, RewriterVar* new_val, bool prev_nullable);
+
     RewriterVar* cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location loc = Location::any());
     RewriterVar* toBool(Location loc = Location::any());
 

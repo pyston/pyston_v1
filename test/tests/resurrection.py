@@ -1,4 +1,3 @@
-# expected: fail
 # Objects are allowed to resurrect themselves in their __del__ methods...
 
 x = None

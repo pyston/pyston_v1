@@ -678,16 +678,13 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
              v);
         v->refConsumed();
     } else {
-        RewriterVar* prev = vregs_array->getAttr(8 * vreg)->setNullable(true);
-        vregs_array->setAttr(8 * vreg, v, RewriterVar::SetattrType::HANDED_OFF);
-        v->refConsumed();
-
-        // TODO With definedness analysis, we could know whether we can skip this check (definitely defined)
-        // or not even load the previous value (definitely undefined).
+        // TODO With definedness analysis, we could know whether we needed to emit an decref/xdecref/neither.
         // The issue is that definedness analysis is somewhat expensive to compute, so we don't compute it
         // for the bjit.  We could try calculating it (which would require some re-plumbing), which might help
         // but I suspect is not that big a deal as long as the llvm jit implements this kind of optimization.
-        prev->xdecref();
+        bool prev_nullable = true;
+
+        vregs_array->replaceAttr(8 * vreg, v, prev_nullable);
     }
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitSetLocal() end");
