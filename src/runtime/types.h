@@ -657,13 +657,13 @@ public:
 
     void* operator new(size_t size, int capacity) {
         assert(size == sizeof(GCdArray));
-        return PyMem_MALLOC(capacity * sizeof(Box*) + size);
+        return PyObject_Malloc(capacity * sizeof(Box*) + size);
     }
 
-    void operator delete(void* p) { PyMem_FREE(p); }
+    void operator delete(void* p) { PyObject_Free(p); }
 
     static GCdArray* grow(GCdArray* array, int capacity) {
-        return (GCdArray*)PyMem_REALLOC(array, capacity * sizeof(Box*) + sizeof(GCdArray));
+        return (GCdArray*)PyObject_Realloc(array, capacity * sizeof(Box*) + sizeof(GCdArray));
     }
 };
 
