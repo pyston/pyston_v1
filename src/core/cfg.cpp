@@ -213,12 +213,16 @@ private:
         return source->getInternedStrings().get(std::move(name));
     }
 
-    AST_Name* makeName(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0) {
+    AST_Name* makeName(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0,
+                       bool is_kill = false) {
         AST_Name* name = new AST_Name(id, ctx_type, lineno, col_offset);
+        name->is_kill = is_kill;
         return name;
     }
 
-    AST_Name* makeLoad(InternedString id, AST* node) { return makeName(id, AST_TYPE::Load, node->lineno); }
+    AST_Name* makeLoad(InternedString id, AST* node, bool is_kill = false) {
+        return makeName(id, AST_TYPE::Load, node->lineno, 0, is_kill);
+    }
 
     void pushLoopContinuation(CFGBlock* continue_dest, CFGBlock* break_dest) {
         assert(continue_dest
@@ -370,7 +374,7 @@ private:
             curblock = body_block;
             InternedString next_name(nodeName());
             pushAssign(next_name, makeCall(next_attr));
-            pushAssign(c->target, makeLoad(next_name, node));
+            pushAssign(c->target, makeLoad(next_name, node, true));
 
             for (AST_expr* if_condition : c->ifs) {
                 AST_expr* remapped = callNonzero(remapExpr(if_condition));
@@ -402,6 +406,7 @@ private:
             assert((finished_block != NULL) == (i != 0));
             if (finished_block) {
                 curblock = exit_block;
+                push_back(makeKill(iter_name));
                 pushJump(finished_block, true);
             }
             finished_block = test_block;
@@ -733,10 +738,10 @@ private:
 
         for (int i = 0; i < node->values.size() - 1; i++) {
             AST_expr* val = remapExpr(node->values[i]);
-            pushAssign(name, val);
+            pushAssign(name, _dup(val));
 
             AST_Branch* br = new AST_Branch();
-            br->test = callNonzero(_dup(val));
+            br->test = callNonzero(val);
             push_back(br);
 
             CFGBlock* was_block = curblock;
@@ -844,7 +849,7 @@ private:
                 val->col_offset = node->col_offset;
                 val->lineno = node->lineno;
                 val->left = left;
-                val->comparators.push_back(right);
+                val->comparators.push_back(_dup(right));
                 val->ops.push_back(node->ops[i]);
 
                 pushAssign(name, val);
@@ -867,7 +872,7 @@ private:
 
                 curblock = next_block;
 
-                left = _dup(right);
+                left = right;
             }
 
             pushJump(exit_block);
@@ -1303,7 +1308,7 @@ private:
         if (wrap_with_assign && (rtn->type != AST_TYPE::Name || ast_cast<AST_Name>(rtn)->id.s()[0] != '#')) {
             InternedString name = nodeName();
             pushAssign(name, rtn);
-            return makeLoad(name, node);
+            return makeLoad(name, node, true);
         } else {
             return rtn;
         }
@@ -1452,6 +1457,7 @@ public:
         ExcBlockInfo& exc_info = exc_handlers.back();
 
         curblock = exc_dest;
+        // TODO: need to clear some temporaries here
         AST_Assign* exc_asgn = new AST_Assign();
         AST_Tuple* target = new AST_Tuple();
         target->elts.push_back(makeName(exc_info.exc_type_name, AST_TYPE::Store, node->lineno));
@@ -1489,7 +1495,7 @@ public:
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeClass(def));
         // is this name mangling correct?
-        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
+        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, 0, true));
 
         return true;
     }
@@ -1511,7 +1517,7 @@ public:
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeFunction(def));
         // is this name mangling correct?
-        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
+        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, node->col_offset, true));
 
         return true;
     }
@@ -1557,7 +1563,7 @@ public:
             if (a->asname.s().size() == 0) {
                 // No asname, so load the top-level module into the name
                 // (e.g., for `import os.path`, loads the os module into `os`)
-                pushAssign(internString(getTopModule(a->name.s())), makeLoad(tmpname, node));
+                pushAssign(internString(getTopModule(a->name.s())), makeLoad(tmpname, node, /* is_kill */ true));
             } else {
                 // If there is an asname, get the bottom-level module by
                 // getting the attributes and load it into asname.
@@ -1571,11 +1577,11 @@ public:
                         l = r + 1;
                         continue;
                     }
-                    pushAssign(tmpname, new AST_Attribute(makeLoad(tmpname, node), AST_TYPE::Load,
+                    pushAssign(tmpname, new AST_Attribute(makeLoad(tmpname, node, true), AST_TYPE::Load,
                                                           internString(a->name.s().substr(l, r - l))));
                     l = r + 1;
                 } while (l < a->name.s().size());
-                pushAssign(a->asname, makeLoad(tmpname, node));
+                pushAssign(a->asname, makeLoad(tmpname, node, true));
             }
         }
 
@@ -1610,13 +1616,16 @@ public:
         InternedString tmp_module_name = nodeName();
         pushAssign(tmp_module_name, import);
 
+        int i = 0;
         for (AST_alias* a : node->names) {
+            i++;
+            bool is_kill = (i == node->names.size());
             if (a->name.s() == "*") {
 
                 AST_LangPrimitive* import_star = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_STAR);
                 import_star->lineno = node->lineno;
                 import_star->col_offset = node->col_offset;
-                import_star->args.push_back(makeLoad(tmp_module_name, node));
+                import_star->args.push_back(makeLoad(tmp_module_name, node, is_kill));
 
                 AST_Expr* import_star_expr = new AST_Expr();
                 import_star_expr->value = import_star;
@@ -1628,12 +1637,12 @@ public:
                 AST_LangPrimitive* import_from = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_FROM);
                 import_from->lineno = node->lineno;
                 import_from->col_offset = node->col_offset;
-                import_from->args.push_back(makeLoad(tmp_module_name, node));
+                import_from->args.push_back(makeLoad(tmp_module_name, node, is_kill));
                 import_from->args.push_back(new AST_Str(a->name.s()));
 
                 InternedString tmp_import_name = nodeName();
                 pushAssign(tmp_import_name, import_from);
-                pushAssign(a->asname.s().size() ? a->asname : a->name, makeLoad(tmp_import_name, node));
+                pushAssign(a->asname.s().size() ? a->asname : a->name, makeLoad(tmp_import_name, node, true));
             }
         }
 
@@ -1681,8 +1690,13 @@ public:
     bool visit_assign(AST_Assign* node) override {
         AST_expr* remapped_value = remapExpr(node->value);
 
-        for (AST_expr* target : node->targets) {
-            pushAssign(target, _dup(remapped_value));
+        for (int i = 0; i < node->targets.size(); i++) {
+            AST_expr* val;
+            if (i == node->targets.size() - 1)
+                val = remapped_value;
+            else
+                val = _dup(remapped_value);
+            pushAssign(node->targets[i], val);
         }
         return true;
     }
@@ -1776,7 +1790,7 @@ public:
 
         InternedString node_name(nodeName());
         pushAssign(node_name, binop);
-        pushAssign(remapped_target, makeLoad(node_name, node));
+        pushAssign(remapped_target, makeLoad(node_name, node, true));
         return true;
     }
 
@@ -2050,6 +2064,13 @@ public:
         return true;
     }
 
+    AST_stmt* makeKill(InternedString name) {
+        // There might be a better way to represent this, maybe with a dedicated AST_Kill bytecode?
+        auto del = new AST_Delete();
+        del->targets.push_back(makeName(name, AST_TYPE::Del, 0, 0, false));
+        return del;
+    }
+
     bool visit_for(AST_For* node) override {
         assert(curblock);
 
@@ -2093,12 +2114,13 @@ public:
         curblock = test_false;
         pushJump(else_block);
 
+        // TODO: need to del the iter_name when break'ing out of the loop
         pushLoopContinuation(test_block, end_block);
 
         curblock = loop_block;
         InternedString next_name(nodeName());
         pushAssign(next_name, makeCall(next_attr));
-        pushAssign(node->target, makeLoad(next_name, node));
+        pushAssign(node->target, makeLoad(next_name, node, true));
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
@@ -2130,6 +2152,7 @@ public:
         cfg->placeBlock(else_block);
         curblock = else_block;
 
+        push_back(makeKill(itername));
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);
             if (!curblock)
@@ -2254,15 +2277,15 @@ public:
                     caught_all = true;
                 }
 
-                AST_LangPrimitive* set_exc_info = new AST_LangPrimitive(AST_LangPrimitive::SET_EXC_INFO);
-                set_exc_info->args.push_back(makeLoad(exc_type_name, node));
-                set_exc_info->args.push_back(makeLoad(exc_value_name, node));
-                set_exc_info->args.push_back(makeLoad(exc_traceback_name, node));
-                push_back(makeExpr(set_exc_info));
-
                 if (exc_handler->name) {
                     pushAssign(exc_handler->name, _dup(exc_obj));
                 }
+
+                AST_LangPrimitive* set_exc_info = new AST_LangPrimitive(AST_LangPrimitive::SET_EXC_INFO);
+                set_exc_info->args.push_back(makeLoad(exc_type_name, node, true));
+                set_exc_info->args.push_back(makeLoad(exc_value_name, node, true));
+                set_exc_info->args.push_back(makeLoad(exc_traceback_name, node, true));
+                push_back(makeExpr(set_exc_info));
 
                 for (AST_stmt* subnode : exc_handler->body) {
                     subnode->accept(this);
@@ -2284,9 +2307,9 @@ public:
 
             if (!caught_all) {
                 AST_Raise* raise = new AST_Raise();
-                raise->arg0 = makeLoad(exc_type_name, node);
-                raise->arg1 = makeLoad(exc_value_name, node);
-                raise->arg2 = makeLoad(exc_traceback_name, node);
+                raise->arg0 = makeLoad(exc_type_name, node, true);
+                raise->arg1 = makeLoad(exc_value_name, node, true);
+                raise->arg2 = makeLoad(exc_traceback_name, node, true);
                 push_back(raise);
                 curblock = NULL;
             }

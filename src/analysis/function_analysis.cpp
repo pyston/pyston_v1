@@ -136,8 +136,13 @@ public:
     bool visit_name(AST_Name* node) {
         if (node->ctx_type == AST_TYPE::Load)
             _doLoad(node->id, node);
-        else if (node->ctx_type == AST_TYPE::Store || node->ctx_type == AST_TYPE::Del
-                 || node->ctx_type == AST_TYPE::Param)
+        else if (node->ctx_type == AST_TYPE::Del) {
+            // Hack: we don't have a bytecode for temporary-kills:
+            if (node->id.s()[0] == '#')
+                return true;
+            _doLoad(node->id, node);
+            _doStore(node->id);
+        } else if (node->ctx_type == AST_TYPE::Store || node->ctx_type == AST_TYPE::Param)
             _doStore(node->id);
         else {
             ASSERT(0, "%d", node->ctx_type);
@@ -145,6 +150,7 @@ public:
         }
         return true;
     }
+
     bool visit_alias(AST_alias* node) {
         InternedString name = node->name;
         if (node->asname.s().size())

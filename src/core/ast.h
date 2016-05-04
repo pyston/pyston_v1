@@ -735,6 +735,8 @@ public:
     // the zero based index of this variable inside the vregs array. If uninitialized it's value is -1.
     int vreg;
 
+    bool is_kill = false;
+
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 

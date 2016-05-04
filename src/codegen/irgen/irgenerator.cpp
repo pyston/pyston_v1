@@ -2123,6 +2123,12 @@ private:
     }
 
     void _doDelName(AST_Name* target, const UnwindInfo& unw_info) {
+        // Hack: we don't have a bytecode for temporary-kills:
+        if (target->id.s()[0] == '#') {
+            // The refcounter will automatically delete this object.
+            return;
+        }
+
         auto scope_info = irstate->getScopeInfo();
         ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {

@@ -379,6 +379,10 @@ RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s, int vreg) {
     return it->second;
 }
 
+void JitFragmentWriter::emitKillTemporary(InternedString s, int vreg) {
+    emitSetLocal(s, vreg, false, imm(nullptr));
+}
+
 RewriterVar* JitFragmentWriter::emitGetBoxedLocal(BoxedString* s) {
     RewriterVar* boxed_locals = emitGetBoxedLocals();
     RewriterVar* globals = getInterp()->getAttr(ASTInterpreterJitInterface::getGlobalsOffset());
