@@ -2046,7 +2046,7 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
 
 // caution when changing the function arguments: this function gets called from an assembler wrapper!
 extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_expr, AST_stmt* enclosing_stmt,
-                                         Box* expr_val, FrameStackState frame_state) {
+                                         Box* expr_val, STOLEN(FrameStackState) frame_state) {
     static_assert(sizeof(FrameStackState) <= 2 * 8, "astInterpretDeopt assumes that all args get passed in regs!");
 
     assert(md);
@@ -2138,6 +2138,10 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
         ASSERT(start_block, "was unable to find the starting block??");
         assert(starting_statement);
     }
+
+    // clear the frame_state now that we have initalized the interpreter with it.
+    // this make sure that we don't have unneccessary references around (e.g. could be a problem for PASSED_GENERATOR)
+    Py_CLEAR(frame_state.locals);
 
     Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
     return v ? v : incref(None);
