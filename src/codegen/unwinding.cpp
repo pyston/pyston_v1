@@ -462,6 +462,9 @@ bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Pyth
         }
     }
 
+    if (info->getFrameInfo()->isDisabledFrame())
+        return false;
+
     return true;
 }
 
