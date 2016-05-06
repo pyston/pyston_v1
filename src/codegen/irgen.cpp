@@ -299,6 +299,13 @@ static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, InternedSt
         return types->getTypeAtBlockStart(name, block);
 }
 
+static bool shouldPhisOwnThisSym(llvm::StringRef name) {
+    // generating unnecessary increfs to the passed generator would introduce cycles inside the generator
+    if (name == PASSED_GENERATOR_NAME)
+        return false;
+    return true;
+}
+
 llvm::Value* handlePotentiallyUndefined(ConcreteCompilerVariable* is_defined_var, llvm::Type* rtn_type,
                                         llvm::BasicBlock*& cur_block, IREmitter& emitter, bool speculate_undefined,
                                         std::function<llvm::Value*(IREmitter&)> when_defined,
@@ -624,7 +631,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(analyzed_type->llvmType(),
                                                                       block->predecessors.size() + 1, p.first.s());
                 if (analyzed_type->getBoxType() == analyzed_type) {
-                    irstate->getRefcounts()->setType(phi, RefType::OWNED);
+                    RefType type = shouldPhisOwnThisSym(p.first.s()) ? RefType::OWNED : RefType::BORROWED;
+                    irstate->getRefcounts()->setType(phi, type);
                 }
                 ConcreteCompilerVariable* var = new ConcreteCompilerVariable(analyzed_type, phi);
                 generator->giveLocalSymbol(p.first, var);
@@ -655,16 +663,20 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             if (source->getScopeInfo()->takesClosure())
                 names.insert(source->getInternedStrings().get(PASSED_CLOSURE_NAME));
 
-            if (source->is_generator)
+            if (source->is_generator) {
+                assert(0 && "not sure if this is correct");
                 names.insert(source->getInternedStrings().get(PASSED_GENERATOR_NAME));
+            }
 
             for (const InternedString& s : names) {
                 // printf("adding guessed phi for %s\n", s.c_str());
                 ConcreteCompilerType* type = getTypeAtBlockStart(types, s, block);
                 llvm::PHINode* phi
                     = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s.s());
-                if (type->getBoxType() == type)
-                    irstate->getRefcounts()->setType(phi, RefType::OWNED);
+                if (type->getBoxType() == type) {
+                    RefType type = shouldPhisOwnThisSym(s.s()) ? RefType::OWNED : RefType::BORROWED;
+                    irstate->getRefcounts()->setType(phi, type);
+                }
                 ConcreteCompilerVariable* var = new ConcreteCompilerVariable(type, phi);
                 generator->giveLocalSymbol(s, var);
 
@@ -764,8 +776,10 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                     // printf("block %d: adding phi for %s from pred %d\n", block->idx, name.c_str(), pred->idx);
                     llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(cv->getType()->llvmType(),
                                                                           block->predecessors.size(), name.s());
-                    if (cv->getType()->getBoxType() == cv->getType())
-                        irstate->getRefcounts()->setType(phi, RefType::OWNED);
+                    if (cv->getType()->getBoxType() == cv->getType()) {
+                        RefType type = shouldPhisOwnThisSym(name.s()) ? RefType::OWNED : RefType::BORROWED;
+                        irstate->getRefcounts()->setType(phi, type);
+                    }
                     // emitter->getBuilder()->CreateCall(g.funcs.dump, phi);
                     ConcreteCompilerVariable* var = new ConcreteCompilerVariable(cv->getType(), phi);
                     generator->giveLocalSymbol(name, var);
@@ -873,7 +887,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 llvm::Value* val = v->getValue();
                 llvm_phi->addIncoming(v->getValue(), llvm_exit_blocks[b->predecessors[j]]);
 
-                if (v->getType()->getBoxType() == v->getType()) {
+                if (v->getType()->getBoxType() == v->getType() && shouldPhisOwnThisSym(it->first.s())) {
                     // llvm::outs() << *v->getValue() << " is getting consumed by phi " << *llvm_phi << '\n';
                     assert(llvm::isa<llvm::BranchInst>(terminator));
                     irstate->getRefcounts()->refConsumed(v->getValue(), terminator);

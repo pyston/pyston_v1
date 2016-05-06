@@ -247,17 +247,18 @@ void FrameInfo::disableDeinit(FrameInfo* replacement_frame) {
 
     // Kinda hacky but maybe worth it to not store any extra bits:
     back = NO_DEINIT;
+    assert(isDisabledFrame());
 }
 
 extern "C" void deinitFrameMaybe(FrameInfo* frame_info) {
     // Note: this has to match FrameInfo::disableDeinit
-    if (frame_info->back != FrameInfo::NO_DEINIT)
+    if (!frame_info->isDisabledFrame())
         deinitFrame(frame_info);
 }
 
 extern "C" void deinitFrame(FrameInfo* frame_info) {
     // This can fire if we have a call to deinitFrame() that should be to deinitFrameMaybe() instead
-    assert(frame_info->back != FrameInfo::NO_DEINIT);
+    assert(!frame_info->isDisabledFrame());
 
     assert(cur_thread_state.frame_info == frame_info);
     cur_thread_state.frame_info = frame_info->back;

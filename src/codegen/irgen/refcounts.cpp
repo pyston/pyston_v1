@@ -746,8 +746,18 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
     }
 
     std::vector<llvm::InvokeInst*> invokes;
+    std::vector<llvm::CallInst*> yields;
     for (auto&& II : llvm::inst_range(f)) {
         llvm::Instruction* inst = &II;
+
+        // is this a yield?
+        if (llvm::isa<llvm::CallInst>(inst)) {
+            llvm::CallInst* call = llvm::cast<llvm::CallInst>(inst);
+            if (call->getCalledValue() == g.funcs.yield_capi)
+                yields.push_back(call);
+        }
+
+        // invoke specific code
         if (!rt->vars.count(inst))
             continue;
         if (auto ii = dyn_cast<InvokeInst>(inst))
@@ -1133,6 +1143,38 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         for (auto&& fixup : state.cxx_fixups) {
             addCXXFixup(fixup.inst, fixup.to_decref, rt);
         }
+    }
+
+    // yields need to get handled specially
+    // we pass all object which we own at the point of the yield call to the yield so that we can traverse them in
+    // tp_traverse.
+    // we have to create a new call instruction because we can't add arguments to an existing call instruction
+    for (auto&& old_yield : yields) {
+        auto&& state = states[old_yield->getParent()];
+        assert(old_yield->getNumArgOperands() == 3);
+        llvm::Value* yield_value = old_yield->getArgOperand(1);
+
+        llvm::SmallVector<llvm::Value*, 8> args;
+        args.push_back(old_yield->getArgOperand(0)); // generator
+        args.push_back(yield_value);                 // value
+        args.push_back(NULL); // num live values. we replace it with the actual number of varargs after inserting them
+        // we can just traverse state.ending_refs because when generating the yield we make sure that it's at the start
+        // of the BB.
+        for (auto ref : state.ending_refs) {
+            if (rt->vars.lookup(ref.first).reftype == RefType::OWNED) {
+                if (yield_value != ref.first) // ignore this value because yield steals it!
+                    args.push_back(ref.first);
+            }
+        }
+        int num_live_values = args.size() - 3;
+        if (num_live_values == 0)
+            continue; // nothing to do
+
+        args[2] = getConstantInt(num_live_values, g.i32); // replace the dummy value the actual amount
+
+        llvm::CallInst* new_yield = llvm::CallInst::Create(g.funcs.yield_capi, args, llvm::Twine(), old_yield);
+        old_yield->replaceAllUsesWith(new_yield);
+        old_yield->eraseFromParent();
     }
 
     long us = _t.end();

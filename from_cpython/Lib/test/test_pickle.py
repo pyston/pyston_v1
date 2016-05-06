@@ -1,5 +1,3 @@
-# expected: reffail
-# - generator abandonment
 import pickle
 from cStringIO import StringIO
 

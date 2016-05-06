@@ -23,6 +23,7 @@
 #include <stddef.h>
 #include <vector>
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/iterator_range.h"
 #include "Python.h"
 
@@ -1056,6 +1057,7 @@ struct FrameInfo {
     // Calling disableDeinit makes future deinitFrameMaybe() frames not call deinitFrame().
     // For use by deopt(), which takes over deinit responsibility for its caller.
     void disableDeinit(FrameInfo* replacement_frame);
+    bool isDisabledFrame() const { return back == NO_DEINIT; }
 
     FrameInfo(ExcInfo exc)
         : exc(exc),

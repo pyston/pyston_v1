@@ -1,5 +1,3 @@
-# expected: reffail
-# - generator abandonment
 def wrapper(f):
     return f
 

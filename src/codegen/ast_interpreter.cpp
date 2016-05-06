@@ -785,8 +785,10 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
         return nullptr;
     }
 
-    if (generator)
-        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_GENERATOR_NAME)] = incref(generator);
+    if (generator) {
+        // generated is only borrowed in order to not introduce cycles
+        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_GENERATOR_NAME)] = generator;
+    }
 
     if (frame_info.passed_closure)
         sorted_symbol_table[source_info->getInternedStrings().get(PASSED_CLOSURE_NAME)]
@@ -993,7 +995,6 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
 
 Value ASTInterpreter::visit_yield(AST_Yield* node) {
     Value value = node->value ? visit_expr(node->value) : getNone();
-    AUTO_DECREF(value.o);
     assert(generator && generator->cls == generator_cls);
 
     return Value(yield(generator, value.o), jit ? jit->emitYield(value) : NULL);
@@ -2045,7 +2046,7 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
 
 // caution when changing the function arguments: this function gets called from an assembler wrapper!
 extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_expr, AST_stmt* enclosing_stmt,
-                                         Box* expr_val, FrameStackState frame_state) {
+                                         Box* expr_val, STOLEN(FrameStackState) frame_state) {
     static_assert(sizeof(FrameStackState) <= 2 * 8, "astInterpretDeopt assumes that all args get passed in regs!");
 
     assert(md);
@@ -2065,6 +2066,11 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
         vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
         memset(vregs, 0, sizeof(Box*) * num_vregs);
     }
+
+    // We need to remove the old python frame created in the LLVM tier otherwise we would have a duplicate frame because
+    // the interpreter will set the new state before executing the first statement.
+    RELEASE_ASSERT(cur_thread_state.frame_info == frame_state.frame_info, "");
+    cur_thread_state.frame_info = frame_state.frame_info->back;
 
     ASTInterpreter interpreter(md, vregs, num_vregs, frame_state.frame_info);
 
@@ -2133,10 +2139,9 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
         assert(starting_statement);
     }
 
-    // We need to remove the old python frame created in the LLVM tier otherwise we would have a duplicate frame because
-    // the interpreter will set the new state before executing the first statement.
-    RELEASE_ASSERT(cur_thread_state.frame_info == frame_state.frame_info, "");
-    cur_thread_state.frame_info = interpreter.getFrameInfo()->back;
+    // clear the frame_state now that we have initalized the interpreter with it.
+    // this make sure that we don't have unneccessary references around (e.g. could be a problem for PASSED_GENERATOR)
+    Py_CLEAR(frame_state.locals);
 
     Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
     return v ? v : incref(None);

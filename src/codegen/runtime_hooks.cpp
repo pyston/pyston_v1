@@ -225,7 +225,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(importStar);
     GET(repr);
     GET(exceptionMatches);
-    GET(yield);
+    GET(yield_capi);
     GET(getiterHelper);
     GET(hasnext);
     GET(apply_slice);

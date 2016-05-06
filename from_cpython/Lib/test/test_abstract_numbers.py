@@ -1,5 +1,3 @@
-# expected: reffail
-# - generator abandonment
 """Unit tests for numbers.py."""
 
 import math

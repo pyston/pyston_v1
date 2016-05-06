@@ -100,13 +100,13 @@ void generatorEntry(BoxedGenerator* g) {
 
             // call body of the generator
             BoxedFunctionBase* func = g->function;
-            KEEP_ALIVE(func);
+            // unnecessary because the generator owns g->function
+            // KEEP_ALIVE(func);
 
             Box** args = g->args ? &g->args->elts[0] : nullptr;
             auto r = callCLFunc<ExceptionStyle::CXX, NOT_REWRITABLE>(func->md, nullptr, func->md->numReceivedArgs(),
                                                                      func->closure, g, func->globals, g->arg1, g->arg2,
                                                                      g->arg3, args);
-            assert(r == None);
             Py_DECREF(r);
         } catch (ExcInfo e) {
             // unhandled exception: propagate the exception to the caller
@@ -331,14 +331,31 @@ Box* generatorHasnext(Box* s) {
     return boxBool(generatorHasnextUnboxed(s));
 }
 
+extern "C" Box* yield_capi(BoxedGenerator* obj, STOLEN(Box*) value, int num_live_values, ...) noexcept {
+    try {
+        llvm::SmallVector<Box*, 8> live_values;
+        live_values.reserve(num_live_values);
+        va_list ap;
+        va_start(ap, num_live_values);
+        for (int i = 0; i < num_live_values; ++i) {
+            live_values.push_back(va_arg(ap, Box*));
+        }
+        va_end(ap);
 
-extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
+        return yield(obj, value, live_values);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+extern "C" Box* yield(BoxedGenerator* obj, STOLEN(Box*) value, llvm::ArrayRef<Box*> live_values) {
     STAT_TIMER(t0, "us_timer_generator_switching", 0);
 
     assert(obj->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(obj);
     assert(!self->returnValue);
-    self->returnValue = incref(value);
+    self->returnValue = value;
 
     threading::popGenerator();
 
@@ -350,9 +367,11 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
     // reset current frame to the caller tops frame --> removes the frame the generator added
     cur_thread_state.frame_info = self->top_caller_frame_info;
     obj->paused_frame_info = generator_frame_info;
+    obj->live_values = live_values;
     swapContext(&self->context, self->returnContext, 0);
     FrameInfo* top_new_caller_frame_info = (FrameInfo*)cur_thread_state.frame_info;
     obj->paused_frame_info = NULL;
+    obj->live_values = llvm::ArrayRef<Box*>();
 
     // the caller of the generator can change between yield statements that means we can't just restore the top of the
     // frame to the point before the yield instead we have to update it.
@@ -371,6 +390,7 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
     if (self->exception.type) {
         ExcInfo e = self->exception;
         self->exception = ExcInfo(NULL, NULL, NULL);
+        Py_CLEAR(self->returnValue);
         throw e;
     }
 
@@ -378,7 +398,6 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
     self->returnValue = NULL;
     return r;
 }
-
 
 extern "C" BoxedGenerator* createGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args) {
     assert(function);
@@ -491,8 +510,12 @@ extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {
     // CPython has some optimizations for not needing to finalize generators that haven't exited, but
     // which are guaranteed to not need any special cleanups.
     // For now just say anything still in-progress needs finalizing.
-    return (bool)self->paused_frame_info;
+    if (!(bool)self->paused_frame_info)
+        return false;
 
+    return true;
+// TODO: is this safe? probably not...
+// return self->paused_frame_info->stmt->type == AST_TYPE::Invoke;
 #if 0
     int i;
     PyFrameObject* f = gen->gi_frame;
@@ -512,17 +535,97 @@ extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {
 #endif
 }
 
+static PyObject* generator_close(PyGenObject* gen, PyObject* args) noexcept {
+    try {
+        return generatorClose((Box*)gen);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+static void generator_del(PyObject* self) noexcept {
+    PyObject* res;
+    PyObject* error_type, *error_value, *error_traceback;
+    BoxedGenerator* gen = (BoxedGenerator*)self;
+
+    // Pyston change:
+    // if (gen->gi_frame == NULL || gen->gi_frame->f_stacktop == NULL)
+    if (!gen->paused_frame_info)
+        /* Generator isn't paused, so no need to close */
+        return;
+
+    /* Temporarily resurrect the object. */
+    assert(self->ob_refcnt == 0);
+    self->ob_refcnt = 1;
+
+    /* Save the current exception, if any. */
+    PyErr_Fetch(&error_type, &error_value, &error_traceback);
+
+    // Pyston change:
+    // res = gen_close(gen, NULL);
+    res = generator_close((PyGenObject*)gen, NULL);
+
+    if (res == NULL)
+        PyErr_WriteUnraisable(self);
+    else
+        Py_DECREF(res);
+
+    /* Restore the saved exception. */
+    PyErr_Restore(error_type, error_value, error_traceback);
+
+    /* Undo the temporary resurrection; can't use DECREF here, it would
+     * cause a recursive call.
+     */
+    assert(self->ob_refcnt > 0);
+    if (--self->ob_refcnt == 0)
+        return; /* this is the normal path out */
+
+    /* close() resurrected it!  Make it look like the original Py_DECREF
+     * never happened.
+     */
+    {
+        Py_ssize_t refcnt = self->ob_refcnt;
+        _Py_NewReference(self);
+        self->ob_refcnt = refcnt;
+    }
+    assert(PyType_IS_GC(self->cls) && _Py_AS_GC(self)->gc.gc_refs != _PyGC_REFS_UNTRACKED);
+
+    /* If Py_REF_DEBUG, _Py_NewReference bumped _Py_RefTotal, so
+     * we need to undo that. */
+    _Py_DEC_REFTOTAL;
+/* If Py_TRACE_REFS, _Py_NewReference re-added self to the object
+ * chain, so no more to do there.
+ * If COUNT_ALLOCS, the original decref bumped tp_frees, and
+ * _Py_NewReference bumped tp_allocs:  both of those need to be
+ * undone.
+ */
+#ifdef COUNT_ALLOCS
+    --self->ob_type->tp_frees;
+    --self->ob_type->tp_allocs;
+#endif
+}
+
 static void generator_dealloc(BoxedGenerator* self) noexcept {
     assert(isSubclass(self->cls, generator_cls));
 
     // Hopefully this never happens:
     assert(!self->running);
 
-    // I don't think this should get hit currently because we don't properly collect the cycle that this would
-    // represent:
-    ASSERT(!self->paused_frame_info, "Can't clean up a generator that is currently paused");
+    _PyObject_GC_UNTRACK(self);
 
-    PyObject_GC_UnTrack(self);
+    if (self->weakreflist != NULL)
+        PyObject_ClearWeakRefs(self);
+
+    _PyObject_GC_TRACK(self);
+
+    if (self->paused_frame_info) {
+        Py_TYPE(self)->tp_del(self);
+        if (self->ob_refcnt > 0)
+            return; /* resurrected.  :( */
+    }
+
+    _PyObject_GC_UNTRACK(self);
 
     freeGeneratorStack(self);
 
@@ -546,8 +649,6 @@ static void generator_dealloc(BoxedGenerator* self) noexcept {
     Py_CLEAR(self->exception.value);
     Py_CLEAR(self->exception.traceback);
 
-    PyObject_ClearWeakRefs(self);
-
     self->cls->tp_free(self);
 }
 
@@ -558,6 +659,10 @@ static int generator_traverse(BoxedGenerator* self, visitproc visit, void* arg) 
         int r = frameinfo_traverse(self->paused_frame_info, visit, arg);
         if (r)
             return r;
+    }
+
+    for (auto v : self->live_values) {
+        Py_VISIT(v);
     }
 
     int numArgs = self->function->md->numReceivedArgs();
@@ -609,5 +714,6 @@ void setupGenerator() {
 
     generator_cls->freeze();
     generator_cls->tp_iter = PyObject_SelfIter;
+    generator_cls->tp_del = generator_del; // don't do giveAttr("__del__") because it should not be visible from python
 }
 }

@@ -1,5 +1,3 @@
-# expected: reffail
-# - generator abandonment
 # NOTE: this file tests the new `io` library backported from Python 3.x.
 # Similar tests for the builtin file object can be found in test_file2k.py.
 

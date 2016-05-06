@@ -101,7 +101,7 @@ void force() {
     FORCE(repr);
     FORCE(str);
     FORCE(exceptionMatches);
-    FORCE(yield);
+    FORCE(yield_capi);
     FORCE(getiterHelper);
     FORCE(hasnext);
     FORCE(apply_slice);

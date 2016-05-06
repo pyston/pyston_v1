@@ -1,5 +1,3 @@
-# expected: reffail
-# - generator abandonment
 """Regresssion tests for urllib"""
 
 import urllib

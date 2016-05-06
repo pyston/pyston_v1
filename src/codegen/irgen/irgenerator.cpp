@@ -1540,13 +1540,26 @@ private:
         assert(generator);
         ConcreteCompilerVariable* convertedGenerator = generator->makeConverted(emitter, generator->getBoxType());
 
-
         CompilerVariable* value = node->value ? evalExpr(node->value, unw_info) : emitter.getNone();
         ConcreteCompilerVariable* convertedValue = value->makeConverted(emitter, value->getBoxType());
 
-        llvm::Value* rtn
-            = emitter.createCall2(unw_info, g.funcs.yield, convertedGenerator->getValue(), convertedValue->getValue());
+        std::vector<llvm::Value*> args;
+        args.push_back(convertedGenerator->getValue());
+        args.push_back(convertedValue->getValue());
+        args.push_back(getConstantInt(0, g.i32)); // the refcounting inserter handles yields specially and adds all
+                                                  // owned objects as additional arguments to it
+
+        // put the yield call at the beginning of a new basic block to make it easier for the refcounting inserter.
+        llvm::BasicBlock* yield_block = emitter.createBasicBlock("yield_block");
+        emitter.getBuilder()->CreateBr(yield_block);
+        emitter.setCurrentBasicBlock(yield_block);
+
+        // we do a capi call because it makes it easier for the refcounter to replace the instruction
+        llvm::Instruction* rtn
+            = emitter.createCall(unw_info, g.funcs.yield_capi, args, CAPI, getNullPtr(g.llvm_value_type_ptr));
+        emitter.refConsumed(convertedValue->getValue(), rtn);
         emitter.setType(rtn, RefType::OWNED);
+        emitter.setNullable(rtn, true);
 
         return new ConcreteCompilerVariable(UNKNOWN, rtn);
     }
