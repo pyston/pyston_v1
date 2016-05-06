@@ -1,8 +1,4 @@
-# expected: fail
-#  - finalization (let alone resurrection) not implemented yet
-
 # Objects are allowed to resurrect themselves in their __del__ methods...
-# Note: the behavior here will differ from cPython and maybe PyPy
 
 x = None
 running = True

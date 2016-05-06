@@ -230,6 +230,7 @@ public:
     RewriterVar* emitExceptionMatches(RewriterVar* v, RewriterVar* cls);
     RewriterVar* emitGetAttr(RewriterVar* obj, BoxedString* s, AST_expr* node);
     RewriterVar* emitGetBlockLocal(InternedString s, int vreg);
+    void emitKillTemporary(InternedString s, int vreg);
     RewriterVar* emitGetBoxedLocal(BoxedString* s);
     RewriterVar* emitGetBoxedLocals();
     RewriterVar* emitGetClsAttr(RewriterVar* obj, BoxedString* s);

@@ -1512,13 +1512,8 @@ void Box::setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rew
                     RewriterVar* r_hattrs
                         = rewrite_args->obj->getAttr(cls->attrs_offset + offsetof(HCAttrs, attr_list), Location::any());
 
-                    // Don't need to do anything: just getting it and setting it to OWNED
-                    // will tell the auto-refcount system to decref it.
-                    r_hattrs->getAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs))
-                        ->setType(RefType::OWNED);
-                    r_hattrs->setAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs), rewrite_args->attrval,
-                                      RewriterVar::SetattrType::HANDED_OFF);
-                    rewrite_args->attrval->refConsumed();
+                    r_hattrs->replaceAttr(offset * sizeof(Box*) + offsetof(HCAttrs::AttrList, attrs),
+                                          rewrite_args->attrval, /* prev_nullable */ false);
 
                     rewrite_args->out_success = true;
                 }

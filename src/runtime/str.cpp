@@ -371,7 +371,7 @@ extern "C" PyObject* PyString_InternFromString(const char* s) noexcept {
     return internStringImmortal(s);
 }
 
-BoxedString* internStringImmortal(llvm::StringRef s) {
+BoxedString* internStringImmortal(llvm::StringRef s) noexcept {
     auto& entry = interned_strings[s];
     if (!entry) {
         num_interned_strings.log();

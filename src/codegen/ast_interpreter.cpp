@@ -1080,6 +1080,24 @@ Value ASTInterpreter::visit_return(AST_Return* node) {
         finishJITing();
     }
 
+// Some day, we should make sure that all temporaries got deleted (and decrefed) at the right time:
+#if 0
+    bool temporaries_alive = false;
+#ifndef NDEBUG
+    for (auto&& v : getSymVRegMap()) {
+        if (v.first.s()[0] == '#' && vregs[v.second]) {
+            fprintf(stderr, "%s still alive\n", v.first.c_str());
+            temporaries_alive = true;
+        }
+    }
+
+    if (temporaries_alive)
+        source_info->cfg->print();
+
+    assert(!temporaries_alive);
+#endif
+#endif
+
     next_block = 0;
     return s;
 }
@@ -1332,14 +1350,21 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                         jit->emitDelName(target->id);
                     ASTInterpreterJitInterface::delNameHelper(this, target->id);
                 } else {
-                    abortJITing();
                     assert(vst == ScopeInfo::VarScopeType::FAST);
 
                     assert(getSymVRegMap().count(target->id));
                     assert(getSymVRegMap()[target->id] == target->vreg);
-                    if (vregs[target->vreg] == 0) {
-                        assertNameDefined(0, target->id.c_str(), NameError, true /* local_var_msg */);
-                        return Value();
+
+                    if (target->id.s()[0] == '#') {
+                        assert(vregs[target->vreg] != NULL);
+                        if (jit)
+                            jit->emitKillTemporary(target->id, target->vreg);
+                    } else {
+                        abortJITing();
+                        if (vregs[target->vreg] == 0) {
+                            assertNameDefined(0, target->id.c_str(), NameError, true /* local_var_msg */);
+                            return Value();
+                        }
                     }
 
                     Py_DECREF(vregs[target->vreg]);
@@ -1635,6 +1660,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
 
     switch (node->lookup_type) {
         case ScopeInfo::VarScopeType::GLOBAL: {
+            assert(!node->is_kill);
             Value v;
             if (jit)
                 v.var = jit->emitGetGlobal(frame_info.globals, node->id.getBox());
@@ -1643,6 +1669,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             return v;
         }
         case ScopeInfo::VarScopeType::DEREF: {
+            assert(!node->is_kill);
             return Value(ASTInterpreterJitInterface::derefHelper(this, node->id),
                          jit ? jit->emitDeref(node->id) : NULL);
         }
@@ -1651,22 +1678,35 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             Value v;
             if (jit) {
                 bool is_live = true;
-                if (node->lookup_type == ScopeInfo::VarScopeType::FAST)
+                if (node->is_kill) {
+                    is_live = false;
+                    assert(!source_info->getLiveness()->isLiveAtEnd(node->id, current_block));
+                } else if (node->lookup_type == ScopeInfo::VarScopeType::FAST)
                     is_live = source_info->getLiveness()->isLiveAtEnd(node->id, current_block);
 
-                if (is_live)
+                if (is_live) {
+                    assert(!node->is_kill);
                     v.var = jit->emitGetLocal(node->id, node->vreg);
-                else
+                } else {
                     v.var = jit->emitGetBlockLocal(node->id, node->vreg);
+                    if (node->is_kill) {
+                        assert(node->id.s()[0] == '#');
+                        jit->emitKillTemporary(node->id, node->vreg);
+                    }
+                }
             }
 
             assert(node->vreg >= 0);
             assert(getSymVRegMap().count(node->id));
             assert(getSymVRegMap()[node->id] == node->vreg);
             Box* val = vregs[node->vreg];
+
             if (val) {
-                Py_INCREF(val);
                 v.o = val;
+                if (node->is_kill)
+                    vregs[node->vreg] = NULL;
+                else
+                    Py_INCREF(val);
                 return v;
             }
 
@@ -1674,6 +1714,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             RELEASE_ASSERT(0, "should be unreachable");
         }
         case ScopeInfo::VarScopeType::NAME: {
+            assert(!node->is_kill && "we might need to support this");
             Value v;
             if (jit)
                 v.var = jit->emitGetBoxedLocal(node->id.getBox());

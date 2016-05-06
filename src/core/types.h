@@ -622,12 +622,12 @@ struct GetattrRewriteArgs;
 struct DelattrRewriteArgs;
 
 // Helper function around PyString_InternFromString:
-BoxedString* internStringImmortal(llvm::StringRef s);
+BoxedString* internStringImmortal(llvm::StringRef s) noexcept;
 
 // Callers should use this function if they can accept mortal string objects.
 // FIXME For now it just returns immortal strings, but at least we can use it
 // to start documenting the places that can take mortal strings.
-inline BoxedString* internStringMortal(llvm::StringRef s) {
+inline BoxedString* internStringMortal(llvm::StringRef s) noexcept {
     return internStringImmortal(s);
 }
 

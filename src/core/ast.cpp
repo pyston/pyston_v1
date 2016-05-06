@@ -1630,7 +1630,8 @@ bool PrintVisitor::visit_suite(AST_Suite* node) {
 
 bool PrintVisitor::visit_name(AST_Name* node) {
     stream << node->id.s();
-    // printf("%s(%d)", node->id.c_str(), node->ctx_type);
+    // Uncomment this line to see which names are kills:
+    // if (node->is_kill) stream << "<k>";
     return false;
 }
 
