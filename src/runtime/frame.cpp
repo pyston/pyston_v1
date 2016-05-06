@@ -185,7 +185,6 @@ public:
     }
     static int clear(Box* self) noexcept {
         BoxedFrame* o = static_cast<BoxedFrame*>(self);
-        assert(o->hasExited());
         Py_CLEAR(o->_back);
         Py_CLEAR(o->_code);
         Py_CLEAR(o->_globals);
@@ -264,7 +263,9 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
     cur_thread_state.frame_info = frame_info->back;
     BoxedFrame* frame = frame_info->frame_obj;
     if (frame) {
-        frame->handleFrameExit();
+        // we don't have to call handleFrameExit() if are the only owner because we will clear it in the next line..
+        if (frame->ob_refcnt > 1)
+            frame->handleFrameExit();
         Py_CLEAR(frame_info->frame_obj);
     }
 
