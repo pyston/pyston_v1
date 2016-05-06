@@ -1,5 +1,5 @@
 # expected: reffail
-# - unknown segfault
+# - leaked refs
 import unittest
 from test import test_support
 import gc
