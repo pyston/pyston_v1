@@ -23,6 +23,7 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallSet.h"
 
 #include "asm_writing/assembler.h"
@@ -184,6 +185,12 @@ public:
 
     void refUsed();
 
+    // registerOwnedAttr tells the refcounter that a certain memory location holds a pointer
+    // to an owned reference.  This must be paired with a call to deregisterOwnedAttr
+    // Call these right before emitting the store (for register) or decref (for deregister).
+    void registerOwnedAttr(int byte_offset);
+    void deregisterOwnedAttr(int byte_offset);
+
 
     template <typename Src, typename Dst> inline RewriterVar* getAttrCast(int offset, Location loc = Location::any());
 
@@ -344,11 +351,13 @@ private:
         }
     };
 
+private:
     // This needs to be the first member:
     RegionAllocator allocator;
 
-    // Increfs that we thought of doing during the guarding phase that we were able to put off.
-    std::vector<std::pair<RewriterVar*, int>> pending_increfs;
+    // The rewriter has refcounting logic for handling owned RewriterVars.  If we own memory inside those RewriterVars,
+    // we need to register that via registerOwnedAttr, which ends up here:
+    llvm::DenseSet<std::pair<RewriterVar*, int /* offset */>> owned_attrs;
 
 protected:
     // Allocates `bytes` bytes of data.  The allocation will get freed when the rewriter gets freed.

@@ -584,7 +584,14 @@ public:
                         Box* b = NULL;
                         if (l.type == Location::Stack) {
                             unw_word_t sp = get_cursor_sp(cursor);
-                            b = ((Box**)sp)[l.stack_offset];
+                            assert(l.stack_offset % 8 == 0);
+                            b = ((Box**)sp)[l.stack_offset / 8];
+                        } else if (l.type == Location::StackIndirect) {
+                            unw_word_t sp = get_cursor_sp(cursor);
+                            assert(l.stack_first_offset % 8 == 0);
+                            Box** b_ptr = ((Box***)sp)[l.stack_first_offset / 8];
+                            assert(l.stack_second_offset % 8 == 0);
+                            b = b_ptr[l.stack_second_offset / 8];
                         } else if (l.type == Location::Register) {
                             RELEASE_ASSERT(0, "untested");
                             // This branch should never get hit since we shouldn't generate Register locations,

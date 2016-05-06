@@ -1,5 +1,5 @@
 # expected: reffail
-# - takes too long; leaks refs
+# - takes too long
 # Copyright (c) 2004 Python Software Foundation.
 # All rights reserved.
 
