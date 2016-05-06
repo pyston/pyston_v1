@@ -1,5 +1,3 @@
-# expected: reffail
-# - "pyexpat.xmlparser needs a tp_traverse"
 # regression test for SAX 2.0            -*- coding: utf-8 -*-
 # $Id$
 
