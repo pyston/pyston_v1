@@ -881,15 +881,11 @@ std::pair<RewriterVar*, RewriterAction*> JitFragmentWriter::emitPPCall(void* fun
     }, args, ActionType::NORMAL);
 
     if (type_recorder) {
-
         RewriterVar* type_recorder_var = imm(type_recorder);
-        /*
-        TODO use call for now because this code is broken because it does not check if result is null
         RewriterVar* obj_cls_var = result->getAttr(offsetof(Box, cls));
         addAction([=]() { _emitRecordType(type_recorder_var, obj_cls_var); }, { type_recorder_var, obj_cls_var },
                   ActionType::NORMAL);
-        */
-        call(false, (void*)recordType, type_recorder_var, result);
+        result->refUsed();
 
         emitPendingCallsCheck();
         return std::make_pair(result, call_action);
