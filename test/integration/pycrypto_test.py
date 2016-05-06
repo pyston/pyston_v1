@@ -1,4 +1,3 @@
-# expected: reffail
 import subprocess, sys, os, shutil, StringIO
 sys.path.append(os.path.dirname(__file__) + "/../lib")
 import test_helper

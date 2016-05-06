@@ -1,4 +1,3 @@
-# expected: reffail
 import os
 import signal
 import subprocess

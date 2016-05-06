@@ -20,18 +20,3 @@ diff -ur M2Crypto-0.21.1.orig/SWIG/_lib.i ./SWIG/_lib.i
              new_style_callback = 1;
          }    
      } else {
-diff -ur M2Crypto-0.21.1/M2Crypto/m2urllib2.py ./M2Crypto/m2urllib2.py
---- M2Crypto-0.21.1/M2Crypto/m2urllib2.py	2011-01-15 19:10:05.000000000 +0000
-+++ ./M2Crypto/m2urllib2.py	2016-02-10 14:36:12.091812337 +0000
-@@ -97,6 +97,11 @@
-         # out of socket._fileobject() and into a base class.
- 
-         r.recv = r.read
-+
-+        # Pyston change: our socket implementation needs this functions
-+        r._reuse = lambda: None
-+        r._drop = lambda: None
-+
-         fp = _closing_fileobject(r)
- 
-         resp = addinfourl(fp, r.msg, req.get_full_url())
