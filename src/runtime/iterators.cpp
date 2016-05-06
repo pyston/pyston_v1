@@ -165,23 +165,19 @@ public:
 BoxIteratorRange Box::pyElements() {
     if (this->cls == list_cls) {
         using BoxIteratorList = BoxIteratorIndex<BoxedList>;
-        std::unique_ptr<BoxIteratorImpl> begin(new BoxIteratorList((BoxedList*)this));
         BoxIteratorImpl* end = BoxIteratorList::end();
-        return BoxIteratorRange(std::move(begin), end);
+        return BoxIteratorRange(end, (BoxedList*)this, (BoxIteratorList*)nullptr);
     } else if (this->cls == tuple_cls) {
         using BoxIteratorTuple = BoxIteratorIndex<BoxedTuple>;
-        std::unique_ptr<BoxIteratorImpl> begin(new BoxIteratorTuple((BoxedTuple*)this));
         BoxIteratorImpl* end = BoxIteratorTuple::end();
-        return BoxIteratorRange(std::move(begin), end);
+        return BoxIteratorRange(end, (BoxedTuple*)this, (BoxIteratorTuple*)nullptr);
     } else if (this->cls == str_cls) {
         using BoxIteratorString = BoxIteratorIndex<BoxedString>;
-        std::unique_ptr<BoxIteratorImpl> begin(new BoxIteratorString((BoxedString*)this));
         BoxIteratorImpl* end = BoxIteratorString::end();
-        return BoxIteratorRange(std::move(begin), end);
+        return BoxIteratorRange(end, (BoxedString*)this, (BoxIteratorString*)nullptr);
     } else {
-        std::unique_ptr<BoxIteratorImpl> begin(new BoxIteratorGeneric(this));
         BoxIteratorImpl* end = BoxIteratorGeneric::end();
-        return BoxIteratorRange(std::move(begin), end);
+        return BoxIteratorRange(end, this, (BoxIteratorGeneric*)nullptr);
     }
 }
 }

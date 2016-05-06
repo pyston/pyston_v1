@@ -591,20 +591,70 @@ public:
     Box* operator*() { return impl->getValue(); }
 };
 
+template <typename T, int N> class SmallUniquePtr {
+private:
+    char _data[N];
+    bool owned;
+#ifndef NDEBUG
+    bool address_taken = false;
+#endif
+
+    template <typename ConcreteType, typename... Args> SmallUniquePtr(ConcreteType* dummy, Args... args) {
+        static_assert(sizeof(ConcreteType) <= N, "SmallUniquePtr not large enough to contain this object");
+        new (_data) ConcreteType(std::forward<Args>(args)...);
+        owned = true;
+    }
+
+public:
+    template <typename ConcreteType, typename... Args> static SmallUniquePtr emplace(Args... args) {
+        return SmallUniquePtr<T, N>((ConcreteType*)nullptr, args...);
+    }
+
+    SmallUniquePtr(const SmallUniquePtr&) = delete;
+    SmallUniquePtr(SmallUniquePtr&& rhs) { *this = std::move(rhs); }
+    void operator=(const SmallUniquePtr&) = delete;
+    void operator=(SmallUniquePtr&& rhs) {
+        assert(!rhs.address_taken && "Invalid copy after being converted to a pointer");
+        std::swap(_data, rhs._data);
+        owned = false;
+        std::swap(owned, rhs.owned);
+    }
+
+    ~SmallUniquePtr() {
+        if (owned)
+            ((T*)this)->~T();
+    }
+    operator T*() {
+#ifndef NDEBUG
+        address_taken = true;
+#endif
+        return reinterpret_cast<T*>(_data);
+    }
+};
+
 // A custom "range" container that helps manage lifetimes.  We need to free the underlying Impl object
 // when the range loop is done; previously we had the iterator itself handle this, but that started
 // to get complicated since they get copied around, and the management of the begin() and end() iterators
 // is slightly different.
 // So to simplify, have the range object take care of it.
+//
+// Note: be careful when explicitly calling begin().  The returned iterator points into this BoxIteratorRange
+// object, so once you call begin() it is a bug to move/copy this BoxIteratorRange object (the SmallUniquePtr
+// should complain).
 class BoxIteratorRange {
 private:
-    std::unique_ptr<BoxIteratorImpl> begin_impl;
+    // std::unique_ptr<BoxIteratorImpl> begin_impl;
+    // char _data[32];
+    typedef SmallUniquePtr<BoxIteratorImpl, 32> UniquePtr;
+    UniquePtr begin_impl;
     BoxIteratorImpl* end_impl;
 
 public:
-    BoxIteratorRange(std::unique_ptr<BoxIteratorImpl> begin, BoxIteratorImpl* end)
-        : begin_impl(std::move(begin)), end_impl(end) {}
-    BoxIterator begin() { return BoxIterator(begin_impl.get()); }
+    template <typename ImplType, typename T>
+    BoxIteratorRange(BoxIteratorImpl* end, T&& arg, ImplType* dummy)
+        : begin_impl(UniquePtr::emplace<ImplType, T>(arg)), end_impl(end) {}
+
+    BoxIterator begin() { return BoxIterator(begin_impl); }
     BoxIterator end() { return BoxIterator(end_impl); }
 
     int traverse(visitproc visit, void* arg) {

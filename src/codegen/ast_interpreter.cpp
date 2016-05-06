@@ -821,6 +821,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     OSRExit exit(found_entry);
 
     std::vector<Box*> arg_array;
+    arg_array.reserve(sorted_symbol_table.size());
     for (auto& it : sorted_symbol_table) {
         arg_array.push_back(it.second);
     }
@@ -1107,10 +1108,14 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
 
     std::vector<Box*> defaults;
     llvm::SmallVector<RewriterVar*, 4> defaults_vars;
+    defaults.reserve(args->defaults.size());
 
     RewriterVar* defaults_var = NULL;
-    if (jit)
+    if (jit) {
         defaults_var = args->defaults.size() ? jit->allocate(args->defaults.size()) : jit->imm(0ul);
+        defaults_vars.reserve(args->defaults.size());
+    }
+
     int i = 0;
     for (AST_expr* d : args->defaults) {
         Value v = visit_expr(d);
@@ -1198,6 +1203,7 @@ Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
     AST_arguments* args = node->args;
 
     std::vector<Value> decorators;
+    decorators.reserve(node->decorator_list.size());
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d));
 
@@ -1228,6 +1234,7 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     }
 
     std::vector<Box*> decorators;
+    decorators.reserve(node->decorator_list.size());
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d).o);
 
@@ -1510,6 +1517,9 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
 
     std::vector<Box*> args;
     llvm::SmallVector<RewriterVar*, 8> args_vars;
+    args.reserve(node->args.size());
+    args_vars.reserve(node->args.size());
+
     for (AST_expr* e : node->args) {
         Value v = visit_expr(e);
         args.push_back(v.o);
