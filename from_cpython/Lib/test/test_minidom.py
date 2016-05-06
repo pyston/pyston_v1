@@ -1,5 +1,3 @@
-# expected: reffail
-# - "pyexpat.xmlparser needs a tp_traverse"
 # test for xml.dom.minidom
 
 import pickle

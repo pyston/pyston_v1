@@ -1,5 +1,3 @@
-# expected: reffail
-# - "pyexpat.xmlparser needs a tp_traverse"
 # XXX TypeErrors on calling handlers, or on bad return values from a
 # handler, are obscure and unhelpful.
 
