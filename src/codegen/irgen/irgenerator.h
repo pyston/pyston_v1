@@ -168,7 +168,7 @@ public:
     virtual void setIncomingExceptionState(llvm::SmallVector<ExceptionState, 2> exc_state) = 0;
     virtual llvm::BasicBlock* getCXXExcDest(const UnwindInfo&) = 0;
     virtual llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* from_block, llvm::BasicBlock* final_dest,
-                                             AST_stmt* current_stmt) = 0;
+                                             AST_stmt* current_stmt, bool is_after_deopt = false) = 0;
     virtual CFGBlock* getCFGBlock() = 0;
 };
 

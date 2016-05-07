@@ -411,23 +411,21 @@ private:
 #endif
     }
 
-    void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val, llvm::Value* exc_val,
-                                        bool double_check = false) {
-        assert(!double_check); // need to call PyErr_Occurred
-
+    void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val, llvm::Value* exc_val) {
         assert(exc_val);
 
         llvm::BasicBlock* normal_dest
             = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
         normal_dest->moveAfter(curblock);
 
-        llvm::BasicBlock* exc_dest = irgenerator->getCAPIExcDest(curblock, unw_info.exc_dest, unw_info.current_stmt);
+        llvm::BasicBlock* exc_dest
+            = irgenerator->getCAPIExcDest(curblock, unw_info.exc_dest, unw_info.current_stmt, unw_info.is_after_deopt);
 
         if (exc_val == ALWAYS_THROWS) {
             assert(returned_val->getType() == g.void_);
 
-            llvm::BasicBlock* exc_dest
-                = irgenerator->getCAPIExcDest(curblock, unw_info.exc_dest, unw_info.current_stmt);
+            llvm::BasicBlock* exc_dest = irgenerator->getCAPIExcDest(curblock, unw_info.exc_dest, unw_info.current_stmt,
+                                                                     unw_info.is_after_deopt);
             getBuilder()->CreateBr(exc_dest);
         } else {
             assert(returned_val->getType() == exc_val->getType());
@@ -678,7 +676,7 @@ public:
         ICSetupInfo* pp = createDeoptIC();
         llvm::Value* v
             = createIC(pp, (void*)pyston::deopt, { embedRelocatablePtr(node, g.llvm_astexpr_type_ptr), node_value },
-                       UnwindInfo(current_stmt, NULL));
+                       UnwindInfo(current_stmt, NULL, /* is_after_deopt*/ true));
         llvm::Value* rtn = getBuilder()->CreateIntToPtr(v, g.llvm_value_type_ptr);
         setType(rtn, RefType::OWNED);
         return rtn;
@@ -841,9 +839,6 @@ private:
         curblock = deopt_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
         llvm::Value* v = emitter.createDeopt(current_statement, (AST_expr*)node, node_value);
-        // TODO: this might not be necessary since it should never fire?
-        if (!irstate->getCurFunction()->entry_descriptor)
-            emitter.getBuilder()->CreateCall(g.funcs.deinitFrameMaybe, irstate->getFrameInfoVar());
         llvm::Instruction* ret_inst = emitter.getBuilder()->CreateRet(v);
         irstate->getRefcounts()->refConsumed(v, ret_inst);
 
@@ -3009,8 +3004,8 @@ public:
     // LANDINGPAD, and this function will create a helper block that fetches the exception.
     // As a special-case, a NULL value for final_dest means that this helper block should
     // instead propagate the exception out of the function.
-    llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* from_block, llvm::BasicBlock* final_dest,
-                                     AST_stmt* current_stmt) override {
+    llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* from_block, llvm::BasicBlock* final_dest, AST_stmt* current_stmt,
+                                     bool is_after_deopt) override {
         llvm::BasicBlock*& capi_exc_dest = capi_exc_dests[final_dest];
         llvm::PHINode*& phi_node = capi_phis[final_dest];
 
@@ -3032,7 +3027,7 @@ public:
                     emitter.getBuilder()->CreateCall(g.funcs.reraiseCapiExcAsCxx);
                     emitter.getBuilder()->CreateUnreachable();
                 } else {
-                    if (!irstate->getCurFunction()->entry_descriptor)
+                    if (!irstate->getCurFunction()->entry_descriptor && !is_after_deopt)
                         emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
                     emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
                 }
@@ -3122,8 +3117,9 @@ public:
             irstate->getRefcounts()->refConsumed(exc_type, call_inst);
             irstate->getRefcounts()->refConsumed(exc_value, call_inst);
             irstate->getRefcounts()->refConsumed(exc_traceback, call_inst);
-            if (!irstate->getCurFunction()->entry_descriptor)
+            if (!irstate->getCurFunction()->entry_descriptor && !unw_info.is_after_deopt) {
                 emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
+            }
             emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
         } else {
             // auto call_inst = emitter.createCall3(UnwindInfo(unw_info.current_stmt, NO_CXX_INTERCEPTION),
