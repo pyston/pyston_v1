@@ -1,4 +1,3 @@
-# expected: reffail
 import unittest, doctest, operator
 import inspect
 from test import test_support

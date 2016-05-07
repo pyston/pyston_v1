@@ -1229,8 +1229,7 @@ std::vector<Location> Rewriter::getDecrefLocations() {
             if (l.type == Location::Scratch) {
                 // convert to stack based location because later on we may not know the offset of the scratch area from
                 // the SP.
-                assert(indirectFor(l).offset % 8 == 0);
-                decref_infos.emplace_back(Location::Stack, indirectFor(l).offset / 8);
+                decref_infos.emplace_back(Location::Stack, indirectFor(l).offset);
             } else if (l.type == Location::Register) {
                 // CSRs shouldn't be getting allocated, and we should only be calling this at a callsite:
                 RELEASE_ASSERT(0, "we shouldn't be trying to decref anything in a register");
@@ -1238,6 +1237,20 @@ std::vector<Location> Rewriter::getDecrefLocations() {
                 RELEASE_ASSERT(0, "not implemented");
         }
     }
+
+    for (auto&& p : owned_attrs) {
+        RewriterVar* var = p.first;
+
+        assert(var->locations.size() == 1);
+        Location l = *var->locations.begin();
+
+        assert(l.type == Location::Scratch);
+
+        int offset1 = indirectFor(l).offset;
+        int offset2 = p.second;
+        decref_infos.emplace_back(Location::StackIndirect, offset1, offset2);
+    }
+
     return decref_infos;
 }
 
@@ -1323,6 +1336,24 @@ bool RewriterVar::needsDecref() {
     return reftype == RefType::OWNED && !this->refHandedOff();
 }
 
+void RewriterVar::registerOwnedAttr(int byte_offset) {
+    rewriter->addAction([=]() {
+        auto p = std::make_pair(this, byte_offset);
+        assert(!this->rewriter->owned_attrs.count(p));
+        this->rewriter->owned_attrs.insert(p);
+        this->bumpUse();
+    }, { this }, ActionType::NORMAL);
+}
+
+void RewriterVar::deregisterOwnedAttr(int byte_offset) {
+    rewriter->addAction([=]() {
+        auto p = std::make_pair(this, byte_offset);
+        assert(this->rewriter->owned_attrs.count(p));
+        this->rewriter->owned_attrs.erase(p);
+        this->bumpUse();
+    }, { this }, ActionType::NORMAL);
+}
+
 void RewriterVar::bumpUse() {
     rewriter->assertPhaseEmitting();
 
@@ -1350,6 +1381,11 @@ void RewriterVar::releaseIfNoUses() {
 
 void Rewriter::commit() {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
+
+    // The rewriter could add decrefs here, but for now let's make the user add them explicitly
+    // and then call deregisterOwnedAttr().  Making people call it explicitly reduces the chances
+    // of bugs only in the exceptional path, from forgetting to call deregisterOwnedAttr.
+    assert(!owned_attrs.size() && "missing a call to deregisterOwnedAttr");
 
     assert(!finished);
     initPhaseEmitting();
@@ -1438,7 +1474,7 @@ void Rewriter::commit() {
         // add increfs if required
         for (auto&& var : actions[i].consumed_refs) {
             if (var->refHandedOff()) {
-                // if this action is the one which the variable gets handed off we don't need todo anything
+                // if this action is the one which the variable gets handed off we don't need to do anything
                 assert(var->last_refconsumed_numuses > 0 && var->last_refconsumed_numuses <= var->uses.size());
                 int last_used_action_id = var->uses[var->last_refconsumed_numuses - 1];
                 if (last_used_action_id == i)

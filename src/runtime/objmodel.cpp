@@ -4096,8 +4096,10 @@ public:
 
 void decrefOargs(RewriterVar* oargs, bool* oargs_owned, int num_oargs) {
     for (int i = 0; i < num_oargs; i++) {
-        if (oargs_owned[i])
+        if (oargs_owned[i]) {
+            oargs->deregisterOwnedAttr(i * sizeof(Box*));
             oargs->getAttr(i * sizeof(Box*))->setType(RefType::OWNED);
+        }
     }
 }
 
@@ -4352,12 +4354,16 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                 if (varargs_idx == 2)
                     rewrite_args->arg3 = varargs_val;
                 if (varargs_idx >= 3) {
-                    rewrite_args->args->setAttr(
-                        (varargs_idx - 3) * sizeof(Box*), varargs_val,
-                        (is_owned ? RewriterVar::SetattrType::HANDED_OFF : RewriterVar::SetattrType::UNKNOWN));
                     if (is_owned) {
+                        rewrite_args->args->registerOwnedAttr((varargs_idx - 3) * sizeof(Box*));
+
+                        rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), varargs_val,
+                                                    RewriterVar::SetattrType::HANDED_OFF);
+
                         oargs_owned[varargs_idx - 3] = true;
                         varargs_val->refConsumed();
+                    } else {
+                        rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), varargs_val);
                     }
                 }
             }

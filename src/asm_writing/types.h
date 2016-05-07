@@ -15,6 +15,8 @@
 #ifndef PYSTON_ASMWRITING_TYPES_H
 #define PYSTON_ASMWRITING_TYPES_H
 
+#include <climits>
+
 #include "core/common.h"
 
 namespace pyston {
@@ -185,6 +187,8 @@ public:
         Stack,
         Scratch, // stack location, relative to the scratch start
 
+        StackIndirect, // A location like $rsp[offset1][offset2]
+
         // For representing constants that fit in 32-bits, that can be encoded as immediates
         AnyReg,        // special type for use when specifying a location as a destination
         None,          // special type that represents the lack of a location, ex where a "ret void" gets returned
@@ -199,10 +203,18 @@ public:
         // also valid if type==XMMRegister
         int32_t regnum;
         // only valid if type==Stack; this is the offset from bottom of the original frame.
-        // ie argument #6 will have a stack_offset of 0, #7 will have a stack offset of 8, etc
+        // ie argument #6 will have a stack_offset of 0, #7 will have a stack offset of 8, etc.
+        // Measured in bytes
         int32_t stack_offset;
-        // only valid if type == Scratch; offset from the beginning of the scratch area
+        // only valid if type == Scratch; offset from the beginning of the scratch area.
+        // Measured in bytes
         int32_t scratch_offset;
+
+        // Only valid if type == StackIndirect:
+        struct {
+            int16_t stack_first_offset;
+            int16_t stack_second_offset;
+        };
 
         int32_t _data;
     };
@@ -212,6 +224,12 @@ public:
     Location& operator=(const Location& r) = default;
 
     constexpr Location(LocationType type, int32_t data) : type(type), _data(data) {}
+    Location(LocationType type, int64_t offset1, int64_t offset2)
+        : type(type), stack_first_offset(offset1), stack_second_offset(offset2) {
+        assert(type == StackIndirect);
+        assert(SHRT_MIN <= offset1 && offset1 <= SHRT_MAX);
+        assert(SHRT_MIN <= offset2 && offset2 <= SHRT_MAX);
+    }
 
     constexpr Location(assembler::Register reg) : type(Register), regnum(reg.regnum) {}
 
