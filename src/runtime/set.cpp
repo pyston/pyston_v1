@@ -25,10 +25,21 @@ extern "C" Box* createSet() {
 }
 
 static void _setAddStolen(BoxedSet* self, STOLEN(BoxAndHash) val) {
-    auto&& p = self->s.insert(val);
-    if (!p.second /* already exists */) {
-        // keep the original key
+    try {
+        auto&& p = self->s.insert(val);
+
+        // Is there a nicer way to represent try-else?
+        try {
+            if (!p.second /* already exists */) {
+                // keep the original key
+                Py_DECREF(val.value);
+            }
+        } catch (ExcInfo e) {
+            abort();
+        }
+    } catch (ExcInfo e) {
         Py_DECREF(val.value);
+        throw e;
     }
 }
 

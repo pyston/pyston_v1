@@ -55,3 +55,18 @@ d = {}
 for i in xrange(1000):
     d[C(i)] = i
 print len(d)
+
+
+class NonEq(object):
+    def __eq__(self, rhs):
+        1/0
+
+    def __hash__(self):
+        return 0
+
+d = {}
+d[NonEq()] = 1
+try:
+    d[NonEq()] = 2
+except ZeroDivisionError as e:
+    print e
