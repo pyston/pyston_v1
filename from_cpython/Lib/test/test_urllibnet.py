@@ -100,6 +100,8 @@ class urlopenNetworkTests(unittest.TestCase):
             open_url.close()
         self.assertEqual(gotten_url, URL)
 
+    # Pyston change -- this test is flaky
+    @unittest.skip("Pyston change -- Not hitting 3rd party website")
     def test_getcode(self):
         # test getcode() with the fancy opener to get 404 error codes
         URL = "http://www.example.com/XXXinvalidXXX"
