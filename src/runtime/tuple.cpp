@@ -92,9 +92,12 @@ Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
 }
 
 extern "C" PyObject* PyTuple_GetSlice(PyObject* p, Py_ssize_t low, Py_ssize_t high) noexcept {
-    RELEASE_ASSERT(PyTuple_Check(p), "");
-    BoxedTuple* t = static_cast<BoxedTuple*>(p);
+    if (p == NULL || !PyTuple_Check(p)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
 
+    BoxedTuple* t = static_cast<BoxedTuple*>(p);
     Py_ssize_t n = t->size();
     if (low < 0)
         low = 0;
@@ -103,8 +106,8 @@ extern "C" PyObject* PyTuple_GetSlice(PyObject* p, Py_ssize_t low, Py_ssize_t hi
     if (high < low)
         high = low;
 
-    if (low == 0 && high == n)
-        return p;
+    if (low == 0 && high == n && PyTuple_CheckExact(p))
+        return incref(p);
 
     return BoxedTuple::create(high - low, &t->elts[low]);
 }

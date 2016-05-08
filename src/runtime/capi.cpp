@@ -747,18 +747,20 @@ extern "C" void Py_Exit(int sts) noexcept {
 }
 
 extern "C" void PyErr_GetExcInfo(PyObject** ptype, PyObject** pvalue, PyObject** ptraceback) noexcept {
-    assert(0 && "check refcounting");
     ExcInfo* exc = getFrameExcInfo();
-    *ptype = exc->type;
-    *pvalue = exc->value;
-    *ptraceback = exc->traceback;
+    *ptype = xincref(exc->type);
+    *pvalue = xincref(exc->value);
+    *ptraceback = xincref(exc->traceback);
 }
 
 extern "C" void PyErr_SetExcInfo(PyObject* type, PyObject* value, PyObject* traceback) noexcept {
-    assert(0 && "check refcounting");
     ExcInfo* exc = getFrameExcInfo();
-    exc->type = type ? type : None;
-    exc->value = value ? value : None;
+    AUTO_XDECREF(exc->type);
+    AUTO_XDECREF(exc->value);
+    AUTO_XDECREF(exc->traceback);
+
+    exc->type = type ? type : incref(None);
+    exc->value = value ? value : incref(None);
     exc->traceback = traceback;
 }
 
