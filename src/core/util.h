@@ -153,19 +153,18 @@ template <int N> struct BitSet {
         bool operator==(const iterator& rhs) { return cur == rhs.cur; }
         bool operator!=(const iterator& rhs) { return !(*this == rhs); }
         iterator& operator++() {
-            // TODO: this function (and begin()) could be optimized using __builtin_ctz
             assert(cur >= 0 && cur < N);
             uint16_t tmp = set.bits;
             tmp >>= cur + 1;
             cur++;
-
-            while (cur < N) {
-                if (tmp & 1)
+            if (tmp > 0) {
+                int offset = __builtin_ctz(tmp);
+                if (cur + offset < N) {
+                    cur += offset;
                     return *this;
-
-                cur++;
-                tmp >>= 1;
+                }
             }
+            cur = N;
             assert(cur == N);
             return *this;
         }
