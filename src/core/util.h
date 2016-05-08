@@ -181,9 +181,10 @@ template <int N> struct BitSet {
     }
     iterator begin() const {
         uint16_t tmp = bits;
-        for (int i = 0; i < N; i++) {
-            if (tmp & 1)
-                return iterator(*this, i);
+        if (tmp > 0) {
+            int offset = __builtin_ctz(tmp);
+            if (offset < N)
+                return iterator(*this, offset);
         }
         return iterator(*this, N);
     }
