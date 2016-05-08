@@ -41,9 +41,13 @@ public:
 
     llvm::BasicBlock* exc_dest;
 
+    // Frame handling changes a bit after a deopt happens.
+    bool is_after_deopt;
+
     bool hasHandler() const { return exc_dest != NULL; }
 
-    UnwindInfo(AST_stmt* current_stmt, llvm::BasicBlock* exc_dest) : current_stmt(current_stmt), exc_dest(exc_dest) {}
+    UnwindInfo(AST_stmt* current_stmt, llvm::BasicBlock* exc_dest, bool is_after_deopt = false)
+        : current_stmt(current_stmt), exc_dest(exc_dest), is_after_deopt(is_after_deopt) {}
 
     ExceptionStyle preferredExceptionStyle() const;
 

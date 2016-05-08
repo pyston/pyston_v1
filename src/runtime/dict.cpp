@@ -36,10 +36,16 @@ BoxedClass* dictiteritem_cls = NULL;
 }
 
 static void _dictSetStolen(BoxedDict* self, BoxAndHash k, STOLEN(Box*) v) {
-    Box*& slot = self->d[k];
-    Box* old_val = slot;
+    Box** slot = NULL;
+    try {
+        slot = &self->d[k];
+    } catch (ExcInfo e) {
+        Py_DECREF(v);
+        throw e;
+    }
+    Box* old_val = *slot;
 
-    slot = v;
+    *slot = v;
 
     if (old_val) {
         Py_DECREF(old_val);

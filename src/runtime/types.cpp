@@ -703,6 +703,8 @@ static Box* assertInitNone(STOLEN(Box*) rtn, STOLEN(Box*) obj) {
 }
 
 static PyObject* cpythonTypeCall(BoxedClass* type, PyObject* args, PyObject* kwds) {
+    assert(PyType_Check(type));
+
     Box* r = cpython_type_call(type, args, kwds);
     if (!r)
         throwCAPIException();
@@ -810,6 +812,10 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         }
     }
 
+    if (rewrite_args) {
+        rewrite_args->arg1->addGuard((intptr_t)cls);
+    }
+
     // Special-case unicode for now, maybe there's something about this that can eventually be generalized:
     if (cls->tp_new == unicode_cls->tp_new) {
         // TODO: implement
@@ -823,10 +829,6 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         }
 
         assert(S == CXX && "implement me");
-
-        if (rewrite_args) {
-            rewrite_args->arg1->addGuard((intptr_t)cls);
-        }
 
         ParamReceiveSpec paramspec(4, 3, false, false);
         bool rewrite_success = false;

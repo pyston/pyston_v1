@@ -1,5 +1,3 @@
-# expected: reffail
-# - leaked refs
 import unittest
 from test import test_support
 import operator

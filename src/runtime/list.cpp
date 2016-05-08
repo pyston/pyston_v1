@@ -661,7 +661,7 @@ extern "C" Box* listDelitem(BoxedList* self, Box* slice) {
         Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
         if (i == -1 && PyErr_Occurred())
             throwCAPIException();
-        rtn = listDelitemInt(self, (BoxedInt*)boxInt(i));
+        rtn = listDelitemInt(self, (BoxedInt*)autoDecref(boxInt(i)));
     } else if (slice->cls == slice_cls) {
         rtn = listDelitemSlice(self, static_cast<BoxedSlice*>(slice));
     } else {
