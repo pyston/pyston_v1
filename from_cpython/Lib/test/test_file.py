@@ -26,8 +26,6 @@ class AutoFileTests(unittest.TestCase):
             self.f.close()
         os.remove(TESTFN)
 
-    # pyston change:
-    @unittest.skip("does not work with GC")
     def testWeakRefs(self):
         # verify weak references
         p = proxy(self.f)

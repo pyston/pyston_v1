@@ -89,15 +89,10 @@ static thread_local Timer per_thread_cleanup_timer(-1);
 #ifndef NDEBUG
 static __thread bool in_cleanup_code = false;
 #endif
-static __thread bool is_unwinding = false;
+static __thread int num_uncaught_exceptions = 0;
 
 bool isUnwinding() {
-    return is_unwinding;
-}
-
-void setUnwinding(bool b) {
-    assert(!in_cleanup_code);
-    is_unwinding = b;
+    return num_uncaught_exceptions > 0;
 }
 
 extern "C" {
@@ -574,7 +569,7 @@ static inline void unwind_loop(ExcInfo* exc_data) {
 #if STAT_TIMERS
             pyston::StatTimer::finishOverride();
 #endif
-            pyston::is_unwinding = false;
+            pyston::num_uncaught_exceptions--;
         }
         static_assert(THREADING_USE_GIL, "have to make the unwind session usage in this file thread safe!");
         // there is a python unwinding implementation detail leaked
@@ -692,9 +687,7 @@ extern "C" HIDDEN void __cxa_throw(void* exc_obj, std::type_info* tinfo, void (*
     pyston::ExcInfo* exc_data = (pyston::ExcInfo*)exc_obj;
     checkExcInfo(exc_data);
 
-    ASSERT(!pyston::is_unwinding, "We don't support throwing exceptions in destructors!");
-
-    pyston::is_unwinding = true;
+    pyston::num_uncaught_exceptions++;
 #if STAT_TIMERS
     pyston::StatTimer::overrideCounter(unwinding_stattimer);
 #endif
