@@ -81,7 +81,7 @@ PyAPI_FUNC(PyObject *) PyMethod_Class(PyObject *) PYSTON_NOEXCEPT;
  * can't fail, never sets an exception, and NULL is not an error (it just
  * means "not found").
  */
-PyAPI_FUNC(PyObject *) _PyInstance_Lookup(PyObject *pinst, PyObject *name) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) _PyInstance_Lookup(PyObject *pinst, PyObject *name) PYSTON_NOEXCEPT;
 
 // Pyston change: no longer macros
 #if 0

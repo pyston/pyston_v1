@@ -1,5 +1,3 @@
-# expected: reffail
-# - leaked refs, some test failures?
 # Copyright (C) 2003 Python Software Foundation
 
 import unittest
