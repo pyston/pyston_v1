@@ -433,15 +433,12 @@ class ComplexTest(unittest.TestCase):
         test_values = (1, 123.0, 10-19j, xcomplex(1+2j),
                        xcomplex(1+87j), xcomplex(10+90j))
 
-        # Pyston change: if rhs is a subclass of lhs, then should try
-        # reverse the order. Pyston don't support it yet. Need to improve
-        # binop handing.
         for op in infix_binops:
             for x in xcomplex_values:
                 for y in test_values:
                     a = 'x %s y' % op
                     b = 'y %s x' % op
-                    # self.assertTrue(type(eval(a)) is type(eval(b)) is xcomplex)
+                    self.assertTrue(type(eval(a)) is type(eval(b)) is xcomplex)
 
     def test_hash(self):
         for x in xrange(-30, 30):

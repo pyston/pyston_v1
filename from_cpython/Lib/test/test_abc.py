@@ -223,8 +223,7 @@ class TestABC(unittest.TestCase):
         C().f()
         del C
         test_support.gc_collect()
-        # Pyston change: disable it for now.
-        # self.assertEqual(r(), None)
+        self.assertEqual(r(), None)
 
 def test_main():
     test_support.run_unittest(TestABC)

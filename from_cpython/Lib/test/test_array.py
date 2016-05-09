@@ -765,8 +765,6 @@ class BaseTest(unittest.TestCase):
             b = buffer(a)
         self.assertEqual(b[0], a.tostring()[0])
 
-    # Pyston change: disable this test because of our GC
-    @unittest.skip("Pyston" in sys.version)
     def test_weakref(self):
         s = array.array(self.typecode, self.example)
         p = proxy(s)

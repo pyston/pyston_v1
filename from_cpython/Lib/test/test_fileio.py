@@ -28,8 +28,6 @@ class AutoFileTests(unittest.TestCase):
             self.f.close()
         os.remove(TESTFN)
 
-    # Pyston change: disable this test becasue of GC
-    @unittest.skip("only works with refcounting")
     def testWeakRefs(self):
         # verify weak references
         p = proxy(self.f)

@@ -1359,10 +1359,6 @@ extern "C" PyOS_sighandler_t PyOS_getsig(int sig) noexcept {
 }
 
 extern "C" PyOS_sighandler_t PyOS_setsig(int sig, PyOS_sighandler_t handler) noexcept {
-    if (sig == SIGUSR2) {
-        Py_FatalError("SIGUSR2 is reserved for Pyston internal use");
-    }
-
 #ifdef HAVE_SIGACTION
     /* Some code in Modules/signalmodule.c depends on sigaction() being
      * used here if HAVE_SIGACTION is defined.  Fix that if this code
