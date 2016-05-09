@@ -4085,11 +4085,16 @@ ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, _CallRewrite
 template <typename FT> class ExceptionCleanup {
 private:
     FT functor;
+    bool do_cleanup = true;
 
 public:
     ExceptionCleanup(FT ft) : functor(std::move(ft)) {}
+    void cancel() {
+        assert(do_cleanup);
+        do_cleanup = false;
+    }
     ~ExceptionCleanup() {
-        if (isUnwinding())
+        if (do_cleanup)
             functor();
     }
 };
@@ -4267,8 +4272,10 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         assert(!rewrite_args);
         Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
         varargs = PySequence_Fast(given_varargs, "argument after * must be a sequence");
-        if (!varargs)
-            return throwCAPIException();
+        if (!varargs) {
+            throwCAPIException();
+            abort();
+        }
         varargs_size = PySequence_Fast_GET_SIZE(varargs);
     }
 
@@ -4575,6 +4582,8 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
 
         getArg(arg_idx, oarg1, oarg2, oarg3, oargs) = xincref(default_obj);
     }
+
+    cleanup.cancel();
 }
 
 template <Rewritable rewritable>

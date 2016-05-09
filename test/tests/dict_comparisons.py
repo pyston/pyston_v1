@@ -1,5 +1,6 @@
 # expected: fail
-# Dict comparisons are supposed to be based on contents:
+# Dict comparisons are supposed to be based on contents.
+# Note -- if you fix this file, please update from_cpython/Lib/mapping_tests.py
 l1 = []
 l2 = []
 for i in xrange(100):

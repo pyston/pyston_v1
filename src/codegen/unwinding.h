@@ -32,8 +32,17 @@ struct FrameInfo;
 
 void registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size);
 uint64_t getCXXUnwindSymbolAddress(llvm::StringRef sym);
-bool isUnwinding(); // use this instead of std::uncaught_exception
-void setUnwinding(bool);
+
+// use this instead of std::uncaught_exception.
+// Highly discouraged except for asserting -- we could be processing
+// a destructor with decref'd something and then we called into more
+// Python code.  So it's impossible to tell for instance, if a destructor
+// was called due to an exception or due to normal function termination,
+// since the latter can still return isUnwinding==true if there is an
+// exception up in the stack.
+#ifndef NDEBUG
+bool isUnwinding();
+#endif
 
 void setupUnwinding();
 BORROWED(BoxedModule*) getCurrentModule();
