@@ -124,12 +124,8 @@
 
 #include "float.h"
 
-// Pyston change: use normal malloc allocator because it's faster and we can't use the GC
-// because the custom memory managment functions inside this file are not compatible with it.
-// #define MALLOC PyMem_Malloc
-// #define FREE PyMem_Free
-#define MALLOC malloc
-#define FREE free
+#define MALLOC PyMem_Malloc
+#define FREE PyMem_Free
 
 /* This code should also work for ARM mixed-endian format on little-endian
    machines, where doubles have byte order 45670123 (in increasing address

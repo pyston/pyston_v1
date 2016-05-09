@@ -139,10 +139,7 @@ class TestLoader(object):
                 hasattr(getattr(testCaseClass, attrname), '__call__')
         testFnNames = filter(isTestMethod, dir(testCaseClass))
         if self.sortTestMethodsUsing:
-            # Pyston change:
-            # TODO(rntz): needs builtin `cmp` to work
-            #testFnNames.sort(key=_CmpToKey(self.sortTestMethodsUsing))
-            testFnNames.sort()
+            testFnNames.sort(key=_CmpToKey(self.sortTestMethodsUsing))
         return testFnNames
 
     def discover(self, start_dir, pattern='test*.py', top_level_dir=None):

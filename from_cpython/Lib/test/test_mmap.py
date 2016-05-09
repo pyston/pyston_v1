@@ -119,10 +119,7 @@ class MmapTests(unittest.TestCase):
     def test_access_parameter(self):
         # Test for "access" keyword parameter
         mapsize = 10
-        # Pyston change: use a with statement to not rely on the destructor being called:
-        # open(TESTFN, "wb").write("a"*mapsize)
-        with open(TESTFN, "wb") as f:
-            f.write("a"*mapsize)
+        open(TESTFN, "wb").write("a"*mapsize)
         f = open(TESTFN, "rb")
         m = mmap.mmap(f.fileno(), mapsize, access=mmap.ACCESS_READ)
         self.assertEqual(m[:], 'a'*mapsize, "Readonly memory map data incorrect.")
@@ -541,10 +538,7 @@ class MmapTests(unittest.TestCase):
     @unittest.skipUnless(hasattr(mmap, 'PROT_READ'), "needs mmap.PROT_READ")
     def test_prot_readonly(self):
         mapsize = 10
-        # Pyston change: use a with statement to not rely on the destructor being called:
-        # open(TESTFN, "wb").write("a"*mapsize)
-        with open(TESTFN, "wb") as f:
-            f.write("a"*mapsize)
+        open(TESTFN, "wb").write("a"*mapsize)
         f = open(TESTFN, "rb")
         m = mmap.mmap(f.fileno(), mapsize, prot=mmap.PROT_READ)
         self.assertRaises(TypeError, m.write, "foo")
@@ -556,10 +550,7 @@ class MmapTests(unittest.TestCase):
 
     def test_io_methods(self):
         data = "0123456789"
-        # Pyston change: use a with statement to not rely on the destructor being called:
-        # open(TESTFN, "wb").write("x"*len(data))
-        with open(TESTFN, "wb") as f:
-            f.write("x"*len(data))
+        open(TESTFN, "wb").write("x"*len(data))
         f = open(TESTFN, "r+b")
         m = mmap.mmap(f.fileno(), len(data))
         f.close()
@@ -626,10 +617,7 @@ class MmapTests(unittest.TestCase):
         m.close()
 
         # Should not crash (Issue 5385)
-        # Pyston change: use a with statement to not rely on the destructor being called:
-        # open(TESTFN, "wb").write("x"*10)
-        with open(TESTFN, "wb") as f:
-            f.write("x"*10)
+        open(TESTFN, "wb").write("x"*10)
         f = open(TESTFN, "r+b")
         m = mmap.mmap(f.fileno(), 0)
         f.close()

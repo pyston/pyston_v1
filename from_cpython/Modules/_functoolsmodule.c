@@ -35,8 +35,7 @@ functools_reduce(PyObject *self, PyObject *args)
     for (;;) {
         PyObject *op2;
 
-        // Pyston change: can't do these sorts of refcount optimizations:
-        if (1 /*args->ob_refcnt > 1*/) {
+        if (args->ob_refcnt > 1) {
             Py_DECREF(args);
             if ((args = PyTuple_New(2)) == NULL)
                 goto Fail;

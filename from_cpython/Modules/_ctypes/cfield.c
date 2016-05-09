@@ -1291,9 +1291,7 @@ s_get(void *ptr, Py_ssize_t size)
      */
     slen = strlen(PyString_AS_STRING(result));
     size = min(size, (Py_ssize_t)slen);
-
-    // Pyston change: no ob_refcnt
-    if (0 /*result->ob_refcnt == 1*/) {
+    if (result->ob_refcnt == 1) {
         /* shorten the result */
         _PyString_Resize(&result, size);
         return result;

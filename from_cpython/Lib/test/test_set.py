@@ -337,9 +337,7 @@ class TestJointOps(unittest.TestCase):
         obj.x = iter(container)
         del obj, container
         gc.collect()
-        # Pyston change: because with conservative scanning
-        # it is hard to guarantee finalizer calls
-        # self.assertTrue(ref() is None, "Cycle was not collected")
+        self.assertTrue(ref() is None, "Cycle was not collected")
 
 class TestSet(TestJointOps):
     thetype = set
@@ -560,9 +558,7 @@ class TestSet(TestJointOps):
         p = weakref.proxy(s)
         self.assertEqual(str(p), str(s))
         s = None
-        # Pyston change: because with conservative scanning
-        # it is hard to guarantee finalizer calls
-        # self.assertRaises(ReferenceError, str, p)
+        self.assertRaises(ReferenceError, str, p)
 
     @unittest.skipUnless(hasattr(set, "test_c_api"),
                          'C API test only available in a debug build')

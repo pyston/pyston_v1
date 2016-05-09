@@ -23,9 +23,7 @@ __all__ = ["Hashable", "Iterable", "Iterator",
 
 def _hasattr(C, attr):
     try:
-        # Pyston temporary workaround: make this a list comprehension instead of generator comprehension,
-        # since any() can exit without exhausting the iterable.
-        return any([attr in B.__dict__ for B in C.__mro__])
+        return any(attr in B.__dict__ for B in C.__mro__)
     except AttributeError:
         # Old-style class
         return hasattr(C, attr)

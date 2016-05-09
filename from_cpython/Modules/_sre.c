@@ -257,9 +257,7 @@ static void
 data_stack_dealloc(SRE_STATE* state)
 {
     if (state->data_stack) {
-        // Pyston change: use malloc
-        // PyMem_FREE(state->data_stack);
-        free(state->data_stack);
+        PyMem_FREE(state->data_stack);
         state->data_stack = NULL;
     }
     state->data_stack_size = state->data_stack_base = 0;
@@ -275,9 +273,7 @@ data_stack_grow(SRE_STATE* state, Py_ssize_t size)
         void* stack;
         cursize = minsize+minsize/4+1024;
         TRACE(("allocate/grow stack %" PY_FORMAT_SIZE_T "d\n", cursize));
-        // Pyston change: use malloc
-        // stack = PyMem_REALLOC(state->data_stack, cursize);
-        stack = realloc(state->data_stack, cursize);
+        stack = PyMem_REALLOC(state->data_stack, cursize);
         if (!stack) {
             data_stack_dealloc(state);
             return SRE_ERROR_MEMORY;
@@ -1180,9 +1176,7 @@ entrance:
                    ctx->pattern[1], ctx->pattern[2]));
 
             /* install new repeat context */
-            // Pyston change: use malloc
-            // ctx->u.rep = (SRE_REPEAT*) PyObject_MALLOC(sizeof(*ctx->u.rep));
-            ctx->u.rep = (SRE_REPEAT*) malloc(sizeof(*ctx->u.rep));
+            ctx->u.rep = (SRE_REPEAT*) PyObject_MALLOC(sizeof(*ctx->u.rep));
             if (!ctx->u.rep) {
                 PyErr_NoMemory();
                 RETURN_FAILURE;
@@ -1196,9 +1190,7 @@ entrance:
             state->ptr = ctx->ptr;
             DO_JUMP(JUMP_REPEAT, jump_repeat, ctx->pattern+ctx->pattern[0]);
             state->repeat = ctx->u.rep->prev;
-            // Pyston change: use malloc
-            // PyObject_FREE(ctx->u.rep);
-            free(ctx->u.rep);
+            PyObject_FREE(ctx->u.rep);
 
             if (ret) {
                 RETURN_ON_ERROR(ret);
