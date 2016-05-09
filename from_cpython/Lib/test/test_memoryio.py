@@ -1,5 +1,3 @@
-# expected: reffail
-# - Some sort of segfault
 """Unit tests for memory-based file-like objects.
 StringIO -- for unicode strings
 BytesIO -- for bytes

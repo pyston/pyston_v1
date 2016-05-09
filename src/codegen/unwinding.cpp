@@ -547,15 +547,11 @@ public:
 
     std::tuple<FrameInfo*, ExcInfo, PythonStackExtractor> pause() {
         t.end();
-        assert(isUnwinding());
-        setUnwinding(false);
         return std::make_tuple(std::move(prev_frame_info), std::move(exc_info), std::move(pystack_extractor));
     }
 
     void resume(std::tuple<FrameInfo*, ExcInfo, PythonStackExtractor>&& state) {
         std::tie(prev_frame_info, exc_info, pystack_extractor) = state;
-        assert(!isUnwinding());
-        setUnwinding(true);
         t.restart();
     }
 
