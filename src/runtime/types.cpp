@@ -4807,6 +4807,9 @@ extern "C" void Py_Finalize() noexcept {
     call_sys_exitfunc();
     // initialized = 0;
 
+    PyType_ClearCache();
+    PyGC_Collect();
+
     PyImport_Cleanup();
 
 #ifdef Py_REF_DEBUG
