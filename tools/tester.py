@@ -217,8 +217,6 @@ def get_test_options(fn, check_stats, run_memcheck):
 
     if opts.expected == "reffail":
         opts.expected = "fail"
-    if opts.expected == "refstatfail":
-        opts.expected = "statfail"
 
     if not opts.skip:
         # consider other reasons for skipping file
