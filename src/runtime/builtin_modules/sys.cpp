@@ -408,6 +408,72 @@ extern "C" BORROWED(PyObject*) PySys_GetModulesDict() noexcept {
     return getSysModulesDict();
 }
 
+size_t _PySys_GetSizeOf(PyObject* o) {
+    static PyObject* str__sizeof__ = NULL;
+    PyObject* res = NULL;
+    Py_ssize_t size;
+
+    /* Make sure the type is initialized. float gets initialized late */
+    if (PyType_Ready(Py_TYPE(o)) < 0)
+        return (size_t)-1;
+
+    /* Instance of old-style class */
+    if (PyInstance_Check(o))
+        size = PyInstance_Type.tp_basicsize;
+    /* all other objects */
+    else {
+        PyObject* method = _PyObject_LookupSpecial(o, "__sizeof__", &str__sizeof__);
+        if (method == NULL) {
+            if (!PyErr_Occurred())
+                PyErr_Format(PyExc_TypeError, "Type %.100s doesn't define __sizeof__", Py_TYPE(o)->tp_name);
+        } else {
+            res = PyObject_CallFunctionObjArgs(method, NULL);
+            Py_DECREF(method);
+        }
+
+        if (res == NULL)
+            return (size_t)-1;
+
+        size = (size_t)PyInt_AsSsize_t(res);
+        Py_DECREF(res);
+        if (size == -1 && PyErr_Occurred())
+            return (size_t)-1;
+    }
+
+    if (size < 0) {
+        PyErr_SetString(PyExc_ValueError, "__sizeof__() should return >= 0");
+        return (size_t)-1;
+    }
+
+    /* add gc_head size */
+    if (PyObject_IS_GC(o))
+        return ((size_t)size) + sizeof(PyGC_Head);
+    return (size_t)size;
+}
+
+static PyObject* sys_getsizeof(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
+    static const char* kwlist[] = { "object", "default", 0 };
+    size_t size;
+    PyObject* o, * dflt = NULL;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|O:getsizeof", const_cast<char**>(kwlist), &o, &dflt))
+        return NULL;
+
+    size = _PySys_GetSizeOf(o);
+
+    if (size == (size_t)-1 && PyErr_Occurred()) {
+        /* Has a default value been given */
+        if (dflt != NULL && PyErr_ExceptionMatches(PyExc_TypeError)) {
+            PyErr_Clear();
+            Py_INCREF(dflt);
+            return dflt;
+        } else
+            return NULL;
+    }
+
+    return PyInt_FromSize_t(size);
+}
+
 static PyObject* sys_excepthook(PyObject* self, PyObject* args) noexcept {
     PyObject* exc, *value, *tb;
     if (!PyArg_UnpackTuple(args, "excepthook", 3, 3, &exc, &value, &tb))
@@ -492,11 +558,16 @@ PyDoc_STRVAR(displayhook_doc, "displayhook(object) -> None\n"
                               "\n"
                               "Print an object to sys.stdout and also save it in __builtin__._\n");
 
+PyDoc_STRVAR(getsizeof_doc, "getsizeof(object, default) -> int\n\
+\n\
+Return the size of object in bytes.");
+
 static PyMethodDef sys_methods[] = {
     { "excepthook", sys_excepthook, METH_VARARGS, excepthook_doc },
     { "displayhook", sys_displayhook, METH_O, displayhook_doc },
     { "_clear_type_cache", sys_clear_type_cache, METH_NOARGS, sys_clear_type_cache__doc__ },
     { "getrefcount", (PyCFunction)sys_getrefcount, METH_O, getrefcount_doc },
+    { "getsizeof", (PyCFunction)sys_getsizeof, METH_VARARGS | METH_KEYWORDS, getsizeof_doc },
 };
 
 PyDoc_STRVAR(version_info__doc__, "sys.version_info\n\
