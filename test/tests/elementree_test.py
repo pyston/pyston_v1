@@ -1,4 +1,3 @@
-# expected: reffail
 # test is based on the cpython ElementTree doc
 def test(ET):
     xml_str = """<?xml version="1.0"?>
