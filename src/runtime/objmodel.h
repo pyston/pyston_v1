@@ -56,7 +56,7 @@ extern "C" Box* getattr_capi(Box* obj, BoxedString* attr) noexcept __attribute__
 extern "C" Box* getattrMaybeNonstring(Box* obj, Box* attr);
 // XXX: testing.  this tail-calls in optimized builds so force it to inline for unoptimized as well to get the same
 // behavior.
-extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) __attribute__((always_inline));
+extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) __attribute__((noinline));
 extern "C" void delattr(Box* obj, BoxedString* attr) __attribute__((noinline));
 extern "C" void delattrGeneric(Box* obj, BoxedString* attr, DelattrRewriteArgs* rewrite_args);
 extern "C" bool nonzero(Box* obj) __attribute__((noinline));
