@@ -3069,8 +3069,10 @@ init_elementtree(void)
 
        );
 
-    if (!PyRun_String(bootstrap, Py_file_input, g, NULL))
+    PyObject* bootstrap_ret;
+    if (!(bootstrap_ret = PyRun_String(bootstrap, Py_file_input, g, NULL)))
         return;
+    Py_DECREF(bootstrap_ret);
 
     elementpath_obj = PyDict_GetItemString(g, "ElementPath");
 
@@ -3089,6 +3091,8 @@ init_elementtree(void)
     elementtree_deepcopy_obj = PyDict_GetItemString(g, "deepcopy");
     elementtree_iter_obj = PyDict_GetItemString(g, "iter");
     elementtree_itertext_obj = PyDict_GetItemString(g, "itertext");
+
+    Py_DECREF(g);
 
 #if defined(USE_PYEXPAT_CAPI)
     /* link against pyexpat, if possible */

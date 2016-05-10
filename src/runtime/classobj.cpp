@@ -77,7 +77,7 @@ static BORROWED(Box*) classLookup(BoxedClassobj* cls, BoxedString* attr) {
     return classLookup<NOT_REWRITABLE>(cls, attr, NULL);
 }
 
-extern "C" PyObject* _PyInstance_Lookup(PyObject* pinst, PyObject* pname) noexcept {
+extern "C" BORROWED(PyObject*) _PyInstance_Lookup(PyObject* pinst, PyObject* pname) noexcept {
     RELEASE_ASSERT(PyInstance_Check(pinst), "");
     BoxedInstance* inst = (BoxedInstance*)pinst;
 
@@ -92,7 +92,7 @@ extern "C" PyObject* _PyInstance_Lookup(PyObject* pinst, PyObject* pname) noexce
         Box* v = inst->getattr(name);
         if (v == NULL)
             v = classLookup(inst->inst_cls, name);
-        return xincref(v);
+        return v;
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
