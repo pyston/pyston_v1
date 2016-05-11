@@ -76,6 +76,9 @@ bool RefcountTracker::isNullable(llvm::Value* v) {
 }
 
 void RefcountTracker::refConsumed(llvm::Value* v, llvm::Instruction* inst) {
+    if (llvm::isa<UndefValue>(v))
+        return;
+
     assert(this->vars[v].reftype != RefType::UNKNOWN);
 
     this->refs_consumed[inst].push_back(v);
@@ -630,6 +633,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
     int num_untracked = 0;
     auto check_val_missed = [&](llvm::Value* v) {
         if (rt->vars.count(v))
+            return;
+
+        if (llvm::isa<UndefValue>(v))
             return;
 
         auto t = v->getType();

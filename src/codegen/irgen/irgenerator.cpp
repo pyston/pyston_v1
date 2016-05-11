@@ -922,7 +922,7 @@ private:
                     // trigger an exception, but the irgenerator will know that definitely-defined
                     // local symbols will not throw.
                     emitter.getBuilder()->CreateUnreachable();
-                    exc_type = exc_value = exc_tb = emitter.getNone();
+                    exc_type = exc_value = exc_tb = undefVariable();
                     // endBlock(DEAD);
                 }
 
