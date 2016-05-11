@@ -4213,6 +4213,9 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     Box* arg3 = oarg3;
     oarg1 = oarg2 = oarg3 = NULL;
 
+    if (oargs)
+        memset(oargs, 0, sizeof(Box*) * (num_output_args - 3));
+
     // Clear any increfs we did for when we throw an exception:
     auto clear_refs = [&]() {
         Py_XDECREF(oarg1);
