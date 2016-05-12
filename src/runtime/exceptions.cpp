@@ -202,7 +202,8 @@ extern "C" void raise3(STOLEN(Box*) arg0, STOLEN(Box*) arg1, STOLEN(Box*) arg2) 
     if (reraise)
         startReraise();
 
-    assert(!PyErr_Occurred());
+    if (PyErr_Occurred())
+        PyErr_Clear();
     throw exc_info;
 }
 
