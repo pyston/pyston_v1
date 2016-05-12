@@ -6,14 +6,12 @@ branches:
 
 compiler:
   - clang
-# XXX: temporarily disable
-# - gcc
+  - gcc
 
 env:
   matrix:
     - TRAVIS_BUILD_TYPE=Debug CCACHE_DIR=$HOME/.ccache_debug
-# XXX: temporarily disable
-# - TRAVIS_BUILD_TYPE=Release CCACHE_DIR=$HOME/.ccache_release
+    - TRAVIS_BUILD_TYPE=Release CCACHE_DIR=$HOME/.ccache_release
   global:
     - PYSTON_RUN_ARGS=G
 

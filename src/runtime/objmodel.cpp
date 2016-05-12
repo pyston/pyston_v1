@@ -3105,6 +3105,76 @@ void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewrit
 template void setattrGeneric<NOT_REWRITABLE>(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
 template void setattrGeneric<REWRITABLE>(Box* obj, BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
 
+void setattrInternal(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val, SetattrRewriteArgs* rewrite_args) {
+    setattrofunc tp_setattro = obj->cls->tp_setattro;
+    assert(tp_setattro);
+
+    assert(!obj->cls->tp_setattr);
+
+    if (rewrite_args) {
+        auto r_cls = rewrite_args->obj->getAttr(offsetof(Box, cls));
+        // rewriter->trap();
+        r_cls->addAttrGuard(offsetof(BoxedClass, tp_setattr), 0);
+        r_cls->addAttrGuard(offsetof(BoxedClass, tp_setattro), (intptr_t)tp_setattro);
+    }
+
+    // Note: setattr will only be retrieved if we think it will be profitable to try calling that as opposed to
+    // the tp_setattr function pointer.
+    Box* setattr = NULL;
+    RewriterVar* r_setattr;
+
+    if (tp_setattro == instance_setattro) {
+        instanceSetattroInternal(obj, attr, attr_val, rewrite_args);
+        return;
+    } else if (tp_setattro != PyObject_GenericSetAttr) {
+// TODO: rewrite these cases?
+#if 0
+        static BoxedString* setattr_str = getStaticString("__setattr__");
+        if (rewrite_args) {
+            GetattrRewriteArgs rewrite_args(rewrite_args->rewriter, rewrite_args->obj->getAttr(offsetof(Box, cls)),
+                                            Location::any());
+            setattr = typeLookup(obj->cls, setattr_str, &rewrite_args);
+            assert(setattr);
+
+            if (rewrite_args.isSuccessful()) {
+                r_setattr = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+                // TODO this is not good enough, since the object could get collected:
+                r_setattr->addGuard((intptr_t)setattr);
+            } else {
+                rewriter.reset(NULL);
+            }
+        } else {
+            // setattr = typeLookup(obj->cls, setattr_str);
+        }
+#endif
+    }
+
+    if (tp_setattro == PyObject_GenericSetAttr) {
+        setattrGeneric<REWRITABLE>(obj, attr, attr_val, rewrite_args);
+        return;
+    }
+
+    AUTO_DECREF(attr_val);
+
+// TODO actually rewrite this?
+#if 0
+    if (rewrite_args) {
+        assert(setattr);
+
+        setattr = processDescriptor(setattr, obj, obj->cls);
+        AUTO_DECREF(setattr);
+        autoDecref(
+            runtimeCallInternal<CXX, REWRITABLE>(setattr, NULL, ArgPassSpec(2), attr, attr_val, NULL, NULL, NULL));
+    } else
+#endif
+    {
+        STAT_TIMER(t0, "us_timer_slowpath_tpsetattro", 10);
+        int r = tp_setattro(obj, attr, attr_val);
+        if (r)
+            throwCAPIException();
+    }
+}
+
 extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) {
     STAT_TIMER(t0, "us_timer_slowpath_setattr", 10);
 
@@ -3125,90 +3195,16 @@ extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) {
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setattr"));
 
-    setattrofunc tp_setattro = obj->cls->tp_setattro;
-    assert(tp_setattro);
-
-    assert(!obj->cls->tp_setattr);
-
     if (rewriter.get()) {
-        rewriter->getArg(0)->setType(RefType::BORROWED);
+        SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->setType(RefType::BORROWED),
+                                        rewriter->getArg(2)->setType(RefType::OWNED));
         rewriter->getArg(1)->setType(RefType::BORROWED);
-        rewriter->getArg(2)->setType(RefType::OWNED);
+        setattrInternal(obj, attr, attr_val, &rewrite_args);
 
-        auto r_cls = rewriter->getArg(0)->getAttr(offsetof(Box, cls));
-        // rewriter->trap();
-        r_cls->addAttrGuard(offsetof(BoxedClass, tp_setattr), 0);
-        r_cls->addAttrGuard(offsetof(BoxedClass, tp_setattro), (intptr_t)tp_setattro);
-    }
-
-    // Note: setattr will only be retrieved if we think it will be profitable to try calling that as opposed to
-    // the tp_setattr function pointer.
-    Box* setattr = NULL;
-    RewriterVar* r_setattr;
-
-    if (tp_setattro == instance_setattro) {
-        if (rewriter.get()) {
-            SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2));
-            instanceSetattroInternal(obj, attr, attr_val, &rewrite_args);
-            if (rewrite_args.out_success)
-                rewriter->commit();
-        } else
-            instanceSetattroInternal(obj, attr, attr_val, NULL);
-
-        return;
-    } else if (tp_setattro != PyObject_GenericSetAttr) {
-        static BoxedString* setattr_str = getStaticString("__setattr__");
-        if (rewriter.get()) {
-            GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->getAttr(offsetof(Box, cls)),
-                                            Location::any());
-            setattr = typeLookup(obj->cls, setattr_str, &rewrite_args);
-            assert(setattr);
-
-            if (rewrite_args.isSuccessful()) {
-                r_setattr = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
-                // TODO this is not good enough, since the object could get collected:
-                r_setattr->addGuard((intptr_t)setattr);
-            } else {
-                rewriter.reset(NULL);
-            }
-        } else {
-            // setattr = typeLookup(obj->cls, setattr_str);
-        }
-    }
-
-    // This is a borrowed reference so we don't need to register it
-    static Box* object_setattr = object_cls->getattr(getStaticString("__setattr__"));
-
-    // I guess this check makes it ok for us to just rely on having guarded on the value of setattr without
-    // invalidating on deallocation, since we assume that object.__setattr__ will never get deallocated.
-    if (tp_setattro == PyObject_GenericSetAttr) {
-        if (rewriter.get()) {
-            // rewriter->trap();
-            SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2));
-            setattrGeneric<REWRITABLE>(obj, attr, attr_val, &rewrite_args);
-            if (rewrite_args.out_success)
-                rewriter->commit();
-        } else {
-            setattrGeneric<NOT_REWRITABLE>(obj, attr, attr_val, NULL);
-        }
-        return;
-    }
-
-    AUTO_DECREF(attr_val);
-
-    if (rewriter.get()) {
-        assert(setattr);
-
-        // TODO actually rewrite this?
-        setattr = processDescriptor(setattr, obj, obj->cls);
-        AUTO_DECREF(setattr);
-        autoDecref(
-            runtimeCallInternal<CXX, REWRITABLE>(setattr, NULL, ArgPassSpec(2), attr, attr_val, NULL, NULL, NULL));
+        if (rewrite_args.out_success)
+            rewriter->commit();
     } else {
-        STAT_TIMER(t0, "us_timer_slowpath_tpsetattro", 10);
-        int r = tp_setattro(obj, attr, attr_val);
-        if (r)
-            throwCAPIException();
+        setattrInternal(obj, attr, attr_val, NULL);
     }
 }
 
@@ -4216,6 +4212,9 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     Box* arg2 = oarg2;
     Box* arg3 = oarg3;
     oarg1 = oarg2 = oarg3 = NULL;
+
+    if (oargs)
+        memset(oargs, 0, sizeof(Box*) * (num_output_args - 3));
 
     // Clear any increfs we did for when we throw an exception:
     auto clear_refs = [&]() {
@@ -7284,14 +7283,23 @@ extern "C" void setGlobal(Box* globals, BoxedString* name, STOLEN(Box*) value) {
     }
 
     if (globals->cls == module_cls) {
-        // Note: in optimized builds, this will be a tail call, which will
-        // preserve the return address, letting the setattr() call rewrite itself.
-        // XXX this isn't really safe in general, since the guards that led to this
-        // path need to end up in the rewrite.  I think this is safe for now since
-        // writing the module case won't accidentally work for the dict case, but
-        // we should make all the entrypoints (the ones that look at the return address)
-        // be noinline.
-        setattr(static_cast<BoxedModule*>(globals), name, value);
+        std::unique_ptr<Rewriter> rewriter(
+            Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setattr"));
+
+        if (rewriter.get()) {
+            SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->setType(RefType::BORROWED),
+                                            rewriter->getArg(2)->setType(RefType::OWNED));
+            rewriter->getArg(1)->setType(RefType::BORROWED);
+
+            rewrite_args.obj->addAttrGuard(offsetof(Box, cls), (uint64_t)globals->cls);
+
+            setattrInternal(globals, name, value, &rewrite_args);
+
+            if (rewrite_args.out_success)
+                rewriter->commit();
+        } else {
+            setattrInternal(globals, name, value, NULL);
+        }
     } else {
         RELEASE_ASSERT(globals->cls == dict_cls, "%s", globals->cls->tp_name);
         int r = PyDict_SetItem(globals, name, value);

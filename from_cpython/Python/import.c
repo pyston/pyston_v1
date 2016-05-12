@@ -600,7 +600,7 @@ _PyImport_FixupExtension(char *name, char *filename)
 {
     PyObject *modules, *mod, *dict, *copy;
     if (extensions == NULL) {
-        extensions = PyGC_RegisterStaticConstant(PyDict_New());
+        extensions = PyDict_New();
         if (extensions == NULL)
             return NULL;
     }
