@@ -339,7 +339,8 @@ endif()
 add_pyston_test(defaults cpython --exit-code-only --skip-failing -t100)
 add_pyston_test(defaults integration --exit-code-only --skip-failing -t600)
 if(ENABLE_EXTRA_TESTS)
-  add_pyston_test(defaults extra -t900 --exit-code-only)
+# XXX: reenable
+# add_pyston_test(defaults extra -t900 --exit-code-only)
 endif()
 
 
