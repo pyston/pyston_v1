@@ -331,29 +331,8 @@ enum class ActionType { NORMAL, GUARD, MUTATION };
 
 class Rewriter : public ICSlotRewrite::CommitHook {
 private:
-    class RegionAllocator {
-    public:
-        static const int BLOCK_SIZE = 1024; // reserve a bit of space for list/malloc overhead
-        std::list<char[BLOCK_SIZE]> blocks;
-
-        int cur_offset = BLOCK_SIZE + 1;
-
-        void* alloc(size_t bytes);
-    };
-    template <typename T> class RegionAllocatorAdaptor : public std::allocator<T> {
-    private:
-        RegionAllocator* allocator;
-
-    public:
-        T* allocate(size_t n) { return (T*)allocator->alloc(n); }
-        void deallocate(T* p, size_t n) {
-            // do nothing
-        }
-    };
-
-private:
     // This needs to be the first member:
-    RegionAllocator allocator;
+    llvm::BumpPtrAllocatorImpl<llvm::MallocAllocator, 512> allocator;
 
     // The rewriter has refcounting logic for handling owned RewriterVars.  If we own memory inside those RewriterVars,
     // we need to register that via registerOwnedAttr, which ends up here:
@@ -361,7 +340,7 @@ private:
 
 protected:
     // Allocates `bytes` bytes of data.  The allocation will get freed when the rewriter gets freed.
-    void* regionAlloc(size_t bytes) { return allocator.alloc(bytes); }
+    void* regionAlloc(size_t bytes) { return allocator.Allocate(bytes, 16 /* alignment */); }
 
     // Helps generating the best code for loading a const integer value.
     // By keeping track of the last known value of every register and reusing it.
@@ -425,7 +404,7 @@ protected:
     Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs,
              bool needs_invalidation_support = true);
 
-    std::deque<RewriterAction, RegionAllocatorAdaptor<RewriterAction>> actions;
+    std::deque<RewriterAction> actions;
     template <typename F> RewriterAction* addAction(F&& action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
         assertPhaseCollecting();
         for (RewriterVar* var : vars) {
