@@ -655,7 +655,7 @@ $(CMAKE_SETUP_DBG):
 	@$(MAKE) cmake_check
 	@$(MAKE) clang_check
 	@mkdir -p $(CMAKE_DIR_DBG)
-	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake $(COMMON_CMAKE_OPTIONS) -DCMAKE_BUILD_TYPE=Debug
+	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake $(COMMON_CMAKE_OPTIONS) -DCMAKE_BUILD_TYPE=Debug -DENABLE_REF_DEBUG=ON
 $(CMAKE_SETUP_RELEASE):
 	@$(MAKE) cmake_check
 	@$(MAKE) clang_check
