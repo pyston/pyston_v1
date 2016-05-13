@@ -231,6 +231,6 @@ extern "C" void boxedLocalsDel(Box* boxedLocals, BoxedString* attr);
 
 extern "C" void checkRefs(Box* b);   // asserts that b has >= 0 refs
 extern "C" Box* assertAlive(Box* b); // asserts that b has > 0 refs, and returns b
-extern "C" void xdecrefAll(int num, ...);
+extern "C" void xdecrefAndRethrow(void* cxa_ptr, int num_decref, ...);
 }
 #endif

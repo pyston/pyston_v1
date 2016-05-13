@@ -118,7 +118,10 @@ static inline Box* callattrInternal3(Box* obj, BoxedString* attr, LookupScope sc
     return callattrInternal<S, rewritable>(obj, attr, scope, rewrite_args, argspec, arg1, arg2, arg3, NULL, NULL);
 }
 
-extern "C" void xdecrefAll(int num, ...) {
+extern "C" void* __cxa_begin_catch(void*);
+extern "C" void xdecrefAndRethrow(void* cxa_ptr, int num, ...) {
+    ExcInfo e = *(ExcInfo*)__cxa_begin_catch(cxa_ptr);
+
     va_list va;
     va_start(va, num);
 
@@ -128,6 +131,8 @@ extern "C" void xdecrefAll(int num, ...) {
     }
 
     va_end(va);
+
+    rawReraise(e.type, e.value, e.traceback);
 }
 
 extern "C" Box* deopt(AST_expr* expr, Box* value) {
