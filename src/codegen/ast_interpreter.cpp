@@ -1691,7 +1691,6 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
                 bool is_live = true;
                 if (node->is_kill) {
                     is_live = false;
-                    assert(!source_info->getLiveness()->isLiveAtEnd(node->id, current_block));
                 } else if (node->lookup_type == ScopeInfo::VarScopeType::FAST)
                     is_live = source_info->getLiveness()->isLiveAtEnd(node->id, current_block);
 
