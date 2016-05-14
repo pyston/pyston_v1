@@ -1683,6 +1683,12 @@ static void functionSetDefaults(Box* b, Box* v, void*) {
     // and leave this assert.
     RELEASE_ASSERT(func->can_change_defaults, "trying to change the defaults on a non-defaults-changable function.");
 
+    // Changing defaults of builtins would be very scary.  Python functions are safe since they
+    // store their arguments into their symbol table, but builtin functions are free to let them
+    // stay borrowed.  If a builtin function has changable defaults, and it can call into arbitrary
+    // user code, then it could call something that changes its own defaults, and all of a sudden
+    // one of its arguments gets deallocated from under it.
+
     if (v == None)
         v = NULL;
     else if (v && !PyTuple_Check(v)) {
