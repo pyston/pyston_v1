@@ -4131,7 +4131,7 @@ void decrefOargs(RewriterVar* oargs, bool* oargs_owned, int num_oargs) {
 
 template <Rewritable rewritable, typename FuncNameCB>
 void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* param_names, FuncNameCB func_name_cb,
-                                Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success,
+                                Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success,
                                 ArgPassSpec argspec, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** args, Box** oargs,
                                 const std::vector<BoxedString*>* keyword_names, bool* oargs_owned) {
     if (rewritable == NOT_REWRITABLE) {
@@ -4610,22 +4610,75 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
     cleanup.cancel();
 }
 
+
+// TODO: implement this for real
+template <Rewritable rewritable, typename FuncNameCB>
+Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNames* param_names,
+                                       FuncNameCB func_name_cb, Box** defaults, CallRewriteArgs* rewrite_args,
+                                       ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
+                                       const std::vector<BoxedString*>* keyword_names, FunctorPointer continuation) {
+    Box** oargs = NULL;
+    bool* oargs_owned = NULL;
+    if (paramspec.totalReceived() > 3) {
+        oargs = (Box**)alloca(sizeof(Box*) * (paramspec.totalReceived() - 3));
+        oargs_owned = (bool*)alloca(sizeof(bool) * (paramspec.totalReceived() - 3));
+    }
+
+    bool rewrite_success = false;
+    rearrangeArgumentsInternal<rewritable>(paramspec, param_names, func_name_cb, defaults, rewrite_args,
+                                           rewrite_success, argspec, arg1, arg2, arg3, args, oargs, keyword_names,
+                                           oargs_owned);
+
+    AUTO_DECREF_ARGS(paramspec, arg1, arg2, arg3, oargs);
+
+    if (!rewrite_success)
+        rewrite_args = NULL;
+
+    Box* r = continuation(rewrite_args, arg1, arg2, arg3, oargs);
+
+    if (rewrite_args)
+        decrefOargs(rewrite_args->args, oargs_owned, paramspec.totalReceived() - 3);
+
+    return r;
+}
+
 template <Rewritable rewritable>
 void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
-                        Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
-                        Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** args, Box** oargs,
+                        Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
+                        Box*& arg1, Box*& arg2, Box*& arg3, Box** args, Box** oargs,
                         const std::vector<BoxedString*>* keyword_names, bool* oargs_owned) {
     auto func = [func_name]() { return func_name; };
     return rearrangeArgumentsInternal<rewritable>(paramspec, param_names, func, defaults, rewrite_args, rewrite_success,
-                                                  argspec, oarg1, oarg2, oarg3, args, oargs, keyword_names,
-                                                  oargs_owned);
+                                                  argspec, arg1, arg2, arg3, args, oargs, keyword_names, oargs_owned);
 }
-template void rearrangeArguments<REWRITABLE>(ParamReceiveSpec, const ParamNames*, const char*, Box**,
-                                             _CallRewriteArgsBase*, bool&, ArgPassSpec, Box*&, Box*&, Box*&, Box**,
-                                             Box**, const std::vector<BoxedString*>*, bool*);
+template void rearrangeArguments<REWRITABLE>(ParamReceiveSpec, const ParamNames*, const char*, Box**, CallRewriteArgs*,
+                                             bool&, ArgPassSpec, Box*&, Box*&, Box*&, Box**, Box**,
+                                             const std::vector<BoxedString*>*, bool*);
 template void rearrangeArguments<NOT_REWRITABLE>(ParamReceiveSpec, const ParamNames*, const char*, Box**,
-                                                 _CallRewriteArgsBase*, bool&, ArgPassSpec, Box*&, Box*&, Box*&, Box**,
+                                                 CallRewriteArgs*, bool&, ArgPassSpec, Box*&, Box*&, Box*&, Box**,
                                                  Box**, const std::vector<BoxedString*>*, bool*);
+
+template <Rewritable rewritable>
+Box* rearrangeArgumentsAndCall(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
+                               Box** defaults, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
+                               Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,
+                               FunctorPointer continuation) {
+    auto func = [func_name]() { return func_name; };
+    return rearrangeArgumentsAndCallInternal<rewritable>(paramspec, param_names, func, defaults, rewrite_args, argspec,
+                                                         arg1, arg2, arg3, args, keyword_names, continuation);
+}
+template Box* rearrangeArgumentsAndCall<REWRITABLE>(ParamReceiveSpec paramspec, const ParamNames* param_names,
+                                                    const char* func_name, Box** defaults,
+                                                    CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                                                    Box* arg2, Box* arg3, Box** args,
+                                                    const std::vector<BoxedString*>* keyword_names,
+                                                    FunctorPointer continuation);
+template Box* rearrangeArgumentsAndCall<NOT_REWRITABLE>(ParamReceiveSpec paramspec, const ParamNames* param_names,
+                                                        const char* func_name, Box** defaults,
+                                                        CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                                                        Box* arg2, Box* arg3, Box** args,
+                                                        const std::vector<BoxedString*>* keyword_names,
+                                                        FunctorPointer continuation);
 
 static StatCounter slowpath_callfunc("slowpath_callfunc");
 template <ExceptionStyle S, Rewritable rewritable>
@@ -4658,26 +4711,49 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         rewrite_args->rewriter->addDependenceOn(func->dependent_ics);
     }
 
-    Box** oargs = NULL;
-    bool* oargs_owned = NULL;
-    bool rewrite_success = false;
-
     int num_output_args = paramspec.totalReceived();
     int num_passed_args = argspec.totalPassed();
 
-    if (num_output_args > 3) {
-        int size = (num_output_args - 3) * sizeof(Box*);
-        oargs = (Box**)alloca(size);
-        memset(&oargs[0], 0, size);
+    bool rearrange_rewrite_failed = false;
+    auto orig_rewrite_args = rewrite_args;
+    auto continuation = [=, &rearrange_rewrite_failed](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3,
+                                                       Box** args) {
+        if (orig_rewrite_args && !rewrite_args)
+            rearrange_rewrite_failed = true;
 
-        oargs_owned = (bool*)alloca((num_output_args - 3) * sizeof(bool));
-    }
+        BoxedClosure* closure = func->closure;
 
+        // special handling for generators:
+        // the call to function containing a yield should just create a new generator object.
+        Box* res;
+        if (md->isGenerator()) {
+            res = createGenerator(func, arg1, arg2, arg3, args);
+
+            if (rewrite_args) {
+                RewriterVar* r_arg1 = num_output_args >= 1 ? rewrite_args->arg1 : rewrite_args->rewriter->loadConst(0);
+                RewriterVar* r_arg2 = num_output_args >= 2 ? rewrite_args->arg2 : rewrite_args->rewriter->loadConst(0);
+                RewriterVar* r_arg3 = num_output_args >= 3 ? rewrite_args->arg3 : rewrite_args->rewriter->loadConst(0);
+                RewriterVar* r_args = num_output_args >= 4 ? rewrite_args->args : rewrite_args->rewriter->loadConst(0);
+                rewrite_args->out_rtn
+                    = rewrite_args->rewriter->call(true, (void*)createGenerator, rewrite_args->obj, r_arg1, r_arg2,
+                                                   r_arg3, r_args)->setType(RefType::OWNED);
+
+                rewrite_args->out_success = true;
+            }
+        } else {
+            res = callCLFunc<S, rewritable>(md, rewrite_args, num_output_args, closure, NULL, func->globals, arg1, arg2,
+                                            arg3, args);
+        }
+
+        return res;
+    };
+
+    Box* r;
     try {
         auto func_name_cb = [md]() { return getFunctionName(md).data(); };
-        rearrangeArgumentsInternal<rewritable>(
+        r = rearrangeArgumentsAndCallInternal<rewritable>(
             paramspec, &md->param_names, func_name_cb, paramspec.num_defaults ? func->defaults->elts : NULL,
-            rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args, oargs, keyword_names, oargs_owned);
+            rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names, continuation);
     } catch (ExcInfo e) {
         if (S == CAPI) {
             setCAPIException(e);
@@ -4686,22 +4762,12 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
             throw e;
     }
 
-    if (num_output_args < 1)
-        arg1 = NULL;
-    if (num_output_args < 2)
-        arg2 = NULL;
-    if (num_output_args < 3)
-        arg3 = NULL;
-    AUTO_XDECREF(arg1);
-    AUTO_XDECREF(arg2);
-    AUTO_XDECREF(arg3);
-    AUTO_XDECREF_ARRAY(oargs, num_output_args - 3);
-
-    if (rewrite_args && !rewrite_success) {
-// These are the cases that we weren't able to rewrite.
-// So instead, just rewrite them to be a call to callFunc, which helps a little bit.
-// TODO we should extract the rest of this function from the end of this block,
-// put it in a different function, and have the rewrites target that.
+    if (rearrange_rewrite_failed) {
+// If we weren't able to rewrite, at least rewrite to callFunc, which helps a little bit.
+// Only do this if rearrangeArguments was the reason we couldn't rewrite, since it is one
+// of the few functions that is careful to not write anything out if it can't rewrite.
+//
+// TODO we should extract the continuation, put it in a different function, and have the rewrites target that.
 
 // Note(kmod): I tried moving this section to runtimeCallInternal, ie to the place that calls
 // callFunc.  The thought was that this would let us apply this same optimization to other
@@ -4760,34 +4826,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         }
     }
 
-    BoxedClosure* closure = func->closure;
-
-    // special handling for generators:
-    // the call to function containing a yield should just create a new generator object.
-    Box* res;
-    if (md->isGenerator()) {
-        res = createGenerator(func, arg1, arg2, arg3, oargs);
-
-        if (rewrite_args) {
-            RewriterVar* r_arg1 = num_output_args >= 1 ? rewrite_args->arg1 : rewrite_args->rewriter->loadConst(0);
-            RewriterVar* r_arg2 = num_output_args >= 2 ? rewrite_args->arg2 : rewrite_args->rewriter->loadConst(0);
-            RewriterVar* r_arg3 = num_output_args >= 3 ? rewrite_args->arg3 : rewrite_args->rewriter->loadConst(0);
-            RewriterVar* r_args = num_output_args >= 4 ? rewrite_args->args : rewrite_args->rewriter->loadConst(0);
-            rewrite_args->out_rtn
-                = rewrite_args->rewriter->call(true, (void*)createGenerator, rewrite_args->obj, r_arg1, r_arg2, r_arg3,
-                                               r_args)->setType(RefType::OWNED);
-
-            rewrite_args->out_success = true;
-        }
-    } else {
-        res = callCLFunc<S, rewritable>(md, rewrite_args, num_output_args, closure, NULL, func->globals, arg1, arg2,
-                                        arg3, oargs);
-    }
-
-    if (rewrite_args && num_output_args > 3)
-        decrefOargs(rewrite_args->args, oargs_owned, num_output_args - 3);
-
-    return res;
+    return r;
 }
 
 template <ExceptionStyle S>

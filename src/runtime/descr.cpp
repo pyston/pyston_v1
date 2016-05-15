@@ -311,15 +311,6 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         RELEASE_ASSERT(0, "0x%x", call_flags);
     }
 
-    Box** oargs = NULL;
-
-    Box* oargs_array[1] = { NULL };
-    if (paramspec.totalReceived() > 3) {
-        assert((paramspec.totalReceived() - 3) <= sizeof(oargs_array) / sizeof(oargs_array[0]));
-        oargs = oargs_array;
-    }
-    bool oargs_owned[1];
-
     bool arg1_class_guarded = false;
     if (rewrite_args && argspec.num_args >= 1) {
         // Try to do the guard before rearrangeArguments if possible:
@@ -327,105 +318,102 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         arg1_class_guarded = true;
     }
 
-    bool rewrite_success = false;
-    rearrangeArguments(paramspec, NULL, self->method->ml_name, defaults, rewrite_args, rewrite_success, argspec, arg1,
-                       arg2, arg3, args, oargs, keyword_names, oargs_owned);
-
-    AUTO_DECREF_ARGS(paramspec, arg1, arg2, arg3, oargs);
-
-    if (!rewrite_success)
-        rewrite_args = NULL;
-
-    if (ml_flags & METH_CLASS) {
-        rewrite_args = NULL;
-        if (!PyType_Check(arg1))
-            raiseExcHelper(TypeError, "descriptor '%s' requires a type but received a '%s'", self->method->ml_name,
-                           getFullTypeName(arg1).c_str());
-    } else {
-        if (!isSubclass(arg1->cls, self->type))
-            raiseExcHelper(TypeError, "descriptor '%s' requires a '%s' arg1 but received a '%s'", self->method->ml_name,
-                           getFullNameOfClass(self->type).c_str(), getFullTypeName(arg1).c_str());
-    }
-
-    if (rewrite_args && !arg1_class_guarded) {
-        rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (intptr_t)arg1->cls);
-    }
-
-    Box* rtn;
-    if (call_flags == METH_NOARGS) {
-        {
-            UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-            rtn = (Box*)self->method->ml_meth(arg1, NULL);
+    auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+        if (ml_flags & METH_CLASS) {
+            rewrite_args = NULL;
+            if (!PyType_Check(arg1))
+                raiseExcHelper(TypeError, "descriptor '%s' requires a type but received a '%s'", self->method->ml_name,
+                               getFullTypeName(arg1).c_str());
+        } else {
+            if (!isSubclass(arg1->cls, self->type))
+                raiseExcHelper(TypeError, "descriptor '%s' requires a '%s' arg1 but received a '%s'",
+                               self->method->ml_name, getFullNameOfClass(self->type).c_str(),
+                               getFullTypeName(arg1).c_str());
         }
-        if (rewrite_args)
-            rewrite_args->out_rtn
-                = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
-                                               rewrite_args->rewriter->loadConst(0, Location::forArg(1)))
-                      ->setType(RefType::OWNED);
-    } else if (call_flags == METH_VARARGS) {
-        {
-            UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-            rtn = (Box*)self->method->ml_meth(arg1, arg2);
+
+        if (rewrite_args && !arg1_class_guarded) {
+            rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (intptr_t)arg1->cls);
         }
-        if (rewrite_args)
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
-                                                                 rewrite_args->arg2)->setType(RefType::OWNED);
-    } else if (call_flags == (METH_VARARGS | METH_KEYWORDS)) {
-        {
-            UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-            rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(arg1, arg2, arg3);
-        }
-        if (rewrite_args)
-            rewrite_args->out_rtn
-                = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
-                                               rewrite_args->arg2, rewrite_args->arg3)->setType(RefType::OWNED);
-    } else if (call_flags == METH_O) {
-        {
-            UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-            rtn = (Box*)self->method->ml_meth(arg1, arg2);
-        }
-        if (rewrite_args)
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
-                                                                 rewrite_args->arg2)->setType(RefType::OWNED);
-    } else if ((call_flags & ~(METH_O3 | METH_D3)) == 0) {
-        {
-            UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-            rtn = ((Box * (*)(Box*, Box*, Box*, Box**))self->method->ml_meth)(arg1, arg2, arg3, oargs);
-        }
-        if (rewrite_args) {
-            if (paramspec.totalReceived() == 2)
+
+        Box* rtn;
+        if (call_flags == METH_NOARGS) {
+            {
+                UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
+                rtn = (Box*)self->method->ml_meth(arg1, NULL);
+            }
+            if (rewrite_args)
+                rewrite_args->out_rtn
+                    = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                                                   rewrite_args->rewriter->loadConst(0, Location::forArg(1)))
+                          ->setType(RefType::OWNED);
+        } else if (call_flags == METH_VARARGS) {
+            {
+                UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
+                rtn = (Box*)self->method->ml_meth(arg1, arg2);
+            }
+            if (rewrite_args)
                 rewrite_args->out_rtn
                     = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
                                                    rewrite_args->arg2)->setType(RefType::OWNED);
-            else if (paramspec.totalReceived() == 3)
+        } else if (call_flags == (METH_VARARGS | METH_KEYWORDS)) {
+            {
+                UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
+                rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(arg1, arg2, arg3);
+            }
+            if (rewrite_args)
                 rewrite_args->out_rtn
                     = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
                                                    rewrite_args->arg2, rewrite_args->arg3)->setType(RefType::OWNED);
-            else if (paramspec.totalReceived() > 3)
+        } else if (call_flags == METH_O) {
+            {
+                UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
+                rtn = (Box*)self->method->ml_meth(arg1, arg2);
+            }
+            if (rewrite_args)
                 rewrite_args->out_rtn
                     = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
-                                                   rewrite_args->arg2, rewrite_args->arg3,
-                                                   rewrite_args->args)->setType(RefType::OWNED);
-            else
-                abort();
+                                                   rewrite_args->arg2)->setType(RefType::OWNED);
+        } else if ((call_flags & ~(METH_O3 | METH_D3)) == 0) {
+            {
+                UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
+                rtn = ((Box * (*)(Box*, Box*, Box*, Box**))self->method->ml_meth)(arg1, arg2, arg3, args);
+            }
+            if (rewrite_args) {
+                if (paramspec.totalReceived() == 2)
+                    rewrite_args->out_rtn
+                        = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                                                       rewrite_args->arg2)->setType(RefType::OWNED);
+                else if (paramspec.totalReceived() == 3)
+                    rewrite_args->out_rtn
+                        = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                                                       rewrite_args->arg2, rewrite_args->arg3)->setType(RefType::OWNED);
+                else if (paramspec.totalReceived() > 3)
+                    rewrite_args->out_rtn
+                        = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                                                       rewrite_args->arg2, rewrite_args->arg3,
+                                                       rewrite_args->args)->setType(RefType::OWNED);
+                else
+                    abort();
+            }
+        } else {
+            RELEASE_ASSERT(0, "0x%x", call_flags);
         }
-    } else {
-        RELEASE_ASSERT(0, "0x%x", call_flags);
-    }
 
-    if (!rtn)
-        throwCAPIException();
+        if (!rtn)
+            throwCAPIException();
 
-    if (rewrite_args && oargs)
-        decrefOargs(rewrite_args->args, oargs_owned, 1);
+        if (rewrite_args) {
+            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+            rewrite_args->out_success = true;
+        }
 
-    if (rewrite_args) {
-        rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-        rewrite_args->out_success = true;
-    }
+        return rtn;
+    };
 
-    return rtn;
+    return rearrangeArgumentsAndCall(paramspec, NULL, self->method->ml_name, defaults, rewrite_args, argspec, arg1,
+                                     arg2, arg3, args, keyword_names, continuation);
 }
+
 static Box* methodGetName(Box* b, void*) {
     assert(b->cls == method_cls);
     const char* s = static_cast<BoxedMethodDescriptor*>(b)->method->ml_name;
@@ -646,74 +634,74 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
         RELEASE_ASSERT(0, "%d", flags);
     }
 
-    Box** oargs = NULL;
+    auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+#ifndef NDEBUG
+        if (paramspec.takes_varargs)
+            assert(arg2 && arg2->cls == tuple_cls);
+#endif
 
-    bool rewrite_success = false;
-    rearrangeArguments(paramspec, NULL, self->wrapper->name.data(), NULL, rewrite_args, rewrite_success, argspec, arg1,
-                       arg2, arg3, args, oargs, keyword_names, NULL);
+        Box* rtn;
+        if (flags == PyWrapperFlag_KEYWORDS) {
+            wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
+            rtn = (*wk)(arg1, arg2, self->wrapped, arg3);
 
-    AUTO_DECREF_ARGS(paramspec, arg1, arg2, arg3, oargs);
+            if (rewrite_args) {
+                auto rewriter = rewrite_args->rewriter;
+                rewrite_args->out_rtn
+                    = rewriter->call(true, (void*)wk, rewrite_args->arg1, rewrite_args->arg2,
+                                     rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)),
+                                     rewrite_args->arg3)->setType(RefType::OWNED);
+                rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+                rewrite_args->out_success = true;
+            }
+        } else if (flags == PyWrapperFlag_PYSTON || flags == 0) {
+            rtn = (*wrapper)(arg1, arg2, self->wrapped);
 
-    if (paramspec.takes_varargs)
-        assert(arg2 && arg2->cls == tuple_cls);
+            if (rewrite_args) {
+                auto rewriter = rewrite_args->rewriter;
+                rewrite_args->out_rtn
+                    = rewriter->call(true, (void*)wrapper, rewrite_args->arg1, rewrite_args->arg2,
+                                     rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)))
+                          ->setType(RefType::OWNED);
+                rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+                rewrite_args->out_success = true;
+            }
+        } else if (flags == PyWrapperFlag_1ARG) {
+            wrapperfunc_1arg wrapper_1arg = (wrapperfunc_1arg)wrapper;
+            rtn = (*wrapper_1arg)(arg1, self->wrapped);
 
-    if (!rewrite_success)
-        rewrite_args = NULL;
+            if (rewrite_args) {
+                auto rewriter = rewrite_args->rewriter;
+                rewrite_args->out_rtn
+                    = rewriter->call(true, (void*)wrapper, rewrite_args->arg1,
+                                     rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(1)))
+                          ->setType(RefType::OWNED);
+                rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+                rewrite_args->out_success = true;
+            }
+        } else if (flags == PyWrapperFlag_2ARG) {
+            rtn = (*wrapper)(arg1, arg2, self->wrapped);
 
-    Box* rtn;
-    if (flags == PyWrapperFlag_KEYWORDS) {
-        wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
-        rtn = (*wk)(arg1, arg2, self->wrapped, arg3);
-
-        if (rewrite_args) {
-            auto rewriter = rewrite_args->rewriter;
-            rewrite_args->out_rtn = rewriter->call(true, (void*)wk, rewrite_args->arg1, rewrite_args->arg2,
-                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)),
-                                                   rewrite_args->arg3)->setType(RefType::OWNED);
-            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-            rewrite_args->out_success = true;
+            if (rewrite_args) {
+                auto rewriter = rewrite_args->rewriter;
+                rewrite_args->out_rtn
+                    = rewriter->call(true, (void*)wrapper, rewrite_args->arg1, rewrite_args->arg2,
+                                     rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)))
+                          ->setType(RefType::OWNED);
+                rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+                rewrite_args->out_success = true;
+            }
+        } else {
+            RELEASE_ASSERT(0, "%d", flags);
         }
-    } else if (flags == PyWrapperFlag_PYSTON || flags == 0) {
-        rtn = (*wrapper)(arg1, arg2, self->wrapped);
 
-        if (rewrite_args) {
-            auto rewriter = rewrite_args->rewriter;
-            rewrite_args->out_rtn = rewriter->call(true, (void*)wrapper, rewrite_args->arg1, rewrite_args->arg2,
-                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)))
-                                        ->setType(RefType::OWNED);
-            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-            rewrite_args->out_success = true;
-        }
-    } else if (flags == PyWrapperFlag_1ARG) {
-        wrapperfunc_1arg wrapper_1arg = (wrapperfunc_1arg)wrapper;
-        rtn = (*wrapper_1arg)(arg1, self->wrapped);
+        if (!rtn)
+            throwCAPIException();
+        return rtn;
+    };
 
-        if (rewrite_args) {
-            auto rewriter = rewrite_args->rewriter;
-            rewrite_args->out_rtn = rewriter->call(true, (void*)wrapper, rewrite_args->arg1,
-                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(1)))
-                                        ->setType(RefType::OWNED);
-            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-            rewrite_args->out_success = true;
-        }
-    } else if (flags == PyWrapperFlag_2ARG) {
-        rtn = (*wrapper)(arg1, arg2, self->wrapped);
-
-        if (rewrite_args) {
-            auto rewriter = rewrite_args->rewriter;
-            rewrite_args->out_rtn = rewriter->call(true, (void*)wrapper, rewrite_args->arg1, rewrite_args->arg2,
-                                                   rewriter->loadConst((intptr_t)self->wrapped, Location::forArg(2)))
-                                        ->setType(RefType::OWNED);
-            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-            rewrite_args->out_success = true;
-        }
-    } else {
-        RELEASE_ASSERT(0, "%d", flags);
-    }
-
-    if (!rtn)
-        throwCAPIException();
-    return rtn;
+    return rearrangeArgumentsAndCall(paramspec, NULL, self->wrapper->name.data(), NULL, rewrite_args, argspec, arg1,
+                                     arg2, arg3, args, keyword_names, continuation);
 }
 
 static Box* wrapperdescrGetDoc(Box* b, void*) {

@@ -262,15 +262,15 @@ struct ParamReceiveSpec {
         assert(num_defaults <= MAX_DEFAULTS);
     }
 
-    bool operator==(ParamReceiveSpec rhs) {
+    bool operator==(ParamReceiveSpec rhs) const {
         return takes_varargs == rhs.takes_varargs && takes_kwargs == rhs.takes_kwargs
                && num_defaults == rhs.num_defaults && num_args == rhs.num_args;
     }
 
-    bool operator!=(ParamReceiveSpec rhs) { return !(*this == rhs); }
+    bool operator!=(ParamReceiveSpec rhs) const { return !(*this == rhs); }
 
-    int totalReceived() { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
-    int kwargsIndex() { return num_args + (takes_varargs ? 1 : 0); }
+    int totalReceived() const { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
+    int kwargsIndex() const { return num_args + (takes_varargs ? 1 : 0); }
 };
 
 // Inline-caches contain fastpath code, and need to know that their fastpath is valid for a particular set

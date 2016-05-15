@@ -1797,85 +1797,82 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
         // so we could just rearrangeArguments to the form that it wants and then call tp_new directly.
     }
 
-    bool rewrite_success = false;
-    rearrangeArguments(paramspec, NULL, self->method_def->ml_name, defaults, rewrite_args, rewrite_success, argspec,
-                       arg1, arg2, arg3, args, oargs, keyword_names, NULL);
-
-    AUTO_DECREF_ARGS(paramspec, arg1, arg2, arg3, oargs);
-
-    if (!rewrite_success)
-        rewrite_args = NULL;
-
-    RewriterVar* r_passthrough = NULL;
-    if (rewrite_args)
-        r_passthrough = rewrite_args->rewriter->loadConst((intptr_t)self->passthrough, Location::forArg(0));
-
-    Box* rtn;
-    if (flags == METH_VARARGS) {
-        rtn = (Box*)func(self->passthrough, arg1);
+    auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+        RewriterVar* r_passthrough = NULL;
         if (rewrite_args)
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1)
-                                        ->setType(RefType::OWNED);
-    } else if (flags == (METH_VARARGS | METH_KEYWORDS)) {
-        rtn = (Box*)((PyCFunctionWithKeywords)func)(self->passthrough, arg1, arg2);
-        if (rewrite_args)
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1,
-                                                                 rewrite_args->arg2)->setType(RefType::OWNED);
-    } else if (flags == METH_NOARGS) {
-        rtn = (Box*)func(self->passthrough, NULL);
-        if (rewrite_args)
-            rewrite_args->out_rtn
-                = rewrite_args->rewriter->call(true, (void*)func, r_passthrough,
-                                               rewrite_args->rewriter->loadConst(0, Location::forArg(1)))
-                      ->setType(RefType::OWNED);
-    } else if (flags == METH_O) {
-        rtn = (Box*)func(self->passthrough, arg1);
-        if (rewrite_args)
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1)
-                                        ->setType(RefType::OWNED);
-    } else if ((flags & ~(METH_O3 | METH_D3)) == 0) {
-        assert(paramspec.totalReceived() <= 3); // would need to pass through oargs
-        rtn = ((Box * (*)(Box*, Box*, Box*, Box*))func)(self->passthrough, arg1, arg2, arg3);
-        if (rewrite_args) {
-            if (paramspec.totalReceived() == 1)
+            r_passthrough = rewrite_args->rewriter->loadConst((intptr_t)self->passthrough, Location::forArg(0));
+
+        Box* rtn;
+        if (flags == METH_VARARGS) {
+            rtn = (Box*)func(self->passthrough, arg1);
+            if (rewrite_args)
                 rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough,
                                                                      rewrite_args->arg1)->setType(RefType::OWNED);
-            else if (paramspec.totalReceived() == 2)
+        } else if (flags == (METH_VARARGS | METH_KEYWORDS)) {
+            rtn = (Box*)((PyCFunctionWithKeywords)func)(self->passthrough, arg1, arg2);
+            if (rewrite_args)
                 rewrite_args->out_rtn
                     = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1,
                                                    rewrite_args->arg2)->setType(RefType::OWNED);
-            else if (paramspec.totalReceived() == 3)
+        } else if (flags == METH_NOARGS) {
+            rtn = (Box*)func(self->passthrough, NULL);
+            if (rewrite_args)
                 rewrite_args->out_rtn
-                    = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1,
-                                                   rewrite_args->arg2, rewrite_args->arg3)->setType(RefType::OWNED);
-            else
-                abort();
+                    = rewrite_args->rewriter->call(true, (void*)func, r_passthrough,
+                                                   rewrite_args->rewriter->loadConst(0, Location::forArg(1)))
+                          ->setType(RefType::OWNED);
+        } else if (flags == METH_O) {
+            rtn = (Box*)func(self->passthrough, arg1);
+            if (rewrite_args)
+                rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough,
+                                                                     rewrite_args->arg1)->setType(RefType::OWNED);
+        } else if ((flags & ~(METH_O3 | METH_D3)) == 0) {
+            assert(paramspec.totalReceived() <= 3); // would need to pass through oargs
+            rtn = ((Box * (*)(Box*, Box*, Box*, Box*))func)(self->passthrough, arg1, arg2, arg3);
+            if (rewrite_args) {
+                if (paramspec.totalReceived() == 1)
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough,
+                                                                         rewrite_args->arg1)->setType(RefType::OWNED);
+                else if (paramspec.totalReceived() == 2)
+                    rewrite_args->out_rtn
+                        = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1,
+                                                       rewrite_args->arg2)->setType(RefType::OWNED);
+                else if (paramspec.totalReceived() == 3)
+                    rewrite_args->out_rtn
+                        = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1,
+                                                       rewrite_args->arg2, rewrite_args->arg3)->setType(RefType::OWNED);
+                else
+                    abort();
+            }
+        } else if (flags == METH_OLDARGS) {
+            /* the really old style */
+
+            rewrite_args = NULL;
+
+            int size = PyTuple_GET_SIZE(arg1);
+            Box* arg = arg1;
+            if (size == 1)
+                arg = PyTuple_GET_ITEM(arg1, 0);
+            else if (size == 0)
+                arg = NULL;
+            rtn = func(self->passthrough, arg);
+        } else {
+            RELEASE_ASSERT(0, "0x%x", flags);
         }
-    } else if (flags == METH_OLDARGS) {
-        /* the really old style */
 
-        rewrite_args = NULL;
+        if (rewrite_args) {
+            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+            rewrite_args->out_success = true;
+        }
 
-        int size = PyTuple_GET_SIZE(arg1);
-        Box* arg = arg1;
-        if (size == 1)
-            arg = PyTuple_GET_ITEM(arg1, 0);
-        else if (size == 0)
-            arg = NULL;
-        rtn = func(self->passthrough, arg);
-    } else {
-        RELEASE_ASSERT(0, "0x%x", flags);
-    }
+        if (S == CXX && !rtn)
+            throwCAPIException();
+        assert(rtn && "should have set + thrown an exception!");
+        return rtn;
+    };
 
-    if (rewrite_args) {
-        rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-        rewrite_args->out_success = true;
-    }
-
-    if (!rtn)
-        throwCAPIException();
-    assert(rtn && "should have set + thrown an exception!");
-    return rtn;
+    return rearrangeArgumentsAndCall(paramspec, NULL, self->method_def->ml_name, defaults, rewrite_args, argspec, arg1,
+                                     arg2, arg3, args, keyword_names, continuation);
 }
 
 /* extension modules might be compiled with GC support so these
