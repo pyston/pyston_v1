@@ -2354,18 +2354,20 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        if (_key->cls != str_cls)
-            self->convertToDictBacked();
-
         if (self->isDictBacked()) {
             static BoxedString* get_str = getStaticString("get");
             return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), get_str, LookupScope::CLASS_ONLY, NULL,
                                                          ArgPassSpec(2), _key, def, NULL, NULL, NULL);
         }
 
-        RELEASE_ASSERT(_key->cls == str_cls, "");
+        _key = coerceUnicodeToStr<CXX>(_key);
+        if (_key->cls != str_cls) {
+            Py_DECREF(_key);
+            return incref(def);
+        }
+
+        assert(_key->cls == str_cls);
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Py_INCREF(key);
         internStringMortalInplace(key);
         AUTO_DECREF(key);
 
