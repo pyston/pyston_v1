@@ -995,9 +995,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
 
 Value ASTInterpreter::visit_yield(AST_Yield* node) {
     Value value = node->value ? visit_expr(node->value) : getNone();
-    assert(generator && generator->cls == generator_cls);
-
-    return Value(yield(generator, value.o), jit ? jit->emitYield(value) : NULL);
+    return Value(ASTInterpreterJitInterface::yieldHelper(this, value.o), jit ? jit->emitYield(value) : NULL);
 }
 
 Value ASTInterpreter::visit_stmt(AST_stmt* node) {
@@ -1896,6 +1894,15 @@ void ASTInterpreterJitInterface::uncacheExcInfoHelper(void* _interpreter) {
 void ASTInterpreterJitInterface::raise0Helper(void* _interpreter) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     raise0(&interpreter->getFrameInfo()->exc);
+}
+
+Box* ASTInterpreterJitInterface::yieldHelper(void* _interpreter, STOLEN(Box*) value) {
+    ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
+    auto generator = interpreter->generator;
+    assert(generator && generator->cls == generator_cls);
+
+    Box* live_values = { interpreter->created_closure };
+    return yield(generator, value, live_values);
 }
 
 const void* interpreter_instr_addr = (void*)&executeInnerAndSetupFrame;
