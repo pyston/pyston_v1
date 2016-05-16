@@ -2520,16 +2520,4 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
 
     return PatchpointInitializationInfo(slowpath_start, slowpath_rtn_addr, continue_addr, std::move(live_outs));
 }
-
-void* Rewriter::RegionAllocator::alloc(size_t bytes) {
-    assert(bytes <= BLOCK_SIZE);
-    if (cur_offset + bytes > BLOCK_SIZE) {
-        blocks.emplace_back();
-        cur_offset = 0;
-    }
-
-    char* rtn = blocks.back() + cur_offset;
-    cur_offset += bytes;
-    return rtn;
-}
 }

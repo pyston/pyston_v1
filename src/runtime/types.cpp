@@ -40,6 +40,7 @@
 #include "runtime/dict.h"
 #include "runtime/hiddenclass.h"
 #include "runtime/ics.h"
+#include "runtime/import.h"
 #include "runtime/inline/list.h"
 #include "runtime/iterobject.h"
 #include "runtime/list.h"
@@ -834,7 +835,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         bool rewrite_success = false;
         static ParamNames param_names({ "", "string", "encoding", "errors" }, "", "");
         static Box* defaults[3] = { NULL, NULL, NULL };
-        Box* oargs[1];
+        Box* oargs[1] = { NULL };
         bool oargs_owned[1];
 
         rearrangeArguments(paramspec, &param_names, "unicode", defaults, rewrite_args, rewrite_success, argspec, arg1,
@@ -2864,7 +2865,6 @@ BORROWED(Box*) Box::getAttrWrapper() {
 }
 
 extern "C" BORROWED(PyObject*) PyObject_GetAttrWrapper(PyObject* obj) noexcept {
-    assert(0 && "check refcounting");
     return obj->getAttrWrapper();
 }
 
@@ -4973,6 +4973,12 @@ extern "C" void Py_Finalize() noexcept {
     if (threading::forgot_refs_via_fork) {
         if (VERBOSITY())
             fprintf(stderr, "[Leaked refs via multithreaded fork]\n");
+        assert_refs = false;
+    }
+
+    if (imported_foreign_cextension) {
+        if (VERBOSITY() && _Py_RefTotal)
+            fprintf(stderr, "[Leaked references but we did load foreign C extensions']\n");
         assert_refs = false;
     }
 

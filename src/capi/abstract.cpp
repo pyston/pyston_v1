@@ -696,7 +696,9 @@ extern "C" PyObject* PyObject_CallMethodObjArgs(PyObject* callable, PyObject* na
         }
     }
 
+    Py_INCREF(attr);
     internStringMortalInplace(attr);
+    AUTO_DECREF(attr);
     tmp = callattrInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(
         callable, attr, CLASS_OR_INST, NULL, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
     if (!tmp && !PyErr_Occurred())

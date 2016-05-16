@@ -1357,14 +1357,33 @@ void HCAttrs::moduleClear() noexcept {
     if (!hcls)
         return;
 
-    RELEASE_ASSERT(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON, "");
+    auto&& first_check_func = [](const char* s) { return s[0] == '_' && s[1] != '_'; };
+    auto&& second_check_func = [](const char* s) { return s[0] != '_' || strcmp(s, "__builtins__") != 0; };
 
+    if (hcls->type == HiddenClass::DICT_BACKED) {
+        BoxedDict* d = (BoxedDict*)this->attr_list->attrs[0];
+        for (auto&& e : d->d) {
+            if (PyString_Check(e.first.value) && first_check_func(PyString_AsString(e.first.value))) {
+                AUTO_DECREF(e.second);
+                e.second = incref(None);
+            }
+        }
+
+        for (auto&& e : d->d) {
+            if (PyString_Check(e.first.value) && second_check_func(PyString_AsString(e.first.value))) {
+                AUTO_DECREF(e.second);
+                e.second = incref(None);
+            }
+        }
+        return;
+    }
+
+    RELEASE_ASSERT(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON, "");
     auto attr_list = this->attr_list;
-    auto attr_list_size = hcls->attributeArraySize();
 
     for (auto&& p : hcls->getStrAttrOffsets()) {
         const char* s = p.first->c_str();
-        if (s[0] == '_' && s[1] != '_') {
+        if (first_check_func(s)) {
             int idx = p.second;
             Box* b = attr_list->attrs[idx];
             attr_list->attrs[idx] = incref(None);
@@ -1374,7 +1393,7 @@ void HCAttrs::moduleClear() noexcept {
 
     for (auto&& p : hcls->getStrAttrOffsets()) {
         const char* s = p.first->c_str();
-        if (s[0] != '_' || strcmp(s, "__builtins__") != 0) {
+        if (second_check_func(s)) {
             int idx = p.second;
             Box* b = attr_list->attrs[idx];
             attr_list->attrs[idx] = incref(None);
@@ -4648,12 +4667,9 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     if (num_output_args > 3) {
         int size = (num_output_args - 3) * sizeof(Box*);
         oargs = (Box**)alloca(size);
+        memset(&oargs[0], 0, size);
 
         oargs_owned = (bool*)alloca((num_output_args - 3) * sizeof(bool));
-
-#ifndef NDEBUG
-        memset(&oargs[0], 0, size);
-#endif
     }
 
     try {
@@ -6865,7 +6881,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
         for (size_t i = 0; i < slots.size(); i++) {
             Box* slot_name = slots[i];
             if (PyUnicode_Check(slot_name)) {
-                slots[i] = _PyUnicode_AsDefaultEncodedString(slot_name, NULL);
+                slots[i] = xincref(_PyUnicode_AsDefaultEncodedString(slot_name, NULL));
                 if (!slots[i])
                     throwCAPIException();
                 Py_DECREF(slot_name);

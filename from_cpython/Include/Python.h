@@ -21,12 +21,6 @@
 #define PYSTON_VERSION "0.5"
 
 #define WITH_PYMALLOC
-// XXX: testing
-#ifndef NDEBUG
-#define Py_REF_DEBUG
-#define PYMALLOC_DEBUG
-#define Py_TRACE_REFS
-#endif
 
 // These include orders come from CPython:
 #include "patchlevel.h"

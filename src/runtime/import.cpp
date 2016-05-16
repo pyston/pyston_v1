@@ -32,6 +32,10 @@
 
 namespace pyston {
 
+#ifdef Py_REF_DEBUG
+bool imported_foreign_cextension = false;
+#endif
+
 static void removeModule(BoxedString* name) {
     BoxedDict* d = getSysModulesDict();
     PyDict_DelItem(d, name);
@@ -173,6 +177,12 @@ BoxedModule* importCExtension(BoxedString* full_name, const std::string& last_na
 
     if (Py_VerboseFlag)
         PySys_WriteStderr("import %s # dynamically loaded from %s\n", full_name->c_str(), path.c_str());
+
+#ifdef Py_REF_DEBUG
+    // if we load a foreign C extension we can't check that _Py_RefTotal == 0
+    if (!llvm::StringRef(path).endswith("from_cpython/Lib/" + last_name + ".pyston.so"))
+        imported_foreign_cextension = true;
+#endif
 
     return incref(m);
 }

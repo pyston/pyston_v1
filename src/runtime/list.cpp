@@ -560,14 +560,14 @@ static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i
     memmove(self->elts->elts + start + v_size, self->elts->elts + stop, remaining_elts * sizeof(Box*));
     for (int i = 0; i < v_size; i++) {
         Box* r = v_elts[i];
-        Py_INCREF(r);
+        Py_XINCREF(r);
         self->elts->elts[start + i] = r;
     }
 
     self->size += delts;
 
     for (int i = 0; i < stop - start; i++) {
-        Py_DECREF(removed_elts[i]);
+        Py_XDECREF(removed_elts[i]);
     }
     if (removed_elts)
         PyMem_FREE(removed_elts);

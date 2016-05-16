@@ -138,6 +138,7 @@ void BoxedList::shrink() {
             capacity = new_capacity;
         } else if (size == 0) {
             delete elts;
+            elts = NULL;
             capacity = 0;
         }
     }

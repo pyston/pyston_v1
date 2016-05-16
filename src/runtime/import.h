@@ -22,6 +22,10 @@ namespace pyston {
 extern "C" PyObject* PyImport_GetImporter(PyObject* path) noexcept;
 extern "C" Box* import(int level, Box* from_imports, llvm::StringRef module_name);
 BoxedModule* importCExtension(BoxedString* full_name, const std::string& last_name, const std::string& path);
+
+#ifdef Py_REF_DEBUG
+extern bool imported_foreign_cextension;
+#endif
 }
 
 #endif

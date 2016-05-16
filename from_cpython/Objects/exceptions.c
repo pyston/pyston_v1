@@ -246,7 +246,6 @@ BaseException_repr(PyBaseExceptionObject *self)
 static PyObject *
 BaseException_reduce(PyBaseExceptionObject *self)
 {
-    assert(0 && "check refcounting");
     /* Pyston change:
     if (self->args && self->dict)
         return PyTuple_Pack(3, Py_TYPE(self), self->args, self->dict);
@@ -853,7 +852,6 @@ EnvironmentError_reduce(PyEnvironmentErrorObject *self)
     } else
         Py_INCREF(args);
 
-    assert(0 && "check refcounting");
     /* Pyston change:
     if (self->dict)
         res = PyTuple_Pack(3, Py_TYPE(self), args, self->dict);
@@ -864,7 +862,9 @@ EnvironmentError_reduce(PyEnvironmentErrorObject *self)
     PyObject* attr_wrapper = PyObject_GetAttrWrapper((PyObject*)self);
     if (!attr_wrapper)
         return NULL;
-    return PyTuple_Pack(3, Py_TYPE(self), args, attr_wrapper);
+    res = PyTuple_Pack(3, Py_TYPE(self), args, attr_wrapper);
+    Py_DECREF(args);
+    return res;
 }
 
 

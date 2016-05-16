@@ -3504,7 +3504,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     RELEASE_ASSERT(cls->tp_cache == NULL, "");
     RELEASE_ASSERT(cls->tp_subclasses == NULL, "");
     RELEASE_ASSERT(cls->tp_weaklist == NULL, "");
-    RELEASE_ASSERT(cls->tp_del == NULL, "");
     RELEASE_ASSERT(cls->tp_version_tag == 0, "");
 
     // I think it is safe to ignore these for for now:
