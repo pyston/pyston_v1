@@ -2360,18 +2360,20 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        if (_key->cls != str_cls)
-            self->convertToDictBacked();
-
         if (self->isDictBacked()) {
             static BoxedString* get_str = getStaticString("get");
             return callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), get_str, LookupScope::CLASS_ONLY, NULL,
                                                          ArgPassSpec(2), _key, def, NULL, NULL, NULL);
         }
 
-        RELEASE_ASSERT(_key->cls == str_cls, "");
+        _key = coerceUnicodeToStr<CXX>(_key);
+        if (_key->cls != str_cls) {
+            Py_DECREF(_key);
+            return incref(def);
+        }
+
+        assert(_key->cls == str_cls);
         BoxedString* key = static_cast<BoxedString*>(_key);
-        Py_INCREF(key);
         internStringMortalInplace(key);
         AUTO_DECREF(key);
 
@@ -4053,6 +4055,8 @@ void AttrWrapperIter::dealloc(Box* _o) noexcept {
 void BoxedClosure::dealloc(Box* _o) noexcept {
     BoxedClosure* o = (BoxedClosure*)_o;
 
+    PyObject_GC_UnTrack(o);
+
     for (int i = 0; i < o->nelts; i++) {
         Py_XDECREF(o->elts[i]);
     }
@@ -4069,6 +4073,8 @@ int BoxedClosure::traverse(Box* _o, visitproc visit, void* arg) noexcept {
         Py_VISIT(o->elts[i]);
     }
 
+    Py_VISIT(o->parent);
+
     return 0;
 }
 
@@ -4078,6 +4084,8 @@ int BoxedClosure::clear(Box* _o) noexcept {
     for (int i = 0; i < o->nelts; i++) {
         Py_CLEAR(o->elts[i]);
     }
+
+    Py_CLEAR(o->parent);
 
     return 0;
 }
