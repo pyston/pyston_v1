@@ -1881,13 +1881,9 @@ private:
     }
 
     template <typename GetLLVMValCB>
-    void _setVRegIfUserVisible(InternedString name, GetLLVMValCB get_llvm_val_cb, CompilerVariable* prev,
+    void _setVRegIfUserVisible(int vreg, GetLLVMValCB get_llvm_val_cb, CompilerVariable* prev,
                                bool potentially_undefined) {
         auto cfg = irstate->getSourceInfo()->cfg;
-        if (!cfg->hasVregsAssigned())
-            irstate->getMD()->calculateNumVRegs();
-        assert(cfg->sym_vreg_map.count(name));
-        int vreg = cfg->sym_vreg_map[name];
         assert(vreg >= 0);
 
         if (vreg < cfg->sym_vreg_map_user_visible.size()) {
@@ -1908,13 +1904,12 @@ private:
     }
 
     // only updates symbol_table if we're *not* setting a global
-    void _doSet(InternedString name, CompilerVariable* val, const UnwindInfo& unw_info) {
+    void _doSet(int vreg, InternedString name, ScopeInfo::VarScopeType vst, CompilerVariable* val,
+                const UnwindInfo& unw_info) {
         assert(name.s() != "None");
         assert(name.s() != FRAME_INFO_PTR_NAME);
         assert(val->getType()->isUsable());
 
-        auto scope_info = irstate->getScopeInfo();
-        ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
         assert(vst != ScopeInfo::VarScopeType::DEREF);
 
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
@@ -1949,7 +1944,7 @@ private:
             bool maybe_was_undefined = _popFake(defined_name, true);
 
             if (vst == ScopeInfo::VarScopeType::CLOSURE) {
-                size_t offset = scope_info->getClosureOffset(name);
+                size_t offset = irstate->getScopeInfo()->getClosureOffset(name);
 
                 // This is basically `closure->elts[offset] = val;`
                 CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
@@ -1967,8 +1962,17 @@ private:
             }
 
             auto&& get_llvm_val = [&]() { return val->makeConverted(emitter, UNKNOWN)->getValue(); };
-            _setVRegIfUserVisible(name, get_llvm_val, prev, maybe_was_undefined);
+            _setVRegIfUserVisible(vreg, get_llvm_val, prev, maybe_was_undefined);
         }
+    }
+
+    void _doSet(AST_Name* name, CompilerVariable* val, const UnwindInfo& unw_info) {
+        auto scope_info = irstate->getScopeInfo();
+        auto vst = name->lookup_type;
+        if (vst == ScopeInfo::VarScopeType::UNKNOWN)
+            vst = scope_info->getScopeTypeOfName(name->id);
+        assert(vst != ScopeInfo::VarScopeType::DEREF);
+        _doSet(name->vreg, name->id, vst, val, unw_info);
     }
 
     void _doSetattr(AST_Attribute* target, CompilerVariable* val, const UnwindInfo& unw_info) {
@@ -2028,7 +2032,7 @@ private:
                 _doSetattr(ast_cast<AST_Attribute>(target), val, unw_info);
                 break;
             case AST_TYPE::Name:
-                _doSet(ast_cast<AST_Name>(target)->id, val, unw_info);
+                _doSet(ast_cast<AST_Name>(target), val, unw_info);
                 break;
             case AST_TYPE::Subscript:
                 _doSetitem(ast_cast<AST_Subscript>(target), val, unw_info);
@@ -2164,7 +2168,7 @@ private:
         InternedString defined_name = getIsDefinedName(target->id);
         ConcreteCompilerVariable* is_defined_var = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
 
-        _setVRegIfUserVisible(target->id, []() { return getNullPtr(g.llvm_value_type_ptr); }, prev,
+        _setVRegIfUserVisible(target->vreg, []() { return getNullPtr(g.llvm_value_type_ptr); }, prev,
                               (bool)is_defined_var);
 
         if (symbol_table.count(target->id) == 0) {
@@ -2599,7 +2603,14 @@ private:
     void loadArgument(InternedString name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {
         assert(name.s() != FRAME_INFO_PTR_NAME);
         CompilerVariable* var = unboxVar(t, v);
-        _doSet(name, var, unw_info);
+        auto cfg = irstate->getSourceInfo()->cfg;
+        auto vst = irstate->getScopeInfo()->getScopeTypeOfName(name);
+        int vreg = -1;
+        if (vst == ScopeInfo::VarScopeType::FAST || vst == ScopeInfo::VarScopeType::CLOSURE) {
+            assert(cfg->sym_vreg_map.count(name));
+            vreg = cfg->sym_vreg_map[name];
+        }
+        _doSet(vreg, name, vst, var, unw_info);
     }
 
     void loadArgument(AST_expr* name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {

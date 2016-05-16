@@ -70,9 +70,9 @@ public:
     const char* c_str() const;
 
     bool operator==(InternedString rhs) const {
-        assert(this->_str || this->pool == invalidPool());
-        assert(rhs._str || rhs.pool == invalidPool());
-        assert(this->pool == rhs.pool || this->pool == invalidPool() || rhs.pool == invalidPool());
+        // assert(this->_str || this->pool == invalidPool());
+        // assert(rhs._str || rhs.pool == invalidPool());
+        // assert(this->pool == rhs.pool || this->pool == invalidPool() || rhs.pool == invalidPool());
         return this->_str == rhs._str;
     }
 

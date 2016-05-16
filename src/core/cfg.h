@@ -120,6 +120,7 @@ public:
 
 class SourceInfo;
 CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body);
+void printCFG(CFG* cfg);
 }
 
 #endif

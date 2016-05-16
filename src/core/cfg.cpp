@@ -309,7 +309,7 @@ private:
 
         auto name = nodeName();
         pushAssign(name, call);
-        return makeLoad(name, e);
+        return makeLoad(name, e, true);
     }
 
     AST_Name* remapName(AST_Name* name) { return name; }
@@ -432,7 +432,7 @@ private:
             // printf("Exit block for comp %d is %d\n", i, exit_blocks[i]->idx);
         }
 
-        return makeLoad(rtn_name, node);
+        return makeLoad(rtn_name, node, /* is_kill */ true);
     }
 
     AST_expr* makeNum(int n) {
@@ -476,9 +476,9 @@ private:
     void pushReraise(AST* node, InternedString exc_type_name, InternedString exc_value_name,
                      InternedString exc_traceback_name) {
         auto raise = new AST_Raise();
-        raise->arg0 = makeLoad(exc_type_name, node);
-        raise->arg1 = makeLoad(exc_value_name, node);
-        raise->arg2 = makeLoad(exc_traceback_name, node);
+        raise->arg0 = makeLoad(exc_type_name, node, true);
+        raise->arg1 = makeLoad(exc_value_name, node, true);
+        raise->arg2 = makeLoad(exc_traceback_name, node, true);
         push_back(raise);
         curblock = nullptr;
     }
@@ -602,7 +602,7 @@ private:
                 InternedString tmp_name = nodeName("", i);
                 new_target->elts.push_back(makeName(tmp_name, AST_TYPE::Store, target->lineno));
 
-                pushAssign((*elts)[i], makeLoad(tmp_name, target));
+                pushAssign((*elts)[i], makeLoad(tmp_name, target, /* is_kill */ true));
             }
         } else {
             RELEASE_ASSERT(0, "%d", target->type);
@@ -773,7 +773,7 @@ private:
         cfg->placeBlock(exit_block);
         curblock = exit_block;
 
-        return makeLoad(name, node);
+        return makeLoad(name, node, true);
     }
 
     AST_expr* remapCall(AST_Call* node) {
@@ -843,17 +843,24 @@ private:
             AST_expr* left = remapExpr(node->left);
 
             for (int i = 0; i < node->ops.size(); i++) {
+                if (i > 0)
+                    push_back(makeKill(name));
+
                 AST_expr* right = remapExpr(node->comparators[i]);
 
                 AST_Compare* val = new AST_Compare;
                 val->col_offset = node->col_offset;
                 val->lineno = node->lineno;
                 val->left = left;
-                val->comparators.push_back(_dup(right));
+                if (i < node->ops.size() - 1)
+                    val->comparators.push_back(_dup(right));
+                else
+                    val->comparators.push_back(right);
                 val->ops.push_back(node->ops[i]);
 
                 pushAssign(name, val);
 
+                // TODO: this branch is unused for the last comparison
                 AST_Branch* br = new AST_Branch();
                 br->test = callNonzero(makeLoad(name, node));
                 push_back(br);
@@ -879,7 +886,7 @@ private:
             cfg->placeBlock(exit_block);
             curblock = exit_block;
 
-            return makeLoad(name, node);
+            return makeLoad(name, node, true);
         }
     }
 
@@ -971,7 +978,7 @@ private:
         AST_MakeFunction* func = makeFunctionForScope(node);
         func->function_def->args->args.push_back(makeName(arg_name, AST_TYPE::Param, node->lineno));
         emitComprehensionLoops(&func->function_def->body, node->generators,
-                               makeName(arg_name, AST_TYPE::Load, node->lineno),
+                               makeName(arg_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true),
                                [this, node](std::vector<AST_stmt*>* insert_point) {
                                    auto y = new AST_Yield();
                                    y->value = node->elt;
@@ -981,7 +988,7 @@ private:
         InternedString func_var_name = nodeName();
         pushAssign(func_var_name, func);
 
-        return makeCall(makeLoad(func_var_name, node), first);
+        return makeCall(makeLoad(func_var_name, node, true), first);
     }
 
     void emitComprehensionYield(AST_DictComp* node, InternedString dict_name, std::vector<AST_stmt*>* insert_point) {
@@ -1013,17 +1020,19 @@ private:
 
         auto lambda =
             [&](std::vector<AST_stmt*>* insert_point) { emitComprehensionYield(node, rtn_name, insert_point); };
-        AST_Name* first_name = makeName(internString("#arg"), AST_TYPE::Load, node->lineno);
+        AST_Name* first_name
+            = makeName(internString("#arg"), AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true);
         emitComprehensionLoops(&func->function_def->body, node->generators, first_name, lambda);
 
         auto rtn = new AST_Return();
-        rtn->value = makeName(rtn_name, AST_TYPE::Load, node->lineno);
+        rtn->value = makeName(rtn_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true);
         func->function_def->body.push_back(rtn);
 
         InternedString func_var_name = nodeName();
         pushAssign(func_var_name, func);
 
-        return makeCall(makeName(func_var_name, AST_TYPE::Load, node->lineno), first);
+        return makeCall(makeName(func_var_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true),
+                        first);
     }
 
     AST_expr* remapIfExp(AST_IfExp* node) {
@@ -1054,7 +1063,7 @@ private:
         cfg->placeBlock(exit_block);
         curblock = exit_block;
 
-        return makeLoad(rtn_name, node);
+        return makeLoad(rtn_name, node, true);
     }
 
     AST_slice* remapIndex(AST_Index* node) {
@@ -1190,7 +1199,7 @@ private:
         if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda)
             raiseExcHelper(SyntaxError, "'yield' outside function");
 
-        return makeLoad(node_name, node);
+        return makeLoad(node_name, node, /* is_kill */ true);
     }
 
     AST_slice* remapSlice(AST_slice* node) {
@@ -1328,7 +1337,7 @@ private:
     void exitFinally(AST* node, Why why, CFGBlock* exit_block = nullptr) {
         switch (why) {
             case Why::RETURN:
-                doReturn(makeLoad(internString(RETURN_NAME), node));
+                doReturn(makeLoad(internString(RETURN_NAME), node, true));
                 break;
             case Why::BREAK:
                 doBreak(node);
@@ -1350,14 +1359,14 @@ private:
     // helper for visit_{with,tryfinally}. Generates a branch testing the value of `whyexpr' against `why', and
     // performing the appropriate exit from the with-block if they are equal.
     // NB. `exit_block' is only used if `why' is FALLTHROUGH.
-    void exitFinallyIf(AST* node, Why why, InternedString whyname, CFGBlock* exit_block = nullptr) {
+    void exitFinallyIf(AST* node, Why why, InternedString whyname, bool is_kill = false) {
         CFGBlock* do_exit = cfg->addDeferredBlock();
         do_exit->info = "with_exit_if";
-        CFGBlock* otherwise = makeFinallyCont(why, makeLoad(whyname, node), do_exit);
+        CFGBlock* otherwise = makeFinallyCont(why, makeLoad(whyname, node, is_kill), do_exit);
 
         cfg->placeBlock(do_exit);
         curblock = do_exit;
-        exitFinally(node, why, exit_block);
+        exitFinally(node, why);
 
         curblock = otherwise;
     }
@@ -1730,7 +1739,7 @@ public:
                 InternedString n_name(nodeName());
                 pushAssign(n_name, makeLoad(n->id, node));
                 remapped_target = n;
-                remapped_lhs = makeLoad(n_name, node);
+                remapped_lhs = makeLoad(n_name, node, /* is_kill */ true);
                 break;
             }
             case AST_TYPE::Subscript: {
@@ -1883,13 +1892,14 @@ public:
             AST_Print* remapped = new AST_Print();
             remapped->col_offset = node->col_offset;
             remapped->lineno = node->lineno;
-            // TODO not good to reuse 'dest' like this
-            remapped->dest = _dup(dest);
 
-            if (i < node->values.size() - 1)
+            if (i < node->values.size() - 1) {
+                remapped->dest = _dup(dest);
                 remapped->nl = false;
-            else
+            } else {
+                remapped->dest = dest;
                 remapped->nl = node->nl;
+            }
 
             remapped->values.push_back(remapExpr(v));
             push_back(remapped);
@@ -2384,7 +2394,7 @@ public:
                 exitFinallyIf(node, Why::CONTINUE, exc_why_name);
 
             CFGBlock* reraise = cfg->addDeferredBlock();
-            CFGBlock* noexc = makeFinallyCont(Why::EXCEPTION, makeLoad(exc_why_name, node), reraise);
+            CFGBlock* noexc = makeFinallyCont(Why::EXCEPTION, makeLoad(exc_why_name, node, true), reraise);
 
             cfg->placeBlock(reraise);
             curblock = reraise;
@@ -2441,7 +2451,7 @@ public:
 
         // Oddly, this acces to __enter__ doesn't suffer from the same bug. Perhaps it has something to do with
         // __enter__ being called immediately?
-        AST_expr* enter = makeLoadAttribute(makeLoad(ctxmgrname, node), internString("__enter__"), true);
+        AST_expr* enter = makeLoadAttribute(makeLoad(ctxmgrname, node, true), internString("__enter__"), true);
         enter = remapExpr(makeCall(enter));
         if (node->optional_vars)
             pushAssign(node->optional_vars, enter);
@@ -2483,7 +2493,7 @@ public:
 
             // call the context-manager's exit method
             InternedString suppressname = nodeName("suppress");
-            pushAssign(suppressname, makeCall(makeLoad(exitname, node), makeLoad(exc_type_name, node),
+            pushAssign(suppressname, makeCall(makeLoad(exitname, node, true), makeLoad(exc_type_name, node),
                                               makeLoad(exc_value_name, node), makeLoad(exc_traceback_name, node)));
 
             // if it returns true, suppress the error and go to our exit block
@@ -2492,7 +2502,7 @@ public:
             // break potential critical edge
             CFGBlock* exiter = cfg->addDeferredBlock();
             exiter->info = "with_exiter";
-            pushBranch(makeLoad(suppressname, node), exiter, reraise_block);
+            pushBranch(makeLoad(suppressname, node, true), exiter, reraise_block);
 
             cfg->placeBlock(exiter);
             curblock = exiter;
@@ -2512,15 +2522,15 @@ public:
             cfg->placeBlock(finally_block);
             curblock = finally_block;
             // call the context-manager's exit method, ignoring result
-            push_back(makeExpr(makeCall(makeLoad(exitname, node), makeLoad(nonename, node), makeLoad(nonename, node),
-                                        makeLoad(nonename, node))));
+            push_back(makeExpr(makeCall(makeLoad(exitname, node, true), makeLoad(nonename, node),
+                                        makeLoad(nonename, node), makeLoad(nonename, node))));
 
             if (finally_did_why & (1 << Why::CONTINUE))
-                exitFinallyIf(node, Why::CONTINUE, whyname);
+                exitFinallyIf(node, Why::CONTINUE, whyname, /* is_kill */ finally_did_why == (1 << Why::CONTINUE));
             if (finally_did_why & (1 << Why::BREAK))
-                exitFinallyIf(node, Why::BREAK, whyname);
+                exitFinallyIf(node, Why::BREAK, whyname, /* is_kill */ !(finally_did_why & (1 << Why::RETURN)));
             if (finally_did_why & (1 << Why::RETURN))
-                exitFinallyIf(node, Why::RETURN, whyname);
+                exitFinallyIf(node, Why::RETURN, whyname, /* is_kill */ true);
             exitFinally(node, Why::FALLTHROUGH, exit_block);
         }
 
@@ -2882,5 +2892,9 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
 
 
     return rtn;
+}
+
+void printCFG(CFG* cfg) {
+    cfg->print();
 }
 }

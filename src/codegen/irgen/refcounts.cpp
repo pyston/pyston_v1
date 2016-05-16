@@ -373,20 +373,25 @@ void addCXXFixup(llvm::Instruction* inst, const llvm::SmallVector<llvm::Tracking
     call->replaceAllUsesWith(new_invoke);
     call->eraseFromParent();
 
-    llvm::Value* exc_type, *exc_value, *exc_traceback;
-    std::tie(exc_type, exc_value, exc_traceback) = createLandingpad(fixup_block);
-
     llvm::IRBuilder<true> builder(fixup_block);
 
-    llvm::SmallVector<llvm::Value*, 4> decref_args;
-    decref_args.push_back(getConstantInt(to_decref.size(), g.i32));
-    decref_args.append(to_decref.begin(), to_decref.end());
-    builder.CreateCall(g.funcs.xdecrefAll, decref_args);
+    static llvm::Function* _personality_func = g.stdlib_module->getFunction("__gxx_personality_v0");
+    assert(_personality_func);
+    llvm::Value* personality_func
+        = g.cur_module->getOrInsertFunction(_personality_func->getName(), _personality_func->getFunctionType());
+    assert(personality_func);
+    static llvm::Type* lp_type = llvm::StructType::create(std::vector<llvm::Type*>{ g.i8_ptr, g.i64 });
+    assert(lp_type);
+    llvm::LandingPadInst* landing_pad = builder.CreateLandingPad(lp_type, personality_func, 1);
+    landing_pad->addClause(getNullPtr(g.i8_ptr));
 
-    auto rethrow = builder.CreateCall3(g.funcs.rawReraise, exc_type, exc_value, exc_traceback);
+    llvm::SmallVector<llvm::Value*, 4> call_args;
+    llvm::Value* cxaexc_pointer = builder.CreateExtractValue(landing_pad, { 0 });
+    call_args.push_back(cxaexc_pointer);
+    call_args.push_back(getConstantInt(to_decref.size(), g.i32));
+    call_args.append(to_decref.begin(), to_decref.end());
+    builder.CreateCall(g.funcs.xdecrefAndRethrow, call_args);
     builder.CreateUnreachable();
-
-    // new_invoke->getParent()->getParent()->dump();
 }
 
 // TODO: this should be cleaned up and moved to src/core/
