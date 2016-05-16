@@ -4049,6 +4049,8 @@ void AttrWrapperIter::dealloc(Box* _o) noexcept {
 void BoxedClosure::dealloc(Box* _o) noexcept {
     BoxedClosure* o = (BoxedClosure*)_o;
 
+    PyObject_GC_UnTrack(o);
+
     for (int i = 0; i < o->nelts; i++) {
         Py_XDECREF(o->elts[i]);
     }
@@ -4065,6 +4067,8 @@ int BoxedClosure::traverse(Box* _o, visitproc visit, void* arg) noexcept {
         Py_VISIT(o->elts[i]);
     }
 
+    Py_VISIT(o->parent);
+
     return 0;
 }
 
@@ -4074,6 +4078,8 @@ int BoxedClosure::clear(Box* _o) noexcept {
     for (int i = 0; i < o->nelts; i++) {
         Py_CLEAR(o->elts[i]);
     }
+
+    Py_CLEAR(o->parent);
 
     return 0;
 }
