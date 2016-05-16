@@ -422,6 +422,32 @@ template <typename B> B* xincref(B* b) {
     return b;
 }
 
+// Helper function: calls a CXX-style function from a templated function.  This is more efficient than the
+// easier-to-type version:
+//
+// try {
+//     return f();
+// } catch (ExcInfo e) {
+//     if (S == CAPI) {
+//         setCAPIException(e);
+//         return NULL;
+//     } else
+//         throw e;
+// }
+//
+// since this version does not need the try-catch block when called from a CXX-style function
+template <ExceptionStyle S, typename Functor> Box* callCXXFromStyle(Functor f) {
+    if (S == CAPI) {
+        try {
+            return f();
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    } else
+        return f();
+}
+
 //#define DISABLE_INT_FREELIST
 
 extern "C" int PyInt_ClearFreeList() noexcept;

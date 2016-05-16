@@ -578,11 +578,18 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
             }
         }
 
-        _str = coerceUnicodeToStr<CXX>(_str);
+        _str = coerceUnicodeToStr<S>(_str);
+
+        if (S == CAPI && !_str)
+            return (Box*)NULL;
 
         if (!PyString_Check(_str)) {
             Py_DECREF(_str);
-            raiseExcHelper(TypeError, "getattr(): attribute name must be string");
+            if (S == CAPI) {
+                PyErr_SetString(TypeError, "getattr(): attribute name must be string");
+                return (Box*)NULL;
+            } else
+                raiseExcHelper(TypeError, "getattr(): attribute name must be string");
         }
 
         BoxedString* str = static_cast<BoxedString*>(_str);
@@ -634,21 +641,15 @@ Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
         }
 
         Box* r = getattrFuncHelper(rtn, obj, str, default_value);
-        if (!r)
+        if (S == CXX && !r)
             throwCAPIException();
         return r;
     };
 
-    try {
+    return callCXXFromStyle<S>([&]() {
         return rearrangeArgumentsAndCall(ParamReceiveSpec(3, 1, false, false), NULL, "getattr", defaults, rewrite_args,
                                          argspec, arg1, arg2, arg3, args, keyword_names, continuation);
-    } catch (ExcInfo e) {
-        if (S == CAPI) {
-            setCAPIException(e);
-            return NULL;
-        }
-        throw e;
-    }
+    });
 }
 
 Box* setattrFunc(Box* obj, Box* _str, Box* value) {
@@ -709,11 +710,18 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
             }
         }
 
-        _str = coerceUnicodeToStr<CXX>(_str);
+        _str = coerceUnicodeToStr<S>(_str);
+
+        if (S == CAPI && !_str)
+            return (Box*)NULL;
 
         if (!PyString_Check(_str)) {
             Py_DECREF(_str);
-            raiseExcHelper(TypeError, "hasattr(): attribute name must be string");
+            if (S == CAPI) {
+                PyErr_SetString(TypeError, "hasattr(): attribute name must be string");
+                return (Box*)NULL;
+            } else
+                raiseExcHelper(TypeError, "hasattr(): attribute name must be string");
         }
 
         BoxedString* str = static_cast<BoxedString*>(_str);
@@ -760,21 +768,15 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
         }
 
         Box* r = hasattrFuncHelper(rtn);
-        if (!r)
+        if (S == CXX && !r)
             throwCAPIException();
         return r;
     };
 
-    try {
+    return callCXXFromStyle<S>([&]() {
         return rearrangeArgumentsAndCall(ParamReceiveSpec(2, 0, false, false), NULL, "hasattr", NULL, rewrite_args,
                                          argspec, arg1, arg2, arg3, args, keyword_names, continuation);
-    } catch (ExcInfo e) {
-        if (S == CAPI) {
-            setCAPIException(e);
-            return NULL;
-        }
-        throw e;
-    }
+    });
 }
 
 Box* map2(Box* f, Box* container) {

@@ -270,6 +270,7 @@ struct ParamReceiveSpec {
     bool operator!=(ParamReceiveSpec rhs) const { return !(*this == rhs); }
 
     int totalReceived() const { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
+    int varargsIndex() const { return num_args; }
     int kwargsIndex() const { return num_args + (takes_varargs ? 1 : 0); }
 };
 

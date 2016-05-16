@@ -1216,16 +1216,10 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             return InitHelper::call(made, cls, arg2, arg3);
         };
 
-        try {
+        return callCXXFromStyle<S>([&]() {
             return rearrangeArgumentsAndCall(ParamReceiveSpec(1, 0, true, true), NULL, "", NULL, rewrite_args, argspec,
                                              made, arg2, arg3, args, keyword_names, continuation);
-        } catch (ExcInfo e) {
-            if (S == CAPI) {
-                setCAPIException(e);
-                return NULL;
-            } else
-                throw e;
-        }
+        });
     }
 
     // If __new__ returns a subclass, supposed to call that subclass's __init__.
@@ -1330,23 +1324,34 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
                 int err = tpinit(made, arg2, arg3);
 
-                if (err == -1) {
-                    throwCAPIException();
+                if (err == -1)
+                    return (Box*)NULL;
+
+                if (rewrite_args) {
+                    auto r_err = rewrite_args->rewriter->call(true, (void*)tpinit, r_made, rewrite_args->arg2,
+                                                              rewrite_args->arg3);
+
+                    assert(S == CXX && "this need to be converted");
+                    rewrite_args->rewriter->checkAndThrowCAPIException(r_err, -1, assembler::MovType::L);
+                    rewrite_args->out_success = true;
                 }
-                return (Box*)NULL;
+                return (Box*)1;
             };
 
+            Box* _t;
             try {
-                Box* _t = rearrangeArgumentsAndCall(ParamReceiveSpec(1, 0, true, true), NULL, "", NULL, rewrite_args,
-                                                    argspec, made, arg2, arg3, args, keyword_names, continuation);
-                assert(_t == NULL);
+                _t = rearrangeArgumentsAndCall(ParamReceiveSpec(1, 0, true, true), NULL, "", NULL, rewrite_args,
+                                               argspec, made, arg2, arg3, args, keyword_names, continuation);
             } catch (ExcInfo e) {
+                setCAPIException(e);
+                _t = NULL;
+            }
+            if (_t == NULL) {
                 Py_DECREF(made);
-                if (S == CAPI) {
-                    setCAPIException(e);
+                if (S == CAPI)
                     return NULL;
-                } else
-                    throw e;
+                else
+                    throwCAPIException();
             }
 
             if (rewrite_args) {
@@ -1354,14 +1359,6 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                     rewrite_args = NULL;
                 else
                     rewrite_args->out_success = false;
-            }
-
-            if (rewrite_args) {
-                auto r_err
-                    = rewrite_args->rewriter->call(true, (void*)tpinit, r_made, rewrite_args->arg2, rewrite_args->arg3);
-
-                assert(S == CXX && "this need to be converted");
-                rewrite_args->rewriter->checkAndThrowCAPIException(r_err, -1, assembler::MovType::L);
             }
         }
     } else {

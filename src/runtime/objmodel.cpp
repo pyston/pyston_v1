@@ -4120,20 +4120,11 @@ public:
     }
 };
 
-void decrefOargs(RewriterVar* oargs, bool* oargs_owned, int num_oargs) {
-    for (int i = 0; i < num_oargs; i++) {
-        if (oargs_owned[i]) {
-            oargs->deregisterOwnedAttr(i * sizeof(Box*));
-            oargs->getAttr(i * sizeof(Box*))->setType(RefType::OWNED);
-        }
-    }
-}
-
 template <Rewritable rewritable, typename FuncNameCB>
-void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* param_names, FuncNameCB func_name_cb,
-                                Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success,
-                                ArgPassSpec argspec, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** args, Box** oargs,
-                                const std::vector<BoxedString*>* keyword_names, bool* oargs_owned) {
+Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNames* param_names,
+                                       FuncNameCB func_name_cb, Box** defaults, CallRewriteArgs* rewrite_args,
+                                       ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
+                                       const std::vector<BoxedString*>* keyword_names, FunctorPointer continuation) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -4147,43 +4138,16 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
      * - error about missing parameters
      */
 
-    int num_output_args = paramspec.totalReceived();
-    int num_passed_args = argspec.totalPassed();
-
-    assert((oargs != NULL) == (num_output_args > 3));
     assert((defaults != NULL) == (paramspec.num_defaults != 0));
-
-    if (rewrite_args && oargs) {
-        assert(oargs_owned);
-        memset(oargs_owned, 0, (num_output_args - 3) * sizeof(bool));
-    }
-
-    if (rewrite_args) {
-        rewrite_success = false; // default case
-    }
-
-    auto propagate_args = [&]() {
-        if (num_output_args >= 1)
-            Py_XINCREF(oarg1);
-        if (num_output_args >= 2)
-            Py_XINCREF(oarg2);
-        if (num_output_args >= 3)
-            Py_XINCREF(oarg3);
-        if (num_output_args >= 3) {
-            memcpy(oargs, args, sizeof(Box*) * (num_output_args - 3));
-            for (int i = 0; i < num_output_args - 3; i++) {
-                Py_XINCREF(oargs[i]);
-            }
-        }
-    };
 
     // Super fast path:
     if (argspec.num_keywords == 0 && !argspec.has_starargs && !paramspec.takes_varargs && !argspec.has_kwargs
         && argspec.num_args == paramspec.num_args && !paramspec.takes_kwargs) {
-        rewrite_success = true;
-        propagate_args();
-        return;
+        return continuation(rewrite_args, arg1, arg2, arg3, args);
     }
+
+    int num_output_args = paramspec.totalReceived();
+    int num_passed_args = argspec.totalPassed();
 
     // Fast path: if it's a simple-enough call, we don't have to do anything special.  On a simple
     // django-admin test this covers something like 93% of all calls to callFunc.
@@ -4195,7 +4159,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
             assert(num_output_args == num_passed_args + 1);
             int idx = paramspec.kwargsIndex();
             assert(idx < 3);
-            getArg(idx, oarg1, oarg2, oarg3, NULL) = NULL; // pass NULL for kwargs
+            getArg(idx, arg1, arg2, arg3, NULL) = NULL; // pass NULL for kwargs
             if (rewrite_args) {
                 if (idx == 0)
                     rewrite_args->arg1 = rewrite_args->rewriter->loadConst(0)->setType(RefType::BORROWED);
@@ -4215,31 +4179,28 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         // received by the caller are always tuples).
         // This is why we can't pass kwargs here.
         if (argspec.has_starargs) {
-            Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, oarg1, oarg2, oarg3, args);
+            Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
             if (given_varargs->cls == tuple_cls) {
                 if (rewrite_args) {
                     getArg(argspec.num_args + argspec.num_keywords, rewrite_args)
                         ->addAttrGuard(offsetof(Box, cls), (intptr_t)tuple_cls);
                 }
-                rewrite_success = true;
-                propagate_args();
-                return;
+                return continuation(rewrite_args, arg1, arg2, arg3, args);
             }
         } else {
-            rewrite_success = true;
-            propagate_args();
-            return;
+            return continuation(rewrite_args, arg1, arg2, arg3, args);
         }
     }
 
-    // Save the original values:
-    Box* arg1 = oarg1;
-    Box* arg2 = oarg2;
-    Box* arg3 = oarg3;
+    Box* oarg1, *oarg2, *oarg3;
     oarg1 = oarg2 = oarg3 = NULL;
 
-    if (oargs)
+    Box** oargs = NULL;
+    // TODO: could we reuse the args array?
+    if (num_output_args > 3) {
+        oargs = (Box**)alloca(sizeof(Box*) * (num_output_args - 3));
         memset(oargs, 0, sizeof(Box*) * (num_output_args - 3));
+    }
 
     // Clear any increfs we did for when we throw an exception:
     auto clear_refs = [&]() {
@@ -4267,9 +4228,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
 
     // At this point we are not allowed to abort the rewrite any more, since we will start
     // modifying rewrite_args.
-
-    if (rewrite_args)
-        rewrite_success = true;
 
     if (rewrite_args) {
         // We might have trouble if we have more output args than input args,
@@ -4346,6 +4304,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         unused_positional.push_back(PySequence_Fast_GET_ITEM(varargs, i));
     }
 
+    bool varargs_owned = false;
     if (paramspec.takes_varargs) {
         int varargs_idx = paramspec.num_args;
         if (rewrite_args) {
@@ -4354,7 +4313,6 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
 
             RewriterVar* varargs_val;
             int varargs_size = unused_positional_rvars.size();
-            bool is_owned = false;
 
             if (varargs_size == 0) {
                 varargs_val
@@ -4374,7 +4332,7 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                 };
                 varargs_val = rewrite_args->rewriter->call(true, create_ptrs[varargs_size], unused_positional_rvars)
                                   ->setType(RefType::OWNED);
-                is_owned = true;
+                varargs_owned = true;
             }
 
             if (varargs_val) {
@@ -4385,13 +4343,12 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
                 if (varargs_idx == 2)
                     rewrite_args->arg3 = varargs_val;
                 if (varargs_idx >= 3) {
-                    if (is_owned) {
+                    if (varargs_owned) {
                         rewrite_args->args->registerOwnedAttr((varargs_idx - 3) * sizeof(Box*));
 
                         rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), varargs_val,
                                                     RewriterVar::SetattrType::HANDED_OFF);
 
-                        oargs_owned[varargs_idx - 3] = true;
                         varargs_val->refConsumed();
                     } else {
                         rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), varargs_val);
@@ -4607,56 +4564,20 @@ void rearrangeArgumentsInternal(ParamReceiveSpec paramspec, const ParamNames* pa
         getArg(arg_idx, oarg1, oarg2, oarg3, oargs) = xincref(default_obj);
     }
 
-    cleanup.cancel();
-}
+    if (rewrite_args && varargs_owned) {
+        Box* r = continuation(rewrite_args, oarg1, oarg2, oarg3, oargs);
 
+        int varargs_idx = paramspec.varargsIndex();
+        if (varargs_idx >= 3) {
+            rewrite_args->args->deregisterOwnedAttr((varargs_idx - 3) * sizeof(Box*));
+            rewrite_args->args->getAttr((varargs_idx - 3) * sizeof(Box*))->setType(RefType::OWNED);
+        }
 
-// TODO: implement this for real
-template <Rewritable rewritable, typename FuncNameCB>
-Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNames* param_names,
-                                       FuncNameCB func_name_cb, Box** defaults, CallRewriteArgs* rewrite_args,
-                                       ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
-                                       const std::vector<BoxedString*>* keyword_names, FunctorPointer continuation) {
-    Box** oargs = NULL;
-    bool* oargs_owned = NULL;
-    if (paramspec.totalReceived() > 3) {
-        oargs = (Box**)alloca(sizeof(Box*) * (paramspec.totalReceived() - 3));
-        oargs_owned = (bool*)alloca(sizeof(bool) * (paramspec.totalReceived() - 3));
+        return r;
+    } else {
+        return continuation(rewrite_args, oarg1, oarg2, oarg3, oargs);
     }
-
-    bool rewrite_success = false;
-    rearrangeArgumentsInternal<rewritable>(paramspec, param_names, func_name_cb, defaults, rewrite_args,
-                                           rewrite_success, argspec, arg1, arg2, arg3, args, oargs, keyword_names,
-                                           oargs_owned);
-
-    AUTO_DECREF_ARGS(paramspec, arg1, arg2, arg3, oargs);
-
-    if (!rewrite_success)
-        rewrite_args = NULL;
-
-    Box* r = continuation(rewrite_args, arg1, arg2, arg3, oargs);
-
-    if (rewrite_args)
-        decrefOargs(rewrite_args->args, oargs_owned, paramspec.totalReceived() - 3);
-
-    return r;
 }
-
-template <Rewritable rewritable>
-void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
-                        Box** defaults, CallRewriteArgs* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
-                        Box*& arg1, Box*& arg2, Box*& arg3, Box** args, Box** oargs,
-                        const std::vector<BoxedString*>* keyword_names, bool* oargs_owned) {
-    auto func = [func_name]() { return func_name; };
-    return rearrangeArgumentsInternal<rewritable>(paramspec, param_names, func, defaults, rewrite_args, rewrite_success,
-                                                  argspec, arg1, arg2, arg3, args, oargs, keyword_names, oargs_owned);
-}
-template void rearrangeArguments<REWRITABLE>(ParamReceiveSpec, const ParamNames*, const char*, Box**, CallRewriteArgs*,
-                                             bool&, ArgPassSpec, Box*&, Box*&, Box*&, Box**, Box**,
-                                             const std::vector<BoxedString*>*, bool*);
-template void rearrangeArguments<NOT_REWRITABLE>(ParamReceiveSpec, const ParamNames*, const char*, Box**,
-                                                 CallRewriteArgs*, bool&, ArgPassSpec, Box*&, Box*&, Box*&, Box**,
-                                                 Box**, const std::vector<BoxedString*>*, bool*);
 
 template <Rewritable rewritable>
 Box* rearrangeArgumentsAndCall(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
@@ -4748,19 +4669,14 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         return res;
     };
 
-    Box* r;
-    try {
-        auto func_name_cb = [md]() { return getFunctionName(md).data(); };
-        r = rearrangeArgumentsAndCallInternal<rewritable>(
+    auto func_name_cb = [md]() { return getFunctionName(md).data(); };
+    Box* r = callCXXFromStyle<S>([&] {
+        return rearrangeArgumentsAndCallInternal<rewritable>(
             paramspec, &md->param_names, func_name_cb, paramspec.num_defaults ? func->defaults->elts : NULL,
             rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names, continuation);
-    } catch (ExcInfo e) {
-        if (S == CAPI) {
-            setCAPIException(e);
-            return NULL;
-        } else
-            throw e;
-    }
+    });
+    if (S == CAPI && !r)
+        return NULL;
 
     if (rearrange_rewrite_failed) {
 // If we weren't able to rewrite, at least rewrite to callFunc, which helps a little bit.

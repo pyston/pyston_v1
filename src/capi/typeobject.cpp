@@ -3436,21 +3436,15 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
         }
 
         Box* r = self->cls->tp_call(self, arg1, arg2);
-        if (!r)
+        if (S == CXX && !r)
             throwCAPIException();
         return r;
     };
 
-    try {
+    return callCXXFromStyle<S>([&]() {
         return rearrangeArgumentsAndCall(paramspec, NULL, "", NULL, rewrite_args, argspec, arg1, arg2, arg3, args,
                                          keyword_names, continuation);
-    } catch (ExcInfo e) {
-        if (S == CAPI) {
-            setCAPIException(e);
-            return NULL;
-        } else
-            throw e;
-    }
+    });
 }
 
 extern "C" void PyType_RequestHcAttrs(PyTypeObject* cls, int offset) noexcept {

@@ -695,13 +695,15 @@ Box* BoxedWrapperDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, 
             RELEASE_ASSERT(0, "%d", flags);
         }
 
-        if (!rtn)
+        if (S == CXX && !rtn)
             throwCAPIException();
         return rtn;
     };
 
-    return rearrangeArgumentsAndCall(paramspec, NULL, self->wrapper->name.data(), NULL, rewrite_args, argspec, arg1,
-                                     arg2, arg3, args, keyword_names, continuation);
+    return callCXXFromStyle<S>([&]() {
+        return rearrangeArgumentsAndCall(paramspec, NULL, self->wrapper->name.data(), NULL, rewrite_args, argspec, arg1,
+                                         arg2, arg3, args, keyword_names, continuation);
+    });
 }
 
 static Box* wrapperdescrGetDoc(Box* b, void*) {
