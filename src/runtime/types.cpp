@@ -1379,7 +1379,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                     = rewrite_args->rewriter->call(true, (void*)tpinit, r_made, rewrite_args->arg2, rewrite_args->arg3);
 
                 assert(S == CXX && "this need to be converted");
-                rewrite_args->rewriter->checkAndThrowCAPIException(r_err, -1);
+                rewrite_args->rewriter->checkAndThrowCAPIException(r_err, -1, assembler::MovType::L);
             }
         }
     } else {

@@ -489,7 +489,7 @@ protected:
     int _allocate(RewriterVar* result, int n);
     void _allocateAndCopy(RewriterVar* result, RewriterVar* array, int n);
     void _allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_elem, RewriterVar* rest, int n_rest);
-    void _checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val);
+    void _checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val, assembler::MovType size);
 
     // The public versions of these are in RewriterVar
     void _addGuard(RewriterVar* var, RewriterVar* val_constant);
@@ -596,7 +596,9 @@ public:
     RewriterVar* allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar* rest, int n_rest);
 
     // This emits `if (r == exc_val) throwCAPIException()`
-    void checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val = 0);
+    // type should be either MovType::Q if you want a 64bit comparison or MovType::L for a 32bit comparison.
+    void checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val, assembler::MovType type);
+    void checkAndThrowCAPIException(RewriterVar* r) { checkAndThrowCAPIException(r, 0, assembler::MovType::Q); }
 
     void abort();
 
