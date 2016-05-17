@@ -333,7 +333,6 @@ public:
 // rearrangeArgumentsAndCall supports both CAPI- and CXX- exception styles for continuation, and will propagate them
 // back to the caller.  For now, it can also throw its own exceptions such as "not enough arguments", and will throw
 // them in the CXX style.
-template <Rewritable rewritable = REWRITABLE>
 Box* rearrangeArgumentsAndCall(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
                                Box** defaults, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                                Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,

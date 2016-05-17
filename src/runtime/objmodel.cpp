@@ -4032,10 +4032,34 @@ static llvm::StringRef getFunctionName(FunctionMetadata* f) {
     return "<unknown function>";
 }
 
-template <typename FuncNameCB>
+// A hacky little class that lets us save on some parameter size.
+// We want to pass enough information to rearrangeArgumentsAndCallInternal so that
+// it knows how to get the function name when it needs to (only when an exception is thrown),
+// and there are a couple different ways that it might need to do that.  So we pass through this
+// class that steals some bits from the pointers.
+class FuncNameGetter {
+private:
+    uint64_t data;
+
+    // Can't be the lsb since a const char* is only 1-byte aligned.
+    static constexpr uint64_t BIT = (1L << 63);
+
+public:
+    FuncNameGetter(const char* name) : data((uint64_t)name) { assert(!(data & BIT)); }
+    FuncNameGetter(FunctionMetadata* md) : data(((uint64_t)md) ^ BIT) { assert(data & BIT); }
+
+    const char* operator()() {
+        if (data & BIT) {
+            FunctionMetadata* md = (FunctionMetadata*)(data ^ BIT);
+            return getFunctionName(md).data();
+        } else {
+            return (const char*)data;
+        }
+    }
+};
 static int placeKeyword(const ParamNames* param_names, llvm::SmallVector<bool, 8>& params_filled, BoxedString* kw_name,
                         Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs, BoxedDict* okwargs,
-                        FuncNameCB func_name_cb) {
+                        FuncNameGetter func_name_cb) {
     assert(kw_val);
     assert(kw_name);
 
@@ -4120,16 +4144,10 @@ public:
     }
 };
 
-template <Rewritable rewritable, typename FuncNameCB>
 Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNames* param_names,
-                                       FuncNameCB func_name_cb, Box** defaults, CallRewriteArgs* rewrite_args,
+                                       FuncNameGetter func_name_cb, Box** defaults, CallRewriteArgs* rewrite_args,
                                        ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
                                        const std::vector<BoxedString*>* keyword_names, FunctorPointer continuation) {
-    if (rewritable == NOT_REWRITABLE) {
-        assert(!rewrite_args);
-        rewrite_args = NULL;
-    }
-
     /*
      * Procedure:
      * - First match up positional arguments; any extra go to varargs.  error if too many.
@@ -4579,27 +4597,13 @@ Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNa
     }
 }
 
-template <Rewritable rewritable>
 Box* rearrangeArgumentsAndCall(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
                                Box** defaults, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                                Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,
                                FunctorPointer continuation) {
-    auto func = [func_name]() { return func_name; };
-    return rearrangeArgumentsAndCallInternal<rewritable>(paramspec, param_names, func, defaults, rewrite_args, argspec,
-                                                         arg1, arg2, arg3, args, keyword_names, continuation);
+    return rearrangeArgumentsAndCallInternal(paramspec, param_names, func_name, defaults, rewrite_args, argspec, arg1,
+                                             arg2, arg3, args, keyword_names, continuation);
 }
-template Box* rearrangeArgumentsAndCall<REWRITABLE>(ParamReceiveSpec paramspec, const ParamNames* param_names,
-                                                    const char* func_name, Box** defaults,
-                                                    CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
-                                                    Box* arg2, Box* arg3, Box** args,
-                                                    const std::vector<BoxedString*>* keyword_names,
-                                                    FunctorPointer continuation);
-template Box* rearrangeArgumentsAndCall<NOT_REWRITABLE>(ParamReceiveSpec paramspec, const ParamNames* param_names,
-                                                        const char* func_name, Box** defaults,
-                                                        CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
-                                                        Box* arg2, Box* arg3, Box** args,
-                                                        const std::vector<BoxedString*>* keyword_names,
-                                                        FunctorPointer continuation);
 
 static StatCounter slowpath_callfunc("slowpath_callfunc");
 template <ExceptionStyle S, Rewritable rewritable>
@@ -4669,11 +4673,10 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         return res;
     };
 
-    auto func_name_cb = [md]() { return getFunctionName(md).data(); };
     Box* r = callCXXFromStyle<S>([&] {
-        return rearrangeArgumentsAndCallInternal<rewritable>(
-            paramspec, &md->param_names, func_name_cb, paramspec.num_defaults ? func->defaults->elts : NULL,
-            rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names, continuation);
+        return rearrangeArgumentsAndCallInternal(paramspec, &md->param_names, md,
+                                                 paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args,
+                                                 argspec, arg1, arg2, arg3, args, keyword_names, continuation);
     });
     if (S == CAPI && !r)
         return NULL;
