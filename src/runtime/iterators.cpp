@@ -57,7 +57,8 @@ public:
         if (next) {
             value = next;
         } else {
-            checkAndThrowCAPIException();
+            if (PyErr_Occurred())
+                throwCAPIException();
             Py_CLEAR(iterator);
             *this = *end();
         }

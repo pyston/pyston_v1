@@ -1500,8 +1500,8 @@ void Box::setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rew
             Box* d = attrs->attr_list->attrs[0];
             assert(d);
             assert(attr->data()[attr->size()] == '\0');
-            PyDict_SetItem(d, attr, val);
-            checkAndThrowCAPIException();
+            if (PyDict_SetItem(d, attr, val) < 0)
+                throwCAPIException();
             return;
         }
 
@@ -2983,9 +2983,10 @@ bool dataDescriptorSetSpecialCases(Box* obj, STOLEN(Box*) val, Box* descr, Setat
         member_def.type = member_desc->type;
         if (member_desc->readonly)
             member_def.flags |= READONLY;
-        PyMember_SetOne((char*)obj, &member_def, val);
+        int ret = PyMember_SetOne((char*)obj, &member_def, val);
         Py_DECREF(val);
-        checkAndThrowCAPIException();
+        if (ret < 0)
+            throwCAPIException();
         return true;
     }
 
@@ -6558,8 +6559,8 @@ void Box::delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args) {
             Box* d = attrs->attr_list->attrs[0];
             assert(d);
             assert(attr->data()[attr->size()] == '\0');
-            PyDict_DelItem(d, attr);
-            checkAndThrowCAPIException();
+            if (PyDict_DelItem(d, attr) < 0)
+                throwCAPIException();
             return;
         }
 
@@ -6834,7 +6835,8 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
     }
 
     BoxedClass* base = best_base(bases);
-    checkAndThrowCAPIException();
+    if (!base)
+        throwCAPIException();
     assert(base);
     if (!PyType_HasFeature(base, Py_TPFLAGS_BASETYPE))
         raiseExcHelper(TypeError, "type '%.100s' is not an acceptable base type", base->tp_name);

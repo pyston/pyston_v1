@@ -981,7 +981,8 @@ pypa::String pypaEscapeDecoder(const pypa::String& s, const pypa::String& encodi
             BoxedString* str_utf8 = (BoxedString*)PyUnicode_AsUTF8String(str);
             AUTO_DECREF(str_utf8);
             assert(str_utf8->cls == str_cls);
-            checkAndThrowCAPIException();
+            if (!str_utf8)
+                throwCAPIException();
             return str_utf8->s().str();
         }
 

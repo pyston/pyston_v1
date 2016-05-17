@@ -2306,7 +2306,8 @@ Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
 
     Box* result = PyString_AsDecodedObject(self, encoding_str ? encoding_str->data() : NULL,
                                            error_str ? error_str->data() : NULL);
-    checkAndThrowCAPIException();
+    if (!result)
+        throwCAPIException();
     return result;
 }
 
@@ -2331,7 +2332,8 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
 
     Box* result = PyString_AsEncodedObject(self, encoding_str ? encoding_str->data() : PyUnicode_GetDefaultEncoding(),
                                            error_str ? error_str->data() : NULL);
-    checkAndThrowCAPIException();
+    if (!result)
+        throwCAPIException();
     return result;
 }
 
