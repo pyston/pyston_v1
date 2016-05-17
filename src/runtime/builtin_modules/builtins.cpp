@@ -350,7 +350,7 @@ extern "C" Box* unichr(Box* arg) {
 
     Box* rtn = PyUnicode_FromOrdinal(n);
     if (!rtn)
-        checkAndThrowCAPIException();
+        throwCAPIException();
     return rtn;
 }
 
@@ -409,21 +409,27 @@ Box* range(Box* start, Box* stop, Box* step) {
     if (stop == NULL) {
         istart = 0;
         istop = PyLong_AsLong(start);
-        checkAndThrowCAPIException();
+        if ((istop == -1) && PyErr_Occurred())
+            throwCAPIException();
         istep = 1;
     } else if (step == NULL) {
         istart = PyLong_AsLong(start);
-        checkAndThrowCAPIException();
+        if ((istart == -1) && PyErr_Occurred())
+            throwCAPIException();
         istop = PyLong_AsLong(stop);
-        checkAndThrowCAPIException();
+        if ((istop == -1) && PyErr_Occurred())
+            throwCAPIException();
         istep = 1;
     } else {
         istart = PyLong_AsLong(start);
-        checkAndThrowCAPIException();
+        if ((istart == -1) && PyErr_Occurred())
+            throwCAPIException();
         istop = PyLong_AsLong(stop);
-        checkAndThrowCAPIException();
+        if ((istop == -1) && PyErr_Occurred())
+            throwCAPIException();
         istep = PyLong_AsLong(step);
-        checkAndThrowCAPIException();
+        if ((istep == -1) && PyErr_Occurred())
+            throwCAPIException();
     }
 
     BoxedList* rtn = new BoxedList();
@@ -470,7 +476,7 @@ Box* isinstance_func(Box* obj, Box* cls) {
 Box* issubclass_func(Box* child, Box* parent) {
     int rtn = PyObject_IsSubclass(child, parent);
     if (rtn < 0)
-        checkAndThrowCAPIException();
+        throwCAPIException();
     return boxBool(rtn);
 }
 
@@ -479,7 +485,6 @@ Box* intern_func(Box* str) {
         raiseExcHelper(TypeError, "can't intern subclass of string");
     Py_INCREF(str);
     PyString_InternInPlace(&str);
-    checkAndThrowCAPIException();
     return str;
 }
 
@@ -1797,7 +1802,8 @@ Box* builtinApply(Box* func, Box* _args, Box* keywords) {
         if (!PySequence_Check(_args))
             raiseExcHelper(TypeError, "apply() arg 2 expected sequence, found %s", getTypeName(_args));
         args = PySequence_Tuple(_args);
-        checkAndThrowCAPIException();
+        if (!args)
+            throwCAPIException();
     } else {
         args = incref(_args);
     }

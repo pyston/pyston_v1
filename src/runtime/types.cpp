@@ -268,7 +268,8 @@ BoxedString* Box::reprICAsString() {
 
     if (isSubclass(r->cls, unicode_cls)) {
         r = PyUnicode_AsASCIIString(autoDecref(r));
-        checkAndThrowCAPIException();
+        if (!r)
+            throwCAPIException();
     }
     if (r->cls != str_cls) {
         Py_DECREF(r);
@@ -2115,7 +2116,8 @@ static PyObject* type_subclasses(PyTypeObject* type, PyObject* args_ignored) noe
 Box* typeSubclasses(BoxedClass* self) {
     assert(PyType_Check(self));
     Box* rtn = type_subclasses(self, 0);
-    checkAndThrowCAPIException();
+    if (!rtn)
+        throwCAPIException();
     return rtn;
 }
 

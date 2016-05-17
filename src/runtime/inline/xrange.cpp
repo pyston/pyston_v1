@@ -154,13 +154,16 @@ Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
 
     if (stop == NULL) {
         i64 istop = PyLong_AsLong(start);
-        checkAndThrowCAPIException();
+        if ((istop == -1) && PyErr_Occurred())
+            throwCAPIException();
         return new BoxedXrange(0, istop, 1);
     } else if (step == NULL) {
         i64 istart = PyLong_AsLong(start);
-        checkAndThrowCAPIException();
+        if ((istart == -1) && PyErr_Occurred())
+            throwCAPIException();
         i64 istop = PyLong_AsLong(stop);
-        checkAndThrowCAPIException();
+        if ((istop == -1) && PyErr_Occurred())
+            throwCAPIException();
         i64 n = BoxedXrange::get_len_of_range(istart, istop, 1);
         if (n > (unsigned long)LONG_MAX || (long)n > PY_SSIZE_T_MAX) {
             raiseExcHelper(OverflowError, "xrange() result has too many items");
@@ -168,11 +171,14 @@ Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
         return new BoxedXrange(istart, istop, 1);
     } else {
         i64 istart = PyLong_AsLong(start);
-        checkAndThrowCAPIException();
+        if ((istart == -1) && PyErr_Occurred())
+            throwCAPIException();
         i64 istop = PyLong_AsLong(stop);
-        checkAndThrowCAPIException();
+        if ((istop == -1) && PyErr_Occurred())
+            throwCAPIException();
         i64 istep = PyLong_AsLong(step);
-        checkAndThrowCAPIException();
+        if ((istep == -1) && PyErr_Occurred())
+            throwCAPIException();
         if (istep == 0)
             raiseExcHelper(ValueError, "xrange() arg 3 must not be zero");
         unsigned long n = BoxedXrange::get_len_of_range(istart, istop, istep);
