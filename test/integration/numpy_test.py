@@ -60,7 +60,7 @@ if not os.path.exists(ENV_NAME) or os.stat(sys.executable).st_mtime > os.stat(EN
 SRC_DIR = ENV_NAME
 PYTHON_EXE = os.path.abspath(ENV_NAME + "/bin/python")
 CYTHON_DIR = os.path.abspath(os.path.join(SRC_DIR, "Cython-0.22"))
-NUMPY_DIR = os.path.dirname(__file__) + "/../lib/numpy"
+NUMPY_DIR = os.path.abspath(os.path.join(SRC_DIR, "numpy"))
 
 print_progress_header("Setting up Cython...")
 if not os.path.exists(CYTHON_DIR):
@@ -82,21 +82,32 @@ if not os.path.exists(CYTHON_DIR):
 else:
     print ">>> Cython already installed."
 
-print_progress_header("Patching NumPy...")
 NUMPY_PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "numpy_patch.patch"))
+
+print_progress_header("Cloning up NumPy...")
+if not os.path.exists(NUMPY_DIR):
+    url = "https://github.com/numpy/numpy"
+    subprocess.check_call(["git", "clone", "--branch", "v1.11.0", url], cwd=SRC_DIR)
+else:
+    print ">>> NumPy already installed."
+
+PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "numpy_patch.patch"))
+
+print_progress_header("Patching NumPy...")
+subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=NUMPY_DIR)
+
 try:
-    cmd = ["patch", "-p1", "--forward", "-i", NUMPY_PATCH_FILE, "-d", NUMPY_DIR]
-    subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-except subprocess.CalledProcessError as e:
-    print e.output
-    if "Reversed (or previously applied) patch detected!  Skipping patch" not in e.output:
-        raise e
+    env = os.environ
+    CYTHON_BIN_DIR = os.path.abspath(os.path.join(ENV_NAME + "/bin"))
+    env["PATH"] = CYTHON_BIN_DIR + ":" + env["PATH"]
 
-print_progress_header("Setting up NumPy...")
-subprocess.check_call([PYTHON_EXE, "setup.py", "build"], cwd=NUMPY_DIR)
+    print_progress_header("Setting up NumPy...")
+    subprocess.check_call([PYTHON_EXE, "setup.py", "build"], cwd=NUMPY_DIR, env=env)
 
-print_progress_header("Installing NumPy...")
-subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=NUMPY_DIR)
+    print_progress_header("Installing NumPy...")
+    subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=NUMPY_DIR, env=env)
+except:
+    subprocess.check_call(["rm", "-rf", NUMPY_DIR])
 
 # From Wikipedia
 script = """
