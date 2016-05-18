@@ -2960,7 +2960,7 @@ bool dataDescriptorSetSpecialCases(Box* obj, STOLEN(Box*) val, Box* descr, Setat
                 /* has_side_effects */ true, (void*)getset_descr->set, args);
 
             if (descr->cls == capi_getset_cls)
-                rewrite_args->rewriter->checkAndThrowCAPIException(r_rtn, -1);
+                rewrite_args->rewriter->checkAndThrowCAPIException(r_rtn, -1, assembler::MovType::L);
 
             rewrite_args->out_success = true;
         }
@@ -3506,7 +3506,7 @@ BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI
 
             // Some CPython code seems to think that any negative return value means an exception,
             // but the docs say -1. TODO it would be nice to just handle any negative value.
-            rewrite_args->rewriter->checkAndThrowCAPIException(r_n, -1);
+            rewrite_args->rewriter->checkAndThrowCAPIException(r_n, -1, assembler::MovType::Q);
 
             RewriterVar* r_r = rewrite_args->rewriter->call(false, (void*)boxInt, r_n)->setType(RefType::OWNED);
 
@@ -5761,7 +5761,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
                     // support calling a RewriterVar (can only call fixed function addresses).
                     r_sqm->addAttrGuard(offsetof(PySequenceMethods, sq_contains), (intptr_t)sqm->sq_contains);
                     RewriterVar* r_b = rewrite_args->rewriter->call(true, (void*)sqm->sq_contains, r_rhs, r_lhs);
-                    rewrite_args->rewriter->checkAndThrowCAPIException(r_b, -1);
+                    rewrite_args->rewriter->checkAndThrowCAPIException(r_b, -1, assembler::MovType::L);
 
                     // This could be inlined:
                     RewriterVar* r_r;

@@ -87,7 +87,7 @@ private:
     void emitRex(uint8_t rex);
     void emitModRM(uint8_t mod, uint8_t reg, uint8_t rm);
     void emitSIB(uint8_t scalebits, uint8_t index, uint8_t base);
-    void emitArith(Immediate imm, Register reg, int opcode);
+    void emitArith(Immediate imm, Register reg, int opcode, MovType type = MovType::Q);
     void emitArith(Immediate imm, Indirect mem, int opcode);
 
     int getModeFromOffset(int offset, int reg_idx) const;
@@ -169,8 +169,9 @@ public:
     void leave();
 
     void cmp(Register reg1, Register reg2);
-    void cmp(Register reg, Immediate imm);
+    void cmp(Register reg, Immediate imm, MovType type = MovType::Q);
     void cmp(Indirect mem, Immediate imm, MovType type = MovType::Q);
+    void cmpl(Register reg, Immediate imm) { return cmp(reg, imm, MovType::L); }
     void cmpl(Indirect mem, Immediate imm) { return cmp(mem, imm, MovType::L); }
     void cmp(Indirect mem, Register reg);
 

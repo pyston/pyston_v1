@@ -76,14 +76,15 @@ GenericRegister GenericRegister::fromDwarf(int dwarf_regnum) {
 
 
 
-void Assembler::emitArith(Immediate imm, Register r, int opcode) {
+void Assembler::emitArith(Immediate imm, Register r, int opcode, MovType type) {
     // assert(r != RSP && "This breaks unwinding, please don't use.");
 
     int64_t amount = imm.val;
     RELEASE_ASSERT(fitsInto<int32_t>(amount), "");
     assert(0 <= opcode && opcode < 8);
 
-    int rex = REX_W;
+    assert(type == MovType::Q || type == MovType::L);
+    int rex = type == MovType::Q ? REX_W : 0;
 
     int reg_idx = r.regnum;
     if (reg_idx >= 8) {
@@ -91,7 +92,8 @@ void Assembler::emitArith(Immediate imm, Register r, int opcode) {
         reg_idx -= 8;
     }
 
-    emitRex(rex);
+    if (rex)
+        emitRex(rex);
     if (-0x80 <= amount && amount < 0x80) {
         emitByte(0x83);
         emitModRM(0b11, opcode, reg_idx);
@@ -872,8 +874,8 @@ void Assembler::cmp(Register reg1, Register reg2) {
     emitModRM(0b11, reg1_idx, reg2_idx);
 }
 
-void Assembler::cmp(Register reg, Immediate imm) {
-    emitArith(imm, reg, OPCODE_CMP);
+void Assembler::cmp(Register reg, Immediate imm, MovType type) {
+    emitArith(imm, reg, OPCODE_CMP, type);
 }
 
 void Assembler::cmp(Indirect mem, Immediate imm, MovType type) {

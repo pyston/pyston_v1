@@ -1898,21 +1898,22 @@ void Rewriter::_allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_ele
     assertConsistent();
 }
 
-void Rewriter::checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val) {
+void Rewriter::checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val, assembler::MovType type) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
-    addAction([=]() { this->_checkAndThrowCAPIException(r, exc_val); }, { r }, ActionType::MUTATION);
+    addAction([=]() { this->_checkAndThrowCAPIException(r, exc_val, type); }, { r }, ActionType::MUTATION);
 }
 
-void Rewriter::_checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val) {
+void Rewriter::_checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val, assembler::MovType type) {
     if (LOG_IC_ASSEMBLY)
         assembler->comment("_checkAndThrowCAPIException");
 
     assembler::Register var_reg = r->getInReg();
-    if (exc_val == 0)
+    if (exc_val == 0) {
+        RELEASE_ASSERT(type == assembler::MovType::Q, "unimplemented");
         assembler->test(var_reg, var_reg);
-    else
-        assembler->cmp(var_reg, assembler::Immediate(exc_val));
+    } else
+        assembler->cmp(var_reg, assembler::Immediate(exc_val), type);
 
     _setupCall(false, RewriterVar::SmallVector(), RewriterVar::SmallVector());
     {
