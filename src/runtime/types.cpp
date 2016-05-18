@@ -3780,7 +3780,7 @@ void HiddenClass::dump() noexcept {
     }
 }
 
-static void tupledealloc(PyTupleObject* op) noexcept {
+void BoxedTuple::dealloc(PyTupleObject* op) noexcept {
     Py_ssize_t i;
     Py_ssize_t len = Py_SIZE(op);
     PyObject_GC_UnTrack(op);
@@ -3789,10 +3789,11 @@ static void tupledealloc(PyTupleObject* op) noexcept {
         while (--i >= 0)
             Py_XDECREF(op->ob_item[i]);
 #if PyTuple_MAXSAVESIZE > 0
-        if (len < PyTuple_MAXSAVESIZE && numfree[len] < PyTuple_MAXFREELIST && Py_TYPE(op) == &PyTuple_Type) {
+        if (likely(len < PyTuple_MAXSAVESIZE && BoxedTuple::numfree[len] < PyTuple_MAXFREELIST
+                   && ((BoxedTuple*)op)->cls == tuple_cls)) {
             op->ob_item[0] = (PyObject*)free_list[len];
             numfree[len]++;
-            free_list[len] = op;
+            free_list[len] = (BoxedTuple*)op;
             goto done; /* return */
         }
 #endif
@@ -4247,7 +4248,7 @@ void setupRuntime() {
     // Not sure why CPython defines sizeof(PyTupleObject) to include one element,
     // but we copy that, which means we have to subtract that extra pointer to get the tp_basicsize:
     tuple_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedTuple) - sizeof(Box*), false, "tuple", true,
-                                   (destructor)tupledealloc, NULL, true, (traverseproc)tupletraverse, NOCLEAR);
+                                   (destructor)BoxedTuple::dealloc, NULL, true, (traverseproc)tupletraverse, NOCLEAR);
 
     tuple_cls->tp_flags |= Py_TPFLAGS_TUPLE_SUBCLASS;
     tuple_cls->tp_itemsize = sizeof(Box*);

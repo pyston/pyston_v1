@@ -27,6 +27,11 @@
 
 namespace pyston {
 
+#if PyTuple_MAXSAVESIZE > 0
+BoxedTuple* BoxedTuple::free_list[PyTuple_MAXSAVESIZE];
+int BoxedTuple::numfree[PyTuple_MAXSAVESIZE];
+#endif
+
 extern "C" Box* createTuple(int64_t nelts, Box** elts) {
     return BoxedTuple::create(nelts, elts);
 }
@@ -725,7 +730,22 @@ extern "C" void _PyTuple_MaybeUntrack(PyObject* op) noexcept {
 }
 
 extern "C" int PyTuple_ClearFreeList() noexcept {
-    return 0; // number of entries cleared
+    int freelist_size = 0;
+#if PyTuple_MAXSAVESIZE > 0
+    int i;
+    for (i = 1; i < PyTuple_MAXSAVESIZE; i++) {
+        PyTupleObject* p = (PyTupleObject*)BoxedTuple::free_list[i];
+        freelist_size += BoxedTuple::numfree[i];
+        BoxedTuple::free_list[i] = NULL;
+        BoxedTuple::numfree[i] = 0;
+        while (p) {
+            PyTupleObject* q = p;
+            p = (PyTupleObject*)(p->ob_item[0]);
+            PyObject_GC_Del(q);
+        }
+    }
+#endif
+    return freelist_size;
 }
 
 void setupTuple() {
