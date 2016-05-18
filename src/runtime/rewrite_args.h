@@ -292,26 +292,28 @@ struct CompareRewriteArgs {
         : rewriter(rewriter), lhs(lhs), rhs(rhs), destination(destination), out_success(false), out_rtn(NULL) {}
 };
 
-// Passes the output arguments back through oarg.  Passes the rewrite success by setting rewrite_success.
-// Directly modifies rewrite_args args in place, but only if rewrite_success got set.
-// oargs needs to be pre-allocated by the caller, since it's assumed that they will want to use alloca.
-// The caller is responsible for guarding for paramspec, argspec, param_names, and defaults.
-// TODO Fix this function's signature.  should we pass back out through args?  the common case is that they
-// match anyway.  Or maybe it should call a callback function, which could save on the common case.
+using FunctorPointer
+    = llvm::function_ref<Box*(CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args)>;
+
+// rearrangeArgumentsAndCall maps from a given set of arguments (the structure specified by an ArgPassSpec) to the
+// parameter form than the receiving function expects (given by the ParamReceiveSpec).  After it does this, it will
+// call `continuation` and return the result.
 //
-// Reference semantics: takes borrowed references, and everything written out is an owned reference.
-template <Rewritable rewritable = REWRITABLE>
-void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
-                        Box** defaults, _CallRewriteArgsBase* rewrite_args, bool& rewrite_success, ArgPassSpec argspec,
-                        Box*& arg1, Box*& arg2, Box*& arg3, Box** args, Box** oargs,
-                        const std::vector<BoxedString*>* keyword_names, bool* oargs_owned);
+// The caller is responsible for guarding for paramspec, argspec, param_names, and defaults.
+//
+// rearrangeArgumentsAndCall supports both CAPI- and CXX- exception styles for continuation, and will propagate them
+// back to the caller.  For now, it can also throw its own exceptions such as "not enough arguments", and will throw
+// them in the CXX style.
+Box* rearrangeArgumentsAndCall(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
+                               Box** defaults, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
+                               Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,
+                               FunctorPointer continuation);
 
 // new_args should be allocated by the caller if at least three args get passed in.
 // rewrite_args will get modified in place.
 ArgPassSpec bindObjIntoArgs(Box* bind_obj, RewriterVar* r_bind_obj, _CallRewriteArgsBase* rewrite_args,
                             ArgPassSpec argspec, Box*& arg1, Box*& arg2, Box*& arg3, Box** args, Box** new_args);
 
-void decrefOargs(RewriterVar* oargs, bool* oargs_owned, int oargs_size);
 } // namespace pyston
 
 #endif

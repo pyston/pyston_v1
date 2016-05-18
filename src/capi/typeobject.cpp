@@ -3411,51 +3411,40 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
         paramspec.takes_kwargs = false;
     }
 
-    bool rewrite_success = false;
-    Box** oargs = NULL;
-    try {
-        rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
-                           oargs, keyword_names, NULL);
-    } catch (ExcInfo e) {
-        if (S == CAPI) {
-            setCAPIException(e);
-            return NULL;
-        } else
-            throw e;
-    }
-
-    AUTO_DECREF(arg1);
-    if (!paramspec.takes_kwargs)
-        arg2 = NULL;
-    AUTO_XDECREF(arg2);
-
-    if (!rewrite_success)
-        rewrite_args = NULL;
-
-    if (rewrite_args) {
+    auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
         if (!paramspec.takes_kwargs)
-            rewrite_args->arg2 = rewrite_args->rewriter->loadConst(0, Location::forArg(2));
+            arg2 = NULL;
 
-        // Currently, guard that the value of tp_call didn't change, and then
-        // emit a call to the current function address.
-        // It might be better to just load the current value of tp_call and call it
-        // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
-        // support calling a RewriterVar (can only call fixed function addresses).
-        RewriterVar* r_cls = rewrite_args->obj->getAttr(offsetof(Box, cls));
-        r_cls->addAttrGuard(offsetof(BoxedClass, tp_call), (intptr_t)self->cls->tp_call);
+        if (rewrite_args) {
+            if (!paramspec.takes_kwargs)
+                rewrite_args->arg2 = rewrite_args->rewriter->loadConst(0, Location::forArg(2));
 
-        rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->cls->tp_call, rewrite_args->obj,
-                                                             rewrite_args->arg1, rewrite_args->arg2);
-        rewrite_args->out_rtn->setType(RefType::OWNED);
-        if (S == CXX)
-            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-        rewrite_args->out_success = true;
-    }
+            // Currently, guard that the value of tp_call didn't change, and then
+            // emit a call to the current function address.
+            // It might be better to just load the current value of tp_call and call it
+            // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
+            // support calling a RewriterVar (can only call fixed function addresses).
+            RewriterVar* r_cls = rewrite_args->obj->getAttr(offsetof(Box, cls));
+            r_cls->addAttrGuard(offsetof(BoxedClass, tp_call), (intptr_t)self->cls->tp_call);
 
-    Box* r = self->cls->tp_call(self, arg1, arg2);
-    if (!r && S == CXX)
-        throwCAPIException();
-    return r;
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->cls->tp_call, rewrite_args->obj,
+                                                                 rewrite_args->arg1, rewrite_args->arg2);
+            rewrite_args->out_rtn->setType(RefType::OWNED);
+            if (S == CXX)
+                rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+            rewrite_args->out_success = true;
+        }
+
+        Box* r = self->cls->tp_call(self, arg1, arg2);
+        if (S == CXX && !r)
+            throwCAPIException();
+        return r;
+    };
+
+    return callCXXFromStyle<S>([&]() {
+        return rearrangeArgumentsAndCall(paramspec, NULL, "", NULL, rewrite_args, argspec, arg1, arg2, arg3, args,
+                                         keyword_names, continuation);
+    });
 }
 
 extern "C" void PyType_RequestHcAttrs(PyTypeObject* cls, int offset) noexcept {

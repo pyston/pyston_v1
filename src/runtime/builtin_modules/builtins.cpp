@@ -553,104 +553,103 @@ template <ExceptionStyle S>
 Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                          Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
     static Box* defaults[] = { NULL };
-    bool rewrite_success = false;
-    rearrangeArguments(ParamReceiveSpec(3, 1, false, false), NULL, "getattr", defaults, rewrite_args, rewrite_success,
-                       argspec, arg1, arg2, arg3, args, NULL, keyword_names, NULL);
-    if (!rewrite_success)
-        rewrite_args = NULL;
 
-    Box* obj = arg1;
-    Box* _str = arg2;
-    Box* default_value = arg3;
+    auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+        Box* obj = arg1;
+        Box* _str = arg2;
+        Box* default_value = arg3;
 
-    AUTO_DECREF(obj);
-    AUTO_DECREF(_str);
-    AUTO_XDECREF(default_value);
+        if (rewrite_args) {
+            // We need to make sure that the attribute string will be the same.
+            // Even though the passed string might not be the exact attribute name
+            // that we end up looking up (because we need to encode it or intern it),
+            // guarding on that object means (for strings and unicode) that the string
+            // value is fixed.
+            if (!PyString_CheckExact(_str) && !PyUnicode_CheckExact(_str))
+                rewrite_args = NULL;
+            else {
+                if (PyString_CheckExact(_str) && PyString_CHECK_INTERNED(_str) == SSTATE_INTERNED_IMMORTAL) {
+                    // can avoid keeping the extra gc reference
+                } else {
+                    rewrite_args->rewriter->addGCReference(_str);
+                }
 
-    if (rewrite_args) {
-        // We need to make sure that the attribute string will be the same.
-        // Even though the passed string might not be the exact attribute name
-        // that we end up looking up (because we need to encode it or intern it),
-        // guarding on that object means (for strings and unicode) that the string
-        // value is fixed.
-        if (!PyString_CheckExact(_str) && !PyUnicode_CheckExact(_str))
-            rewrite_args = NULL;
-        else {
-            if (PyString_CheckExact(_str) && PyString_CHECK_INTERNED(_str) == SSTATE_INTERNED_IMMORTAL) {
-                // can avoid keeping the extra gc reference
-            } else {
-                rewrite_args->rewriter->addGCReference(_str);
+                rewrite_args->arg2->addGuard((intptr_t)arg2);
             }
-
-            rewrite_args->arg2->addGuard((intptr_t)arg2);
         }
-    }
 
-    _str = coerceUnicodeToStr<S>(_str);
-    if (S == CAPI && !_str)
-        return NULL;
+        _str = coerceUnicodeToStr<S>(_str);
 
-    if (!PyString_Check(_str)) {
-        Py_DECREF(_str);
-        if (S == CAPI) {
-            PyErr_SetString(TypeError, "getattr(): attribute name must be string");
-            return NULL;
-        } else
-            raiseExcHelper(TypeError, "getattr(): attribute name must be string");
-    }
+        if (S == CAPI && !_str)
+            return (Box*)NULL;
 
-    BoxedString* str = static_cast<BoxedString*>(_str);
-    if (!PyString_CHECK_INTERNED(str))
-        internStringMortalInplace(str);
-    AUTO_DECREF(str);
+        if (!PyString_Check(_str)) {
+            Py_DECREF(_str);
+            if (S == CAPI) {
+                PyErr_SetString(TypeError, "getattr(): attribute name must be string");
+                return (Box*)NULL;
+            } else
+                raiseExcHelper(TypeError, "getattr(): attribute name must be string");
+        }
 
-    Box* rtn;
-    RewriterVar* r_rtn;
-    if (rewrite_args) {
-        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
-        rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
-        // TODO could make the return valid in the NOEXC_POSSIBLE case via a helper
-        if (!grewrite_args.isSuccessful())
-            rewrite_args = NULL;
-        else {
-            ReturnConvention return_convention;
-            std::tie(r_rtn, return_convention) = grewrite_args.getReturn();
+        BoxedString* str = static_cast<BoxedString*>(_str);
+        if (!PyString_CHECK_INTERNED(str))
+            internStringMortalInplace(str);
+        AUTO_DECREF(str);
 
-            // Convert to NOEXC_POSSIBLE:
-            if (return_convention == ReturnConvention::NO_RETURN) {
-                return_convention = ReturnConvention::NOEXC_POSSIBLE;
-                r_rtn = rewrite_args->rewriter->loadConst(0);
-            } else if (return_convention == ReturnConvention::MAYBE_EXC) {
-                if (default_value)
-                    rewrite_args = NULL;
+        Box* rtn;
+        RewriterVar* r_rtn;
+        if (rewrite_args) {
+            GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
+            rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
+            // TODO could make the return valid in the NOEXC_POSSIBLE case via a helper
+            if (!grewrite_args.isSuccessful())
+                rewrite_args = NULL;
+            else {
+                ReturnConvention return_convention;
+                std::tie(r_rtn, return_convention) = grewrite_args.getReturn();
+
+                // Convert to NOEXC_POSSIBLE:
+                if (return_convention == ReturnConvention::NO_RETURN) {
+                    return_convention = ReturnConvention::NOEXC_POSSIBLE;
+                    r_rtn = rewrite_args->rewriter->loadConst(0);
+                } else if (return_convention == ReturnConvention::MAYBE_EXC) {
+                    if (default_value)
+                        rewrite_args = NULL;
+                }
+                assert(!rewrite_args || return_convention == ReturnConvention::NOEXC_POSSIBLE
+                       || return_convention == ReturnConvention::HAS_RETURN
+                       || return_convention == ReturnConvention::CAPI_RETURN
+                       || (default_value == NULL && return_convention == ReturnConvention::MAYBE_EXC));
             }
-            assert(!rewrite_args || return_convention == ReturnConvention::NOEXC_POSSIBLE
-                   || return_convention == ReturnConvention::HAS_RETURN
-                   || return_convention == ReturnConvention::CAPI_RETURN
-                   || (default_value == NULL && return_convention == ReturnConvention::MAYBE_EXC));
+        } else {
+            rtn = getattrInternal<CAPI>(obj, str);
         }
-    } else {
-        rtn = getattrInternal<CAPI>(obj, str);
-    }
 
-    if (rewrite_args) {
-        assert(PyString_CHECK_INTERNED(str) == SSTATE_INTERNED_IMMORTAL);
-        RewriterVar* r_str = rewrite_args->rewriter->loadConst((intptr_t)str, Location::forArg(2));
-        RewriterVar* final_rtn
-            = rewrite_args->rewriter->call(false, (void*)getattrFuncHelper, r_rtn, rewrite_args->arg1, r_str,
-                                           rewrite_args->arg3)->setType(RefType::OWNED);
-        r_rtn->refConsumed();
+        if (rewrite_args) {
+            assert(PyString_CHECK_INTERNED(str) == SSTATE_INTERNED_IMMORTAL);
+            RewriterVar* r_str = rewrite_args->rewriter->loadConst((intptr_t)str, Location::forArg(2));
+            RewriterVar* final_rtn
+                = rewrite_args->rewriter->call(false, (void*)getattrFuncHelper, r_rtn, rewrite_args->arg1, r_str,
+                                               rewrite_args->arg3)->setType(RefType::OWNED);
+            r_rtn->refConsumed();
 
-        if (S == CXX)
-            rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);
-        rewrite_args->out_success = true;
-        rewrite_args->out_rtn = final_rtn;
-    }
+            if (S == CXX)
+                rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = final_rtn;
+        }
 
-    Box* r = getattrFuncHelper(rtn, obj, str, default_value);
-    if (S == CXX && !r)
-        throwCAPIException();
-    return r;
+        Box* r = getattrFuncHelper(rtn, obj, str, default_value);
+        if (S == CXX && !r)
+            throwCAPIException();
+        return r;
+    };
+
+    return callCXXFromStyle<S>([&]() {
+        return rearrangeArgumentsAndCall(ParamReceiveSpec(3, 1, false, false), NULL, "getattr", defaults, rewrite_args,
+                                         argspec, arg1, arg2, arg3, args, keyword_names, continuation);
+    });
 }
 
 Box* setattrFunc(Box* obj, Box* _str, Box* value) {
@@ -688,97 +687,96 @@ static Box* hasattrFuncHelper(STOLEN(Box*) return_val) noexcept {
 template <ExceptionStyle S>
 Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                          Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
-    bool rewrite_success = false;
-    rearrangeArguments(ParamReceiveSpec(2, 0, false, false), NULL, "hasattr", NULL, rewrite_args, rewrite_success,
-                       argspec, arg1, arg2, arg3, args, NULL, keyword_names, NULL);
-    if (!rewrite_success)
-        rewrite_args = NULL;
+    auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+        Box* obj = arg1;
+        Box* _str = arg2;
 
-    AUTO_DECREF(arg1);
-    AUTO_DECREF(arg2);
-
-    Box* obj = arg1;
-    Box* _str = arg2;
-
-    if (rewrite_args) {
-        // We need to make sure that the attribute string will be the same.
-        // Even though the passed string might not be the exact attribute name
-        // that we end up looking up (because we need to encode it or intern it),
-        // guarding on that object means (for strings and unicode) that the string
-        // value is fixed.
-        if (!PyString_CheckExact(_str) && !PyUnicode_CheckExact(_str))
-            rewrite_args = NULL;
-        else {
-            if (PyString_CheckExact(_str) && PyString_CHECK_INTERNED(_str) == SSTATE_INTERNED_IMMORTAL) {
-                // can avoid keeping the extra gc reference
-            } else {
-                rewrite_args->rewriter->addGCReference(_str);
-            }
-
-            rewrite_args->arg2->addGuard((intptr_t)arg2);
-        }
-    }
-
-    _str = coerceUnicodeToStr<S>(_str);
-    if (S == CAPI && !_str)
-        return NULL;
-
-    if (!PyString_Check(_str)) {
-        Py_DECREF(_str);
-        if (S == CAPI) {
-            PyErr_SetString(TypeError, "hasattr(): attribute name must be string");
-            return NULL;
-        } else
-            raiseExcHelper(TypeError, "hasattr(): attribute name must be string");
-    }
-
-    BoxedString* str = static_cast<BoxedString*>(_str);
-
-    if (!PyString_CHECK_INTERNED(str))
-        internStringMortalInplace(str);
-    AUTO_DECREF(str);
-
-    Box* rtn;
-    RewriterVar* r_rtn;
-    if (rewrite_args) {
-        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
-        rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
-        if (!grewrite_args.isSuccessful())
-            rewrite_args = NULL;
-        else {
-            ReturnConvention return_convention;
-            std::tie(r_rtn, return_convention) = grewrite_args.getReturn();
-
-            // Convert to NOEXC_POSSIBLE:
-            if (return_convention == ReturnConvention::NO_RETURN) {
-                return_convention = ReturnConvention::NOEXC_POSSIBLE;
-                r_rtn = rewrite_args->rewriter->loadConst(0);
-            } else if (return_convention == ReturnConvention::MAYBE_EXC) {
+        if (rewrite_args) {
+            // We need to make sure that the attribute string will be the same.
+            // Even though the passed string might not be the exact attribute name
+            // that we end up looking up (because we need to encode it or intern it),
+            // guarding on that object means (for strings and unicode) that the string
+            // value is fixed.
+            if (!PyString_CheckExact(_str) && !PyUnicode_CheckExact(_str))
                 rewrite_args = NULL;
+            else {
+                if (PyString_CheckExact(_str) && PyString_CHECK_INTERNED(_str) == SSTATE_INTERNED_IMMORTAL) {
+                    // can avoid keeping the extra gc reference
+                } else {
+                    rewrite_args->rewriter->addGCReference(_str);
+                }
+
+                rewrite_args->arg2->addGuard((intptr_t)arg2);
             }
-            assert(!rewrite_args || return_convention == ReturnConvention::NOEXC_POSSIBLE
-                   || return_convention == ReturnConvention::HAS_RETURN
-                   || return_convention == ReturnConvention::CAPI_RETURN);
         }
-    } else {
-        rtn = getattrInternal<CAPI>(obj, str);
-    }
 
-    if (rewrite_args) {
-        RewriterVar* final_rtn
-            = rewrite_args->rewriter->call(false, (void*)hasattrFuncHelper, r_rtn)->setType(RefType::OWNED);
-        r_rtn->refConsumed();
+        _str = coerceUnicodeToStr<S>(_str);
 
-        if (S == CXX)
-            rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);
-        rewrite_args->out_success = true;
-        rewrite_args->out_rtn = final_rtn;
-    }
+        if (S == CAPI && !_str)
+            return (Box*)NULL;
 
-    Box* r = hasattrFuncHelper(rtn);
-    if (S == CXX && !r)
-        throwCAPIException();
-    return r;
+        if (!PyString_Check(_str)) {
+            Py_DECREF(_str);
+            if (S == CAPI) {
+                PyErr_SetString(TypeError, "hasattr(): attribute name must be string");
+                return (Box*)NULL;
+            } else
+                raiseExcHelper(TypeError, "hasattr(): attribute name must be string");
+        }
+
+        BoxedString* str = static_cast<BoxedString*>(_str);
+
+        if (!PyString_CHECK_INTERNED(str))
+            internStringMortalInplace(str);
+        AUTO_DECREF(str);
+
+        Box* rtn;
+        RewriterVar* r_rtn;
+        if (rewrite_args) {
+            GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
+            rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
+            if (!grewrite_args.isSuccessful())
+                rewrite_args = NULL;
+            else {
+                ReturnConvention return_convention;
+                std::tie(r_rtn, return_convention) = grewrite_args.getReturn();
+
+                // Convert to NOEXC_POSSIBLE:
+                if (return_convention == ReturnConvention::NO_RETURN) {
+                    return_convention = ReturnConvention::NOEXC_POSSIBLE;
+                    r_rtn = rewrite_args->rewriter->loadConst(0);
+                } else if (return_convention == ReturnConvention::MAYBE_EXC) {
+                    rewrite_args = NULL;
+                }
+                assert(!rewrite_args || return_convention == ReturnConvention::NOEXC_POSSIBLE
+                       || return_convention == ReturnConvention::HAS_RETURN
+                       || return_convention == ReturnConvention::CAPI_RETURN);
+            }
+        } else {
+            rtn = getattrInternal<CAPI>(obj, str);
+        }
+
+        if (rewrite_args) {
+            RewriterVar* final_rtn
+                = rewrite_args->rewriter->call(false, (void*)hasattrFuncHelper, r_rtn)->setType(RefType::OWNED);
+            r_rtn->refConsumed();
+
+            if (S == CXX)
+                rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = final_rtn;
+        }
+
+        Box* r = hasattrFuncHelper(rtn);
+        if (S == CXX && !r)
+            throwCAPIException();
+        return r;
+    };
+
+    return callCXXFromStyle<S>([&]() {
+        return rearrangeArgumentsAndCall(ParamReceiveSpec(2, 0, false, false), NULL, "hasattr", NULL, rewrite_args,
+                                         argspec, arg1, arg2, arg3, args, keyword_names, continuation);
+    });
 }
 
 Box* map2(Box* f, Box* container) {

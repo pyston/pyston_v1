@@ -833,32 +833,25 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         assert(S == CXX && "implement me");
 
         ParamReceiveSpec paramspec(4, 3, false, false);
-        bool rewrite_success = false;
         static ParamNames param_names({ "", "string", "encoding", "errors" }, "", "");
         static Box* defaults[3] = { NULL, NULL, NULL };
-        Box* oargs[1] = { NULL };
-        bool oargs_owned[1];
 
-        rearrangeArguments(paramspec, &param_names, "unicode", defaults, rewrite_args, rewrite_success, argspec, arg1,
-                           arg2, arg3, args, oargs, keyword_names, oargs_owned);
-        assert(arg1 == cls);
+        auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+            assert(arg1 == cls);
 
-        AUTO_DECREF_ARGS(paramspec, arg1, arg2, arg3, oargs);
+            if (rewrite_args) {
+                rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)unicodeNewHelper, rewrite_args->arg1,
+                                                                     rewrite_args->arg2, rewrite_args->arg3,
+                                                                     rewrite_args->args)->setType(RefType::OWNED);
 
-        if (!rewrite_success)
-            rewrite_args = NULL;
+                rewrite_args->out_success = true;
+            }
 
-        if (rewrite_args) {
-            rewrite_args->out_rtn
-                = rewrite_args->rewriter->call(true, (void*)unicodeNewHelper, rewrite_args->arg1, rewrite_args->arg2,
-                                               rewrite_args->arg3, rewrite_args->args)->setType(RefType::OWNED);
+            return unicodeNewHelper(static_cast<BoxedClass*>(arg1), arg2, arg3, args);
+        };
 
-            decrefOargs(rewrite_args->args, oargs_owned, 1);
-
-            rewrite_args->out_success = true;
-        }
-
-        return unicodeNewHelper(cls, arg2, arg3, oargs);
+        return rearrangeArgumentsAndCall(paramspec, &param_names, "unicode", defaults, rewrite_args, argspec, arg1,
+                                         arg2, arg3, args, keyword_names, continuation);
     }
 
     if (cls->tp_new != object_cls->tp_new && cls->tp_new != slot_tp_new && cls->tp_new != BaseException->tp_new
@@ -870,27 +863,21 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         assert(S == CXX && "implement me");
 
         ParamReceiveSpec paramspec(1, false, true, true);
-        bool rewrite_success = false;
-        Box** oargs = NULL;
-        rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
-                           oargs, keyword_names, NULL);
-        assert(arg1 == cls);
 
-        AUTO_DECREF(arg1);
-        AUTO_DECREF(arg2);
-        AUTO_XDECREF(arg3);
+        auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+            assert(arg1 == cls);
 
-        if (!rewrite_success)
-            rewrite_args = NULL;
+            if (rewrite_args) {
+                rewrite_args->out_rtn
+                    = rewrite_args->rewriter->call(true, (void*)cpythonTypeCall, rewrite_args->arg1, rewrite_args->arg2,
+                                                   rewrite_args->arg3)->setType(RefType::OWNED);
+                rewrite_args->out_success = true;
+            }
 
-        if (rewrite_args) {
-            rewrite_args->out_rtn
-                = rewrite_args->rewriter->call(true, (void*)cpythonTypeCall, rewrite_args->arg1, rewrite_args->arg2,
-                                               rewrite_args->arg3)->setType(RefType::OWNED);
-            rewrite_args->out_success = true;
-        }
-
-        return cpythonTypeCall(cls, arg2, arg3);
+            return cpythonTypeCall(cls, arg2, arg3);
+        };
+        return rearrangeArgumentsAndCall(paramspec, NULL, "", NULL, rewrite_args, argspec, arg1, arg2, arg3, args,
+                                         keyword_names, continuation);
     }
 
     if (argspec.has_starargs || argspec.has_kwargs)
@@ -1196,27 +1183,6 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         // will be, whereas this block can't; I'm not sure how to merge the functionality.  That's
         // probably just evidence of the overall convolutedness of this function.
 
-        // TODO: instead of rewriting to the capi-format, maybe we should do the rearrangearguments
-        // inside the helper?
-        bool rewrite_success = false;
-        try {
-            rearrangeArguments(ParamReceiveSpec(1, 0, true, true), NULL, "", NULL, rewrite_args, rewrite_success,
-                               argspec, made, arg2, arg3, args, NULL, keyword_names, NULL);
-        } catch (ExcInfo e) {
-            if (S == CAPI) {
-                setCAPIException(e);
-                return NULL;
-            } else
-                throw e;
-        }
-
-        AUTO_DECREF(made);
-        AUTO_DECREF(arg2);
-        AUTO_XDECREF(arg3);
-
-        if (!rewrite_success)
-            rewrite_args = NULL;
-
         class InitHelper {
         public:
             static Box* call(STOLEN(Box*) made, BoxedClass* cls, Box* args, Box* kwargs) noexcept(S == CAPI) {
@@ -1234,17 +1200,26 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             }
         };
 
-        assert(arg2->cls == tuple_cls);
-        assert(!arg3 || arg3->cls == dict_cls);
+        // TODO: instead of rewriting to the capi-format, maybe we should do the rearrangearguments
+        // inside the helper?
+        auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+            assert(arg2->cls == tuple_cls);
+            assert(!arg3 || arg3->cls == dict_cls);
 
-        if (rewrite_args) {
-            rewrite_args->out_rtn
-                = rewrite_args->rewriter->call(true, (void*)InitHelper::call, r_made, r_ccls, rewrite_args->arg2,
-                                               rewrite_args->arg3)->setType(RefType::OWNED);
-            r_made->refConsumed();
-            rewrite_args->out_success = true;
-        }
-        return InitHelper::call(made, cls, arg2, arg3);
+            if (rewrite_args) {
+                rewrite_args->out_rtn
+                    = rewrite_args->rewriter->call(true, (void*)InitHelper::call, r_made, r_ccls, rewrite_args->arg2,
+                                                   rewrite_args->arg3)->setType(RefType::OWNED);
+                r_made->refConsumed();
+                rewrite_args->out_success = true;
+            }
+            return InitHelper::call(made, cls, arg2, arg3);
+        };
+
+        return callCXXFromStyle<S>([&]() {
+            return rearrangeArgumentsAndCall(ParamReceiveSpec(1, 0, true, true), NULL, "", NULL, rewrite_args, argspec,
+                                             made, arg2, arg3, args, keyword_names, continuation);
+        });
     }
 
     // If __new__ returns a subclass, supposed to call that subclass's __init__.
@@ -1343,30 +1318,35 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                 assert(tpinit == cls->tp_init);
             }
 
-            bool rewrite_success = false;
+            auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+                assert(arg2->cls == tuple_cls);
+                assert(!arg3 || arg3->cls == dict_cls);
+
+                int err = tpinit(made, arg2, arg3);
+
+                if (err == -1)
+                    return (Box*)NULL;
+
+                if (rewrite_args) {
+                    auto r_err = rewrite_args->rewriter->call(true, (void*)tpinit, r_made, rewrite_args->arg2,
+                                                              rewrite_args->arg3);
+
+                    assert(S == CXX && "this need to be converted");
+                    rewrite_args->rewriter->checkAndThrowCAPIException(r_err, -1, assembler::MovType::L);
+                    rewrite_args->out_success = true;
+                }
+                return (Box*)1;
+            };
+
+            Box* _t;
             try {
-                rearrangeArguments(ParamReceiveSpec(1, 0, true, true), NULL, "", NULL, rewrite_args, rewrite_success,
-                                   argspec, made, arg2, arg3, args, NULL, keyword_names, NULL);
+                _t = rearrangeArgumentsAndCall(ParamReceiveSpec(1, 0, true, true), NULL, "", NULL, rewrite_args,
+                                               argspec, made, arg2, arg3, args, keyword_names, continuation);
             } catch (ExcInfo e) {
-                Py_DECREF(made);
-                if (S == CAPI) {
-                    setCAPIException(e);
-                    return NULL;
-                } else
-                    throw e;
+                setCAPIException(e);
+                _t = NULL;
             }
-
-            if (!rewrite_success)
-                rewrite_args = NULL;
-
-            assert(arg2->cls == tuple_cls);
-            assert(!arg3 || arg3->cls == dict_cls);
-
-            int err = tpinit(made, arg2, arg3);
-            Py_DECREF(made);
-            Py_DECREF(arg2);
-            Py_XDECREF(arg3);
-            if (err == -1) {
+            if (_t == NULL) {
                 Py_DECREF(made);
                 if (S == CAPI)
                     return NULL;
@@ -1375,11 +1355,10 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             }
 
             if (rewrite_args) {
-                auto r_err
-                    = rewrite_args->rewriter->call(true, (void*)tpinit, r_made, rewrite_args->arg2, rewrite_args->arg3);
-
-                assert(S == CXX && "this need to be converted");
-                rewrite_args->rewriter->checkAndThrowCAPIException(r_err, -1, assembler::MovType::L);
+                if (!rewrite_args->out_success)
+                    rewrite_args = NULL;
+                else
+                    rewrite_args->out_success = false;
             }
         }
     } else {

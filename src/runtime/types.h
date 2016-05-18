@@ -413,41 +413,6 @@ public:
 #define AUTO_DECREF_ARRAY(x, size) AutoDecrefArray<false> CAT(_autodecref_, __LINE__)((x), (size))
 #define AUTO_XDECREF_ARRAY(x, size) AutoDecrefArray<true> CAT(_autodecref_, __LINE__)((x), (size))
 
-class AutoDecrefArgs {
-private:
-    int num_args;
-    Box* arg1, *arg2, *arg3;
-    Box** args;
-
-public:
-    AutoDecrefArgs(int num_args, Box* arg1, Box* arg2, Box* arg3, Box** args)
-        : num_args(num_args), arg1(arg1), arg2(arg2), arg3(arg3), args(args) {}
-    AutoDecrefArgs(ParamReceiveSpec paramspec, Box* arg1, Box* arg2, Box* arg3, Box** args)
-        : num_args(paramspec.totalReceived()), arg1(arg1), arg2(arg2), arg3(arg3), args(args) {}
-
-    ~AutoDecrefArgs() {
-        // TODO Minor optimization: only the last arg (kwargs) is allowed to be NULL.
-        switch (num_args) {
-            default:
-                for (int i = 0; i < num_args - 3; i++) {
-                    Py_XDECREF(args[i]);
-                }
-            case 3:
-                Py_XDECREF(arg3);
-            case 2:
-                Py_XDECREF(arg2);
-            case 1:
-                Py_XDECREF(arg1);
-            case 0:
-                break;
-        }
-    }
-};
-// Note: this captures the first three args by value (like AUTO_DECREF) but the array by reference.
-// You can also pass a ParamReceiveSpec instead of an int for num_args
-#define AUTO_DECREF_ARGS(num_args, arg1, arg2, arg3, args)                                                             \
-    AutoDecrefArgs CAT(_autodecref_, __LINE__)((num_args), (arg1), (arg2), (arg3), (args))
-
 template <typename B> B* incref(B* b) {
     Py_INCREF(b);
     return b;
@@ -455,6 +420,32 @@ template <typename B> B* incref(B* b) {
 template <typename B> B* xincref(B* b) {
     Py_XINCREF(b);
     return b;
+}
+
+// Helper function: calls a CXX-style function from a templated function.  This is more efficient than the
+// easier-to-type version:
+//
+// try {
+//     return f();
+// } catch (ExcInfo e) {
+//     if (S == CAPI) {
+//         setCAPIException(e);
+//         return NULL;
+//     } else
+//         throw e;
+// }
+//
+// since this version does not need the try-catch block when called from a CXX-style function
+template <ExceptionStyle S, typename Functor> Box* callCXXFromStyle(Functor f) {
+    if (S == CAPI) {
+        try {
+            return f();
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    } else
+        return f();
 }
 
 //#define DISABLE_INT_FREELIST

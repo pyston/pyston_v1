@@ -429,11 +429,14 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
 #endif
 {
     Py_INCREF(function);
-    Py_XINCREF(arg1);
-    Py_XINCREF(arg2);
-    Py_XINCREF(arg3);
 
     int numArgs = function->md->numReceivedArgs();
+    if (numArgs > 0)
+        Py_XINCREF(arg1);
+    if (numArgs > 1)
+        Py_XINCREF(arg2);
+    if (numArgs > 2)
+        Py_XINCREF(arg3);
     if (numArgs > 3) {
         numArgs -= 3;
         this->args = new (numArgs) GCdArray();
@@ -631,15 +634,16 @@ static void generator_dealloc(BoxedGenerator* self) noexcept {
 
     int numArgs = self->function->md->numReceivedArgs();
     if (numArgs > 3) {
-        numArgs -= 3;
-        for (int i = 0; i < numArgs; i++) {
+        for (int i = 0; i < numArgs - 3; i++) {
             Py_CLEAR(self->args->elts[i]);
         }
     }
-
-    Py_CLEAR(self->arg1);
-    Py_CLEAR(self->arg2);
-    Py_CLEAR(self->arg3);
+    if (numArgs > 2)
+        Py_CLEAR(self->arg3);
+    if (numArgs > 1)
+        Py_CLEAR(self->arg2);
+    if (numArgs > 0)
+        Py_CLEAR(self->arg1);
 
     Py_CLEAR(self->function);
 
@@ -667,15 +671,16 @@ static int generator_traverse(BoxedGenerator* self, visitproc visit, void* arg) 
 
     int numArgs = self->function->md->numReceivedArgs();
     if (numArgs > 3) {
-        numArgs -= 3;
-        for (int i = 0; i < numArgs; i++) {
+        for (int i = 0; i < numArgs - 3; i++) {
             Py_VISIT(self->args->elts[i]);
         }
     }
-
-    Py_VISIT(self->arg1);
-    Py_VISIT(self->arg2);
-    Py_VISIT(self->arg3);
+    if (numArgs > 2)
+        Py_VISIT(self->arg3);
+    if (numArgs > 1)
+        Py_VISIT(self->arg2);
+    if (numArgs > 0)
+        Py_VISIT(self->arg1);
 
     Py_VISIT(self->function);
 
