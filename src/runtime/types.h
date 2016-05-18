@@ -695,7 +695,16 @@ static_assert(offsetof(BoxedList, elts) == offsetof(PyListObject, ob_item), "");
 static_assert(offsetof(GCdArray, elts) == 0, "");
 static_assert(offsetof(BoxedList, capacity) == offsetof(PyListObject, allocated), "");
 
+#define PyTuple_MAXSAVESIZE 20   /* Largest tuple to save on free list */
+#define PyTuple_MAXFREELIST 2000 /* Maximum number of tuples of each size to save */
+extern "C" int PyTuple_ClearFreeList() noexcept;
 class BoxedTuple : public BoxVar {
+private:
+#if PyTuple_MAXSAVESIZE > 0
+    static BoxedTuple* free_list[PyTuple_MAXSAVESIZE];
+    static int numfree[PyTuple_MAXSAVESIZE];
+#endif
+
 public:
     static BoxedTuple* create(int64_t size) {
         if (size == 0) {
@@ -834,7 +843,7 @@ public:
         return BoxVar::operator new(size, cls, nitems);
     }
 
-    void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {
+    void* operator new(size_t /*size*/, size_t nitems) __attribute__((visibility("default"))) {
         ALLOC_STATS_VAR(tuple_cls)
 
         assert(tuple_cls->tp_alloc == PyType_GenericAlloc);
@@ -843,11 +852,31 @@ public:
         assert(tuple_cls->is_pyston_class);
         assert(tuple_cls->attrs_offset == 0);
 
-        BoxVar* rtn = static_cast<BoxVar*>(PyObject_GC_NewVar(BoxedTuple, &PyTuple_Type, nitems));
-        assert(rtn);
-        _PyObject_GC_TRACK(rtn);
+        BoxedTuple* op = NULL;
+#if PyTuple_MAXSAVESIZE > 0
+        if (likely(nitems < PyTuple_MAXSAVESIZE && (op = free_list[nitems]) != NULL)) {
+            free_list[nitems] = (BoxedTuple*)op->elts[0];
+            numfree[nitems]--;
+/* Inline PyObject_InitVar */
+#ifdef Py_TRACE_REFS
+            Py_SIZE(op) = nitems;
+            Py_TYPE(op) = &PyTuple_Type;
+#endif
+            _Py_NewReference((PyObject*)op);
+        } else
+#endif
+        {
+            Py_ssize_t nbytes = nitems * sizeof(PyObject*);
+            /* Check for overflow */
+            if (unlikely(nbytes / sizeof(PyObject*) != (size_t)nitems
+                         || (nbytes > PY_SSIZE_T_MAX - sizeof(PyTupleObject) - sizeof(PyObject*)))) {
+                return PyErr_NoMemory();
+            }
 
-        return rtn;
+            op = PyObject_GC_NewVar(BoxedTuple, &PyTuple_Type, nitems);
+        }
+        _PyObject_GC_TRACK(op);
+        return (PyObject*)op;
     }
 
 private:
@@ -871,6 +900,9 @@ public:
         Box* elts[0];
         Box* _elts[1];
     };
+
+    static void dealloc(PyTupleObject* op) noexcept;
+    friend int PyTuple_ClearFreeList() noexcept;
 };
 static_assert(sizeof(BoxedTuple) == sizeof(PyTupleObject), "");
 static_assert(offsetof(BoxedTuple, ob_size) == offsetof(PyTupleObject, ob_size), "");
