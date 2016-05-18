@@ -292,37 +292,8 @@ struct CompareRewriteArgs {
         : rewriter(rewriter), lhs(lhs), rhs(rhs), destination(destination), out_success(false), out_rtn(NULL) {}
 };
 
-typedef Box* (*rearrange_target_t)(void*, CallRewriteArgs*, Box*, Box*, Box*, Box**);
-
-// This is a magical helper class that converts a functor (in particular, lambdas) into a [function pointer, void* data]
-// pair.  This lets us pass the functor efficiently: we can avoid doing an allocation (by storing the functor on the
-// stack),
-// and also avoid making the receiving function have to be a template.
-//
-// In effect, it does what you would have to do to create a function pointer + void* pair, like one would pass to
-// C-style functions.
-class FunctorPointer {
-private:
-    template <typename Functor> class ConversionHelper {
-    public:
-        static Box* call(void* f, CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
-            // static_assert(decltypeD
-            return (*(Functor*)f)(rewrite_args, arg1, arg2, arg3, args);
-        }
-    };
-
-    rearrange_target_t function_pointer;
-    void* functor;
-
-public:
-    template <typename Functor>
-    FunctorPointer(Functor& f)
-        : function_pointer(ConversionHelper<Functor>::call), functor(&f) {}
-
-    Box* operator()(CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
-        return function_pointer(functor, rewrite_args, arg1, arg2, arg3, args);
-    }
-};
+using FunctorPointer
+    = llvm::function_ref<Box*(CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args)>;
 
 // rearrangeArgumentsAndCall maps from a given set of arguments (the structure specified by an ArgPassSpec) to the
 // parameter form than the receiving function expects (given by the ParamReceiveSpec).  After it does this, it will
