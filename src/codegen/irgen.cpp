@@ -1126,17 +1126,7 @@ CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames
 
     emitBBs(&irstate, types, entry_descriptor, blocks);
 
-    // Calculate the module hash before adding the refcount instruction and before doing any optimizations.
-    // This has the advantage that we can skip running the opt passes when we have cached object file
-    // but the disadvantage that optimizations are not allowed to add new symbolic constants and that we have to make
-    // sure that changes to the refcounting pass change the hash we generate...
-    bool have_cached_filed = false;
-    if (ENABLE_JIT_OBJECT_CACHE) {
-        g.object_cache->calculateModuleHash(g.cur_module, effort);
-        have_cached_filed = g.object_cache->haveCacheFileForHash();
-    }
-    if (!have_cached_filed)
-        RefcountTracker::addRefcounts(&irstate);
+    RefcountTracker::addRefcounts(&irstate);
 
     int num_instructions = std::distance(llvm::inst_begin(f), llvm::inst_end(f));
     static StatCounter num_llvm_insts("num_llvm_insts");
@@ -1164,8 +1154,18 @@ CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames
     static StatCounter us_irgen("us_compiling_irgen");
     us_irgen.log(irgen_us);
 
-    if (ENABLE_LLVMOPTS && !have_cached_filed)
-        optimizeIR(f, effort);
+
+    // Calculate the module hash before doing any optimizations.
+    // This has the advantage that we can skip running the opt passes when we have cached object file
+    // but the disadvantage that optimizations are not allowed to add new symbolic constants...
+    if (ENABLE_JIT_OBJECT_CACHE) {
+        g.object_cache->calculateModuleHash(g.cur_module, effort);
+        if (ENABLE_LLVMOPTS && !g.object_cache->haveCacheFileForHash())
+            optimizeIR(f, effort);
+    } else {
+        if (ENABLE_LLVMOPTS)
+            optimizeIR(f, effort);
+    }
 
     g.cur_module = NULL;
 
