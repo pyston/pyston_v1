@@ -51,6 +51,9 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <windows.h>
 #endif
 
+#define UNLIKELY(value) __builtin_expect((value), 0)
+#define LIKELY(value) __builtin_expect((value), 1)
+
 /* Limit for the Unicode object free list */
 
 #define PyUnicode_MAXFREELIST       1024
@@ -321,22 +324,22 @@ PyUnicodeObject *_PyUnicode_New(Py_ssize_t length)
     register PyUnicodeObject *unicode;
 
     /* Optimization for empty strings */
-    if (length == 0 && unicode_empty != NULL) {
+    if (UNLIKELY(length == 0 && unicode_empty != NULL)) {
         Py_INCREF(unicode_empty);
         return unicode_empty;
     }
 
     /* Ensure we won't overflow the size. */
-    if (length > ((PY_SSIZE_T_MAX / sizeof(Py_UNICODE)) - 1)) {
+    if (UNLIKELY(length > ((PY_SSIZE_T_MAX / sizeof(Py_UNICODE)) - 1))) {
         return (PyUnicodeObject *)PyErr_NoMemory();
     }
 
     /* Unicode freelist & memory allocation */
-    if (free_list) {
+    if (LIKELY((intptr_t)free_list)) {
         unicode = free_list;
         free_list = *(PyUnicodeObject **)unicode;
         numfree--;
-        if (unicode->str) {
+        if ((intptr_t)unicode->str) {
             /* Keep-Alive optimization: we only upsize the buffer,
                never downsize it. */
             if ((unicode->length < length) &&
@@ -360,7 +363,7 @@ PyUnicodeObject *_PyUnicode_New(Py_ssize_t length)
         unicode->str = (Py_UNICODE*) PyObject_MALLOC(new_size);
     }
 
-    if (!unicode->str) {
+    if (UNLIKELY(!unicode->str)) {
         PyErr_NoMemory();
         goto onError;
     }
