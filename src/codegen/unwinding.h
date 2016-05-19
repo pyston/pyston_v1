@@ -59,8 +59,10 @@ void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cu
 
 // TODO move these to exceptions.h
 void logException(ExcInfo* exc_info);
-void startReraise();
-bool exceptionAtLineCheck();
+bool& getIsReraiseFlag();
+inline void startReraise() {
+    getIsReraiseFlag() = true;
+}
 void exceptionAtLine(Box** traceback);
 void caughtCxxException(ExcInfo* exc_info);
 extern "C" void caughtCapiException();

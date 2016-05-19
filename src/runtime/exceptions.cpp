@@ -299,30 +299,20 @@ void caughtCxxException(ExcInfo* exc_info) {
     exceptionAtLine(&exc_info->traceback);
 }
 
-
-
 struct ExcState {
     bool is_reraise;
     constexpr ExcState() : is_reraise(false) {}
 } static __thread exc_state;
 
-bool exceptionAtLineCheck() {
-    if (exc_state.is_reraise) {
-        exc_state.is_reraise = false;
-        return false;
-    }
-    return true;
+bool& getIsReraiseFlag() {
+    return exc_state.is_reraise;
 }
 
 void exceptionAtLine(Box** traceback) {
-    if (exceptionAtLineCheck()) {
+    if (!getIsReraiseFlag())
         PyTraceBack_Here_Tb((struct _frame*)getFrame((FrameInfo*)cur_thread_state.frame_info),
                             (PyTracebackObject**)traceback);
-    }
-}
-
-void startReraise() {
-    assert(!exc_state.is_reraise);
-    exc_state.is_reraise = true;
+    else
+        getIsReraiseFlag() = false;
 }
 }
