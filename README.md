@@ -120,4 +120,4 @@ Standard Python flags:
   <dd>Go into the repl after executing the given script.</dd>
 </dl>
 
-There are also some lesser-used flags; see src/jit.cpp for more details.
+There are also some lesser-used flags; see [`src/jit.cpp`](https://github.com/dropbox/pyston/blob/master/src/jit.cpp) for more details.
