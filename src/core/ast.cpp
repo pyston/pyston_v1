@@ -2223,7 +2223,7 @@ public:
     }
 };
 
-void flatten(const std::vector<AST_stmt*>& roots, std::vector<AST*>& output, bool expand_scopes) {
+void flatten(const llvm::SmallVector<AST_stmt*, 4>& roots, std::vector<AST*>& output, bool expand_scopes) {
     FlattenVisitor visitor(&output, expand_scopes);
 
     for (int i = 0; i < roots.size(); i++) {
