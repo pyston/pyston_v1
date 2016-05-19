@@ -2990,9 +2990,7 @@ static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) 
         builtins = PyEval_GetBuiltins();
         if (builtins == NULL)
             goto error;
-        // Pyston change: builtins is a module not a dict
-        // sorted = PyDict_GetItemString(builtins, "sorted");
-        sorted = builtins->getattr(autoDecref(internStringMortal("sorted")));
+        sorted = PyDict_GetItemString(builtins, "sorted");
         if (sorted == NULL)
             goto error;
         sorted_methods = PyObject_CallFunctionObjArgs(sorted, abstract_methods, NULL);
