@@ -1164,6 +1164,13 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
     return rtn;
 }
 
+Box* strRMod(BoxedString* lhs, Box* rhs) {
+    Box* rtn = PyString_Format(rhs, lhs);
+    if (!rtn)
+        throwCAPIException();
+    return rtn;
+}
+
 extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
     assert(PyString_Check(lhs));
 
@@ -2926,6 +2933,7 @@ void setupStr() {
 
     str_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)strAdd, UNKNOWN, 2)));
     str_cls->giveAttr("__mod__", new BoxedFunction(FunctionMetadata::create((void*)strMod, UNKNOWN, 2)));
+    str_cls->giveAttr("__rmod__", new BoxedFunction(FunctionMetadata::create((void*)strRMod, UNKNOWN, 2)));
     str_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)strMul, UNKNOWN, 2)));
     // TODO not sure if this is right in all cases:
     str_cls->giveAttr("__rmul__", new BoxedFunction(FunctionMetadata::create((void*)strMul, UNKNOWN, 2)));

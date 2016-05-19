@@ -1397,7 +1397,7 @@ extern "C" BORROWED(PyObject*) PyEval_GetGlobals(void) noexcept {
 }
 
 extern "C" BORROWED(PyObject*) PyEval_GetBuiltins(void) noexcept {
-    return builtins_module;
+    return builtins_module->getAttrWrapper();
 }
 
 Box* ellipsisRepr(Box* self) {
