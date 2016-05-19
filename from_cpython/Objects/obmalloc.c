@@ -9,15 +9,20 @@
  #endif
 #endif
 
+#define UNLIKELY(value) __builtin_expect((value), 0)
+#define LIKELY(value) __builtin_expect((value), 1)
+
 #ifdef WITH_VALGRIND
 #include <valgrind/valgrind.h>
 
+#if 0
 /* If we're using GCC, use __builtin_expect() to reduce overhead of
    the valgrind checks */
 #if defined(__GNUC__) && (__GNUC__ > 2) && defined(__OPTIMIZE__)
 #  define UNLIKELY(value) __builtin_expect((value), 0)
 #else
 #  define UNLIKELY(value) (value)
+#endif
 #endif
 
 /* -1 indicates that we haven't checked that we're running on valgrind yet. */
@@ -779,25 +784,16 @@ PyObject_Malloc(size_t nbytes)
 #endif
 
     /*
-     * Limit ourselves to PY_SSIZE_T_MAX bytes to prevent security holes.
-     * Most python internals blindly use a signed Py_ssize_t to track
-     * things without checking for overflows or negatives.
-     * As size_t is unsigned, checking for nbytes < 0 is not required.
-     */
-    if (nbytes > PY_SSIZE_T_MAX)
-        return NULL;
-
-    /*
      * This implicitly redirects malloc(0).
      */
-    if ((nbytes - 1) < SMALL_REQUEST_THRESHOLD) {
+    if (LIKELY((nbytes - 1) < SMALL_REQUEST_THRESHOLD)) {
         LOCK();
         /*
          * Most frequent paths first
          */
         size = (uint)(nbytes - 1) >> ALIGNMENT_SHIFT;
         pool = usedpools[size + size];
-        if (pool != pool->nextpool) {
+        if (LIKELY(pool != pool->nextpool)) {
             /*
              * There is a used pool for this size class.
              * Pick up the head block of its free list.
@@ -949,6 +945,18 @@ PyObject_Malloc(size_t nbytes)
 
         goto init_pool;
     }
+
+    // Pyston change: move this unlikely case below the likely one.
+    // This is ok because the two cases don't overlap.
+    /*
+     * Limit ourselves to PY_SSIZE_T_MAX bytes to prevent security holes.
+     * Most python internals blindly use a signed Py_ssize_t to track
+     * things without checking for overflows or negatives.
+     * As size_t is unsigned, checking for nbytes < 0 is not required.
+     */
+    if (UNLIKELY(nbytes > PY_SSIZE_T_MAX))
+        return NULL;
+
 
     /* The small block allocator ends here. */
 

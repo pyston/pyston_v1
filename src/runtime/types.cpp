@@ -3632,55 +3632,6 @@ out:
     return result;
 }
 
-extern "C" PyUnicodeObject* unicode_empty;
-extern "C" PyUnicodeObject* _PyUnicode_New(Py_ssize_t length) noexcept {
-    PyUnicodeObject* unicode;
-
-    /* Optimization for empty strings */
-    if (length == 0 && unicode_empty != NULL) {
-        Py_INCREF(unicode_empty);
-        return unicode_empty;
-    }
-
-    /* Ensure we won't overflow the size. */
-    if (length > ((PY_SSIZE_T_MAX / sizeof(Py_UNICODE)) - 1)) {
-        return (PyUnicodeObject*)PyErr_NoMemory();
-    }
-
-    // Pyston change: allocate ->str first, so that if this allocation
-    // causes a collection, we don't see a half-created unicode object:
-    size_t new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
-    unicode = PyObject_New(PyUnicodeObject, &PyUnicode_Type);
-    if (unicode == NULL)
-        return NULL;
-    unicode->str = (Py_UNICODE*)PyObject_MALLOC(new_size);
-    if (!unicode->str) {
-        Py_DECREF(unicode);
-        return (PyUnicodeObject*)PyErr_NoMemory();
-    }
-
-#if STAT_ALLOCATIONS
-    {
-        size_t size = sizeof(PyUnicodeObject);
-        ALLOC_STATS(unicode_cls);
-    }
-#endif
-
-    /* Initialize the first element to guard against cases where
-     * the caller fails before initializing str -- unicode_resize()
-     * reads str[0], and the Keep-Alive optimization can keep memory
-     * allocated for str alive across a call to unicode_dealloc(unicode).
-     * We don't want unicode_resize to read uninitialized memory in
-     * that case.
-     */
-    unicode->str[0] = 0;
-    unicode->str[length] = 0;
-    unicode->length = length;
-    unicode->hash = -1;
-    unicode->defenc = NULL;
-    return unicode;
-}
-
 void dealloc_null(Box* box) {
     assert(box->cls->tp_del == NULL);
 }

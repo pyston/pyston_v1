@@ -51,6 +51,9 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <windows.h>
 #endif
 
+#define UNLIKELY(value) __builtin_expect((value), 0)
+#define LIKELY(value) __builtin_expect((value), 1)
+
 /* Limit for the Unicode object free list */
 
 #define PyUnicode_MAXFREELIST       1024
@@ -108,9 +111,8 @@ PyUnicodeObject *unicode_empty = NULL;
             Py_INCREF(unicode_empty);                   \
         else {                                          \
             unicode_empty = _PyUnicode_New(0);          \
-            if (unicode_empty != NULL) {                \
+            if (unicode_empty != NULL)                  \
                 Py_INCREF(unicode_empty);               \
-            }                                           \
         }                                               \
         return (PyObject *)unicode_empty;               \
     } while (0)
@@ -316,7 +318,76 @@ int unicode_resize(register PyUnicodeObject *unicode,
 
 */
 
-extern PyUnicodeObject *_PyUnicode_New(Py_ssize_t length);
+static
+PyUnicodeObject *_PyUnicode_New(Py_ssize_t length)
+{
+    register PyUnicodeObject *unicode;
+
+    /* Optimization for empty strings */
+    if (UNLIKELY(length == 0 && unicode_empty != NULL)) {
+        Py_INCREF(unicode_empty);
+        return unicode_empty;
+    }
+
+    /* Ensure we won't overflow the size. */
+    if (UNLIKELY(length > ((PY_SSIZE_T_MAX / sizeof(Py_UNICODE)) - 1))) {
+        return (PyUnicodeObject *)PyErr_NoMemory();
+    }
+
+    /* Unicode freelist & memory allocation */
+    if (LIKELY((intptr_t)free_list)) {
+        unicode = free_list;
+        free_list = *(PyUnicodeObject **)unicode;
+        numfree--;
+        if ((intptr_t)unicode->str) {
+            /* Keep-Alive optimization: we only upsize the buffer,
+               never downsize it. */
+            if ((unicode->length < length) &&
+                unicode_resize(unicode, length) < 0) {
+                PyObject_DEL(unicode->str);
+                unicode->str = NULL;
+            }
+        }
+        else {
+            size_t new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
+            unicode->str = (Py_UNICODE*) PyObject_MALLOC(new_size);
+        }
+        PyObject_INIT(unicode, &PyUnicode_Type);
+    }
+    else {
+        size_t new_size;
+        unicode = PyObject_New(PyUnicodeObject, &PyUnicode_Type);
+        if (unicode == NULL)
+            return NULL;
+        new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
+        unicode->str = (Py_UNICODE*) PyObject_MALLOC(new_size);
+    }
+
+    if (UNLIKELY(!unicode->str)) {
+        PyErr_NoMemory();
+        goto onError;
+    }
+    /* Initialize the first element to guard against cases where
+     * the caller fails before initializing str -- unicode_resize()
+     * reads str[0], and the Keep-Alive optimization can keep memory
+     * allocated for str alive across a call to unicode_dealloc(unicode).
+     * We don't want unicode_resize to read uninitialized memory in
+     * that case.
+     */
+    unicode->str[0] = 0;
+    unicode->str[length] = 0;
+    unicode->length = length;
+    unicode->hash = -1;
+    unicode->defenc = NULL;
+    return unicode;
+
+  onError:
+    /* XXX UNREF/NEWREF interface should be more symmetrical */
+    _Py_DEC_REFTOTAL;
+    _Py_ForgetReference((PyObject *)unicode);
+    PyObject_Del(unicode);
+    return NULL;
+}
 
 static
 void unicode_dealloc(register PyUnicodeObject *unicode)
