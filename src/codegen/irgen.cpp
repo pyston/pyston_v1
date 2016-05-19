@@ -456,6 +456,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             ConcreteCompilerType* phi_type;
             phi_type = getTypeAtBlockStart(types, p.first, target_block);
 
+            irstate->getRefcounts()->setType(from_arg, RefType::BORROWED);
+
             ConcreteCompilerVariable* var = new ConcreteCompilerVariable(p.second, from_arg);
             (*initial_syms)[p.first] = var;
 
@@ -467,9 +469,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             if (p.second == phi_type) {
                 // good to go
                 v = from_arg;
-                irstate->getRefcounts()->setType(v, RefType::BORROWED);
             } else if (p.second->canConvertTo(phi_type)) {
-                assert(0 && "check refcounting");
+                RELEASE_ASSERT(0, "this hasn't been hit in a very long time -- check refcounting");
                 // not sure if/when this happens, but if there's a type mismatch but one we know
                 // can be handled (such as casting from a subclass to a superclass), handle it:
                 ConcreteCompilerVariable* converted = var->makeConverted(*unbox_emitter, phi_type);
@@ -903,7 +904,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             }
         }
         for (auto t : phi_args) {
-            assert(0 && "check refcounting");
+            RELEASE_ASSERT(0, "this hasn't been hit in a very long time -- check refcounting");
             std::get<0>(t)->addIncoming(std::get<1>(t), std::get<2>(t));
         }
     }

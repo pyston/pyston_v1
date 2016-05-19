@@ -166,12 +166,6 @@ public:
 
     void setCurrentStatement(AST_stmt* stmt) { frame_info.stmt = stmt; }
 
-    Box* getGlobals() {
-        assert(0 && "check refcounting (of callers)");
-        assert(frame_info.globals);
-        return incref(frame_info.globals);
-    }
-
     FunctionMetadata* getMD() { return frame_info.md; }
     FrameInfo* getFrameInfo() { return &frame_info; }
     BoxedClosure* getPassedClosure() { return frame_info.passed_closure; }
@@ -1754,7 +1748,11 @@ Value ASTInterpreter::visit_list(AST_List* node) {
             items.push_back(v);
             listAppendInternalStolen(list, v.o);
         } catch (ExcInfo e) {
-            RELEASE_ASSERT(0, "check refcounting");
+            // The CFG currently converts all list expressions to something like
+            // #0 = <expr1>
+            // #1 = <expr2>
+            // #2 = [#0, #1]
+            RELEASE_ASSERT(0, "list elements should not be throwing");
         }
     }
 

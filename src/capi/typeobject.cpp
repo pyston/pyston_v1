@@ -3456,6 +3456,7 @@ extern "C" void PyType_RequestHcAttrs(PyTypeObject* cls, int offset) noexcept {
 extern "C" void PyType_GiveHcAttrsDictDescr(PyTypeObject* cls) noexcept {
     static BoxedString* dict_str = getStaticString("__dict__");
     assert(!cls->hasattr(dict_str));
+    assert(cls->instancesHaveHCAttrs() && !cls->instancesHaveDictAttrs());
     cls->giveAttr(incref(dict_str), incref(dict_descr));
 }
 

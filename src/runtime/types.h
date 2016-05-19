@@ -1035,7 +1035,6 @@ public:
     BoxedString* name; // __name__ (should be here or in one of the derived classes?)
     Box* doc;          // __doc__
 
-    BoxedFunctionBase(FunctionMetadata* md);
     BoxedFunctionBase(FunctionMetadata* md, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
                       Box* globals = NULL, bool can_change_defaults = false);
 
