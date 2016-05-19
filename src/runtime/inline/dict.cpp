@@ -26,7 +26,7 @@ BoxedDictIterator::BoxedDictIterator(BoxedDict* d) : d(d), it(d->d.begin()), itE
 Box* dict_iter(Box* s) noexcept {
     assert(PyDict_Check(s));
     BoxedDict* self = static_cast<BoxedDict*>(s);
-    return new (&PyDictIterKey_Type) BoxedDictIterator(self);
+    return new (&PyDictIterKey_Type, FAST_GC) BoxedDictIterator(self);
 }
 
 Box* dictIterKeys(Box* s) {
@@ -36,13 +36,13 @@ Box* dictIterKeys(Box* s) {
 Box* dictIterValues(Box* s) {
     assert(PyDict_Check(s));
     BoxedDict* self = static_cast<BoxedDict*>(s);
-    return new (&PyDictIterValue_Type) BoxedDictIterator(self);
+    return new (&PyDictIterValue_Type, FAST_GC) BoxedDictIterator(self);
 }
 
 Box* dictIterItems(Box* s) {
     assert(PyDict_Check(s));
     BoxedDict* self = static_cast<BoxedDict*>(s);
-    return new (&PyDictIterItem_Type) BoxedDictIterator(self);
+    return new (&PyDictIterItem_Type, FAST_GC) BoxedDictIterator(self);
 }
 
 Box* dictIterIter(Box* s) {

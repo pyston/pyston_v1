@@ -33,7 +33,7 @@ Box* listIterIter(Box* s) {
 Box* listIter(Box* s) noexcept {
     assert(PyList_Check(s));
     BoxedList* self = static_cast<BoxedList*>(s);
-    return new BoxedListIterator(self, 0);
+    return new (list_iterator_cls, FAST_GC) BoxedListIterator(self, 0);
 }
 
 Box* listiterHasnext(Box* s) {
@@ -89,7 +89,7 @@ Box* listiter_next(Box* s) noexcept {
 Box* listReversed(Box* s) {
     assert(PyList_Check(s));
     BoxedList* self = static_cast<BoxedList*>(s);
-    return new (list_reverse_iterator_cls) BoxedListIterator(self, self->size - 1);
+    return new (list_reverse_iterator_cls, FAST_GC) BoxedListIterator(self, self->size - 1);
 }
 
 Box* listreviterHasnext(Box* s) {
