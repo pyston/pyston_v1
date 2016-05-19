@@ -1714,15 +1714,6 @@ template <ExceptionStyle S>
 Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                                 Box* arg3, Box** args,
                                 const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
-    if (S == CAPI) {
-        try {
-            return tppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
-        } catch (ExcInfo e) {
-            setCAPIException(e);
-            return NULL;
-        }
-    }
-
     STAT_TIMER(t0, "us_timer_boxedcapifunction__call__", 10);
 
     BoxedCApiFunction* self = static_cast<BoxedCApiFunction*>(_self);
@@ -1791,6 +1782,7 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
                 rewrite_args->out_rtn->setType(RefType::OWNED);
                 rewrite_args->out_success = true;
             }
+            assert(rtn); // This shouldn't throw, otherwise we would need to check the return value
             return rtn;
         }
         // TODO rewrite these cases specially; tp_new_wrapper just slices the args array,
@@ -1861,18 +1853,20 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
         }
 
         if (rewrite_args) {
-            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+            if (S == CXX)
+                rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
             rewrite_args->out_success = true;
         }
 
         if (S == CXX && !rtn)
             throwCAPIException();
-        assert(rtn && "should have set + thrown an exception!");
         return rtn;
     };
 
-    return rearrangeArgumentsAndCall(paramspec, NULL, self->method_def->ml_name, defaults, rewrite_args, argspec, arg1,
-                                     arg2, arg3, args, keyword_names, continuation);
+    return callCXXFromStyle<S>([=]() {
+        return rearrangeArgumentsAndCall(paramspec, NULL, self->method_def->ml_name, defaults, rewrite_args, argspec,
+                                         arg1, arg2, arg3, args, keyword_names, continuation);
+    });
 }
 
 /* extension modules might be compiled with GC support so these
