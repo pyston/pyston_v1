@@ -1595,6 +1595,12 @@ static Box* builtinFunctionOrMethodName(Box* b, void*) {
     return incref(func->name);
 }
 
+static Box* wrapperobjectName(Box* w, void*) {
+    assert(w->cls == wrapperobject_cls);
+    BoxedWrapperObject* wrapper_obj = static_cast<BoxedWrapperObject*>(w);
+    return boxString(wrapper_obj->descr->wrapper->name);
+}
+
 static Box* functionCode(Box* self, void*) {
     assert(self->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
@@ -4530,6 +4536,8 @@ void setupRuntime() {
 
     instancemethod_cls->giveAttr("im_class", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
                                                                        offsetof(BoxedInstanceMethod, im_class), true));
+
+    wrapperobject_cls->giveAttrDescriptor("__name__", wrapperobjectName, NULL);
 
     slice_cls->giveAttr(
         "__new__",
