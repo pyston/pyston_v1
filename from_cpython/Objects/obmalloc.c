@@ -784,15 +784,6 @@ PyObject_Malloc(size_t nbytes)
 #endif
 
     /*
-     * Limit ourselves to PY_SSIZE_T_MAX bytes to prevent security holes.
-     * Most python internals blindly use a signed Py_ssize_t to track
-     * things without checking for overflows or negatives.
-     * As size_t is unsigned, checking for nbytes < 0 is not required.
-     */
-    if (UNLIKELY(nbytes > PY_SSIZE_T_MAX))
-        return NULL;
-
-    /*
      * This implicitly redirects malloc(0).
      */
     if (LIKELY((nbytes - 1) < SMALL_REQUEST_THRESHOLD)) {
@@ -954,6 +945,18 @@ PyObject_Malloc(size_t nbytes)
 
         goto init_pool;
     }
+
+    // Pyston change: move this unlikely case below the likely one.
+    // This is ok because the two cases don't overlap.
+    /*
+     * Limit ourselves to PY_SSIZE_T_MAX bytes to prevent security holes.
+     * Most python internals blindly use a signed Py_ssize_t to track
+     * things without checking for overflows or negatives.
+     * As size_t is unsigned, checking for nbytes < 0 is not required.
+     */
+    if (UNLIKELY(nbytes > PY_SSIZE_T_MAX))
+        return NULL;
+
 
     /* The small block allocator ends here. */
 
