@@ -85,6 +85,9 @@ void RefcountTracker::refConsumed(llvm::Value* v, llvm::Instruction* inst) {
 }
 
 void RefcountTracker::refUsed(llvm::Value* v, llvm::Instruction* inst) {
+    if (llvm::isa<UndefValue>(v))
+        return;
+
     assert(this->vars[v].reftype != RefType::UNKNOWN);
 
     this->refs_used[inst].push_back(v);

@@ -1,4 +1,3 @@
-# expected: reffail
 import gc
 import os
 import sys
@@ -192,21 +191,22 @@ MODULES_TO_TEST = [
     'test.sql.test_rowcount',
     'test.sql.test_selectable',
     'test.sql.test_text',
+    
+    'test.sql.test_unicode',
+    'test.aaa_profiling.test_resultset',
+    'test.dialect.test_sqlite',
+    'test.orm.test_dynamic',
+    'test.orm.test_merge',
+    'test.orm.test_relationships',
+    'test.orm.test_versioning',
+    'test.sql.test_compiler',
 ]
 
 FAILING = [
-    # 'test.aaa_profiling.test_memusage',   # Wants gc.get_objects
-    # 'test.aaa_profiling.test_resultset',  # Wants sys.getrefcount
-    # 'test.dialect.test_sqlite',           # ascii codec can't encode
     # 'test.ext.test_extendedattr',         # does `locals()[42] = 99` in a classdef to prove it can.  maybe we could say is_pypy to avoid it.
-    # 'test.orm.test_dynamic',              # not sure; things end up being put in tuples
-    # 'test.orm.test_merge',                # needs PyObject_AsWriteBuffer
-    # 'test.orm.test_relationships',        # not sure; things end up being put in tuples
+    # 'test.aaa_profiling.test_memusage',   # assert(obj->cls != closure_cls);
     # 'test.orm.test_session',              # unclear
-    # 'test.orm.test_versioning',           # crashes in the uuid module with an AttributeError from ctypes
-    # 'test.sql.test_compiler',             # unclear
     # 'test.sql.test_quote',                # unclear
-    # 'test.sql.test_unicode',              # "ascii codec can't encod character"
 ]
 
 # MODULES_TO_TEST = ['test.orm.test_bulk']
