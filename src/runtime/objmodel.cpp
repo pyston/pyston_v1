@@ -1009,13 +1009,6 @@ BoxedDict** Box::getDictPtr() {
     return d_ptr;
 }
 
-void Box::setDict(STOLEN(BoxedDict*) d) {
-    assert(0 && "check refcounting");
-    assert(cls->instancesHaveDictAttrs());
-
-    *getDictPtr() = d;
-}
-
 BORROWED(BoxedDict*) Box::getDict() {
     assert(cls->instancesHaveDictAttrs());
 
@@ -6985,7 +6978,12 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
         assert(!final_slot_names.size()); // would need to decref them here
     }
 
-    if (made->instancesHaveHCAttrs() || made->instancesHaveDictAttrs()) {
+    if ((made->instancesHaveHCAttrs() || made->instancesHaveDictAttrs())
+        && !(base->instancesHaveHCAttrs() || base->instancesHaveDictAttrs())) {
+
+        // We shouldn't be adding dict attrs to anything that didn't already have them:
+        assert(!made->instancesHaveDictAttrs());
+
         static BoxedString* dict_str = getStaticString("__dict__");
         made->setattr(dict_str, dict_descr, NULL);
     }

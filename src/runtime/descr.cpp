@@ -743,42 +743,9 @@ static Box* wrapperObjectRepr(Box* _o) {
                                getTypeName(wp->obj), wp->obj);
 }
 
-Box* BoxedWrapperObject::__call__(BoxedWrapperObject* self, Box* args, Box* kwds) {
-    assert(0 && "check refcounting");
-    STAT_TIMER(t0, "us_timer_boxedwrapperobject_call", (self->cls->is_user_defined ? 10 : 20));
-
-    assert(self->cls == wrapperobject_cls);
-    assert(args->cls == tuple_cls);
-    assert(!kwds || kwds->cls == dict_cls);
-
-    int flags = self->descr->wrapper->flags;
-    wrapperfunc wrapper = self->descr->wrapper->wrapper;
-    assert(self->descr->wrapper->offset > 0);
-
-    Box* rtn;
-    if (flags == PyWrapperFlag_KEYWORDS) {
-        wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
-        rtn = (*wk)(self->obj, args, self->descr->wrapped, kwds);
-    } else if (flags == PyWrapperFlag_PYSTON || flags == 0) {
-        rtn = (*wrapper)(self->obj, args, self->descr->wrapped);
-    } else if (flags == PyWrapperFlag_1ARG) {
-        if (PyTuple_GET_SIZE(args) != 0)
-            raiseExcHelper(TypeError, "%s() takes exactly 1 arguments (%ld given)", self->descr->wrapper->name.data(),
-                           PyTuple_GET_SIZE(args) + 1);
-        wrapperfunc_1arg wrapper_1arg = (wrapperfunc_1arg)wrapper;
-        rtn = (*wrapper_1arg)(self->obj, self->descr->wrapped);
-    } else if (flags == PyWrapperFlag_2ARG) {
-        if (PyTuple_GET_SIZE(args) != 1)
-            raiseExcHelper(TypeError, "%s() takes exactly 2 arguments (%ld given)", self->descr->wrapper->name.data(),
-                           PyTuple_GET_SIZE(args) + 1);
-        rtn = (*wrapper)(self->obj, PyTuple_GET_ITEM(args, 0), self->descr->wrapped);
-    } else {
-        RELEASE_ASSERT(0, "%d", flags);
-    }
-
-    if (!rtn)
-        throwCAPIException();
-    return rtn;
+// TODO this should be auto-generated as a slot wrapper:
+Box* BoxedWrapperObject::__call__(BoxedWrapperObject* self, Box* args, Box* kwargs) {
+    return BoxedWrapperObject::tppCall<CXX>(self, NULL, ArgPassSpec(0, 0, true, true), args, kwargs, NULL, NULL, NULL);
 }
 
 template <ExceptionStyle S>

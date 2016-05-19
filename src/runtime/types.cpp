@@ -286,30 +286,6 @@ Box* Box::hasnextOrNullIC() {
     return this->cls->callHasnextIC(this, true);
 }
 
-extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md)
-    : weakreflist(NULL),
-      md(md),
-      closure(NULL),
-      defaults(NULL),
-      can_change_defaults(false),
-      modname(NULL),
-      name(NULL),
-      doc(NULL) {
-
-    if (md->source) {
-        assert(md->source->scoping->areGlobalsFromModule());
-        Box* globals_for_name = md->source->parent_module;
-
-        assert(0 && "check the refcounting here");
-        static BoxedString* name_str = getStaticString("__name__");
-        this->modname = xincref(globals_for_name->getattr(name_str));
-        this->doc = md->source->getDocString();
-    } else {
-        this->modname = PyString_InternFromString("__builtin__");
-        this->doc = incref(None);
-    }
-}
-
 extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initializer_list<Box*> defaults,
                                                 BoxedClosure* closure, Box* globals, bool can_change_defaults)
     : weakreflist(NULL),
@@ -499,7 +475,7 @@ BORROWED(BoxedString*) BoxedModule::getStringConstant(llvm::StringRef ast_str, b
         // that we would keep the previously-created string alive.
         // So, make sure to put it onto the keep_alive list.
         if (r && !PyString_CHECK_INTERNED(r)) {
-            assert(0 && "check refcounting");
+            RELEASE_ASSERT(0, "this codepath has been dead for a little while, make sure it still works");
             keep_alive.push_back(r);
             r = NULL;
         }
@@ -1388,28 +1364,18 @@ static Box* typeDict(Box* obj, void* context) {
 }
 
 static Box* typeSubDict(Box* obj, void* context) {
-    if (obj->cls->instancesHaveHCAttrs())
-        return incref(obj->getAttrWrapper());
-    if (obj->cls->instancesHaveDictAttrs())
-        return obj->getDict();
-    abort();
+    // This should only be getting called for hc-backed classes:
+    assert(obj->cls->instancesHaveHCAttrs());
+    return incref(obj->getAttrWrapper());
 }
 
 static void typeSubSetDict(BORROWED(Box*) obj, BORROWED(Box*) val, void* context) {
+    // This should only be getting called for hc-backed classes:
+    assert(obj->cls->instancesHaveHCAttrs());
+
     Py_INCREF(val);
-    if (obj->cls->instancesHaveDictAttrs()) {
-        RELEASE_ASSERT(val->cls == dict_cls, "");
-        obj->setDict(static_cast<BoxedDict*>(val));
-        return;
-    }
 
-    if (obj->cls->instancesHaveHCAttrs()) {
-        obj->setDictBacked(val);
-        return;
-    }
-
-    // This should have thrown an exception rather than get here:
-    abort();
+    obj->setDictBacked(val);
 }
 
 extern "C" void PyType_SetDict(PyTypeObject* type, STOLEN(PyObject*) dict) noexcept {
