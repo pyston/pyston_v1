@@ -41,6 +41,10 @@ extern "C" void rawReraise(Box*, Box*, Box*) __attribute__((__noreturn__));
 void raiseExc(STOLEN(Box*) exc_obj) __attribute__((__noreturn__));
 void _printStacktrace();
 
+// Note -- most of these functions are marked 'noinline' because they inspect the return-address
+// to see if they are getting called from jitted code.  If we inline them into a function that
+// got called from jitted code, they might incorrectly think that they are a rewritable entrypoint.
+
 extern "C" Box* deopt(AST_expr* expr, Box* value) __attribute__((noinline));
 
 // helper function for raising from the runtime:
@@ -54,8 +58,6 @@ extern "C" void my_assert(bool b);
 extern "C" Box* getattr(Box* obj, BoxedString* attr) __attribute__((noinline));
 extern "C" Box* getattr_capi(Box* obj, BoxedString* attr) noexcept __attribute__((noinline));
 extern "C" Box* getattrMaybeNonstring(Box* obj, Box* attr);
-// XXX: testing.  this tail-calls in optimized builds so force it to inline for unoptimized as well to get the same
-// behavior.
 extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) __attribute__((noinline));
 extern "C" void delattr(Box* obj, BoxedString* attr) __attribute__((noinline));
 extern "C" void delattrGeneric(Box* obj, BoxedString* attr, DelattrRewriteArgs* rewrite_args);

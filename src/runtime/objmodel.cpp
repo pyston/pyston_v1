@@ -4870,13 +4870,13 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
                 RewriterVar* arg_array = rewrite_args->rewriter->allocate(4);
                 arg_vec.push_back(arg_array);
                 if (num_output_args >= 1)
-                    arg_array->setAttr(0, rewrite_args->arg1, RewriterVar::SetattrType::REFUSED);
+                    arg_array->setAttr(0, rewrite_args->arg1, RewriterVar::SetattrType::REF_USED);
                 if (num_output_args >= 2)
-                    arg_array->setAttr(8, rewrite_args->arg2, RewriterVar::SetattrType::REFUSED);
+                    arg_array->setAttr(8, rewrite_args->arg2, RewriterVar::SetattrType::REF_USED);
                 if (num_output_args >= 3)
-                    arg_array->setAttr(16, rewrite_args->arg3, RewriterVar::SetattrType::REFUSED);
+                    arg_array->setAttr(16, rewrite_args->arg3, RewriterVar::SetattrType::REF_USED);
                 if (num_output_args >= 4)
-                    arg_array->setAttr(24, rewrite_args->args, RewriterVar::SetattrType::REFUSED);
+                    arg_array->setAttr(24, rewrite_args->args, RewriterVar::SetattrType::REF_USED);
 
                 if (S == CXX)
                     rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelper, arg_vec)
@@ -5391,11 +5391,6 @@ static Box* runtimeCallEntry(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2
     }
     assert(rtn || (S == CAPI && PyErr_Occurred()));
 
-// XXX
-#ifndef NDEBUG
-    rewriter.release();
-#endif
-
     return rtn;
 }
 
@@ -5586,11 +5581,6 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     } else {
         rtn = binopInternal<NOT_REWRITABLE>(lhs, rhs, op_type, false, NULL);
     }
-
-// XXX
-#ifndef NDEBUG
-    rewriter.release();
-#endif
 
     return rtn;
 }
@@ -7238,11 +7228,6 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
         } else {
             rtn = builtins_module->getattr(name);
         }
-
-// XXX
-#ifndef NDEBUG
-        rewriter.release();
-#endif
 
         if (rtn) {
             assert(rtn->ob_refcnt > 0);

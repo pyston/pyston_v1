@@ -1241,7 +1241,12 @@ std::vector<Location> Rewriter::getDecrefLocations() {
     for (auto&& p : owned_attrs) {
         RewriterVar* var = p.first;
 
-        assert(var->locations.size() == 1);
+        // If you forget to call deregisterOwnedAttr(), and then later do something that needs to emit decref info,
+        // we will try to emit the info for that owned attr even though the rewriter has decided that it doesn't need
+        // to keep it alive any more.
+        ASSERT(var->locations.size() > 0,
+               "owned variable not accessible any more -- maybe forgot to call deregisterOwnedAttr?");
+        ASSERT(var->locations.size() == 1, "this code only looks at one location");
         Location l = *var->locations.begin();
 
         assert(l.type == Location::Scratch);

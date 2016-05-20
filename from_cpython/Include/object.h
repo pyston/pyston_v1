@@ -10,7 +10,6 @@ extern "C" {
 // Pyston addition: refcounting annotations:
 #define BORROWED(...) __VA_ARGS__
 #define STOLEN(...) __VA_ARGS__
-#define NOREFCHECK ;
 
 /* Object and type object interface */
 

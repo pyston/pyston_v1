@@ -130,6 +130,7 @@ class RewriterAction;
 // This might make more sense as an inner class of Rewriter, but
 // you can't forward-declare that :/
 class RewriterVar {
+private:
     // Fields for automatic refcounting:
     int num_refs_consumed = 0; // The number of "refConsumed()" calls on this RewriterVar
     int last_refconsumed_numuses
@@ -150,10 +151,18 @@ public:
     // getAttrFloat casts to double (maybe I should make that separate?)
     RewriterVar* getAttrFloat(int offset, Location loc = Location::any());
     RewriterVar* getAttrDouble(int offset, Location loc = Location::any());
+
+    // SetattrType: a guardrail against the easy-to-make mistake of having a reference
+    // stored in a memory location.  The refcount-tracker can't see this type of usage, so it will
+    // end up decrefing the object after the store, even if the memory location is later used.
+    //
+    // For refcount-tracked objects, you need to specify one of two subsequent calls you will make:
+    // either HANDED_OFF if the ref got handed off and you will call refConsumed(), or REF_USED if the stored ref
+    // is borrowed, in which case you need to call refUsed() after the usage of the memory location.
     enum class SetattrType {
         UNKNOWN,
         HANDED_OFF,
-        REFUSED,
+        REF_USED,
     };
     void setAttr(int offset, RewriterVar* other, SetattrType type = SetattrType::UNKNOWN);
 
@@ -263,7 +272,7 @@ public:
     }
 
 #ifndef NDEBUG
-    // XXX: for testing, reset these on deallocation so that we will see the next time they get set.
+    // For testing, reset these on deallocation so that we will see the next time they get set.
     ~RewriterVar() {
         rewriter = (Rewriter*)-1;
         reftype = (RefType)-1;

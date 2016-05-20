@@ -1,4 +1,4 @@
-# TODO: we will have to figure out a better way of generating this file
+# TODO: there are many things missing here
 
 build_time_vars = {
         "CC": "gcc -pthread",

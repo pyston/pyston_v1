@@ -70,8 +70,6 @@ Box* BoxedCode::argcount(Box* b, void*) {
 }
 
 Box* BoxedCode::varnames(Box* b, void*) {
-    NOREFCHECK;
-
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
 

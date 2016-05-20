@@ -275,7 +275,6 @@ public:
     // emitSideExit steals a full ref from v, not just a vref
     void emitSideExit(STOLEN(RewriterVar*) v, Box* cmp_value, CFGBlock* next_block);
     void emitUncacheExcInfo();
-    void emitEndBlock();
 
     void abortCompilation();
     int finishCompilation();
