@@ -5476,6 +5476,77 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
         rewrite_args = NULL;
     }
 
+    // Currently can't patchpoint user-defined binops since we can't assume that just because
+    // resolving it one way right now (ex, using the value from lhs.__add__) means that later
+    // we'll resolve it the same way, even for the same argument types.
+    // TODO implement full resolving semantics inside the rewrite?
+    bool can_patchpoint = !lhs->cls->is_user_defined && !rhs->cls->is_user_defined;
+    if (!can_patchpoint) {
+        PyObject* (*func)(PyObject*, PyObject*) = NULL;
+
+        switch (op_type) {
+            case AST_TYPE::Add:
+                func = inplace ? PyNumber_InPlaceAdd : PyNumber_Add;
+                break;
+            case AST_TYPE::BitOr:
+                func = inplace ? PyNumber_InPlaceOr : PyNumber_Or;
+                break;
+            case AST_TYPE::BitXor:
+                func = inplace ? PyNumber_InPlaceXor : PyNumber_Xor;
+                break;
+            case AST_TYPE::BitAnd:
+                func = inplace ? PyNumber_InPlaceAnd : PyNumber_And;
+                break;
+            case AST_TYPE::LShift:
+                func = inplace ? PyNumber_InPlaceLshift : PyNumber_Lshift;
+                break;
+            case AST_TYPE::RShift:
+                func = inplace ? PyNumber_InPlaceRshift : PyNumber_Rshift;
+                break;
+            case AST_TYPE::Sub:
+                func = inplace ? PyNumber_InPlaceSubtract : PyNumber_Subtract;
+                break;
+            case AST_TYPE::Div:
+                func = inplace ? PyNumber_InPlaceDivide : PyNumber_Divide;
+                break;
+            case AST_TYPE::Mod:
+                func = inplace ? PyNumber_InPlaceRemainder : PyNumber_Remainder;
+                break;
+            case AST_TYPE::Mult:
+                func = inplace ? PyNumber_InPlaceMultiply : PyNumber_Multiply;
+                break;
+            case AST_TYPE::FloorDiv:
+                func = inplace ? PyNumber_InPlaceFloorDivide : PyNumber_FloorDivide;
+                break;
+            case AST_TYPE::TrueDiv:
+                func = inplace ? PyNumber_InPlaceTrueDivide : PyNumber_TrueDivide;
+                break;
+            case AST_TYPE::DivMod:
+                func = inplace ? NULL : PyNumber_Divmod;
+                break;
+        };
+
+        if (func) {
+            if (rewrite_args) {
+                rewrite_args->lhs->addAttrGuard(offsetof(Box, cls), (intptr_t)lhs->cls);
+                rewrite_args->rhs->addAttrGuard(offsetof(Box, cls), (intptr_t)rhs->cls);
+                RewriterVar* r_ret = rewrite_args->rewriter->call(true, (void*)func, rewrite_args->lhs,
+                                                                  rewrite_args->rhs)->setType(RefType::OWNED);
+                rewrite_args->rewriter->checkAndThrowCAPIException(r_ret);
+                rewrite_args->out_rtn = r_ret;
+                rewrite_args->out_success = true;
+            }
+
+            Box* rtn = func(lhs, rhs);
+            if (!rtn)
+                throwCAPIException();
+            return rtn;
+        }
+    }
+
+    if (!can_patchpoint)
+        rewrite_args = NULL;
+
     RewriterVar* r_lhs = NULL;
     RewriterVar* r_rhs = NULL;
     if (rewrite_args) {
@@ -5546,7 +5617,6 @@ template Box* binopInternal<NOT_REWRITABLE>(Box*, Box*, int, bool, BinopRewriteA
 
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     STAT_TIMER(t0, "us_timer_slowpath_binop", 10);
-    bool can_patchpoint = !lhs->cls->is_user_defined && !rhs->cls->is_user_defined;
 #if 0
     static uint64_t* st_id = Stats::getStatCounter("us_timer_slowpath_binop_patchable");
     static uint64_t* st_id_nopatch = Stats::getStatCounter("us_timer_slowpath_binop_nopatch");
@@ -5561,14 +5631,8 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     // int id = Stats::getStatId("slowpath_binop_" + *getTypeName(lhs) + op_name + *getTypeName(rhs));
     // Stats::log(id);
 
-    std::unique_ptr<Rewriter> rewriter((Rewriter*)NULL);
-    // Currently can't patchpoint user-defined binops since we can't assume that just because
-    // resolving it one way right now (ex, using the value from lhs.__add__) means that later
-    // we'll resolve it the same way, even for the same argument types.
-    // TODO implement full resolving semantics inside the rewrite?
-    if (can_patchpoint)
-        rewriter.reset(
-            Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "binop"));
+    std::unique_ptr<Rewriter> rewriter(
+        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "binop"));
 
     Box* rtn;
     if (rewriter.get()) {
@@ -5605,15 +5669,8 @@ extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type) {
     // int id = Stats::getStatId("slowpath_augbinop_" + *getTypeName(lhs) + op_name + *getTypeName(rhs));
     // Stats::log(id);
 
-    std::unique_ptr<Rewriter> rewriter((Rewriter*)NULL);
-    // Currently can't patchpoint user-defined binops since we can't assume that just because
-    // resolving it one way right now (ex, using the value from lhs.__add__) means that later
-    // we'll resolve it the same way, even for the same argument types.
-    // TODO implement full resolving semantics inside the rewrite?
-    bool can_patchpoint = !lhs->cls->is_user_defined && !rhs->cls->is_user_defined;
-    if (can_patchpoint)
-        rewriter.reset(
-            Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "binop"));
+    std::unique_ptr<Rewriter> rewriter(
+        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "binop"));
 
     Box* rtn;
     if (rewriter.get()) {
