@@ -724,6 +724,77 @@ extern std::vector<BoxedClass*> classes;
 class BoxedDict;
 class BoxedString;
 
+#if STAT_ALLOCATION_TYPES
+#define ALLOC_STATS(cls)                                                                                               \
+    if (cls->tp_name) {                                                                                                \
+        std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
+        std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
+        Stats::log(Stats::getStatCounter(per_name_alloc_name));                                                        \
+        Stats::log(Stats::getStatCounter(per_name_allocsize_name), size);                                              \
+    }
+#define ALLOC_STATS_VAR(cls)                                                                                           \
+    if (cls->tp_name) {                                                                                                \
+        std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
+        std::string per_name_alloc_name0 = "alloc." + std::string(cls->tp_name) + "(0)";                               \
+        std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
+        std::string per_name_allocsize_name0 = "allocsize." + std::string(cls->tp_name) + "(0)";                       \
+        static StatCounter alloc_name(per_name_alloc_name);                                                            \
+        static StatCounter alloc_name0(per_name_alloc_name0);                                                          \
+        static StatCounter allocsize_name(per_name_allocsize_name);                                                    \
+        static StatCounter allocsize_name0(per_name_allocsize_name0);                                                  \
+        if (nitems == 0) {                                                                                             \
+            alloc_name0.log();                                                                                         \
+            allocsize_name0.log(_PyObject_VAR_SIZE(cls, nitems));                                                      \
+        } else {                                                                                                       \
+            alloc_name.log();                                                                                          \
+            allocsize_name.log(_PyObject_VAR_SIZE(cls, nitems));                                                       \
+        }                                                                                                              \
+    }
+#else
+#define ALLOC_STATS(cls)
+#define ALLOC_STATS_VAR(cls)
+#endif
+
+#if STAT_ALLOCATION_TYPES
+#define ALLOC_STATS(cls)                                                                                               \
+    if (cls->tp_name) {                                                                                                \
+        std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
+        std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
+        Stats::log(Stats::getStatCounter(per_name_alloc_name));                                                        \
+        Stats::log(Stats::getStatCounter(per_name_allocsize_name), size);                                              \
+    }
+#define ALLOC_STATS_VAR(cls)                                                                                           \
+    if (cls->tp_name) {                                                                                                \
+        std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
+        std::string per_name_alloc_name0 = "alloc." + std::string(cls->tp_name) + "(0)";                               \
+        std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
+        std::string per_name_allocsize_name0 = "allocsize." + std::string(cls->tp_name) + "(0)";                       \
+        static StatCounter alloc_name(per_name_alloc_name);                                                            \
+        static StatCounter alloc_name0(per_name_alloc_name0);                                                          \
+        static StatCounter allocsize_name(per_name_allocsize_name);                                                    \
+        static StatCounter allocsize_name0(per_name_allocsize_name0);                                                  \
+        if (nitems == 0) {                                                                                             \
+            alloc_name0.log();                                                                                         \
+            allocsize_name0.log(_PyObject_VAR_SIZE(cls, nitems));                                                      \
+        } else {                                                                                                       \
+            alloc_name.log();                                                                                          \
+            allocsize_name.log(_PyObject_VAR_SIZE(cls, nitems));                                                       \
+        }                                                                                                              \
+    }
+#else
+#define ALLOC_STATS(cls)
+#define ALLOC_STATS_VAR(cls)
+#endif
+
+
+// These are just dummy objects to help us differentiate operator new() versions from each other, since we can't use
+// normal templating or different function names.
+struct FastToken {};
+extern FastToken FAST;
+struct FastGCToken {};
+extern FastGCToken FAST_GC;
+
+
 // "Box" is the base class of any C++ type that implements a Python type.  For example,
 // BoxedString is the data structure that implements Python's str type, and BoxedString
 // inherits from Box.
@@ -738,11 +809,26 @@ private:
     // Appends a new value to the hcattrs array.
     void appendNewHCAttr(BORROWED(Box*) val, SetattrRewriteArgs* rewrite_args);
 
+protected:
+    // newFast(): a fast implementation of operator new() that optimizes for the common case.  It does this
+    // by inlining the following methods and skipping most of the dynamic checks:
+    // - Box::operator new
+    // - cls->tp_alloc
+    // - PyType_GenericAlloc
+    // - PyObject_Init
+    // The restrictions on when you can use the fast variant are encoded as assertions in the implementation
+    // (see runtime/types.h)
+    template <bool is_gc> static void* newFast(size_t size, BoxedClass* cls);
+
 public:
     // Add a no-op constructor to make sure that we don't zero-initialize cls
     Box() {}
 
     void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default")));
+
+    void* operator new(size_t size, BoxedClass* cls, FastToken _dummy) { return newFast<false>(size, cls); }
+    void* operator new(size_t size, BoxedClass* cls, FastGCToken _dummy) { return newFast<true>(size, cls); }
+
     void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
 
     _PyObject_HEAD_EXTRA
@@ -827,84 +913,12 @@ static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
         return Box::operator new(size, default_cls);                                                                   \
     }
 
-#if STAT_ALLOCATION_TYPES
-#define ALLOC_STATS(cls)                                                                                               \
-    if (cls->tp_name) {                                                                                                \
-        std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
-        std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
-        Stats::log(Stats::getStatCounter(per_name_alloc_name));                                                        \
-        Stats::log(Stats::getStatCounter(per_name_allocsize_name), size);                                              \
-    }
-#define ALLOC_STATS_VAR(cls)                                                                                           \
-    if (cls->tp_name) {                                                                                                \
-        std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
-        std::string per_name_alloc_name0 = "alloc." + std::string(cls->tp_name) + "(0)";                               \
-        std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
-        std::string per_name_allocsize_name0 = "allocsize." + std::string(cls->tp_name) + "(0)";                       \
-        static StatCounter alloc_name(per_name_alloc_name);                                                            \
-        static StatCounter alloc_name0(per_name_alloc_name0);                                                          \
-        static StatCounter allocsize_name(per_name_allocsize_name);                                                    \
-        static StatCounter allocsize_name0(per_name_allocsize_name0);                                                  \
-        if (nitems == 0) {                                                                                             \
-            alloc_name0.log();                                                                                         \
-            allocsize_name0.log(_PyObject_VAR_SIZE(cls, nitems));                                                      \
-        } else {                                                                                                       \
-            alloc_name.log();                                                                                          \
-            allocsize_name.log(_PyObject_VAR_SIZE(cls, nitems));                                                       \
-        }                                                                                                              \
-    }
-#else
-#define ALLOC_STATS(cls)
-#define ALLOC_STATS_VAR(cls)
-#endif
-
-
-// In the simple cases, we can inline the fast paths of the following methods and improve allocation speed quite a bit:
-// - Box::operator new
-// - cls->tp_alloc
-// - PyType_GenericAlloc
-// - PyObject_Init
-// The restrictions on when you can use the SIMPLE (ie fast) variant are encoded as
-// asserts in the 1-arg operator new function:
+// A faster version that can be used for classes that can use "FAST" operator new
 #define DEFAULT_CLASS_SIMPLE(default_cls, is_gc)                                                                       \
     void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
         return Box::operator new(size, cls);                                                                           \
     }                                                                                                                  \
-    void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
-        ALLOC_STATS(default_cls);                                                                                      \
-        assert(default_cls->tp_alloc == PyType_GenericAlloc);                                                          \
-        assert(default_cls->tp_itemsize == 0);                                                                         \
-        assert(default_cls->tp_basicsize == size);                                                                     \
-        assert(default_cls->is_pyston_class);                                                                          \
-        assert(default_cls->attrs_offset == 0);                                                                        \
-        assert(is_gc == PyType_IS_GC(default_cls));                                                                    \
-        bool is_heaptype = false;                                                                                      \
-        assert(is_heaptype == (bool)(default_cls->tp_flags & Py_TPFLAGS_HEAPTYPE));                                    \
-                                                                                                                       \
-        /* Don't allocate classes through this -- we need to keep track of all class objects. */                       \
-        assert(default_cls != type_cls);                                                                               \
-                                                                                                                       \
-        /* note: we want to use size instead of tp_basicsize, since size is a compile-time constant */                 \
-        void* mem;                                                                                                     \
-        if (is_gc)                                                                                                     \
-            mem = _PyObject_GC_Malloc(size);                                                                           \
-        else                                                                                                           \
-            mem = PyObject_MALLOC(size);                                                                               \
-        assert(mem);                                                                                                   \
-                                                                                                                       \
-        Box* rtn = static_cast<Box*>(mem);                                                                             \
-                                                                                                                       \
-        if (is_heaptype)                                                                                               \
-            Py_INCREF(default_cls);                                                                                    \
-                                                                                                                       \
-        PyObject_INIT(rtn, default_cls);                                                                               \
-                                                                                                                       \
-        if (is_gc)                                                                                                     \
-            _PyObject_GC_TRACK(rtn);                                                                                   \
-                                                                                                                       \
-        return rtn;                                                                                                    \
-        /* TODO: there should be a way to not have to do this nested inlining by hand */                               \
-    }
+    void* operator new(size_t size) __attribute__((visibility("default"))) { return newFast<is_gc>(size, default_cls); }
 
 // This corresponds to CPython's PyVarObject, for objects with a variable number of "items" that are stored inline.
 // For example, strings and tuples store their data in line in the main object allocation, so are BoxVars.  Lists,
@@ -938,6 +952,7 @@ static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size),
         return BoxVar::operator new(size, default_cls, nitems);                                                        \
     }
 
+// TODO: extract out newFastVar like we did with newFast
 #define DEFAULT_CLASS_VAR_SIMPLE(default_cls, itemsize)                                                                \
     static_assert(itemsize > 0, "");                                                                                   \
     inline void _base_check() {                                                                                        \

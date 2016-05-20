@@ -2217,7 +2217,7 @@ public:
         b = NULL;
     }
 
-    DEFAULT_CLASS(attrwrapper_cls);
+    DEFAULT_CLASS_SIMPLE(attrwrapper_cls, true);
 
 
     BORROWED(Box*) getUnderlying() {

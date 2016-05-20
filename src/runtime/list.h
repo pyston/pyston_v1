@@ -28,8 +28,6 @@ public:
     int pos;
     BoxedListIterator(BoxedList* l, int start);
 
-    DEFAULT_CLASS(list_iterator_cls);
-
     static void dealloc(BoxedListIterator* o) noexcept {
         PyObject_GC_UnTrack(o);
         Py_XDECREF(o->l);

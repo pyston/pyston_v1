@@ -281,6 +281,42 @@ protected:
     friend void setupThread();
 };
 
+template <bool is_gc> void* Box::newFast(size_t size, BoxedClass* cls) {
+    ALLOC_STATS(cls);
+    assert(cls->tp_alloc == PyType_GenericAlloc);
+    assert(cls->tp_itemsize == 0);
+    assert(cls->tp_basicsize == size);
+    assert(cls->is_pyston_class);
+    assert(cls->attrs_offset == 0);
+    assert(is_gc == PyType_IS_GC(cls));
+    bool is_heaptype = false;
+    assert(is_heaptype == (bool)(cls->tp_flags & Py_TPFLAGS_HEAPTYPE));
+
+    /* Don't allocate classes through this -- we need to keep track of all class objects. */
+    assert(cls != type_cls);
+
+    /* note: we want to use size instead of tp_basicsize, since size is a compile-time constant */
+    void* mem;
+    if (is_gc)
+        mem = _PyObject_GC_Malloc(size);
+    else
+        mem = PyObject_MALLOC(size);
+    assert(mem);
+
+    Box* rtn = static_cast<Box*>(mem);
+
+    if (is_heaptype)
+        Py_INCREF(cls);
+
+    PyObject_INIT(rtn, cls);
+
+    if (is_gc)
+        _PyObject_GC_TRACK(rtn);
+
+    return rtn;
+    /* TODO: there should be a way to not have to do this nested inlining by hand */
+}
+
 // Corresponds to PyHeapTypeObject.  Very similar to BoxedClass, but allocates some extra space for
 // structures that otherwise might get allocated statically.  For instance, tp_as_number for builtin
 // types will usually point to a `static PyNumberMethods` object, but for a heap-allocated class it
