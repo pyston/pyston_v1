@@ -509,7 +509,7 @@ static int main(int argc, char** argv) noexcept {
                 free(real_path);
 
                 try {
-                    AST_Module* ast = caching_parse_file(fn, /* future_flags = */ 0);
+                    AST_Module* ast = parse_file(fn, /* future_flags = */ 0);
                     compileAndRunModule(ast, main_module);
                     rtncode = 0;
                 } catch (ExcInfo e) {
