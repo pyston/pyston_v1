@@ -1,4 +1,4 @@
-# skip-if: 'clang' in os.environ['CC']
+# skip-if: 'clang' in os.environ.get('CC', '')
 # looks like libsass only builds using gcc...
 import os, sys, subprocess
 sys.path.append(os.path.dirname(__file__) + "/../lib")
