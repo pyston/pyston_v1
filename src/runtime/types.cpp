@@ -1162,6 +1162,9 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         class InitHelper {
         public:
             static Box* call(STOLEN(Box*) made, BoxedClass* cls, Box* args, Box* kwargs) noexcept(S == CAPI) {
+                if (S == CAPI && !made)
+                    return NULL;
+
                 if (!isSubclass(made->cls, cls))
                     return made;
 

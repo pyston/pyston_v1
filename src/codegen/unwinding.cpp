@@ -546,7 +546,8 @@ public:
     }
 
     std::tuple<FrameInfo*, ExcInfo, PythonStackExtractor> pause() {
-        t.end();
+        static StatCounter stat("us_unwind_session");
+        stat.log(t.end());
         return std::make_tuple(std::move(prev_frame_info), std::move(exc_info), std::move(pystack_extractor));
     }
 
