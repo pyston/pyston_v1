@@ -88,35 +88,31 @@ void computeFixedPoint(typename BBAnalyzer<T>::Map&& initial_map, CFGBlock* init
             }
 
             Map& next = starting_states[next_block];
+            // merge ending->next
             for (const auto& p : ending) {
-                if (next.count(p.first) == 0) {
-                    changed = true;
-                    if (initial) {
-                        next[p.first] = p.second;
-                    } else {
-                        next[p.first] = analyzer.mergeBlank(p.second);
-                    }
-                } else {
-                    T& next_elt = next[p.first];
+                bool existed = next.count(p.first);
+                T& next_elt = next[p.first];
 
-                    T new_elt = analyzer.merge(p.second, next_elt);
-                    if (next_elt != new_elt) {
-                        next_elt = new_elt;
-                        changed = true;
-                    }
+                T new_elt = analyzer.merge(p.second, next_elt);
+
+                if (!existed) {
+                    assert(new_elt != next_elt);
+                    if (initial)
+                        assert(new_elt == p.second);
+                }
+
+                if (next_elt != new_elt) {
+                    next_elt = new_elt;
+                    changed = true;
                 }
             }
 
+#ifndef NDEBUG
             for (const auto& p : next) {
-                if (ending.count(p.first))
-                    continue;
-
-                T next_elt = analyzer.mergeBlank(p.second);
-                if (next_elt != p.second) {
-                    next[p.first] = next_elt;
-                    changed = true;
-                }
+                assert(ending.count(p.first));
             }
+            assert(next.size() == ending.size());
+#endif
 
             if (changed && in_queue.insert(next_block).second) {
                 q.push(next_block);

@@ -58,6 +58,7 @@ class PhiAnalysis;
 class DefinednessAnalysis {
 public:
     enum DefinitionLevel {
+        Unknown,
         Undefined,
         PotentiallyDefined,
         Defined,

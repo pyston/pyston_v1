@@ -219,11 +219,16 @@ public:
     DefinednessBBAnalyzer(ScopeInfo* scope_info) : scope_info(scope_info) {}
 
     virtual DefinitionLevel merge(DefinitionLevel from, DefinitionLevel into) const {
-        assert(from != DefinednessAnalysis::Undefined);
-        assert(into != DefinednessAnalysis::Undefined);
-        if (from == DefinednessAnalysis::PotentiallyDefined || into == DefinednessAnalysis::PotentiallyDefined)
-            return DefinednessAnalysis::PotentiallyDefined;
-        return DefinednessAnalysis::Defined;
+        assert(from != DefinitionLevel::Unknown);
+        if (into == DefinitionLevel::Unknown)
+            return from;
+
+        if (into == DefinednessAnalysis::Undefined && from == DefinednessAnalysis::Undefined)
+            return DefinednessAnalysis::Undefined;
+
+        if (into == DefinednessAnalysis::Defined && from == DefinednessAnalysis::Defined)
+            return DefinednessAnalysis::Defined;
+        return DefinednessAnalysis::PotentiallyDefined;
     }
     virtual void processBB(Map& starting, CFGBlock* block) const;
     virtual DefinitionLevel mergeBlank(DefinitionLevel into) const {
@@ -237,16 +242,33 @@ private:
     typedef DefinednessBBAnalyzer::Map Map;
     Map& state;
 
-    void _doSet(InternedString s) { state[s] = DefinednessAnalysis::Defined; }
+    void _doSet(InternedString s) {
+        ASSERT(state.count(s), "%s", s.c_str());
+        state[s] = DefinednessAnalysis::Defined;
+    }
 
     void _doSet(AST* t) {
         switch (t->type) {
             case AST_TYPE::Attribute:
                 // doesn't affect definedness (yet?)
                 break;
-            case AST_TYPE::Name:
-                _doSet(((AST_Name*)t)->id);
+            case AST_TYPE::Name: {
+                auto name = ast_cast<AST_Name>(t);
+                if (name->lookup_type == ScopeInfo::VarScopeType::FAST
+                    || name->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
+                    assert(name->vreg != -1);
+                    assert(state.count(name->id));
+                    _doSet(name->id);
+                } else if (name->lookup_type == ScopeInfo::VarScopeType::GLOBAL
+                           || name->lookup_type == ScopeInfo::VarScopeType::NAME) {
+                    assert(name->vreg == -1);
+                    assert(!state.count(name->id));
+                    // skip
+                } else {
+                    RELEASE_ASSERT(0, "%d", name->lookup_type);
+                }
                 break;
+            }
             case AST_TYPE::Subscript:
                 break;
             case AST_TYPE::Tuple: {
@@ -279,7 +301,11 @@ public:
         for (auto t : node->targets) {
             if (t->type == AST_TYPE::Name) {
                 AST_Name* name = ast_cast<AST_Name>(t);
-                state.erase(name->id);
+                if (name->lookup_type != ScopeInfo::VarScopeType::GLOBAL
+                    && name->lookup_type != ScopeInfo::VarScopeType::NAME) {
+                    ASSERT(state.count(name->id), "%s", name->id.c_str());
+                    state[name->id] = DefinednessAnalysis::Undefined;
+                }
             } else {
                 // The CFG pass should reduce all deletes to the "basic" deletes on names/attributes/subscripts.
                 // If not, probably the best way to do this would be to just do a full AST traversal
@@ -362,11 +388,15 @@ void DefinednessAnalysis::run(llvm::DenseMap<InternedString, DefinednessAnalysis
     for (const auto& p : defined_at_end) {
         RequiredSet& required = defined_at_end_sets[p.first];
         for (const auto& p2 : p.second) {
+#ifndef NDEBUG
             ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(p2.first);
-            if (vst == ScopeInfo::VarScopeType::GLOBAL || vst == ScopeInfo::VarScopeType::NAME)
-                continue;
+            assert(vst != ScopeInfo::VarScopeType::GLOBAL && vst != ScopeInfo::VarScopeType::NAME);
+#endif
 
-            required.insert(p2.first);
+            // TODO: don't returned a RequiredSet here, just use a bitset
+            assert(p2.second != DefinednessAnalysis::Unknown);
+            if (p2.second != DefinednessAnalysis::Undefined)
+                required.insert(p2.first);
         }
     }
 
@@ -491,12 +521,28 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames& args, CFG* cf
 
     llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map;
 
+    assert(cfg->hasVregsAssigned());
+    for (auto p : cfg->sym_vreg_map)
+        initial_map[p.first] = DefinednessAnalysis::Undefined;
+
+    auto maybe_add = [&](llvm::StringRef s) {
+        InternedString e = scope_info->internString(s);
+        ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(e);
+        assert(vst != ScopeInfo::VarScopeType::GLOBAL);
+        if (vst == ScopeInfo::VarScopeType::NAME)
+            return;
+        assert(cfg->sym_vreg_map.count(e));
+        initial_map[e] = DefinednessAnalysis::Defined;
+    };
+
     for (auto e : args.args)
-        initial_map[scope_info->internString(e)] = DefinednessAnalysis::Defined;
+        maybe_add(e);
     if (args.vararg.size())
-        initial_map[scope_info->internString(args.vararg)] = DefinednessAnalysis::Defined;
+        maybe_add(args.vararg);
     if (args.kwarg.size())
-        initial_map[scope_info->internString(args.kwarg)] = DefinednessAnalysis::Defined;
+        maybe_add(args.kwarg);
+
+    assert(initial_map.size() == cfg->sym_vreg_map.size());
 
     return std::unique_ptr<PhiAnalysis>(
         new PhiAnalysis(std::move(initial_map), cfg->getStartingBlock(), false, liveness, scope_info));
@@ -508,6 +554,10 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor* entry
     counter.log();
 
     llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map;
+
+    for (auto p : entry_descriptor->md->source->cfg->sym_vreg_map) {
+        initial_map[p.first] = DefinednessAnalysis::Undefined;
+    }
 
     llvm::StringSet<> potentially_undefined;
     for (const auto& p : entry_descriptor->args) {
