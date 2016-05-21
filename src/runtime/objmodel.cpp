@@ -5469,8 +5469,8 @@ static Box* binopInternalHelper(BinopRewriteArgs*& rewrite_args, BoxedString* op
     return rtn;
 }
 
-template <Rewritable rewritable>
-Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args) {
+template <Rewritable rewritable, bool inplace>
+Box* binopInternal(Box* lhs, Box* rhs, int op_type, BinopRewriteArgs* rewrite_args) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -5612,8 +5612,10 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteAr
     raiseExcHelper(TypeError, "unsupported operand type(s) for %s%s: '%s' and '%s'", op_sym.data(), op_sym_suffix,
                    getTypeName(lhs), getTypeName(rhs));
 }
-template Box* binopInternal<REWRITABLE>(Box*, Box*, int, bool, BinopRewriteArgs*);
-template Box* binopInternal<NOT_REWRITABLE>(Box*, Box*, int, bool, BinopRewriteArgs*);
+template Box* binopInternal<REWRITABLE, true>(Box*, Box*, int, BinopRewriteArgs*);
+template Box* binopInternal<REWRITABLE, false>(Box*, Box*, int, BinopRewriteArgs*);
+template Box* binopInternal<NOT_REWRITABLE, true>(Box*, Box*, int, BinopRewriteArgs*);
+template Box* binopInternal<NOT_REWRITABLE, false>(Box*, Box*, int, BinopRewriteArgs*);
 
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     STAT_TIMER(t0, "us_timer_slowpath_binop", 10);
@@ -5640,7 +5642,7 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
         BinopRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->setType(RefType::BORROWED),
                                       rewriter->getArg(1)->setType(RefType::BORROWED),
                                       rewriter->getReturnDestination());
-        rtn = binopInternal<REWRITABLE>(lhs, rhs, op_type, false, &rewrite_args);
+        rtn = binopInternal<REWRITABLE, false /*not inplace*/>(lhs, rhs, op_type, &rewrite_args);
         assert(rtn);
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
@@ -5648,7 +5650,7 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
             rewriter->commitReturning(rewrite_args.out_rtn);
         }
     } else {
-        rtn = binopInternal<NOT_REWRITABLE>(lhs, rhs, op_type, false, NULL);
+        rtn = binopInternal<NOT_REWRITABLE, false /*not inplace*/>(lhs, rhs, op_type, NULL);
     }
 
 // XXX
@@ -5676,14 +5678,14 @@ extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type) {
     if (rewriter.get()) {
         BinopRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1),
                                       rewriter->getReturnDestination());
-        rtn = binopInternal<REWRITABLE>(lhs, rhs, op_type, true, &rewrite_args);
+        rtn = binopInternal<REWRITABLE, true /*inplace*/>(lhs, rhs, op_type, &rewrite_args);
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         } else {
             rewriter->commitReturning(rewrite_args.out_rtn);
         }
     } else {
-        rtn = binopInternal<NOT_REWRITABLE>(lhs, rhs, op_type, true, NULL);
+        rtn = binopInternal<NOT_REWRITABLE, true /*inplace*/>(lhs, rhs, op_type, NULL);
     }
 
     return rtn;

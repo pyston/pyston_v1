@@ -1404,7 +1404,7 @@ Box* ellipsisRepr(Box* self) {
     return boxString("Ellipsis");
 }
 Box* divmod(Box* lhs, Box* rhs) {
-    return binopInternal<NOT_REWRITABLE>(lhs, rhs, AST_TYPE::DivMod, false, NULL);
+    return binopInternal<NOT_REWRITABLE, false>(lhs, rhs, AST_TYPE::DivMod, NULL);
 }
 
 Box* powFunc(Box* x, Box* y, Box* z) {

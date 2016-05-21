@@ -113,8 +113,8 @@ template <Rewritable rewritable>
 void setattrGeneric(Box* obj, BoxedString* attr, STOLEN(Box*) val, SetattrRewriteArgs* rewrite_args);
 
 struct BinopRewriteArgs;
-template <Rewritable rewritable>
-Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
+template <Rewritable rewritable, bool inplace>
+Box* binopInternal(Box* lhs, Box* rhs, int op_type, BinopRewriteArgs* rewrite_args);
 
 struct CallRewriteArgs;
 template <ExceptionStyle S, Rewritable rewritable>
