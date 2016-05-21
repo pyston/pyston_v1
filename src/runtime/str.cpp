@@ -1184,7 +1184,7 @@ extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
             PyErr_Clear();
             raiseExcHelper(OverflowError, "cannot fit 'long' into index-sized integer");
         }
-    } else if (PyIndex_Check(rhs)) {
+    } else if (PyIndex_Check(rhs) && !PySequence_Check(rhs)) {
         n = PyNumber_AsSsize_t(rhs, PyExc_OverflowError);
         if (n == -1 && PyErr_Occurred())
             throwCAPIException();
