@@ -545,14 +545,17 @@ public:
         stat.log();
     }
 
-    std::tuple<FrameInfo*, ExcInfo, PythonStackExtractor> pause() {
+    std::tuple<FrameInfo*, ExcInfo, PythonStackExtractor, bool> pause() {
         static StatCounter stat("us_unwind_session");
         stat.log(t.end());
-        return std::make_tuple(std::move(prev_frame_info), std::move(exc_info), std::move(pystack_extractor));
+        bool is_reraise = getIsReraiseFlag();
+        getIsReraiseFlag() = false;
+        return std::make_tuple(std::move(prev_frame_info), std::move(exc_info), std::move(pystack_extractor),
+                               is_reraise);
     }
 
-    void resume(std::tuple<FrameInfo*, ExcInfo, PythonStackExtractor>&& state) {
-        std::tie(prev_frame_info, exc_info, pystack_extractor) = state;
+    void resume(std::tuple<FrameInfo*, ExcInfo, PythonStackExtractor, bool>&& state) {
+        std::tie(prev_frame_info, exc_info, pystack_extractor, getIsReraiseFlag()) = state;
         t.restart();
     }
 
@@ -620,11 +623,12 @@ public:
             // make sure that our libunwind based python frame handling and the manual one are the same.
             assert(prev_frame_info == getTopFrameInfo());
 
-            if (exceptionAtLineCheck()) {
+            if (!getIsReraiseFlag()) {
                 // TODO: shouldn't fetch this multiple times?
                 frame_iter.getCurrentStatement()->cxx_exception_count++;
                 exceptionAtLine(&exc_info.traceback);
-            }
+            } else
+                getIsReraiseFlag() = false;
         }
     }
 };
