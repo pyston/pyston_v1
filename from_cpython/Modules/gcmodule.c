@@ -19,7 +19,7 @@
 */
 
 #include "Python.h"
-//#include "frameobject.h"        /* for PyFrame_ClearFreeList */
+#include "frameobject.h"        /* for PyFrame_ClearFreeList */
 
 /* Get an object's GC head */
 #define AS_GC(o) ((PyGC_Head *)(o)-1)
@@ -382,13 +382,6 @@ subtract_refs(PyGC_Head *containers)
     PyGC_Head *gc = containers->gc.gc_next;
     for (; gc != containers; gc=gc->gc.gc_next) {
         traverse = Py_TYPE(FROM_GC(gc))->tp_traverse;
-        // Pyston addition: some extra checking for our transition
-#ifndef NDEBUG
-        if (!traverse) {
-            fprintf(stderr, "%s needs a tp_traverse\n", Py_TYPE(FROM_GC(gc))->tp_name);
-            assert(0);
-        }
-#endif
         (void) traverse(FROM_GC(gc),
                        (visitproc)visit_decref,
                        NULL);
@@ -551,8 +544,6 @@ move_finalizers(PyGC_Head *unreachable, PyGC_Head *finalizers)
      */
     for (gc = unreachable->gc.gc_next; gc != unreachable; gc = next) {
         PyObject *op = FROM_GC(gc);
-
-        // Pyston addition: for now assert that the gc isn't freeing anything.
 
         assert(IS_TENTATIVELY_UNREACHABLE(op));
         next = gc->gc.gc_next;

@@ -353,7 +353,9 @@ llvm::Value* IRGenState::getGlobalsIfCustom() {
     return getGlobals();
 }
 
-// XXX This is pretty hacky, but I think I can get rid of it once I merge in Marius's new frame introspection work
+// This is a hacky little constant that should only be used by the underlying exception-propagation code.
+// But it means that we are calling a function that 1) throws a C++ exception, and 2) we explicitly want to
+// disable generation of a C++ fixup.  This is really just for propagating an exception after it had gotten caught.
 #define NO_CXX_INTERCEPTION ((llvm::BasicBlock*)-1)
 
 llvm::Value* IREmitter::ALWAYS_THROWS = ((llvm::Value*)1);
@@ -770,7 +772,6 @@ private:
     llvm::SmallVector<ExceptionState, 2> incoming_exc_state;
     // These are the values that are outgoing of an invoke block:
     llvm::SmallVector<ExceptionState, 2> outgoing_exc_state;
-    // llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> cxx_exc_dests;
     llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> capi_exc_dests;
     llvm::DenseMap<llvm::BasicBlock*, llvm::PHINode*> capi_phis;
 
@@ -923,6 +924,8 @@ private:
                     // local symbols will not throw.
                     emitter.getBuilder()->CreateUnreachable();
                     exc_type = exc_value = exc_tb = undefVariable();
+                    // TODO: should we not emit the rest of the block? I (kmod) think I tried that and
+                    // ran into some sort of issue, but I don't remember what it was.
                     // endBlock(DEAD);
                 }
 
@@ -3091,10 +3094,6 @@ public:
     }
 
     llvm::BasicBlock* getCXXExcDest(const UnwindInfo& unw_info) override {
-        // llvm::BasicBlock*& cxx_exc_dest = cxx_exc_dests[final_dest];
-        // if (cxx_exc_dest)
-        // return cxx_exc_dest;
-
         llvm::BasicBlock* final_dest;
         if (unw_info.hasHandler()) {
             final_dest = unw_info.exc_dest;

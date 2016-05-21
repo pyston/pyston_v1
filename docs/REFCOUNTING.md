@@ -61,6 +61,8 @@ Refcounting in the JIT tiers is handled differently from normal code.  In this c
 - `refConsumed()` says that a reference was handed out of the JIT's set of objects.  This could be handling `return` statements, calling functions that steal a ref from their arguments, or storing the reference in a data structure (which thus inherits the reference).
 - `refUsed()`.  This shouldn't be needed that often, but tells the refcounting system that there was a use of a reference that the refcounter was unable to see.  For example, we have some calling conventions where objects are passed in an array; the uses of the array are thus uses of the individual variables.  You probably don't have to worry about this.
 
+The automatic refcounter will then look at the IR we generated (either the LLVM IR or our Rewriter IR) and determine where to insert incref and decref operations.  Note that it will insert decrefs at the first possible point that it thinks they are acceptable.  So if you have some use of your variable that is not visible to the refcounter, you will need to call refUsed().  But for the most part things should just work.
+
 Here's an example of what it can look like.  The case is storing a variable in an array.
 
 ```C++
@@ -76,12 +78,12 @@ Note that we get the previous value and then set the type to OWNED.  The refcoun
 
 ## Updating C extensions
 
-C extensions don't require any updates, but they ofter leak some references (usually a constant number) which the refcounting system
+C extensions don't require any updates, but they often leak some references (usually a constant number) which the refcounting system
 can't distinguish from steady-state leaks.  For standard libraries that are implemented as C extensions, it's usually nice to go through and fix these so that the system can get down to "0 refs remaining" at finalization.
 
 Usually this is just a matter of calling PyGC_RegisterStaticConstant() around any static constants.  This will usually be things like static strings, or sometimes singletons or interned values.
 
-Similarly, this can happen in our code.  If you store sometihng in a `static` variable, you will typically have to call PyGC_RegisterStaticConstant.  There is a helper function for the common case -- getStaticString() is equivalent to `PyGC_RegisterStaticConstant(PyString_InternFromString())`, which happens a decent amount.
+Similarly, this can happen in our code.  If you store something in a `static` C/C++ variable, you will typically have to call PyGC_RegisterStaticConstant.  There is a helper function for the common case -- getStaticString() is equivalent to `PyGC_RegisterStaticConstant(PyString_InternFromString())`, which happens a decent amount.
 
 ## Testing
 

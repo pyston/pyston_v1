@@ -593,6 +593,12 @@ public:
     Box* operator*() { return impl->getValue(); }
 };
 
+// Similar to std::unique_ptr<>, but allocates its data on the stack.
+// This means that it should only be used with types that can be relocated trivially.
+// TODO add assertions for that, similar to SmallFunction.
+// Also, if you copy the SmallUniquePtr, the address that it represents changes (since you
+// copy the data as well).  In debug mode, this class will enforce that once you get the
+// pointer value, it does not get copied again.
 template <typename T, int N> class SmallUniquePtr {
 private:
     char _data[N];
@@ -645,8 +651,6 @@ public:
 // should complain).
 class BoxIteratorRange {
 private:
-    // std::unique_ptr<BoxIteratorImpl> begin_impl;
-    // char _data[32];
     typedef SmallUniquePtr<BoxIteratorImpl, 32> UniquePtr;
     UniquePtr begin_impl;
     BoxIteratorImpl* end_impl;
@@ -831,9 +835,9 @@ public:
 
     void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
 
-    _PyObject_HEAD_EXTRA
+    _PyObject_HEAD_EXTRA;
 
-        Py_ssize_t ob_refcnt;
+    Py_ssize_t ob_refcnt;
 
     // Note: cls gets initialized in the new() function.
     BoxedClass* cls;

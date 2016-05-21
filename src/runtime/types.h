@@ -365,6 +365,8 @@ static_assert(offsetof(pyston::BoxedHeapClass, as_sequence) == offsetof(PyHeapTy
 static_assert(offsetof(pyston::BoxedHeapClass, as_buffer) == offsetof(PyHeapTypeObject, as_buffer), "");
 static_assert(sizeof(pyston::BoxedHeapClass) == sizeof(PyHeapTypeObject), "");
 
+// DecrefHandle: a simple RAII-style class that [x]decref's its argument when it is destructed.
+// Usually shouldn't be used on its own, it is the base of autoDecref() and AUTO_DECREF.
 template <typename B, bool Nullable = false> struct DecrefHandle {
 private:
     B* b;
@@ -397,12 +399,17 @@ public:
             Py_DECREF(old_b);
     }
 };
+// autoDecref(): use this on a subexpression that needs to have a ref removed.  For example:
+// unboxInt(autoDecref(boxInt(5)))
 template <typename B, bool Nullable = false> DecrefHandle<B, Nullable> autoDecref(B* b) {
     return DecrefHandle<B, Nullable>(b);
 }
 template <typename B> DecrefHandle<B, true> autoXDecref(B* b) {
     return DecrefHandle<B, true>(b);
 }
+
+// AUTO_DECREF: A block-scoped decref handle, that will decref its argument when the block is done.
+// It captures the argument by value.
 #define AUTO_DECREF(x) DecrefHandle<Box, false> CAT(_autodecref_, __LINE__)((x))
 #define AUTO_XDECREF(x) DecrefHandle<Box, true> CAT(_autodecref_, __LINE__)((x))
 
@@ -484,6 +491,10 @@ template <ExceptionStyle S, typename Functor> Box* callCXXFromStyle(Functor f) {
         return f();
 }
 
+// Uncoment this to disable the int freelist, which can make debugging eassier.
+// The freelist complicates things since it overwrites class pointers, doesn't free memory when
+// it is freed by the application, etc.
+// TODO we should have a flag like this to disable all freelists, not just the int one.
 //#define DISABLE_INT_FREELIST
 
 extern "C" int PyInt_ClearFreeList() noexcept;
@@ -1482,16 +1493,9 @@ inline BORROWED(BoxedString*) getStaticString(llvm::StringRef s) {
 extern "C" volatile int _pendingcalls_to_do;
 
 inline BORROWED(Box*) Box::getattrString(const char* attr) {
-    // XXX need to auto-decref
     BoxedString* s = internStringMortal(attr);
-    try {
-        Box* r = getattr<NOT_REWRITABLE>(s, NULL);
-        Py_DECREF(s);
-        return r;
-    } catch (ExcInfo e) {
-        Py_DECREF(s);
-        throw e;
-    }
+    AUTO_DECREF(s);
+    return getattr<NOT_REWRITABLE>(s, NULL);
 }
 
 inline void ExcInfo::clear() {

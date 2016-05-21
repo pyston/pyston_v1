@@ -897,6 +897,11 @@ public:
 };
 
 void _sortArray(Box** elts, long num_elts, Box* cmp, Box* key) {
+    // TODO(kmod): maybe we should just switch to CPython's sort.  not sure how the algorithms compare,
+    // but they specifically try to support cases where __lt__ or the cmp function might end up inspecting
+    // the current list being sorted.
+    // I also don't know if std::stable_sort is exception-safe.
+
     if (cmp) {
         assert(!key);
         std::stable_sort<Box**, PyCmpComparer>(elts, elts + num_elts, PyCmpComparer(cmp));
@@ -955,11 +960,6 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
         key = NULL;
 
     RELEASE_ASSERT(!cmp || !key, "Specifying both the 'cmp' and 'key' keywords is currently not supported");
-
-    // TODO(kmod): maybe we should just switch to CPython's sort.  not sure how the algorithms compare,
-    // but they specifically try to support cases where __lt__ or the cmp function might end up inspecting
-    // the current list being sorted.
-    // I also don't know if std::stable_sort is exception-safe.
 
     auto orig_size = self->size;
     auto orig_elts = self->elts;

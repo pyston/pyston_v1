@@ -179,8 +179,7 @@ RewriterVar* JitFragmentWriter::emitAugbinop(AST_expr* node, RewriterVar* lhs, R
 }
 
 RewriterVar* JitFragmentWriter::emitBinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
-    /// XXX increase this too much for testing
-    return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2, 640, node).first->setType(RefType::OWNED);
+    return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2, 240, node).first->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
@@ -202,7 +201,7 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
     if (args.size() > 3) {
         RewriterVar* scratch = allocate(args.size() - 3);
         for (int i = 0; i < args.size() - 3; ++i)
-            scratch->setAttr(i * sizeof(void*), args[i + 3], RewriterVar::SetattrType::REFUSED);
+            scratch->setAttr(i * sizeof(void*), args[i + 3], RewriterVar::SetattrType::REF_USED);
         call_args.push_back(scratch);
     } else if (keyword_names) {
         call_args.push_back(imm(0ul));
@@ -303,7 +302,7 @@ RewriterVar* JitFragmentWriter::emitCreateList(const llvm::ArrayRef<RewriterVar*
         return call(false, (void*)createList)->setType(RefType::OWNED);
 
     auto rtn = emitCallWithAllocatedArgs((void*)createListHelper,
-                                         { imm(num), allocArgs(values, RewriterVar::SetattrType::REFUSED) },
+                                         { imm(num), allocArgs(values, RewriterVar::SetattrType::REF_USED) },
                                          values)->setType(RefType::OWNED);
     for (RewriterVar* v : values) {
         v->refConsumed();
@@ -316,7 +315,7 @@ RewriterVar* JitFragmentWriter::emitCreateSet(const llvm::ArrayRef<RewriterVar*>
     if (num == 0)
         return call(false, (void*)createSet)->setType(RefType::OWNED);
     auto rtn = emitCallWithAllocatedArgs((void*)createSetHelper,
-                                         { imm(num), allocArgs(values, RewriterVar::SetattrType::REFUSED) },
+                                         { imm(num), allocArgs(values, RewriterVar::SetattrType::REF_USED) },
                                          values)->setType(RefType::OWNED);
     for (RewriterVar* v : values) {
         v->refConsumed();
@@ -341,7 +340,7 @@ RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar
         r = call(false, (void*)BoxedTuple::create3, values[0], values[1], values[2])->setType(RefType::OWNED);
     else {
         r = emitCallWithAllocatedArgs((void*)createTupleHelper,
-                                      { imm(num), allocArgs(values, RewriterVar::SetattrType::REFUSED) },
+                                      { imm(num), allocArgs(values, RewriterVar::SetattrType::REF_USED) },
                                       values)->setType(RefType::OWNED);
     }
     return r;
@@ -482,7 +481,7 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj
     if (args.size() > 3) {
         RewriterVar* scratch = allocate(args.size() - 3);
         for (int i = 0; i < args.size() - 3; ++i)
-            scratch->setAttr(i * sizeof(void*), args[i + 3], RewriterVar::SetattrType::REFUSED);
+            scratch->setAttr(i * sizeof(void*), args[i + 3], RewriterVar::SetattrType::REF_USED);
         call_args.push_back(scratch);
     } else
         call_args.push_back(imm(0ul));
@@ -500,7 +499,7 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj
 
     RewriterVar* args_array = nullptr;
     if (args.size()) {
-        args_array = allocArgs(args, RewriterVar::SetattrType::REFUSED);
+        args_array = allocArgs(args, RewriterVar::SetattrType::REF_USED);
     } else
         RELEASE_ASSERT(!keyword_names_var, "0 args but keyword names are set");
 
@@ -616,10 +615,6 @@ void JitFragmentWriter::emitRaise3(RewriterVar* arg0, RewriterVar* arg1, Rewrite
     arg0->refConsumed();
     arg1->refConsumed();
     arg2->refConsumed();
-}
-
-void JitFragmentWriter::emitEndBlock() {
-    // XXX remove
 }
 
 void JitFragmentWriter::emitReturn(RewriterVar* v) {

@@ -215,9 +215,6 @@ def get_test_options(fn, check_stats, run_memcheck):
         elif l.startswith("# no-collect-stats"):
             opts.collect_stats = False
 
-    if opts.expected == "reffail":
-        opts.expected = "fail"
-
     if not opts.skip:
         # consider other reasons for skipping file
         if SKIP_FAILING_TESTS and opts.expected == 'fail':

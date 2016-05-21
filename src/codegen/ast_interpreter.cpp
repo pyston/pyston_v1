@@ -643,8 +643,6 @@ Value ASTInterpreter::visit_branch(AST_Branch* node) {
     AUTO_DECREF(v.o);
 
     if (jit) {
-        jit->emitEndBlock();
-
         // Special note: emitSideExit decrefs v for us.
         // TODO: since the value is always True or False, maybe could optimize by putting the decref
         // before the conditional instead of after.
@@ -676,15 +674,13 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
     if (jit) {
         if (backedge && ENABLE_OSR && !FORCE_INTERPRETER)
             jit->emitOSRPoint(node);
-        jit->emitEndBlock();
         jit->emitJump(node->target);
         finishJITing(node->target);
 
         // we may have started JITing because the OSR thresholds got triggered in this case we don't want to jit
         // additional blocks ouside of the loop if the function is cold.
-        // XXX reenable this
-        // if (getMD()->times_interpreted < REOPT_THRESHOLD_INTERPRETER)
-        // should_jit = false;
+        if (getMD()->times_interpreted < REOPT_THRESHOLD_INTERPRETER)
+            should_jit = false;
     }
 
     if (backedge)
@@ -1069,7 +1065,6 @@ Value ASTInterpreter::visit_return(AST_Return* node) {
     Value s = node->value ? visit_expr(node->value) : getNone();
 
     if (jit) {
-        jit->emitEndBlock();
         jit->emitReturn(s);
         finishJITing();
     }
@@ -1114,7 +1109,7 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
         Value v = visit_expr(d);
         defaults.push_back(v.o);
         if (jit) {
-            defaults_var->setAttr(i++ * sizeof(void*), v, RewriterVar::SetattrType::REFUSED);
+            defaults_var->setAttr(i++ * sizeof(void*), v, RewriterVar::SetattrType::REF_USED);
             defaults_vars.push_back(v.var);
         }
     }

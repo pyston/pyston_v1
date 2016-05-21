@@ -3515,14 +3515,6 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
         *PyObject_GET_WEAKREFS_LISTPTR(op) = NULL;
     }
 
-// I think CPython defers the dict creation (equivalent of our initUserAttrs) to the
-// first time that an attribute gets set.
-// Our HCAttrs object already includes this optimization of no-allocation-if-empty,
-// but it's nice to initialize the hcls here so we don't have to check it on every getattr/setattr.
-// TODO It does mean that anything not defering to this function will have to call
-// initUserAttrs themselves, though.
-// initUserAttrs(op, tp);
-
 #ifndef NDEBUG
     if (tp->tp_flags & Py_TPFLAGS_HEAPTYPE) {
         BoxedHeapClass* heap_cls = static_cast<BoxedHeapClass*>(tp);
@@ -4623,46 +4615,6 @@ void setupRuntime() {
     setupSysEnd();
 
     TRACK_ALLOCATIONS = true;
-
-#if 0
-    Box* l = NULL;
-    for (int i = 0; i < 1000000000; i++) {
-        //if (i % 10000 == 0) {
-            //Py_XDECREF(l);
-            //l = PyList_New(0);
-        //}
-        //PyList_Append(l, autoDecref(boxInt(i)));
-        autoDecref(boxInt(i));
-    }
-    Py_XDECREF(l);
-
-    // XXX
-    PyGC_Collect(); // To make sure it creates any static objects
-    IN_SHUTDOWN = true;
-    PyType_ClearCache();
-    PyOS_FiniInterrupts();
-    _PyUnicode_Fini();
-    for (auto b : constants) {
-        Py_DECREF(b);
-    }
-    // May need to run multiple collections to collect everything:
-    while (PyGC_Collect())
-        ;
-    _Py_ReleaseInternedStrings();
-    for (auto b : classes) {
-        if (!PyObject_IS_GC(b)) {
-            b->clearAttrs();
-            Py_CLEAR(b->tp_mro);
-        }
-        Py_DECREF(b);
-    }
-    // May need to run multiple collections to collect everything:
-    while (PyGC_Collect())
-        ;
-    PRINT_TOTAL_REFS();
-    exit(0);
-    // XXX
-#endif
 }
 
 BORROWED(BoxedModule*) createModule(BoxedString* name, const char* fn, const char* doc) noexcept {
@@ -4763,7 +4715,7 @@ extern "C" void Py_Finalize() noexcept {
     PyType_ClearCache();
     PyOS_FiniInterrupts();
     _PyCodecRegistry_Deinit();
-    // TODO: we might have to do this in a loop:
+
     _PyUnicode_Fini();
     PyInterpreterState_Clear(PyThreadState_GET()->interp);
 
@@ -4805,16 +4757,13 @@ extern "C" void Py_Finalize() noexcept {
 
 #endif
 
-// PyGC_Collect());
 
-// PyImport_Cleanup();
-// _PyImport_Fini();
-
-// _PyExc_Fini();
-
-// _PyGILState_Fini();
-
+// CPython's implementation:
 #if 0
+    _PyExc_Fini();
+
+    _PyGILState_Fini();
+
     /* Delete current thread */
     PyThreadState_Swap(NULL);
     PyInterpreterState_Delete(interp);

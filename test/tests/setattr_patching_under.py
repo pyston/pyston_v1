@@ -1,4 +1,3 @@
-# skip-if: '-n' not in EXTRA_JIT_ARGS and '-O' not in EXTRA_JIT_ARGS
 # This test currently fails in the interpreter because we keep dead vreg entries around until the frame exists,
 # which causes D() to get destroyed too late 
 
