@@ -1807,7 +1807,7 @@ bool isNondataDescriptorInstanceSpecialCase(Box* descr) {
 
 template <Rewritable rewritable>
 Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box* obj, Box* descr, RewriterVar* r_descr,
-                                           bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
+                                           bool for_call, BORROWED(Box**) bind_obj_out, RewriterVar** r_bind_obj_out) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -1888,7 +1888,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
             }
             return boxInstanceMethod(im_self, im_func, im_class);
         } else {
-            *bind_obj_out = incref(im_self);
+            *bind_obj_out = im_self;
             if (rewrite_args) {
                 rewrite_args->setReturn(r_im_func, ReturnConvention::HAS_RETURN);
                 *r_bind_obj_out = r_im_self;
@@ -1915,7 +1915,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
                 rewrite_args->setReturn(r_descr, ReturnConvention::HAS_RETURN);
                 *r_bind_obj_out = rewrite_args->obj;
             }
-            *bind_obj_out = incref(obj);
+            *bind_obj_out = obj;
             return incref(descr);
         } else {
             BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(descr);
@@ -1944,7 +1944,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
 // r_descr must represent a valid object.
 template <Rewritable rewritable>
 Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls, Box* descr, RewriterVar* r_descr,
-                               bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
+                               bool for_call, BORROWED(Box**) bind_obj_out, RewriterVar** r_bind_obj_out) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -1999,7 +1999,7 @@ Box* boxChar(char c) {
 // r_descr needs to represent a valid object
 template <Rewritable rewritable>
 Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedString* attr_name, Box* obj, Box* descr,
-                                        RewriterVar* r_descr, bool for_call, Box** bind_obj_out,
+                                        RewriterVar* r_descr, bool for_call, BORROWED(Box**) bind_obj_out,
                                         RewriterVar** r_bind_obj_out) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
@@ -2214,7 +2214,7 @@ static void ensureValidCapiReturn(Box* r) {
 
 template <ExceptionStyle S, Rewritable rewritable>
 Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
-                       Box** bind_obj_out, RewriterVar** r_bind_obj_out) noexcept(S == CAPI) {
+                       BORROWED(Box**) bind_obj_out, RewriterVar** r_bind_obj_out) noexcept(S == CAPI) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -2431,7 +2431,7 @@ Box* processDescriptor(Box* obj, Box* inst, Box* owner) {
 
 template <bool IsType, Rewritable rewritable>
 Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
-                            Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
+                            BORROWED(Box**) bind_obj_out, RewriterVar** r_bind_obj_out) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -3744,8 +3744,6 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
 
         return val;
     }
-
-    AUTO_XDECREF(bind_obj);
 
     if (bind_obj != NULL) {
         Box** new_args = NULL;

@@ -872,7 +872,7 @@ static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) 
 
 template <ExceptionStyle S, Rewritable rewritable>
 Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs* rewrite_args, bool for_call,
-                               Box** bind_obj_out, RewriterVar** r_bind_obj_out) noexcept(S == CAPI) {
+                               BORROWED(Box**) bind_obj_out, RewriterVar** r_bind_obj_out) noexcept(S == CAPI) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;

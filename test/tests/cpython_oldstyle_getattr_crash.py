@@ -1,3 +1,6 @@
+# skip-if: True
+# - sadly, we have now inherited CPython's buggy behavior here
+
 # This segfaults under python-dbg
 # (In a release build it "works" since the use-after-free happens without penalty.)
 

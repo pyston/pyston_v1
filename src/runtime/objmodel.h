@@ -168,7 +168,7 @@ template <ExceptionStyle S> inline Box* getattrInternal(Box* obj, BoxedString* a
 // __getattribute__.
 template <bool IsType, Rewritable rewritable>
 Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
-                            Box** bind_obj_out, RewriterVar** r_bind_obj_out);
+                            BORROWED(Box**) bind_obj_out, RewriterVar** r_bind_obj_out);
 
 extern "C" PyObject* type_getattro(PyObject* o, PyObject* name) noexcept;
 
