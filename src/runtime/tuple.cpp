@@ -314,17 +314,20 @@ Box* tupleNonzero(BoxedTuple* self) {
     return boxBool(self->size() != 0);
 }
 
-Box* tupleContains(BoxedTuple* self, Box* elt) {
-    int size = self->size();
+static int tuplecontains(BoxedTuple* self, Box* elt) noexcept {
     for (Box* e : *self) {
         int r = PyObject_RichCompareBool(elt, e, Py_EQ);
-        if (r == -1)
-            throwCAPIException();
-
         if (r)
-            Py_RETURN_TRUE;
+            return r;
     }
-    Py_RETURN_FALSE;
+    return 0;
+}
+
+Box* tupleContains(BoxedTuple* self, Box* elt) {
+    int r = tuplecontains(self, elt);
+    if (r == -1)
+        throwCAPIException();
+    return boxBool(r);
 }
 
 Box* tupleIndex(BoxedTuple* self, Box* elt, Box* startBox, Box** args) {
@@ -805,6 +808,7 @@ void setupTuple() {
     tuple_cls->tp_as_sequence->sq_length = (lenfunc)tuplelength;
     tuple_cls->tp_as_sequence->sq_concat = (binaryfunc)tupleconcat;
     tuple_cls->tp_as_sequence->sq_repeat = (ssizeargfunc)tuplerepeat;
+    tuple_cls->tp_as_sequence->sq_contains = (objobjproc)tuplecontains;
     tuple_cls->tp_iter = tupleIter;
 
     FunctionMetadata* hasnext = FunctionMetadata::create((void*)tupleiterHasnextUnboxed, BOOL, 1);
