@@ -47,7 +47,7 @@ static struct gc_generation generations[NUM_GENERATIONS] = {
     {{{GEN_HEAD(2), GEN_HEAD(2), 0}},           10,             0},
 };
 
-PyGC_Head *_PyGC_generation0 = GEN_HEAD(0);
+PyGC_Head * const _PyGC_generation0 = GEN_HEAD(0);
 
 static int enabled = 1; /* automatic collection enabled? */
 

@@ -260,7 +260,7 @@ typedef union _gc_head {
     long double dummy;  /* force worst-case alignment */
 } PyGC_Head;
 
-extern PyGC_Head *_PyGC_generation0;
+extern PyGC_Head * const _PyGC_generation0;
 
 #define _Py_AS_GC(o) ((PyGC_Head *)(o)-1)
 
