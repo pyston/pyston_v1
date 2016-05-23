@@ -104,7 +104,7 @@ std::string getInplaceOpSymbol(int op_type) {
     return std::string(getOpSymbol(op_type)) + '=';
 }
 
-BoxedString* getOpName(int op_type) {
+BORROWED(BoxedString*) getOpName(int op_type) {
     assert(op_type != AST_TYPE::Is);
     assert(op_type != AST_TYPE::IsNot);
 
@@ -114,31 +114,31 @@ BoxedString* getOpName(int op_type) {
 
     static bool initialized = false;
     if (!initialized) {
-        strAdd = internStringImmortal("__add__");
-        strBitAnd = internStringImmortal("__and__");
-        strBitOr = internStringImmortal("__or__");
-        strBitXor = internStringImmortal("__xor__");
-        strDiv = internStringImmortal("__div__");
-        strTrueDiv = internStringImmortal("__truediv__");
-        strDivMod = internStringImmortal("__divmod__");
-        strEq = internStringImmortal("__eq__");
-        strFloorDiv = internStringImmortal("__floordiv__");
-        strLShift = internStringImmortal("__lshift__");
-        strLt = internStringImmortal("__lt__");
-        strLtE = internStringImmortal("__le__");
-        strGt = internStringImmortal("__gt__");
-        strGtE = internStringImmortal("__ge__");
-        strIn = internStringImmortal("__contains__");
-        strInvert = internStringImmortal("__invert__");
-        strMod = internStringImmortal("__mod__");
-        strMult = internStringImmortal("__mul__");
-        strNot = internStringImmortal("__nonzero__");
-        strNotEq = internStringImmortal("__ne__");
-        strPow = internStringImmortal("__pow__");
-        strRShift = internStringImmortal("__rshift__");
-        strSub = internStringImmortal("__sub__");
-        strUAdd = internStringImmortal("__pos__");
-        strUSub = internStringImmortal("__neg__");
+        strAdd = getStaticString("__add__");
+        strBitAnd = getStaticString("__and__");
+        strBitOr = getStaticString("__or__");
+        strBitXor = getStaticString("__xor__");
+        strDiv = getStaticString("__div__");
+        strTrueDiv = getStaticString("__truediv__");
+        strDivMod = getStaticString("__divmod__");
+        strEq = getStaticString("__eq__");
+        strFloorDiv = getStaticString("__floordiv__");
+        strLShift = getStaticString("__lshift__");
+        strLt = getStaticString("__lt__");
+        strLtE = getStaticString("__le__");
+        strGt = getStaticString("__gt__");
+        strGtE = getStaticString("__ge__");
+        strIn = getStaticString("__contains__");
+        strInvert = getStaticString("__invert__");
+        strMod = getStaticString("__mod__");
+        strMult = getStaticString("__mul__");
+        strNot = getStaticString("__nonzero__");
+        strNotEq = getStaticString("__ne__");
+        strPow = getStaticString("__pow__");
+        strRShift = getStaticString("__rshift__");
+        strSub = getStaticString("__sub__");
+        strUAdd = getStaticString("__pos__");
+        strUSub = getStaticString("__neg__");
 
         initialized = true;
     }
@@ -1630,7 +1630,8 @@ bool PrintVisitor::visit_suite(AST_Suite* node) {
 
 bool PrintVisitor::visit_name(AST_Name* node) {
     stream << node->id.s();
-    // printf("%s(%d)", node->id.c_str(), node->ctx_type);
+    // Uncomment this line to see which names are kills:
+    // if (node->is_kill) stream << "<k>";
     return false;
 }
 
@@ -2222,7 +2223,7 @@ public:
     }
 };
 
-void flatten(const std::vector<AST_stmt*>& roots, std::vector<AST*>& output, bool expand_scopes) {
+void flatten(const llvm::SmallVector<AST_stmt*, 4>& roots, std::vector<AST*>& output, bool expand_scopes) {
     FlattenVisitor visitor(&output, expand_scopes);
 
     for (int i = 0; i < roots.size(); i++) {

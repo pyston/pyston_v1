@@ -90,10 +90,10 @@ typedef struct {
 PyAPI_FUNC(void) PyErr_SetNone(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyErr_SetObject(PyObject *, PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyErr_SetString(PyObject *, const char *) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject *) PyErr_Occurred(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PyErr_Occurred(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyErr_Clear(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyErr_Fetch(PyObject **, PyObject **, PyObject **) PYSTON_NOEXCEPT;
-PyAPI_FUNC(void) PyErr_Restore(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyErr_Restore(STOLEN(PyObject *), STOLEN(PyObject *), STOLEN(PyObject *)) PYSTON_NOEXCEPT;
 
 // Pyton change: This functions are normally only available in CPython >= 3.3 and PyPy but Cython can use them.
 PyAPI_FUNC(void) PyErr_GetExcInfo(PyObject **ptype, PyObject **pvalue, PyObject **ptraceback) PYSTON_NOEXCEPT;
@@ -219,7 +219,8 @@ PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithUnicodeFilename(
     PyObject *, const Py_UNICODE *) PYSTON_NOEXCEPT;
 #endif /* MS_WINDOWS */
 
-PyAPI_FUNC(PyObject *) PyErr_Format(PyObject *, const char *, ...)
+// This actually always returns NULL:
+PyAPI_FUNC(BORROWED(PyObject *)) PyErr_Format(PyObject *, const char *, ...)
                         PYSTON_NOEXCEPT Py_GCC_ATTRIBUTE((format(printf, 2, 3)));
 
 #ifdef MS_WINDOWS

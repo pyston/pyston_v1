@@ -82,6 +82,8 @@ print int("0b101", 2), int("0b101", 0)
 print 1 << 63, 1 << 64, -1 << 63, -1 << 64, 2 << 63
 print type(1 << 63), type(1 << 64), type(-1 << 63), type(-1 << 64), type(2 << 63)
 
+# TODO: enable this once intmethods_exceptions is working
+'''
 for b in range(26):
     try:
         print int('123', b)
@@ -91,6 +93,7 @@ for b in range(26):
         print int(u'123', b)
     except ValueError as e:
         print e
+'''
 
 
 class I(int):
@@ -232,3 +235,14 @@ for x in data:
                                                                arg2=y)))
             except Exception as e:
                 print(e.message)
+
+for b in range(26):
+    try:
+        print int('123', b)
+    except ValueError as e:
+        print e
+    try:
+        print int(u'123', b)
+    except ValueError as e:
+        print e
+

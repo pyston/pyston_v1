@@ -34,123 +34,121 @@ namespace pyston {
 namespace AST_TYPE {
 // These are in a pretty random order (started off alphabetical but then I had to add more).
 // These can be changed freely as long as parse_ast.py is also updated
-#define FOREACH_TYPE(X)  \
-    X(alias, 1)  \
-    X(arguments, 2)  \
-    X(Assert, 3)  \
-    X(Assign, 4)  \
-    X(Attribute, 5)  \
-    X(AugAssign, 6)  \
-    X(BinOp, 7)  \
-    X(BoolOp, 8)  \
-    X(Call, 9)  \
-    X(ClassDef, 10)  \
-    X(Compare, 11)  \
-    X(comprehension, 12)  \
-    X(Delete, 13)  \
-    X(Dict, 14)  \
-    X(Exec, 16)  \
-    X(ExceptHandler, 17)  \
-    X(ExtSlice, 18)  \
-    X(Expr, 19)  \
-    X(For, 20)  \
-    X(FunctionDef, 21)  \
-    X(GeneratorExp, 22)  \
-    X(Global, 23)  \
-    X(If, 24)  \
-    X(IfExp, 25)  \
-    X(Import, 26)  \
-    X(ImportFrom, 27)  \
-    X(Index, 28)  \
-    X(keyword, 29)  \
-    X(Lambda, 30)  \
-    X(List, 31)  \
-    X(ListComp, 32)  \
-    X(Module, 33)  \
-    X(Num, 34)  \
-    X(Name, 35)  \
-    X(Pass, 37)  \
-    X(Pow, 38)  \
-    X(Print, 39)  \
-    X(Raise, 40)  \
-    X(Repr, 41)  \
-    X(Return, 42)  \
-    X(Slice, 44)  \
-    X(Str, 45)  \
-    X(Subscript, 46)  \
-    X(TryExcept, 47)  \
-    X(TryFinally, 48)  \
-    X(Tuple, 49)  \
-    X(UnaryOp, 50)  \
-    X(With, 51)  \
-    X(While, 52)  \
-    X(Yield, 53)  \
-    X(Store, 54)  \
-    X(Load, 55)  \
-    X(Param, 56)  \
-    X(Not, 57)  \
-    X(In, 58)  \
-    X(Is, 59)  \
-    X(IsNot, 60)  \
-    X(Or, 61)  \
-    X(And, 62)  \
-    X(Eq, 63)  \
-    X(NotEq, 64)  \
-    X(NotIn, 65)  \
-    X(GtE, 66)  \
-    X(Gt, 67)  \
-    X(Mod, 68)  \
-    X(Add, 69)  \
-    X(Continue, 70)  \
-    X(Lt, 71)  \
-    X(LtE, 72)  \
-    X(Break, 73)  \
-    X(Sub, 74)  \
-    X(Del, 75)  \
-    X(Mult, 76)  \
-    X(Div, 77)  \
-    X(USub, 78)  \
-    X(BitAnd, 79)  \
-    X(BitOr, 80)  \
-    X(BitXor, 81)  \
-    X(RShift, 82)  \
-    X(LShift, 83)  \
-    X(Invert, 84)  \
-    X(UAdd, 85)  \
-    X(FloorDiv, 86)  \
-    X(DictComp, 15)  \
-    X(Set, 43)  \
-    X(Ellipsis, 87)  \
-    /* like Module, but used for eval. */  \
-    X(Expression, 88)  \
-    X(SetComp, 89)  \
-    X(Suite, 90)  \
-    \
-    /* Pseudo-nodes that are specific to this compiler: */  \
-    X(Branch, 200)  \
-    X(Jump, 201)  \
-    X(ClsAttribute, 202)  \
-    X(AugBinOp, 203)  \
-    X(Invoke, 204)  \
-    X(LangPrimitive, 205)  \
-    /* wraps a ClassDef to make it an expr */  \
-    X(MakeClass, 206)  \
-    /* wraps a FunctionDef to make it an expr */  \
-    X(MakeFunction, 207)  \
-    \
-    /* These aren't real AST types, but since we use AST types to represent binexp types */  \
-    /* and divmod+truediv are essentially types of binops, we add them here (at least for now): */ \
-    X(DivMod, 250)  \
-    X(TrueDiv, 251)  \
+#define FOREACH_TYPE(X)                                                                                                \
+    X(alias, 1)                                                                                                        \
+    X(arguments, 2)                                                                                                    \
+    X(Assert, 3)                                                                                                       \
+    X(Assign, 4)                                                                                                       \
+    X(Attribute, 5)                                                                                                    \
+    X(AugAssign, 6)                                                                                                    \
+    X(BinOp, 7)                                                                                                        \
+    X(BoolOp, 8)                                                                                                       \
+    X(Call, 9)                                                                                                         \
+    X(ClassDef, 10)                                                                                                    \
+    X(Compare, 11)                                                                                                     \
+    X(comprehension, 12)                                                                                               \
+    X(Delete, 13)                                                                                                      \
+    X(Dict, 14)                                                                                                        \
+    X(Exec, 16)                                                                                                        \
+    X(ExceptHandler, 17)                                                                                               \
+    X(ExtSlice, 18)                                                                                                    \
+    X(Expr, 19)                                                                                                        \
+    X(For, 20)                                                                                                         \
+    X(FunctionDef, 21)                                                                                                 \
+    X(GeneratorExp, 22)                                                                                                \
+    X(Global, 23)                                                                                                      \
+    X(If, 24)                                                                                                          \
+    X(IfExp, 25)                                                                                                       \
+    X(Import, 26)                                                                                                      \
+    X(ImportFrom, 27)                                                                                                  \
+    X(Index, 28)                                                                                                       \
+    X(keyword, 29)                                                                                                     \
+    X(Lambda, 30)                                                                                                      \
+    X(List, 31)                                                                                                        \
+    X(ListComp, 32)                                                                                                    \
+    X(Module, 33)                                                                                                      \
+    X(Num, 34)                                                                                                         \
+    X(Name, 35)                                                                                                        \
+    X(Pass, 37)                                                                                                        \
+    X(Pow, 38)                                                                                                         \
+    X(Print, 39)                                                                                                       \
+    X(Raise, 40)                                                                                                       \
+    X(Repr, 41)                                                                                                        \
+    X(Return, 42)                                                                                                      \
+    X(Slice, 44)                                                                                                       \
+    X(Str, 45)                                                                                                         \
+    X(Subscript, 46)                                                                                                   \
+    X(TryExcept, 47)                                                                                                   \
+    X(TryFinally, 48)                                                                                                  \
+    X(Tuple, 49)                                                                                                       \
+    X(UnaryOp, 50)                                                                                                     \
+    X(With, 51)                                                                                                        \
+    X(While, 52)                                                                                                       \
+    X(Yield, 53)                                                                                                       \
+    X(Store, 54)                                                                                                       \
+    X(Load, 55)                                                                                                        \
+    X(Param, 56)                                                                                                       \
+    X(Not, 57)                                                                                                         \
+    X(In, 58)                                                                                                          \
+    X(Is, 59)                                                                                                          \
+    X(IsNot, 60)                                                                                                       \
+    X(Or, 61)                                                                                                          \
+    X(And, 62)                                                                                                         \
+    X(Eq, 63)                                                                                                          \
+    X(NotEq, 64)                                                                                                       \
+    X(NotIn, 65)                                                                                                       \
+    X(GtE, 66)                                                                                                         \
+    X(Gt, 67)                                                                                                          \
+    X(Mod, 68)                                                                                                         \
+    X(Add, 69)                                                                                                         \
+    X(Continue, 70)                                                                                                    \
+    X(Lt, 71)                                                                                                          \
+    X(LtE, 72)                                                                                                         \
+    X(Break, 73)                                                                                                       \
+    X(Sub, 74)                                                                                                         \
+    X(Del, 75)                                                                                                         \
+    X(Mult, 76)                                                                                                        \
+    X(Div, 77)                                                                                                         \
+    X(USub, 78)                                                                                                        \
+    X(BitAnd, 79)                                                                                                      \
+    X(BitOr, 80)                                                                                                       \
+    X(BitXor, 81)                                                                                                      \
+    X(RShift, 82)                                                                                                      \
+    X(LShift, 83)                                                                                                      \
+    X(Invert, 84)                                                                                                      \
+    X(UAdd, 85)                                                                                                        \
+    X(FloorDiv, 86)                                                                                                    \
+    X(DictComp, 15)                                                                                                    \
+    X(Set, 43)                                                                                                         \
+    X(Ellipsis, 87)                                                                                                    \
+    /* like Module, but used for eval. */                                                                              \
+    X(Expression, 88)                                                                                                  \
+    X(SetComp, 89)                                                                                                     \
+    X(Suite, 90)                                                                                                       \
+                                                                                                                       \
+    /* Pseudo-nodes that are specific to this compiler: */                                                             \
+    X(Branch, 200)                                                                                                     \
+    X(Jump, 201)                                                                                                       \
+    X(ClsAttribute, 202)                                                                                               \
+    X(AugBinOp, 203)                                                                                                   \
+    X(Invoke, 204)                                                                                                     \
+    X(LangPrimitive, 205)                                                                                              \
+    /* wraps a ClassDef to make it an expr */                                                                          \
+    X(MakeClass, 206)                                                                                                  \
+    /* wraps a FunctionDef to make it an expr */                                                                       \
+    X(MakeFunction, 207)                                                                                               \
+                                                                                                                       \
+    /* These aren't real AST types, but since we use AST types to represent binexp types */                            \
+    /* and divmod+truediv are essentially types of binops, we add them here (at least for now): */                     \
+    X(DivMod, 250)                                                                                                     \
+    X(TrueDiv, 251)
 
 #define GENERATE_ENUM(ENUM, N) ENUM = N,
 #define GENERATE_STRING(STRING, N) m[N] = #STRING;
 
-enum AST_TYPE {
-    FOREACH_TYPE(GENERATE_ENUM)
-};
+enum AST_TYPE { FOREACH_TYPE(GENERATE_ENUM) };
 
-static const char *stringify(int n) {
+static const char* stringify(int n) {
     static std::map<int, const char*> m;
     FOREACH_TYPE(GENERATE_STRING)
     return m[n];
@@ -159,7 +157,6 @@ static const char *stringify(int n) {
 #undef FOREACH_TYPE
 #undef GENERATE_ENUM
 #undef GENERATE_STRING
-
 };
 
 class ASTVisitor;
@@ -737,6 +734,8 @@ public:
     // The interpreter and baseline JIT store variables with FAST and CLOSURE scopes in an array (vregs) this specifies
     // the zero based index of this variable inside the vregs array. If uninitialized it's value is -1.
     int vreg;
+
+    bool is_kill = false;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
@@ -1360,9 +1359,7 @@ private:
 public:
     PrintVisitor(int indent = 0, llvm::raw_ostream& stream = llvm::outs()) : stream(stream), indent(indent) {}
     virtual ~PrintVisitor() {}
-    void flush() {
-        stream.flush();
-    }
+    void flush() { stream.flush(); }
 
     virtual bool visit_alias(AST_alias* node);
     virtual bool visit_arguments(AST_arguments* node);
@@ -1435,7 +1432,7 @@ public:
 // Given an AST node, return a vector of the node plus all its descendents.
 // This is useful for analyses that care more about the constituent nodes than the
 // exact tree structure; ex, finding all "global" directives.
-void flatten(const std::vector<AST_stmt*>& roots, std::vector<AST*>& output, bool expand_scopes);
+void flatten(const llvm::SmallVector<AST_stmt*, 4>& roots, std::vector<AST*>& output, bool expand_scopes);
 void flatten(AST_expr* root, std::vector<AST*>& output, bool expand_scopes);
 // Similar to the flatten() function, but filters for a specific type of ast nodes:
 template <class T, class R> void findNodes(const R& roots, std::vector<T*>& output, bool expand_scopes) {
@@ -1452,7 +1449,7 @@ template <class T, class R> void findNodes(const R& roots, std::vector<T*>& outp
 void makeModuleInteractive(AST_Module* m);
 
 llvm::StringRef getOpSymbol(int op_type);
-BoxedString* getOpName(int op_type);
+BORROWED(BoxedString*) getOpName(int op_type);
 int getReverseCmpOp(int op_type, bool& success);
 BoxedString* getReverseOpName(int op_type);
 BoxedString* getInplaceOpName(int op_type);

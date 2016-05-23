@@ -53,6 +53,7 @@ Py_ssize_t slot_sq_length(PyObject* self) noexcept;
 PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept;
 PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept;
 int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept;
+int compatible_for_assignment(PyTypeObject* oldto, PyTypeObject* newto, const char* attr) noexcept;
 
 class GetattrRewriteArgs;
 template <ExceptionStyle S, Rewritable rewritable>

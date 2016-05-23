@@ -21,16 +21,10 @@ _Py_TrueStruct and _Py_ZeroStruct in boolobject.h; don't use this.
 extern "C" {
 #endif
 
-// Pyston change: this is not the format we're using
-// - actually I think it is but there's no reason to have multiple definitions.
-#if 0
 typedef struct {
     PyObject_HEAD
     long ob_ival;
 } PyIntObject;
-#endif
-struct _PyIntObject;
-typedef struct _PyIntObject PyIntObject;
 
 // Pyston change: this is no longer a static object
 PyAPI_DATA(PyTypeObject*) int_cls;

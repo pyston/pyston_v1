@@ -655,7 +655,7 @@ PyAPI_FUNC(int) PyUnicode_ClearFreeList(void) PYSTON_NOEXCEPT;
 
 */
 
-PyAPI_FUNC(PyObject *) _PyUnicode_AsDefaultEncodedString(
+PyAPI_FUNC(BORROWED(PyObject *)) _PyUnicode_AsDefaultEncodedString(
     PyObject *, const char *) PYSTON_NOEXCEPT;
 
 /* Returns the currently active default encoding.

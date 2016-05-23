@@ -33,6 +33,8 @@ public:
     BoxedCApiFunction(PyMethodDef* method_def, Box* passthrough, Box* module_name)
         : method_def(method_def), passthrough(passthrough), module(module_name) {
         assert(!module || PyString_Check(module_name));
+        Py_XINCREF(passthrough);
+        Py_XINCREF(module);
     }
 
     DEFAULT_CLASS(capifunc_cls);
@@ -57,7 +59,7 @@ public:
         const char* s = static_cast<BoxedCApiFunction*>(b)->method_def->ml_name;
         if (s)
             return boxString(s);
-        return None;
+        return incref(None);
     }
 
     static Box* doc(Box* b, void*) {
@@ -65,17 +67,32 @@ public:
         const char* s = static_cast<BoxedCApiFunction*>(b)->method_def->ml_doc;
         if (s)
             return boxString(s);
-        return None;
+        return incref(None);
     }
 
-    static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == capifunc_cls);
-        BoxedCApiFunction* o = static_cast<BoxedCApiFunction*>(_o);
+    static void dealloc(Box* _o) noexcept {
+        BoxedCApiFunction* o = (BoxedCApiFunction*)_o;
 
-        Box::gcHandler(v, o);
-        v->visitPotential(o->method_def);
-        v->visit(&o->passthrough);
-        v->visit(&o->module);
+        _PyObject_GC_UNTRACK(o);
+        Py_XDECREF(o->module);
+        Py_XDECREF(o->passthrough);
+        o->cls->tp_free(o);
+    }
+
+    static int traverse(Box* _o, visitproc visit, void* arg) noexcept {
+        BoxedCApiFunction* o = (BoxedCApiFunction*)_o;
+
+        Py_VISIT(o->module);
+        Py_VISIT(o->passthrough);
+        return 0;
+    }
+
+    static int clear(Box* _o) noexcept {
+        BoxedCApiFunction* o = (BoxedCApiFunction*)_o;
+
+        Py_CLEAR(o->module);
+        Py_CLEAR(o->passthrough);
+        return 0;
     }
 };
 static_assert(sizeof(BoxedCApiFunction) == sizeof(PyCFunctionObject), "");

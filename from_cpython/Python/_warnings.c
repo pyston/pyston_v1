@@ -44,7 +44,7 @@ get_warnings_attr(const char *attr)
     int result;
 
     if (warnings_str == NULL) {
-        warnings_str = PyString_InternFromString("warnings");
+        warnings_str = PyGC_RegisterStaticConstant(PyString_InternFromString("warnings"));
         if (warnings_str == NULL)
             return NULL;
     }
@@ -538,8 +538,8 @@ setup_context(Py_ssize_t stack_level, PyObject **filename, int *lineno,
                     goto handle_error;
                 }
                 else if (!is_true) {
-                     Py_DECREF(*filename);
-                     *filename = PyString_FromString("__main__");
+                    Py_DECREF(*filename);
+                    *filename = PyString_FromString("__main__");
                     if (*filename == NULL)
                         goto handle_error;
                 }
@@ -658,12 +658,12 @@ warnings_warn_explicit(PyObject *self, PyObject *args, PyObject *kwds)
         PyObject *returned;
 
         if (get_source_name == NULL) {
-            get_source_name = PyString_InternFromString("get_source");
+            get_source_name = PyGC_RegisterStaticConstant(PyString_InternFromString("get_source"));
             if (!get_source_name)
                 return NULL;
         }
         if (splitlines_name == NULL) {
-            splitlines_name = PyString_InternFromString("splitlines");
+            splitlines_name = PyGC_RegisterStaticConstant(PyString_InternFromString("splitlines"));
             if (!splitlines_name)
                 return NULL;
         }
@@ -812,7 +812,7 @@ create_filter(PyObject *category, const char *action)
 
     if (!strcmp(action, "ignore")) {
         if (ignore_str == NULL) {
-            ignore_str = PyString_InternFromString("ignore");
+            ignore_str = PyGC_RegisterStaticConstant(PyString_InternFromString("ignore"));
             if (ignore_str == NULL)
                 return NULL;
         }
@@ -820,7 +820,7 @@ create_filter(PyObject *category, const char *action)
     }
     else if (!strcmp(action, "error")) {
         if (error_str == NULL) {
-            error_str = PyString_InternFromString("error");
+            error_str = PyGC_RegisterStaticConstant(PyString_InternFromString("error"));
             if (error_str == NULL)
                 return NULL;
         }
@@ -828,7 +828,7 @@ create_filter(PyObject *category, const char *action)
     }
     else if (!strcmp(action, "default")) {
         if (default_str == NULL) {
-            default_str = PyString_InternFromString("default");
+            default_str = PyGC_RegisterStaticConstant(PyString_InternFromString("default"));
             if (default_str == NULL)
                 return NULL;
         }
@@ -901,8 +901,7 @@ _PyWarnings_Init(void)
     _filters = init_filters();
     if (_filters == NULL)
         return;
-    // Pyston change: let the GC scan the filters
-    PyGC_AddPotentialRoot(&_filters, sizeof(_filters));
+    PyGC_RegisterStaticConstantLocation(&_filters);
     Py_INCREF(_filters);
     if (PyModule_AddObject(m, "filters", _filters) < 0)
         return;
@@ -910,8 +909,7 @@ _PyWarnings_Init(void)
     _once_registry = PyDict_New();
     if (_once_registry == NULL)
         return;
-    // Pyston change: let the GC scan the registry
-    PyGC_AddPotentialRoot(&_once_registry, sizeof(_once_registry));
+    PyGC_RegisterStaticConstant(_once_registry);
     Py_INCREF(_once_registry);
     if (PyModule_AddObject(m, "once_registry", _once_registry) < 0)
         return;
@@ -919,8 +917,7 @@ _PyWarnings_Init(void)
     _default_action = PyString_FromString("default");
     if (_default_action == NULL)
         return;
-    // Pyston change: let the GC scan the action
-    PyGC_AddPotentialRoot(&_default_action, sizeof(_default_action));
+    PyGC_RegisterStaticConstant(_default_action);
     Py_INCREF(_default_action);
     if (PyModule_AddObject(m, "default_action", _default_action) < 0)
         return;

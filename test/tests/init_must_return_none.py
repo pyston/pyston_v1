@@ -1,4 +1,3 @@
-# should_error
 # As the test filename says, init functions must return None.
 # This file tests that; it also makes sure that it gets tested
 # when in a patchpoint.
@@ -11,5 +10,8 @@ class C(object):
 
 # Call it in a loop to make sure that the constructor gets inlined:
 for i in xrange(1000):
-    c = C(i)
-    print c.n
+    try:
+        c = C(i)
+        print c.n
+    except Exception as e:
+        print e

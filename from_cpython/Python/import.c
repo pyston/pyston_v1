@@ -192,9 +192,6 @@ _PyImport_Init(void)
 
     _PyImport_Filetab = filetab;
 
-    // Pyston change:
-    PyGC_AddPotentialRoot(&_PyImport_Filetab, sizeof(void*));
-
     if (Py_OptimizeFlag) {
         /* Replace ".pyc" with ".pyo" in _PyImport_Filetab */
         for (; filetab->suffix != NULL; filetab++) {
@@ -443,16 +440,16 @@ static char* sys_files[] = {
 
 
 /* Un-initialize things, as good as we can */
-// Pyston change: we don't support calling cleanup currently
-#if 0
 void
 PyImport_Cleanup(void)
 {
     Py_ssize_t pos, ndone;
     char *name;
     PyObject *key, *value, *dict;
-    PyInterpreterState *interp = PyThreadState_GET()->interp;
-    PyObject *modules = interp->modules;
+    // Pyston change:
+    //PyInterpreterState *interp = PyThreadState_GET()->interp;
+    //PyObject *modules = interp->modules;
+    PyObject *modules = PySys_GetModulesDict();
 
     if (modules == NULL)
         return; /* Already done */
@@ -571,12 +568,14 @@ PyImport_Cleanup(void)
 
     /* Finally, clear and delete the modules directory */
     PyDict_Clear(modules);
-    interp->modules = NULL;
-    Py_DECREF(modules);
-    Py_CLEAR(interp->modules_reloading);
+    // Pyston change:
+    //interp->modules = NULL;
+    //Py_DECREF(modules);
+    //Py_CLEAR(interp->modules_reloading);
 }
 
 
+#if 0
 /* Helper for pythonrun.c -- return magic number */
 
 long
@@ -601,7 +600,7 @@ _PyImport_FixupExtension(char *name, char *filename)
 {
     PyObject *modules, *mod, *dict, *copy;
     if (extensions == NULL) {
-        extensions = PyGC_AddRoot(PyDict_New());
+        extensions = PyDict_New();
         if (extensions == NULL)
             return NULL;
     }
@@ -2362,17 +2361,17 @@ get_parent(PyObject *globals, char *buf, Py_ssize_t *p_buflen, int level)
         return Py_None;
 
     if (namestr == NULL) {
-        namestr = PyGC_AddRoot(PyString_InternFromString("__name__"));
+        namestr = PyGC_RegisterStaticConstant(PyString_InternFromString("__name__"));
         if (namestr == NULL)
             return NULL;
     }
     if (pathstr == NULL) {
-        pathstr = PyGC_AddRoot(PyString_InternFromString("__path__"));
+        pathstr = PyGC_RegisterStaticConstant(PyString_InternFromString("__path__"));
         if (pathstr == NULL)
             return NULL;
     }
     if (pkgstr == NULL) {
-        pkgstr = PyGC_AddRoot(PyString_InternFromString("__package__"));
+        pkgstr = PyGC_RegisterStaticConstant(PyString_InternFromString("__package__"));
         if (pkgstr == NULL)
             return NULL;
     }
@@ -2775,7 +2774,7 @@ PyImport_ReloadModule(PyObject *m)
 
     // Pyston change: initalize static variable
     if (!modules_reloading)
-        modules_reloading = PyGC_AddRoot(PyDict_New());
+        modules_reloading = PyGC_RegisterStaticConstant(PyDict_New());
 
     if (modules_reloading == NULL) {
         Py_FatalError("PyImport_ReloadModule: "
@@ -2889,13 +2888,13 @@ PyImport_Import(PyObject *module_name)
 
     /* Initialize constant string objects */
     if (silly_list == NULL) {
-        import_str = PyGC_AddRoot(PyString_InternFromString("__import__"));
+        import_str = PyGC_RegisterStaticConstant(PyString_InternFromString("__import__"));
         if (import_str == NULL)
             return NULL;
-        builtins_str = PyGC_AddRoot(PyString_InternFromString("__builtins__"));
+        builtins_str = PyGC_RegisterStaticConstant(PyString_InternFromString("__builtins__"));
         if (builtins_str == NULL)
             return NULL;
-        silly_list = PyGC_AddRoot(Py_BuildValue("[s]", "__doc__"));
+        silly_list = PyGC_RegisterStaticConstant(Py_BuildValue("[s]", "__doc__"));
         if (silly_list == NULL)
             return NULL;
     }
@@ -3495,10 +3494,6 @@ PyImport_ExtendInittab(struct _inittab *newtab)
         return 0; /* Nothing to do */
     for (i = 0; PyImport_Inittab[i].name != NULL; i++)
         ;
-
-    // Pyston change: Let the GC know about the variable
-    if (!our_copy)
-         PyGC_AddPotentialRoot(&our_copy, sizeof(void*));
 
     /* Allocate new memory for the combined table */
     p = our_copy;

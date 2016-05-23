@@ -213,12 +213,16 @@ private:
         return source->getInternedStrings().get(std::move(name));
     }
 
-    AST_Name* makeName(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0) {
+    AST_Name* makeName(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0,
+                       bool is_kill = false) {
         AST_Name* name = new AST_Name(id, ctx_type, lineno, col_offset);
+        name->is_kill = is_kill;
         return name;
     }
 
-    AST_Name* makeLoad(InternedString id, AST* node) { return makeName(id, AST_TYPE::Load, node->lineno); }
+    AST_Name* makeLoad(InternedString id, AST* node, bool is_kill = false) {
+        return makeName(id, AST_TYPE::Load, node->lineno, 0, is_kill);
+    }
 
     void pushLoopContinuation(CFGBlock* continue_dest, CFGBlock* break_dest) {
         assert(continue_dest
@@ -271,7 +275,8 @@ private:
             }
         }
 
-        raiseSyntaxError("'continue' not properly in loop", value->lineno, value->col_offset, source->getFn()->s(), "", true);
+        raiseSyntaxError("'continue' not properly in loop", value->lineno, value->col_offset, source->getFn()->s(), "",
+                         true);
     }
 
     void doBreak(AST* value) {
@@ -304,7 +309,7 @@ private:
 
         auto name = nodeName();
         pushAssign(name, call);
-        return makeLoad(name, e);
+        return makeLoad(name, e, true);
     }
 
     AST_Name* remapName(AST_Name* name) { return name; }
@@ -369,7 +374,7 @@ private:
             curblock = body_block;
             InternedString next_name(nodeName());
             pushAssign(next_name, makeCall(next_attr));
-            pushAssign(c->target, makeLoad(next_name, node));
+            pushAssign(c->target, makeLoad(next_name, node, true));
 
             for (AST_expr* if_condition : c->ifs) {
                 AST_expr* remapped = callNonzero(remapExpr(if_condition));
@@ -401,6 +406,7 @@ private:
             assert((finished_block != NULL) == (i != 0));
             if (finished_block) {
                 curblock = exit_block;
+                push_back(makeKill(iter_name));
                 pushJump(finished_block, true);
             }
             finished_block = test_block;
@@ -426,7 +432,7 @@ private:
             // printf("Exit block for comp %d is %d\n", i, exit_blocks[i]->idx);
         }
 
-        return makeLoad(rtn_name, node);
+        return makeLoad(rtn_name, node, /* is_kill */ true);
     }
 
     AST_expr* makeNum(int n) {
@@ -470,9 +476,9 @@ private:
     void pushReraise(AST* node, InternedString exc_type_name, InternedString exc_value_name,
                      InternedString exc_traceback_name) {
         auto raise = new AST_Raise();
-        raise->arg0 = makeLoad(exc_type_name, node);
-        raise->arg1 = makeLoad(exc_value_name, node);
-        raise->arg2 = makeLoad(exc_traceback_name, node);
+        raise->arg0 = makeLoad(exc_type_name, node, true);
+        raise->arg1 = makeLoad(exc_value_name, node, true);
+        raise->arg2 = makeLoad(exc_traceback_name, node, true);
         push_back(raise);
         curblock = nullptr;
     }
@@ -596,7 +602,7 @@ private:
                 InternedString tmp_name = nodeName("", i);
                 new_target->elts.push_back(makeName(tmp_name, AST_TYPE::Store, target->lineno));
 
-                pushAssign((*elts)[i], makeLoad(tmp_name, target));
+                pushAssign((*elts)[i], makeLoad(tmp_name, target, /* is_kill */ true));
             }
         } else {
             RELEASE_ASSERT(0, "%d", target->type);
@@ -732,10 +738,10 @@ private:
 
         for (int i = 0; i < node->values.size() - 1; i++) {
             AST_expr* val = remapExpr(node->values[i]);
-            pushAssign(name, val);
+            pushAssign(name, _dup(val));
 
             AST_Branch* br = new AST_Branch();
-            br->test = callNonzero(_dup(val));
+            br->test = callNonzero(val);
             push_back(br);
 
             CFGBlock* was_block = curblock;
@@ -767,7 +773,7 @@ private:
         cfg->placeBlock(exit_block);
         curblock = exit_block;
 
-        return makeLoad(name, node);
+        return makeLoad(name, node, true);
     }
 
     AST_expr* remapCall(AST_Call* node) {
@@ -837,17 +843,24 @@ private:
             AST_expr* left = remapExpr(node->left);
 
             for (int i = 0; i < node->ops.size(); i++) {
+                if (i > 0)
+                    push_back(makeKill(name));
+
                 AST_expr* right = remapExpr(node->comparators[i]);
 
                 AST_Compare* val = new AST_Compare;
                 val->col_offset = node->col_offset;
                 val->lineno = node->lineno;
                 val->left = left;
-                val->comparators.push_back(right);
+                if (i < node->ops.size() - 1)
+                    val->comparators.push_back(_dup(right));
+                else
+                    val->comparators.push_back(right);
                 val->ops.push_back(node->ops[i]);
 
                 pushAssign(name, val);
 
+                // TODO: this branch is unused for the last comparison
                 AST_Branch* br = new AST_Branch();
                 br->test = callNonzero(makeLoad(name, node));
                 push_back(br);
@@ -866,14 +879,14 @@ private:
 
                 curblock = next_block;
 
-                left = _dup(right);
+                left = right;
             }
 
             pushJump(exit_block);
             cfg->placeBlock(exit_block);
             curblock = exit_block;
 
-            return makeLoad(name, node);
+            return makeLoad(name, node, true);
         }
     }
 
@@ -965,7 +978,7 @@ private:
         AST_MakeFunction* func = makeFunctionForScope(node);
         func->function_def->args->args.push_back(makeName(arg_name, AST_TYPE::Param, node->lineno));
         emitComprehensionLoops(&func->function_def->body, node->generators,
-                               makeName(arg_name, AST_TYPE::Load, node->lineno),
+                               makeName(arg_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true),
                                [this, node](std::vector<AST_stmt*>* insert_point) {
                                    auto y = new AST_Yield();
                                    y->value = node->elt;
@@ -975,7 +988,7 @@ private:
         InternedString func_var_name = nodeName();
         pushAssign(func_var_name, func);
 
-        return makeCall(makeLoad(func_var_name, node), first);
+        return makeCall(makeLoad(func_var_name, node, true), first);
     }
 
     void emitComprehensionYield(AST_DictComp* node, InternedString dict_name, std::vector<AST_stmt*>* insert_point) {
@@ -1007,17 +1020,19 @@ private:
 
         auto lambda =
             [&](std::vector<AST_stmt*>* insert_point) { emitComprehensionYield(node, rtn_name, insert_point); };
-        AST_Name* first_name = makeName(internString("#arg"), AST_TYPE::Load, node->lineno);
+        AST_Name* first_name
+            = makeName(internString("#arg"), AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true);
         emitComprehensionLoops(&func->function_def->body, node->generators, first_name, lambda);
 
         auto rtn = new AST_Return();
-        rtn->value = makeName(rtn_name, AST_TYPE::Load, node->lineno);
+        rtn->value = makeName(rtn_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true);
         func->function_def->body.push_back(rtn);
 
         InternedString func_var_name = nodeName();
         pushAssign(func_var_name, func);
 
-        return makeCall(makeName(func_var_name, AST_TYPE::Load, node->lineno), first);
+        return makeCall(makeName(func_var_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true),
+                        first);
     }
 
     AST_expr* remapIfExp(AST_IfExp* node) {
@@ -1048,7 +1063,7 @@ private:
         cfg->placeBlock(exit_block);
         curblock = exit_block;
 
-        return makeLoad(rtn_name, node);
+        return makeLoad(rtn_name, node, true);
     }
 
     AST_slice* remapIndex(AST_Index* node) {
@@ -1184,7 +1199,7 @@ private:
         if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda)
             raiseExcHelper(SyntaxError, "'yield' outside function");
 
-        return makeLoad(node_name, node);
+        return makeLoad(node_name, node, /* is_kill */ true);
     }
 
     AST_slice* remapSlice(AST_slice* node) {
@@ -1302,7 +1317,7 @@ private:
         if (wrap_with_assign && (rtn->type != AST_TYPE::Name || ast_cast<AST_Name>(rtn)->id.s()[0] != '#')) {
             InternedString name = nodeName();
             pushAssign(name, rtn);
-            return makeLoad(name, node);
+            return makeLoad(name, node, true);
         } else {
             return rtn;
         }
@@ -1322,7 +1337,7 @@ private:
     void exitFinally(AST* node, Why why, CFGBlock* exit_block = nullptr) {
         switch (why) {
             case Why::RETURN:
-                doReturn(makeLoad(internString(RETURN_NAME), node));
+                doReturn(makeLoad(internString(RETURN_NAME), node, true));
                 break;
             case Why::BREAK:
                 doBreak(node);
@@ -1344,14 +1359,14 @@ private:
     // helper for visit_{with,tryfinally}. Generates a branch testing the value of `whyexpr' against `why', and
     // performing the appropriate exit from the with-block if they are equal.
     // NB. `exit_block' is only used if `why' is FALLTHROUGH.
-    void exitFinallyIf(AST* node, Why why, InternedString whyname, CFGBlock* exit_block = nullptr) {
+    void exitFinallyIf(AST* node, Why why, InternedString whyname, bool is_kill = false) {
         CFGBlock* do_exit = cfg->addDeferredBlock();
         do_exit->info = "with_exit_if";
-        CFGBlock* otherwise = makeFinallyCont(why, makeLoad(whyname, node), do_exit);
+        CFGBlock* otherwise = makeFinallyCont(why, makeLoad(whyname, node, is_kill), do_exit);
 
         cfg->placeBlock(do_exit);
         curblock = do_exit;
-        exitFinally(node, why, exit_block);
+        exitFinally(node, why);
 
         curblock = otherwise;
     }
@@ -1421,7 +1436,9 @@ public:
             }
         }
 
-        bool is_raise = (node->type == AST_TYPE::Raise);
+        // We remapped asserts to just be assertion failures at this point.
+        bool is_raise = (node->type == AST_TYPE::Raise || node->type == AST_TYPE::Assert);
+
         // If we invoke a raise statement, generate an invoke where both destinations
         // are the exception handler, since we know the non-exceptional path won't be taken.
         // TODO: would be much better (both more efficient and require less special casing)
@@ -1449,6 +1466,7 @@ public:
         ExcBlockInfo& exc_info = exc_handlers.back();
 
         curblock = exc_dest;
+        // TODO: need to clear some temporaries here
         AST_Assign* exc_asgn = new AST_Assign();
         AST_Tuple* target = new AST_Tuple();
         target->elts.push_back(makeName(exc_info.exc_type_name, AST_TYPE::Store, node->lineno));
@@ -1486,7 +1504,7 @@ public:
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeClass(def));
         // is this name mangling correct?
-        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
+        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, 0, true));
 
         return true;
     }
@@ -1508,7 +1526,7 @@ public:
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeFunction(def));
         // is this name mangling correct?
-        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
+        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, node->col_offset, true));
 
         return true;
     }
@@ -1554,7 +1572,7 @@ public:
             if (a->asname.s().size() == 0) {
                 // No asname, so load the top-level module into the name
                 // (e.g., for `import os.path`, loads the os module into `os`)
-                pushAssign(internString(getTopModule(a->name.s())), makeLoad(tmpname, node));
+                pushAssign(internString(getTopModule(a->name.s())), makeLoad(tmpname, node, /* is_kill */ true));
             } else {
                 // If there is an asname, get the bottom-level module by
                 // getting the attributes and load it into asname.
@@ -1568,11 +1586,11 @@ public:
                         l = r + 1;
                         continue;
                     }
-                    pushAssign(tmpname, new AST_Attribute(makeLoad(tmpname, node), AST_TYPE::Load,
+                    pushAssign(tmpname, new AST_Attribute(makeLoad(tmpname, node, true), AST_TYPE::Load,
                                                           internString(a->name.s().substr(l, r - l))));
                     l = r + 1;
                 } while (l < a->name.s().size());
-                pushAssign(a->asname, makeLoad(tmpname, node));
+                pushAssign(a->asname, makeLoad(tmpname, node, true));
             }
         }
 
@@ -1607,13 +1625,16 @@ public:
         InternedString tmp_module_name = nodeName();
         pushAssign(tmp_module_name, import);
 
+        int i = 0;
         for (AST_alias* a : node->names) {
+            i++;
+            bool is_kill = (i == node->names.size());
             if (a->name.s() == "*") {
 
                 AST_LangPrimitive* import_star = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_STAR);
                 import_star->lineno = node->lineno;
                 import_star->col_offset = node->col_offset;
-                import_star->args.push_back(makeLoad(tmp_module_name, node));
+                import_star->args.push_back(makeLoad(tmp_module_name, node, is_kill));
 
                 AST_Expr* import_star_expr = new AST_Expr();
                 import_star_expr->value = import_star;
@@ -1625,12 +1646,12 @@ public:
                 AST_LangPrimitive* import_from = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_FROM);
                 import_from->lineno = node->lineno;
                 import_from->col_offset = node->col_offset;
-                import_from->args.push_back(makeLoad(tmp_module_name, node));
+                import_from->args.push_back(makeLoad(tmp_module_name, node, is_kill));
                 import_from->args.push_back(new AST_Str(a->name.s()));
 
                 InternedString tmp_import_name = nodeName();
                 pushAssign(tmp_import_name, import_from);
-                pushAssign(a->asname.s().size() ? a->asname : a->name, makeLoad(tmp_import_name, node));
+                pushAssign(a->asname.s().size() ? a->asname : a->name, makeLoad(tmp_import_name, node, true));
             }
         }
 
@@ -1657,9 +1678,6 @@ public:
 
         curblock = iffalse;
 
-        // The rest of this is pretty hacky:
-        // Emit a "assert(0, msg()); while (1) {}" section that basically captures
-        // what the assert will do but in a very hacky way.
         AST_Assert* remapped = new AST_Assert();
         if (node->msg)
             remapped->msg = remapExpr(node->msg);
@@ -1673,13 +1691,6 @@ public:
         remapped->col_offset = node->col_offset;
         push_back(remapped);
 
-        CFGBlock* unreachable = cfg->addBlock();
-        unreachable->info = "unreachable";
-        pushJump(unreachable);
-
-        curblock = unreachable;
-        pushJump(unreachable, true);
-
         curblock = iftrue;
 
         return true;
@@ -1688,8 +1699,13 @@ public:
     bool visit_assign(AST_Assign* node) override {
         AST_expr* remapped_value = remapExpr(node->value);
 
-        for (AST_expr* target : node->targets) {
-            pushAssign(target, _dup(remapped_value));
+        for (int i = 0; i < node->targets.size(); i++) {
+            AST_expr* val;
+            if (i == node->targets.size() - 1)
+                val = remapped_value;
+            else
+                val = _dup(remapped_value);
+            pushAssign(node->targets[i], val);
         }
         return true;
     }
@@ -1723,7 +1739,7 @@ public:
                 InternedString n_name(nodeName());
                 pushAssign(n_name, makeLoad(n->id, node));
                 remapped_target = n;
-                remapped_lhs = makeLoad(n_name, node);
+                remapped_lhs = makeLoad(n_name, node, /* is_kill */ true);
                 break;
             }
             case AST_TYPE::Subscript: {
@@ -1783,7 +1799,7 @@ public:
 
         InternedString node_name(nodeName());
         pushAssign(node_name, binop);
-        pushAssign(remapped_target, makeLoad(node_name, node));
+        pushAssign(remapped_target, makeLoad(node_name, node, true));
         return true;
     }
 
@@ -1876,13 +1892,14 @@ public:
             AST_Print* remapped = new AST_Print();
             remapped->col_offset = node->col_offset;
             remapped->lineno = node->lineno;
-            // TODO not good to reuse 'dest' like this
-            remapped->dest = _dup(dest);
 
-            if (i < node->values.size() - 1)
+            if (i < node->values.size() - 1) {
+                remapped->dest = _dup(dest);
                 remapped->nl = false;
-            else
+            } else {
+                remapped->dest = dest;
                 remapped->nl = node->nl;
+            }
 
             remapped->values.push_back(remapExpr(v));
             push_back(remapped);
@@ -2057,6 +2074,13 @@ public:
         return true;
     }
 
+    AST_stmt* makeKill(InternedString name) {
+        // There might be a better way to represent this, maybe with a dedicated AST_Kill bytecode?
+        auto del = new AST_Delete();
+        del->targets.push_back(makeName(name, AST_TYPE::Del, 0, 0, false));
+        return del;
+    }
+
     bool visit_for(AST_For* node) override {
         assert(curblock);
 
@@ -2100,12 +2124,13 @@ public:
         curblock = test_false;
         pushJump(else_block);
 
+        // TODO: need to del the iter_name when break'ing out of the loop
         pushLoopContinuation(test_block, end_block);
 
         curblock = loop_block;
         InternedString next_name(nodeName());
         pushAssign(next_name, makeCall(next_attr));
-        pushAssign(node->target, makeLoad(next_name, node));
+        pushAssign(node->target, makeLoad(next_name, node, true));
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
@@ -2137,6 +2162,7 @@ public:
         cfg->placeBlock(else_block);
         curblock = else_block;
 
+        push_back(makeKill(itername));
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);
             if (!curblock)
@@ -2261,15 +2287,15 @@ public:
                     caught_all = true;
                 }
 
-                AST_LangPrimitive* set_exc_info = new AST_LangPrimitive(AST_LangPrimitive::SET_EXC_INFO);
-                set_exc_info->args.push_back(makeLoad(exc_type_name, node));
-                set_exc_info->args.push_back(makeLoad(exc_value_name, node));
-                set_exc_info->args.push_back(makeLoad(exc_traceback_name, node));
-                push_back(makeExpr(set_exc_info));
-
                 if (exc_handler->name) {
                     pushAssign(exc_handler->name, _dup(exc_obj));
                 }
+
+                AST_LangPrimitive* set_exc_info = new AST_LangPrimitive(AST_LangPrimitive::SET_EXC_INFO);
+                set_exc_info->args.push_back(makeLoad(exc_type_name, node, true));
+                set_exc_info->args.push_back(makeLoad(exc_value_name, node, true));
+                set_exc_info->args.push_back(makeLoad(exc_traceback_name, node, true));
+                push_back(makeExpr(set_exc_info));
 
                 for (AST_stmt* subnode : exc_handler->body) {
                     subnode->accept(this);
@@ -2291,9 +2317,9 @@ public:
 
             if (!caught_all) {
                 AST_Raise* raise = new AST_Raise();
-                raise->arg0 = makeLoad(exc_type_name, node);
-                raise->arg1 = makeLoad(exc_value_name, node);
-                raise->arg2 = makeLoad(exc_traceback_name, node);
+                raise->arg0 = makeLoad(exc_type_name, node, true);
+                raise->arg1 = makeLoad(exc_value_name, node, true);
+                raise->arg2 = makeLoad(exc_traceback_name, node, true);
                 push_back(raise);
                 curblock = NULL;
             }
@@ -2368,7 +2394,7 @@ public:
                 exitFinallyIf(node, Why::CONTINUE, exc_why_name);
 
             CFGBlock* reraise = cfg->addDeferredBlock();
-            CFGBlock* noexc = makeFinallyCont(Why::EXCEPTION, makeLoad(exc_why_name, node), reraise);
+            CFGBlock* noexc = makeFinallyCont(Why::EXCEPTION, makeLoad(exc_why_name, node, true), reraise);
 
             cfg->placeBlock(reraise);
             curblock = reraise;
@@ -2425,7 +2451,7 @@ public:
 
         // Oddly, this acces to __enter__ doesn't suffer from the same bug. Perhaps it has something to do with
         // __enter__ being called immediately?
-        AST_expr* enter = makeLoadAttribute(makeLoad(ctxmgrname, node), internString("__enter__"), true);
+        AST_expr* enter = makeLoadAttribute(makeLoad(ctxmgrname, node, true), internString("__enter__"), true);
         enter = remapExpr(makeCall(enter));
         if (node->optional_vars)
             pushAssign(node->optional_vars, enter);
@@ -2467,7 +2493,7 @@ public:
 
             // call the context-manager's exit method
             InternedString suppressname = nodeName("suppress");
-            pushAssign(suppressname, makeCall(makeLoad(exitname, node), makeLoad(exc_type_name, node),
+            pushAssign(suppressname, makeCall(makeLoad(exitname, node, true), makeLoad(exc_type_name, node),
                                               makeLoad(exc_value_name, node), makeLoad(exc_traceback_name, node)));
 
             // if it returns true, suppress the error and go to our exit block
@@ -2476,7 +2502,7 @@ public:
             // break potential critical edge
             CFGBlock* exiter = cfg->addDeferredBlock();
             exiter->info = "with_exiter";
-            pushBranch(makeLoad(suppressname, node), exiter, reraise_block);
+            pushBranch(makeLoad(suppressname, node, true), exiter, reraise_block);
 
             cfg->placeBlock(exiter);
             curblock = exiter;
@@ -2496,15 +2522,15 @@ public:
             cfg->placeBlock(finally_block);
             curblock = finally_block;
             // call the context-manager's exit method, ignoring result
-            push_back(makeExpr(makeCall(makeLoad(exitname, node), makeLoad(nonename, node), makeLoad(nonename, node),
-                                        makeLoad(nonename, node))));
+            push_back(makeExpr(makeCall(makeLoad(exitname, node, true), makeLoad(nonename, node),
+                                        makeLoad(nonename, node), makeLoad(nonename, node))));
 
             if (finally_did_why & (1 << Why::CONTINUE))
-                exitFinallyIf(node, Why::CONTINUE, whyname);
+                exitFinallyIf(node, Why::CONTINUE, whyname, /* is_kill */ finally_did_why == (1 << Why::CONTINUE));
             if (finally_did_why & (1 << Why::BREAK))
-                exitFinallyIf(node, Why::BREAK, whyname);
+                exitFinallyIf(node, Why::BREAK, whyname, /* is_kill */ !(finally_did_why & (1 << Why::RETURN)));
             if (finally_did_why & (1 << Why::RETURN))
-                exitFinallyIf(node, Why::RETURN, whyname);
+                exitFinallyIf(node, Why::RETURN, whyname, /* is_kill */ true);
             exitFinally(node, Why::FALLTHROUGH, exit_block);
         }
 
@@ -2535,7 +2561,8 @@ public:
     llvm::DenseMap<InternedString, int> sym_vreg_map;
     ScopeInfo* scope_info;
 
-    AssignVRegsVisitor(ScopeInfo* scope_info, bool only_user_visible) : only_user_visible(only_user_visible), scope_info(scope_info) {}
+    AssignVRegsVisitor(ScopeInfo* scope_info, bool only_user_visible)
+        : only_user_visible(only_user_visible), scope_info(scope_info) {}
 
     bool visit_arguments(AST_arguments* node) override {
         for (AST_expr* d : node->defaults)
@@ -2594,8 +2621,9 @@ void CFG::assignVRegs(const ParamNames& param_names, ScopeInfo* scope_info) {
 
     AssignVRegsVisitor visitor(scope_info, true);
 
-    // we need todo two passes: first we assign the user visible vars a vreg and then the compiler created get there value.
-    for (int i=0; i<2; ++i) {
+    // we need todo two passes: first we assign the user visible vars a vreg and then the compiler created get there
+    // value.
+    for (int i = 0; i < 2; ++i) {
         for (CFGBlock* b : blocks) {
             for (AST_stmt* stmt : b->body) {
                 stmt->accept(&visitor);
@@ -2639,7 +2667,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
             new AST_Name(source->getInternedStrings().get("__module__"), AST_TYPE::Store, source->ast->lineno));
 
         if (source->scoping->areGlobalsFromModule()) {
-            static BoxedString* name_str = internStringImmortal("__name__");
+            static BoxedString* name_str = getStaticString("__name__");
             Box* module_name = source->parent_module->getattr(name_str);
             assert(module_name->cls == str_cls);
             module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s());
@@ -2742,7 +2770,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         if (b->successors.size() == 0) {
             AST_stmt* terminator = b->body.back();
             assert(terminator->type == AST_TYPE::Return || terminator->type == AST_TYPE::Raise
-                   || terminator->type == AST_TYPE::Raise);
+                   || terminator->type == AST_TYPE::Raise || terminator->type == AST_TYPE::Assert);
         }
 
         if (b->predecessors.size() == 0) {
@@ -2864,5 +2892,9 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
 
 
     return rtn;
+}
+
+void printCFG(CFG* cfg) {
+    cfg->print();
 }
 }

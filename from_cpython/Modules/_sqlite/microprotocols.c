@@ -44,6 +44,7 @@ pysqlite_microprotocols_init(PyObject *dict)
     if ((psyco_adapters = PyDict_New()) == NULL) {
         return -1;
     }
+    PyGC_RegisterStaticConstant(psyco_adapters);
 
     return PyDict_SetItemString(dict, "adapters", psyco_adapters);
 }

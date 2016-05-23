@@ -27,16 +27,16 @@ extern "C" PyObject* PyBool_FromLong(long n) noexcept {
 }
 
 extern "C" Box* boolNonzero(BoxedBool* v) {
-    return v;
+    return incref(v);
 }
 
 extern "C" Box* boolRepr(BoxedBool* v) {
-    static BoxedString* true_str = internStringImmortal("True");
-    static BoxedString* false_str = internStringImmortal("False");
+    static BoxedString* true_str = getStaticString("True");
+    static BoxedString* false_str = getStaticString("False");
 
     if (v == True)
-        return true_str;
-    return false_str;
+        return incref(true_str);
+    return incref(false_str);
 }
 
 size_t bool_hash(BoxedBool* v) {
@@ -105,8 +105,5 @@ void setupBool() {
 
     bool_cls->freeze();
     bool_cls->tp_hash = (hashfunc)bool_hash;
-}
-
-void teardownBool() {
 }
 }

@@ -37,6 +37,7 @@ BaseException_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (!self)
         return NULL;
     self->message = NULL;
+    // Pyston change:
     PyObject_InitHcAttrs(&self->hcattrs);
 
     self->args = PyTuple_New(0);
@@ -72,6 +73,7 @@ BaseException_init(PyBaseExceptionObject *self, PyObject *args, PyObject *kwds)
     return 0;
 }
 
+// Pyston addition:
 PyObject* PyErr_CreateExceptionInstance(PyObject* _type, PyObject* arg) {
     if (PyType_Check(_type) && ((PyTypeObject*)_type)->tp_new == (newfunc)BaseException_new &&
             ((PyTypeObject*)_type)->tp_init == (initproc)BaseException_init) {
@@ -87,18 +89,29 @@ PyObject* PyErr_CreateExceptionInstance(PyObject* _type, PyObject* arg) {
         PyObject_InitHcAttrs(&self->hcattrs);
         if (arg) {
             self->args = PyTuple_Pack(1, arg);
-            if (!self->args)
+            if (!self->args) {
+                Py_DECREF(self);
                 return NULL;
+            }
+            Py_INCREF(arg);
             self->message = arg;
         } else {
             self->args = PyTuple_New(0);
-            self->message = PyString_FromString("");
-            if (!self->message)
+            if (!self->args) {
+                Py_DECREF(self);
                 return NULL;
+            }
+            self->message = PyString_FromString("");
+            if (!self->message) {
+                Py_DECREF(self->args);
+                Py_DECREF(self);
+                return NULL;
+            }
         }
         return (PyObject*)self;
     } else {
         // Fallback
+        PyObject* rtn;
         PyObject* args;
         if (arg == NULL)
             args = PyTuple_New(0);
@@ -108,7 +121,9 @@ PyObject* PyErr_CreateExceptionInstance(PyObject* _type, PyObject* arg) {
         if (args == NULL)
             return NULL;
 
-        return PyObject_Call(_type, args, NULL);
+        rtn = PyObject_Call(_type, args, NULL);
+        Py_DECREF(args);
+        return rtn;
     }
 }
 
@@ -117,6 +132,7 @@ BaseException_clear(PyBaseExceptionObject *self)
 {
     // Pyston change:
     // Py_CLEAR(self->dict);
+    PyObject_ClearHcAttrs(&self->hcattrs);
     Py_CLEAR(self->args);
     Py_CLEAR(self->message);
     return 0;
@@ -135,6 +151,9 @@ BaseException_traverse(PyBaseExceptionObject *self, visitproc visit, void *arg)
 {
     // Pyston change:
     // Py_VISIT(self->dict);
+    int vret = PyObject_TraverseHcAttrs(&self->hcattrs, visit, arg);
+    if (vret)
+        return vret;
     Py_VISIT(self->args);
     Py_VISIT(self->message);
     return 0;
@@ -843,7 +862,9 @@ EnvironmentError_reduce(PyEnvironmentErrorObject *self)
     PyObject* attr_wrapper = PyObject_GetAttrWrapper((PyObject*)self);
     if (!attr_wrapper)
         return NULL;
-    return PyTuple_Pack(3, Py_TYPE(self), args, attr_wrapper);
+    res = PyTuple_Pack(3, Py_TYPE(self), args, attr_wrapper);
+    Py_DECREF(args);
+    return res;
 }
 
 
@@ -2246,15 +2267,20 @@ _PyExc_Init(void)
     POST_INIT(UnicodeWarning)
     POST_INIT(BytesWarning)
 
-    PyExc_MemoryErrorInst = PyGC_AddRoot(BaseException_new(&_PyExc_MemoryError, NULL, NULL));
+    PyExc_MemoryErrorInst = BaseException_new(&_PyExc_MemoryError, NULL, NULL);
     if (!PyExc_MemoryErrorInst)
         Py_FatalError("Cannot pre-allocate MemoryError instance");
+    // Pyston addition:
+    PyGC_RegisterStaticConstant(PyExc_MemoryErrorInst);
 
-    PyExc_RecursionErrorInst = PyGC_AddRoot(BaseException_new(&_PyExc_RuntimeError, NULL, NULL));
+    PyExc_RecursionErrorInst = BaseException_new(&_PyExc_RuntimeError, NULL, NULL);
     if (!PyExc_RecursionErrorInst)
         Py_FatalError("Cannot pre-allocate RuntimeError instance for "
                         "recursion errors");
     else {
+        // Pyston addition:
+        PyGC_RegisterStaticConstant(PyExc_RecursionErrorInst);
+
         PyBaseExceptionObject *err_inst =
             (PyBaseExceptionObject *)PyExc_RecursionErrorInst;
         PyObject *args_tuple;

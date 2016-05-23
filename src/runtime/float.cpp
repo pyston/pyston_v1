@@ -41,6 +41,86 @@ extern "C" int float_pow_unboxed(double iv, double iw, double* res) noexcept;
 
 namespace pyston {
 
+/* Special free list -- see comments for same code in intobject.c. */
+#define BLOCK_SIZE 1000 /* 1K less typical malloc overhead */
+#define BHEAD_SIZE 8    /* Enough for a 64-bit pointer */
+#define N_FLOATOBJECTS ((BLOCK_SIZE - BHEAD_SIZE) / sizeof(PyFloatObject))
+
+struct _floatblock {
+    struct _floatblock* next;
+    PyFloatObject objects[N_FLOATOBJECTS];
+};
+
+typedef struct _floatblock PyFloatBlock;
+
+static PyFloatBlock* block_list = NULL;
+PyFloatObject* BoxedFloat::free_list = NULL;
+
+PyFloatObject* BoxedFloat::fill_free_list(void) noexcept {
+    PyFloatObject* p, *q;
+    /* XXX Float blocks escape the object heap. Use PyObject_MALLOC ??? */
+    p = (PyFloatObject*)PyMem_MALLOC(sizeof(PyFloatBlock));
+    if (p == NULL)
+        return (PyFloatObject*)PyErr_NoMemory();
+    ((PyFloatBlock*)p)->next = block_list;
+    block_list = (PyFloatBlock*)p;
+    p = &((PyFloatBlock*)p)->objects[0];
+    q = p + N_FLOATOBJECTS;
+    while (--q > p)
+        q->ob_type = (struct _typeobject*)(q - 1);
+    q->ob_type = NULL;
+    return p + N_FLOATOBJECTS - 1;
+}
+
+void BoxedFloat::tp_dealloc(Box* b) noexcept {
+#ifdef DISABLE_INT_FREELIST
+    b->cls->tp_free(b);
+#else
+    if (likely(PyFloat_CheckExact(b))) {
+        PyFloatObject* v = (PyFloatObject*)(b);
+        v->ob_type = (struct _typeobject*)free_list;
+        free_list = v;
+    } else {
+        b->cls->tp_free(b);
+    }
+#endif
+}
+
+extern "C" int PyFloat_ClearFreeList() noexcept {
+    PyFloatObject* p;
+    PyFloatBlock* list, *next;
+    int i;
+    int u; /* remaining unfreed ints per block */
+    int freelist_size = 0;
+
+    list = block_list;
+    block_list = NULL;
+    BoxedFloat::free_list = NULL;
+    while (list != NULL) {
+        u = 0;
+        for (i = 0, p = &list->objects[0]; i < N_FLOATOBJECTS; i++, p++) {
+            if (PyFloat_CheckExact((BoxedFloat*)p) && Py_REFCNT(p) != 0)
+                u++;
+        }
+        next = list->next;
+        if (u) {
+            list->next = block_list;
+            block_list = list;
+            for (i = 0, p = &list->objects[0]; i < N_FLOATOBJECTS; i++, p++) {
+                if (!PyFloat_CheckExact((BoxedFloat*)p) || Py_REFCNT(p) == 0) {
+                    p->ob_type = (struct _typeobject*)BoxedFloat::free_list;
+                    BoxedFloat::free_list = p;
+                }
+            }
+        } else {
+            PyMem_FREE(list);
+        }
+        freelist_size += u;
+        list = next;
+    }
+    return freelist_size;
+}
+
 extern "C" PyObject* PyFloat_FromDouble(double d) noexcept {
     return boxFloat(d);
 }
@@ -77,12 +157,15 @@ extern "C" double PyFloat_AsDouble(PyObject* o) noexcept {
     fo = (BoxedFloat*)(*nb->nb_float)(o);
     if (fo == NULL)
         return -1;
+    AUTO_DECREF(fo);
     if (!PyFloat_Check(fo)) {
         PyErr_SetString(PyExc_TypeError, "nb_float should return float object");
         return -1;
     }
 
-    return static_cast<BoxedFloat*>(fo)->d;
+    val = static_cast<BoxedFloat*>(fo)->d;
+
+    return val;
 }
 
 template <typename T> static inline void raiseDivZeroExcIfZero(T var) {
@@ -139,7 +222,7 @@ extern "C" Box* floatAdd(BoxedFloat* lhs, Box* rhs) {
         }
         return boxFloat(lhs->d + rhs_f);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -170,7 +253,7 @@ extern "C" Box* floatDiv(BoxedFloat* lhs, Box* rhs) {
         }
         return boxFloat(lhs->d / rhs_f);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -187,7 +270,7 @@ extern "C" Box* floatTruediv(BoxedFloat* lhs, Box* rhs) {
         }
         return boxFloat(lhs->d / rhs_f);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -219,7 +302,7 @@ extern "C" Box* floatRDiv(BoxedFloat* lhs, Box* rhs) {
         raiseDivZeroExcIfZero(lhs->d);
         return boxFloat(rhs_f / lhs->d);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -240,7 +323,7 @@ Box* floatRTruediv(BoxedFloat* lhs, Box* rhs) {
         raiseDivZeroExcIfZero(lhs->d);
         return boxFloat(rhs_f / lhs->d);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -271,7 +354,7 @@ extern "C" Box* floatFloorDiv(BoxedFloat* lhs, Box* rhs) {
         }
         return floatFloorDivFloat(lhs, new BoxedFloat(rhs_f));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -292,7 +375,7 @@ extern "C" Box* floatRFloorDiv(BoxedFloat* lhs, Box* _rhs) {
         }
         return floatFloorDivFloat(new BoxedFloat(rhs_f), lhs);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -623,7 +706,7 @@ extern "C" Box* floatMod(BoxedFloat* lhs, Box* rhs) {
         }
         return boxFloat(mod_float_float(lhs->d, rhs_f));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -652,7 +735,7 @@ extern "C" Box* floatRMod(BoxedFloat* lhs, Box* rhs) {
         }
         return boxFloat(mod_float_float(rhs_f, lhs->d));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -749,7 +832,7 @@ extern "C" Box* floatMul(BoxedFloat* lhs, Box* rhs) {
         }
         return boxFloat(lhs->d * rhs_f);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -778,7 +861,7 @@ extern "C" Box* floatSub(BoxedFloat* lhs, Box* rhs) {
         }
         return boxFloat(lhs->d - rhs_f);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -807,7 +890,7 @@ extern "C" Box* floatRSub(BoxedFloat* lhs, Box* rhs) {
         }
         return boxFloat(rhs_f - lhs->d);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -878,6 +961,7 @@ template <ExceptionStyle S> Box* floatNew(BoxedClass* _cls, Box* a) noexcept(S =
         assert(S == CAPI);
         return NULL;
     }
+    AUTO_DECREF(f);
 
     return new (cls) BoxedFloat(f->d);
 }
@@ -912,7 +996,7 @@ extern "C" Box* floatFloat(BoxedFloat* self) {
                        getTypeName(self));
 
     if (self->cls == float_cls)
-        return self;
+        return incref(self);
     return boxFloat(self->d);
 }
 
@@ -985,10 +1069,12 @@ Box* floatCoerce(BoxedFloat* _self, Box* other) {
 
     Box* self = static_cast<Box*>(_self);
     int result = float_coerce(&self, &other);
-    if (result == 0)
+    if (result == 0) {
+        AUTO_DECREF(self);
+        AUTO_DECREF(other);
         return BoxedTuple::create({ self, other });
-    else if (result == 1)
-        return NotImplemented;
+    } else if (result == 1)
+        return incref(NotImplemented);
     else
         throwCAPIException();
 }
@@ -1036,7 +1122,7 @@ static Box* floatConjugate(Box* b, void*) {
         raiseExcHelper(TypeError, "descriptor 'conjugate' requires a 'float' object but received a '%s'",
                        getTypeName(b));
     if (b->cls == float_cls) {
-        return b;
+        return incref(b);
     } else {
         assert(PyFloat_Check(b));
         return boxFloat(static_cast<BoxedFloat*>(b)->d);
@@ -1595,7 +1681,7 @@ void setupFloat() {
                                                                                      1, ParamNames::empty(), CAPI)));
 
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);
-    float_cls->giveAttr("__radd__", float_cls->getattr(internStringMortal("__add__")));
+    float_cls->giveAttrBorrowed("__radd__", float_cls->getattr(autoDecref(internStringMortal("__add__"))));
 
     _addFunc("__div__", BOXED_FLOAT, (void*)floatDivFloat, (void*)floatDivInt, (void*)floatDiv);
     _addFunc("__rdiv__", BOXED_FLOAT, (void*)floatRDivFloat, (void*)floatRDivInt, (void*)floatRDiv);
@@ -1608,7 +1694,7 @@ void setupFloat() {
     _addFunc("__mod__", BOXED_FLOAT, (void*)floatModFloat, (void*)floatModInt, (void*)floatMod);
     _addFunc("__rmod__", BOXED_FLOAT, (void*)floatRModFloat, (void*)floatRModInt, (void*)floatRMod);
     _addFunc("__mul__", BOXED_FLOAT, (void*)floatMulFloat, (void*)floatMulInt, (void*)floatMul);
-    float_cls->giveAttr("__rmul__", float_cls->getattr(internStringMortal("__mul__")));
+    float_cls->giveAttrBorrowed("__rmul__", float_cls->getattr(autoDecref(internStringMortal("__mul__"))));
 
     _addFuncPow("__pow__", BOXED_FLOAT, (void*)floatPowFloat, (void*)floatPowInt, (void*)floatPow);
     float_cls->giveAttr("__rpow__", new BoxedFunction(FunctionMetadata::create((void*)floatRPow, UNKNOWN, 2)));
@@ -1620,7 +1706,7 @@ void setupFloat() {
     auto float_new = FunctionMetadata::create((void*)floatNew<CXX>, UNKNOWN, 2, false, false,
                                               ParamNames({ "", "x" }, "", ""), CXX);
     float_new->addVersion((void*)floatNew<CAPI>, UNKNOWN, CAPI);
-    float_cls->giveAttr("__new__", new BoxedFunction(float_new, { boxFloat(0.0) }));
+    float_cls->giveAttr("__new__", new BoxedFunction(float_new, { autoDecref(boxFloat(0.0)) }));
 
     float_cls->giveAttr("__eq__", new BoxedFunction(FunctionMetadata::create((void*)floatEq, UNKNOWN, 2)));
     float_cls->giveAttr("__ne__", new BoxedFunction(FunctionMetadata::create((void*)floatNe, UNKNOWN, 2)));
@@ -1671,8 +1757,5 @@ void setupFloat() {
     float_cls->tp_str = float_str;
     float_cls->tp_as_number->nb_power = float_pow;
     float_cls->tp_new = (newfunc)floatNewPacked;
-}
-
-void teardownFloat() {
 }
 }

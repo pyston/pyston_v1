@@ -42,8 +42,8 @@ PyAPI_DATA(PyTypeObject*) tuple_cls;
 
 PyAPI_FUNC(PyObject *) PyTuple_New(Py_ssize_t size) PYSTON_NOEXCEPT;
 PyAPI_FUNC(Py_ssize_t) PyTuple_Size(PyObject *) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject *) PyTuple_GetItem(PyObject *, Py_ssize_t) PYSTON_NOEXCEPT;
-PyAPI_FUNC(int) PyTuple_SetItem(PyObject *, Py_ssize_t, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PyTuple_GetItem(PyObject *, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyTuple_SetItem(PyObject *, Py_ssize_t, STOLEN(PyObject *)) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyTuple_GetSlice(PyObject *, Py_ssize_t, Py_ssize_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) _PyTuple_Resize(PyObject **, Py_ssize_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyTuple_Pack(Py_ssize_t, ...) PYSTON_NOEXCEPT;

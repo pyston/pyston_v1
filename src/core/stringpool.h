@@ -22,6 +22,7 @@
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/StringRef.h"
+#include "Python.h"
 
 #include "core/common.h"
 
@@ -61,7 +62,7 @@ public:
     InternedString() : _str(NULL) {}
 #endif
 
-    BoxedString* getBox() const {
+    BORROWED(BoxedString*) getBox() const {
         assert(this->_str);
         return _str;
     }
@@ -69,9 +70,9 @@ public:
     const char* c_str() const;
 
     bool operator==(InternedString rhs) const {
-        assert(this->_str || this->pool == invalidPool());
-        assert(rhs._str || rhs.pool == invalidPool());
-        assert(this->pool == rhs.pool || this->pool == invalidPool() || rhs.pool == invalidPool());
+        // assert(this->_str || this->pool == invalidPool());
+        // assert(rhs._str || rhs.pool == invalidPool());
+        // assert(this->pool == rhs.pool || this->pool == invalidPool() || rhs.pool == invalidPool());
         return this->_str == rhs._str;
     }
 
@@ -80,7 +81,7 @@ public:
 
     llvm::StringRef s() const;
     operator llvm::StringRef() const { return s(); }
-    operator BoxedString*() const { return getBox(); }
+    operator BORROWED(BoxedString*)() const { return getBox(); }
 
     bool isCompilerCreatedName() const;
 

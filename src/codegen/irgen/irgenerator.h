@@ -40,6 +40,8 @@ class GCBuilder;
 struct PatchpointInfo;
 class ScopeInfo;
 class TypeAnalysis;
+class RefcountTracker;
+class UnwindInfo;
 
 typedef std::unordered_map<InternedString, CompilerVariable*> SymbolTable;
 typedef std::map<InternedString, CompilerVariable*> SortedSymbolTable;
@@ -65,6 +67,7 @@ private:
     ParamNames* param_names;
     GCBuilder* gc;
     llvm::MDNode* func_dbg_info;
+    RefcountTracker* refcount_tracker;
 
     llvm::AllocaInst* scratch_space;
     llvm::Value* frame_info;
@@ -76,7 +79,7 @@ private:
 
 public:
     IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<PhiAnalysis> phis,
-               ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info);
+               ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info, RefcountTracker* refcount_tracker);
     ~IRGenState();
 
     CompiledFunction* getCurFunction() { return cf; }
@@ -111,6 +114,8 @@ public:
     ScopeInfo* getScopeInfoForNode(AST* node);
 
     llvm::MDNode* getFuncDbgInfo() { return func_dbg_info; }
+
+    RefcountTracker* getRefcounts() { return refcount_tracker; }
 
     ParamNames* getParamNames() { return param_names; }
 
@@ -161,10 +166,13 @@ public:
     virtual void addFrameStackmapArgs(PatchpointInfo* pp, std::vector<llvm::Value*>& stackmap_args) = 0;
     virtual void addOutgoingExceptionState(ExceptionState exception_state) = 0;
     virtual void setIncomingExceptionState(llvm::SmallVector<ExceptionState, 2> exc_state) = 0;
-    virtual llvm::BasicBlock* getCXXExcDest(llvm::BasicBlock* final_dest) = 0;
+    virtual llvm::BasicBlock* getCXXExcDest(const UnwindInfo&) = 0;
     virtual llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* from_block, llvm::BasicBlock* final_dest,
-                                             AST_stmt* current_stmt) = 0;
+                                             AST_stmt* current_stmt, bool is_after_deopt = false) = 0;
+    virtual CFGBlock* getCFGBlock() = 0;
 };
+
+std::tuple<llvm::Value*, llvm::Value*, llvm::Value*> createLandingpad(llvm::BasicBlock*);
 
 class IREmitter;
 class AST_Call;

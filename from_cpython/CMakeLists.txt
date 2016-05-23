@@ -45,6 +45,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     fcntlmodule.c
     fileio.c
     future_builtins.c
+    gcmodule.c
     getpath.c
     iobase.c
     itertoolsmodule.c
@@ -94,6 +95,7 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     import.c
     iterobject.c
     memoryobject.c
+    obmalloc.c
     stringobject.c
     structseq.c
     traceback.c

@@ -1603,7 +1603,7 @@ init_csv(void)
         return;
 
     /* Add _dialects dictionary */
-    dialects = PyGC_AddRoot(PyDict_New());
+    dialects = PyDict_New();
     if (dialects == NULL)
         return;
     if (PyModule_AddObject(module, "_dialects", dialects))
@@ -1622,8 +1622,13 @@ init_csv(void)
         return;
 
     /* Add the CSV exception object to the module. */
-    error_obj = PyGC_AddRoot(PyErr_NewException("_csv.Error", NULL, NULL));
+    error_obj = PyErr_NewException("_csv.Error", NULL, NULL);
     if (error_obj == NULL)
         return;
+
+    // Pyston change: I *think* an incref is needed here, but it doesn't matter in CPython since they don't
+    // try to tear down builtin classes:
+    Py_INCREF(error_obj);
+
     PyModule_AddObject(module, "Error", error_obj);
 }

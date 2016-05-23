@@ -160,17 +160,12 @@ PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t) PYSTON_NO
 #define PyObject_NewVar(type, typeobj, n) \
                 ( (type *) _PyObject_NewVar((typeobj), (n)) )
 
-// Pyston change: these are function calls now
-#if 0
 /* Macros trading binary compatibility for speed. See also pymem.h.
    Note that these macros expect non-NULL object pointers.*/
 #define PyObject_INIT(op, typeobj) \
-    ( Py_TYPE(op) = (typeobj), (op) )
+    ( Py_TYPE(op) = (typeobj), _Py_NewReference((PyObject *)(op)), (op) )
 #define PyObject_INIT_VAR(op, typeobj, size) \
     ( Py_SIZE(op) = (size), PyObject_INIT((op), (typeobj)) )
-#endif
-#define PyObject_INIT(op, typeobj) PyObject_Init((PyObject*)(op), (PyTypeObject*)(typeobj))
-#define PyObject_INIT_VAR(op, typeobj, size) PyObject_InitVar((PyVarObject*)(op), (PyTypeObject*)(typeobj), size)
 
 #define _PyObject_SIZE(typeobj) ( (typeobj)->tp_basicsize )
 
@@ -241,9 +236,6 @@ PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t) PYSTON_NO
 /* C equivalent of gc.collect(). */
 PyAPI_FUNC(Py_ssize_t) PyGC_Collect(void) PYSTON_NOEXCEPT;
 
-// Pyston changes: everything is GC tracked now
-
-#if 0
 /* Test if a type has a GC head */
 #define PyType_IS_GC(t) PyType_HasFeature((t), Py_TPFLAGS_HAVE_GC)
 
@@ -311,10 +303,7 @@ extern PyGC_Head *_PyGC_generation0;
 #define _PyObject_GC_MAY_BE_TRACKED(obj) \
     (PyObject_IS_GC(obj) && \
         (!PyTuple_CheckExact(obj) || _PyObject_GC_IS_TRACKED(obj)))
-#else
-/* for source compatibility with 2.2 */
-#define _PyObject_GC_Del PyObject_GC_Del
-#endif
+
 
 PyAPI_FUNC(PyObject *) _PyObject_GC_Malloc(size_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) _PyObject_GC_New(PyTypeObject *) PYSTON_NOEXCEPT;
@@ -322,15 +311,6 @@ PyAPI_FUNC(PyVarObject *) _PyObject_GC_NewVar(PyTypeObject *, Py_ssize_t) PYSTON
 PyAPI_FUNC(void) PyObject_GC_Track(void *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyObject_GC_UnTrack(void *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyObject_GC_Del(void *) PYSTON_NOEXCEPT;
-#define PyType_IS_GC(t) ((t),1)
-#define _PyObject_GC_TRACK(o) ((void)(o))
-#define _PyObject_GC_UNTRACK(o) ((void)(o))
-#define _PyObject_GC_Malloc(size) ((PyObject*)PyObject_MALLOC(size))
-#define _PyObject_GC_New _PyObject_New
-#define PyObject_GC_Track(o) ((void)(o))
-#define PyObject_GC_UnTrack(o) ((void)(o))
-#define PyObject_GC_Del PyObject_Del
-
 
 #define PyObject_GC_New(type, typeobj) \
                 ( (type *) _PyObject_GC_New(typeobj) )

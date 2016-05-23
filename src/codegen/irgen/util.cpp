@@ -22,12 +22,12 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 
 #include "codegen/codegen.h"
 #include "codegen/patchpoints.h"
 #include "core/common.h"
-#include "gc/gc.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -127,39 +127,27 @@ llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type, llvm::St
 
     std::string name;
     if (!shared_name.empty()) {
-        llvm::GlobalVariable* gv = g.cur_module->getGlobalVariable(shared_name, true);
+        llvm::GlobalVariable* gv = g.cur_module->getGlobalVariable(shared_name, /* AllowInternal */ true);
         if (gv)
             return gv;
         assert(!relocatable_syms.count(name));
         name = shared_name;
     } else {
-        name = (llvm::Twine("c") + llvm::Twine(relocatable_syms.size())).str();
+        int nsyms = relocatable_syms.size();
+        name = (llvm::Twine("c") + llvm::Twine(nsyms)).str();
     }
 
     relocatable_syms[name] = addr;
 
-#if MOVING_GC
-    gc::GCAllocation* al = gc::global_heap.getAllocationFromInteriorPointer(const_cast<void*>(addr));
-    if (al) {
-        pointers_in_code->push_back(al->user_data);
-    }
-#endif
-
     llvm::Type* var_type = type->getPointerElementType();
-    return new llvm::GlobalVariable(*g.cur_module, var_type, true, llvm::GlobalVariable::ExternalLinkage, 0, name);
+    return new llvm::GlobalVariable(*g.cur_module, var_type, /* isConstant */ false,
+                                    llvm::GlobalVariable::ExternalLinkage, 0, name);
 }
 
 llvm::Constant* embedConstantPtr(const void* addr, llvm::Type* type) {
     assert(type);
     llvm::Constant* int_val = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
     llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, type);
-
-#if MOVING_GC
-    gc::GCAllocation* al = gc::global_heap.getAllocationFromInteriorPointer(const_cast<void*>(addr));
-    if (al) {
-        pointers_in_code->push_back(al->user_data);
-    }
-#endif
 
     return ptr_val;
 }
@@ -214,51 +202,49 @@ public:
                 return module->getOrInsertGlobal(name, pt->getElementType());
             }
         }
-        if (llvm::IntrinsicInst* ii = llvm::dyn_cast<llvm::IntrinsicInst>(v)) {
-            if (ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_i64
-                || ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_void
-                || ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_double) {
-                int pp_id = -1;
-                for (int i = 0; i < ii->getNumArgOperands(); i++) {
-                    llvm::Value* op = ii->getArgOperand(i);
-                    if (i != 2) {
-                        if (i == 0) {
-                            llvm::ConstantInt* l_pp_id = llvm::cast<llvm::ConstantInt>(op);
-                            pp_id = l_pp_id->getSExtValue();
-                        }
-                        ii->setArgOperand(i, llvm::MapValue(op, VMap, flags, type_remapper, this));
-                        continue;
-                    } else {
-                        assert(pp_id != -1);
-                        void* addr = PatchpointInfo::getSlowpathAddr(pp_id);
-
-                        bool lookup_success = true;
-                        std::string name;
-                        if (addr == (void*)None) {
-                            name = "None";
-                        } else {
-                            name = g.func_addr_registry.getFuncNameAtAddress(addr, true, &lookup_success);
-                        }
-
-                        if (!lookup_success) {
-                            llvm::Constant* int_val
-                                = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
-                            llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, g.i8_ptr);
-                            ii->setArgOperand(i, ptr_val);
-                            continue;
-                        } else {
-                            ii->setArgOperand(i, module->getOrInsertGlobal(name, g.i8));
-                        }
-                    }
-                }
-                return ii;
-            }
-        }
         return v;
     }
 };
 
+template <typename I> void remapPatchpoint(I* ii) {
+    int pp_id = -1;
+    for (int i = 0; i < ii->getNumArgOperands(); i++) {
+        llvm::Value* op = ii->getArgOperand(i);
+        if (i == 0) {
+            llvm::ConstantInt* l_pp_id = llvm::cast<llvm::ConstantInt>(op);
+            pp_id = l_pp_id->getSExtValue();
+        } else if (i == 2) {
+            assert(pp_id != -1);
+
+            if (pp_id == DECREF_PP_ID || pp_id == XDECREF_PP_ID)
+                continue;
+
+            void* addr = PatchpointInfo::getSlowpathAddr(pp_id);
+
+            bool lookup_success = true;
+            std::string name;
+            if (addr == (void*)None) {
+                name = "None";
+            } else {
+                name = g.func_addr_registry.getFuncNameAtAddress(addr, true, &lookup_success);
+            }
+
+            if (!lookup_success) {
+                llvm::Constant* int_val = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
+                llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, g.i8_ptr);
+                ii->setArgOperand(i, ptr_val);
+                continue;
+            } else {
+                ii->setArgOperand(i, ii->getParent()->getParent()->getParent()->getOrInsertGlobal(name, g.i8));
+            }
+        }
+    }
+}
+
 void dumpPrettyIR(llvm::Function* f) {
+    // f->getParent()->dump();
+    // return;
+
     std::unique_ptr<llvm::Module> tmp_module(llvm::CloneModule(f->getParent()));
     // std::unique_ptr<llvm::Module> tmp_module(new llvm::Module("tmp", g.context));
 
@@ -273,6 +259,18 @@ void dumpPrettyIR(llvm::Function* f) {
     }
     for (llvm::inst_iterator it = inst_begin(new_f), end = inst_end(new_f); it != end; ++it) {
         llvm::RemapInstruction(&*it, VMap, flags, type_remapper, &materializer);
+
+        if (llvm::IntrinsicInst* ii = llvm::dyn_cast<llvm::IntrinsicInst>(&*it)) {
+            if (ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_i64
+                || ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_void
+                || ii->getIntrinsicID() == llvm::Intrinsic::experimental_patchpoint_double) {
+                remapPatchpoint(ii);
+            }
+        } else if (llvm::InvokeInst* ii = llvm::dyn_cast<llvm::InvokeInst>(&*it)) {
+            if (ii->getCalledFunction() && ii->getCalledFunction()->isIntrinsic()) {
+                remapPatchpoint(ii);
+            }
+        }
     }
     tmp_module->begin()->dump();
     // tmp_module->dump();

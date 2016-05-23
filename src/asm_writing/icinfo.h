@@ -27,10 +27,6 @@
 
 namespace pyston {
 
-namespace gc {
-class GCVisitor;
-}
-
 class TypeRecorder;
 
 class ICInfo;
@@ -38,6 +34,24 @@ class ICInvalidator;
 
 #define IC_INVALDITION_HEADER_SIZE 6
 #define IC_MEGAMORPHIC_THRESHOLD 100
+
+// This registers a decref info in the constructor and deregisters it in the destructor.
+struct DecrefInfo {
+    uint64_t ip;
+
+    DecrefInfo() : ip(0) {}
+    DecrefInfo(uint64_t ip, std::vector<Location> locations);
+
+    // we only allow moves
+    DecrefInfo(DecrefInfo&& other) : ip(0) { std::swap(other.ip, ip); }
+    DecrefInfo& operator=(DecrefInfo&& other) {
+        std::swap(other.ip, ip);
+        return *this;
+    }
+    ~DecrefInfo() { reset(); }
+
+    void reset();
+};
 
 struct ICSlotInfo {
 public:
@@ -48,6 +62,7 @@ public:
     int num_inside; // the number of stack frames that are currently inside this slot
 
     std::vector<void*> gc_references;
+    std::vector<DecrefInfo> decref_infos;
 
     void clear();
 };
@@ -88,10 +103,9 @@ public:
 
     ICSlotInfo* prepareEntry();
 
-    void gc_visit(gc::GCVisitor* visitor);
-
     void addDependenceOn(ICInvalidator&);
-    void commit(CommitHook* hook, std::vector<void*> gc_references);
+    void commit(CommitHook* hook, std::vector<void*> gc_references,
+                std::vector<std::pair<uint64_t, std::vector<Location>>> decref_infos);
     void abort();
 
     const ICInfo* getICInfo() { return ic; }
@@ -123,13 +137,20 @@ private:
     int retry_in, retry_backoff;
     int times_rewritten;
 
+    DecrefInfo slowpath_decref_info;
+    // This is a vector of locations which always need to get decrefed inside this IC.
+    // Calls inside the ICSlots may need to decref additional locations but they will always contain at least the IC
+    // global ones.
+    std::vector<Location> ic_global_decref_locations;
+
     // for ICSlotRewrite:
     ICSlotInfo* pickEntryForRewrite(const char* debug_name);
 
 public:
     ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int num_slots,
            int slot_size, llvm::CallingConv::ID calling_conv, LiveOutSet live_outs,
-           assembler::GenericRegister return_register, TypeRecorder* type_recorder);
+           assembler::GenericRegister return_register, TypeRecorder* type_recorder,
+           std::vector<Location> ic_global_decref_locations);
     ~ICInfo();
     void* const start_addr, *const slowpath_rtn_addr, *const continue_addr;
 
@@ -140,6 +161,11 @@ public:
 
     std::unique_ptr<ICSlotRewrite> startRewrite(const char* debug_name);
     void clear(ICSlotInfo* entry);
+    void clearAll() {
+        for (ICSlotInfo& slot_info : slots) {
+            clear(&slot_info);
+        }
+    }
 
     bool shouldAttempt();
     bool isMegamorphic();
@@ -150,10 +176,11 @@ public:
     int timesRewritten() const { return times_rewritten; }
 
     friend class ICSlotRewrite;
-    static void visitGCReferences(gc::GCVisitor* visitor);
 
     static ICInfo* getICInfoForNode(AST* node);
     void associateNodeWithICInfo(AST* node);
+
+    void appendDecrefInfosTo(std::vector<DecrefInfo>& dest_decref_infos);
 };
 
 void registerGCTrackedICInfo(ICInfo* ic);
@@ -161,12 +188,15 @@ void deregisterGCTrackedICInfo(ICInfo* ic);
 
 class ICSetupInfo;
 struct CompiledFunction;
-std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t* slowpath_start_addr,
-                                                   uint8_t* continue_addr, uint8_t* slowpath_rtn_addr,
-                                                   const ICSetupInfo*, StackInfo stack_info, LiveOutSet live_outs);
+std::unique_ptr<ICInfo>
+registerCompiledPatchpoint(uint8_t* start_addr, uint8_t* slowpath_start_addr, uint8_t* continue_addr,
+                           uint8_t* slowpath_rtn_addr, const ICSetupInfo*, StackInfo stack_info, LiveOutSet live_outs,
+                           std::vector<Location> ic_global_decref_locations = std::vector<Location>());
 void deregisterCompiledPatchpoint(ICInfo* ic);
 
 ICInfo* getICInfo(void* rtn_addr);
+
+void clearAllICs(); // mostly for refcount debugging
 }
 
 #endif

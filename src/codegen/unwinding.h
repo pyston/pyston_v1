@@ -32,12 +32,22 @@ struct FrameInfo;
 
 void registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size);
 uint64_t getCXXUnwindSymbolAddress(llvm::StringRef sym);
-bool isUnwinding(); // use this instead of std::uncaught_exception
+
+// use this instead of std::uncaught_exception.
+// Highly discouraged except for asserting -- we could be processing
+// a destructor with decref'd something and then we called into more
+// Python code.  So it's impossible to tell for instance, if a destructor
+// was called due to an exception or due to normal function termination,
+// since the latter can still return isUnwinding==true if there is an
+// exception up in the stack.
+#ifndef NDEBUG
+bool isUnwinding();
+#endif
 
 void setupUnwinding();
-BoxedModule* getCurrentModule();
-Box* getGlobals();     // returns either the module or a globals dict
-Box* getGlobalsDict(); // always returns a dict-like object
+BORROWED(BoxedModule*) getCurrentModule();
+BORROWED(Box*) getGlobals();     // returns either the module or a globals dict
+BORROWED(Box*) getGlobalsDict(); // always returns a dict-like object
 CompiledFunction* getCFForAddress(uint64_t addr);
 
 class PythonUnwindSession;
@@ -49,8 +59,10 @@ void unwindingThroughFrame(PythonUnwindSession* unwind_session, unw_cursor_t* cu
 
 // TODO move these to exceptions.h
 void logException(ExcInfo* exc_info);
-void startReraise();
-bool exceptionAtLineCheck();
+bool& getIsReraiseFlag();
+inline void startReraise() {
+    getIsReraiseFlag() = true;
+}
 void exceptionAtLine(Box** traceback);
 void caughtCxxException(ExcInfo* exc_info);
 extern "C" void caughtCapiException();
@@ -66,7 +78,7 @@ std::string getCurrentPythonLine();
 void logByCurrentPythonLine(const std::string& stat_name);
 
 // Adds stack locals and closure locals into the locals dict, and returns it.
-Box* fastLocalsToBoxedLocals();
+BORROWED(Box*) fastLocalsToBoxedLocals();
 
 class PythonFrameIteratorImpl;
 class PythonFrameIterator {
@@ -79,7 +91,7 @@ public:
     FrameInfo* getFrameInfo();
     bool exists() { return impl.get() != NULL; }
     AST_stmt* getCurrentStatement();
-    Box* getGlobalsDict();
+    BORROWED(Box*) getGlobalsDict();
 
     PythonFrameIterator(PythonFrameIterator&& rhs);
     void operator=(PythonFrameIterator&& rhs);
@@ -96,6 +108,9 @@ ExcInfo* getFrameExcInfo();
 // This is faster in the case that the frame-level excinfo is already up-to-date,
 // but just as slow if it's not.
 void updateFrameExcInfoIfNeeded(ExcInfo* latest);
+
+void addDecrefInfoEntry(uint64_t ip, std::vector<class Location> location);
+void removeDecrefInfoEntry(uint64_t ip);
 
 struct FrameStackState {
     // This includes all # variables (but not the ! ones).

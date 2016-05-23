@@ -48,12 +48,12 @@ static Box* setOption(Box* option, Box* value) {
     else CHECK(LAZY_SCOPING_ANALYSIS);
     else raiseExcHelper(ValueError, "unknown option name '%s", option_string->data());
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 static Box* clearStats() {
     Stats::clear();
-    return None;
+    Py_RETURN_NONE;
 }
 
 static Box* dumpStats(Box* includeZeros) {
@@ -61,11 +61,11 @@ static Box* dumpStats(Box* includeZeros) {
         raiseExcHelper(TypeError, "includeZeros must be a 'bool' object but received a '%s'",
                        getTypeName(includeZeros));
     Stats::dump(((BoxedBool*)includeZeros)->n != 0);
-    return None;
+    Py_RETURN_NONE;
 }
 
 void setupPyston() {
-    pyston_module = createModule(boxString("__pyston__"));
+    pyston_module = createModule(autoDecref(boxString("__pyston__")));
 
     pyston_module->giveAttr("setOption", new BoxedBuiltinFunctionOrMethod(
                                              FunctionMetadata::create((void*)setOption, UNKNOWN, 2), "setOption"));

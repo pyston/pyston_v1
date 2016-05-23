@@ -1,16 +1,14 @@
-From e0257ba4efd903da2a0f1909d21d51ff1799a3c6 Mon Sep 17 00:00:00 2001
+From eaf300b61a56af151e93aa51803e6a61a0f8afee Mon Sep 17 00:00:00 2001
 From: Marius Wachtler <undingen@gmail.com>
-Date: Tue, 9 Jun 2015 19:26:44 +0200
-Subject: [PATCH] Pyston change: we don't support custom traceback entries yet
+Date: Fri, 6 May 2016 16:19:50 +0100
+Subject: [PATCH] [PATCH] Pyston change: make cython work with pyston
 
 ---
- Cython/Compiler/ExprNodes.py     |  9 +++++++++
- Cython/Compiler/ModuleNode.py    |  8 ++++++--
- Cython/Utility/CythonFunction.c  |  4 +++-
- Cython/Utility/Exceptions.c      |  7 ++++++-
- Cython/Utility/Generator.c       | 41 ++++++++++++++++++++++++++++------------
- Cython/Utility/ModuleSetupCode.c |  2 +-
- 6 files changed, 54 insertions(+), 17 deletions(-)
+ Cython/Compiler/ExprNodes.py     | 9 +++++++++
+ Cython/Utility/CythonFunction.c  | 4 +++-
+ Cython/Utility/Exceptions.c      | 4 +++-
+ Cython/Utility/ModuleSetupCode.c | 2 +-
+ 4 files changed, 16 insertions(+), 3 deletions(-)
 
 diff --git a/Cython/Compiler/ExprNodes.py b/Cython/Compiler/ExprNodes.py
 index f99ec6e..7ab41f3 100644
@@ -38,26 +36,6 @@ index f99ec6e..7ab41f3 100644
  
      def analyse_types(self, env):
          if self.binding:
-diff --git a/Cython/Compiler/ModuleNode.py b/Cython/Compiler/ModuleNode.py
-index 4785858..699cd15 100644
---- a/Cython/Compiler/ModuleNode.py
-+++ b/Cython/Compiler/ModuleNode.py
-@@ -1399,9 +1399,13 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
-         code.putln("{")
-         code.putln("PyObject *etype, *eval, *etb;")
-         code.putln("PyErr_Fetch(&etype, &eval, &etb);")
--        code.putln("++Py_REFCNT(o);")
-+        # Pyston change:
-+        # code.putln("++Py_REFCNT(o);")
-+        code.putln("Py_INCREF(o);")
-         code.putln("%s(o);" % entry.func_cname)
--        code.putln("--Py_REFCNT(o);")
-+        # Pyston change:
-+        # code.putln("--Py_REFCNT(o);")
-+        code.putln("Py_DECREF(o);")
-         code.putln("PyErr_Restore(etype, eval, etb);")
-         code.putln("}")
- 
 diff --git a/Cython/Utility/CythonFunction.c b/Cython/Utility/CythonFunction.c
 index 9cc38f0..ab05ad1 100644
 --- a/Cython/Utility/CythonFunction.c
@@ -74,10 +52,10 @@ index 9cc38f0..ab05ad1 100644
  // PyPy does not have this function
  static PyObject * __Pyx_CyFunction_Call(PyObject *func, PyObject *arg, PyObject *kw) {
 diff --git a/Cython/Utility/Exceptions.c b/Cython/Utility/Exceptions.c
-index 354a776..8af3cb7 100644 static void __Pyx_AddTraceback(const char *funcname, int c_line,
+index 354a776..567970d 100644
 --- a/Cython/Utility/Exceptions.c
 +++ b/Cython/Utility/Exceptions.c
-@@ -528,7 +528,9 @@
+@@ -528,7 +528,9 @@ static void __Pyx_AddTraceback(const char *funcname, int c_line,
          0                    /*PyObject *locals*/
      );
      if (!py_frame) goto bad;
@@ -88,100 +66,6 @@ index 354a776..8af3cb7 100644 static void __Pyx_AddTraceback(const char *funcnam
      PyTraceBack_Here(py_frame);
  bad:
      Py_XDECREF(py_code);
-diff --git a/Cython/Utility/Generator.c b/Cython/Utility/Generator.c
-index 0310570..70e550c 100644
---- a/Cython/Utility/Generator.c
-+++ b/Cython/Utility/Generator.c
-@@ -43,7 +43,9 @@ static void __Pyx_Generator_Replace_StopIteration(void) {
- //////////////////// Generator.proto ////////////////////
- #define __Pyx_Generator_USED
- #include <structmember.h>
--#include <frameobject.h>
-+
-+// Pyston change:
-+// #include <frameobject.h>
- 
- typedef PyObject *(*__pyx_generator_body_t)(PyObject *, PyObject *);
- 
-@@ -473,6 +475,9 @@ static int __Pyx_Generator_clear(PyObject *self) {
-     return 0;
- }
- 
-+// Pyston change: add forward decl
-+static void __Pyx_Generator_del(PyObject *self);
-+
- static void __Pyx_Generator_dealloc(PyObject *self) {
-     __pyx_GeneratorObject *gen = (__pyx_GeneratorObject *) self;
- 
-@@ -486,8 +491,10 @@ static void __Pyx_Generator_dealloc(PyObject *self) {
- #if PY_VERSION_HEX >= 0x030400a1
-         if (PyObject_CallFinalizerFromDealloc(self))
- #else
--        Py_TYPE(gen)->tp_del(self);
--        if (self->ob_refcnt > 0)
-+        // Pyston change: call __Pyx_Generator_del directly and assume obj resurrected
-+        // Py_TYPE(gen)->tp_del(self);
-+        // if (self->ob_refcnt > 0)
-+        __Pyx_Generator_del(self);
- #endif
-         {
-             // resurrected.  :(
-@@ -509,9 +516,10 @@ static void __Pyx_Generator_del(PyObject *self) {
-         return ;
- 
- #if PY_VERSION_HEX < 0x030400a1
--    // Temporarily resurrect the object.
--    assert(self->ob_refcnt == 0);
--    self->ob_refcnt = 1;
-+    // Pyston change:
-+    // // Temporarily resurrect the object.
-+    // assert(self->ob_refcnt == 0);
-+    // self->ob_refcnt = 1;
- #endif
- 
-     // Save the current exception, if any.
-@@ -530,18 +538,25 @@ static void __Pyx_Generator_del(PyObject *self) {
- #if PY_VERSION_HEX < 0x030400a1
-     // Undo the temporary resurrection; can't use DECREF here, it would
-     // cause a recursive call.
--    assert(self->ob_refcnt > 0);
--    if (--self->ob_refcnt == 0) {
--        // this is the normal path out
--        return;
--    }
-+
-+    // Pyston change:
-+    // assert(self->ob_refcnt > 0);
-+    // if (--self->ob_refcnt == 0) {
-+    //     // this is the normal path out
-+    //     return;
-+    // }
- 
-     // close() resurrected it!  Make it look like the original Py_DECREF
-     // never happened.
-     {
-+// Pyston change:
-+#if 0
-         Py_ssize_t refcnt = self->ob_refcnt;
-         _Py_NewReference(self);
-         self->ob_refcnt = refcnt;
-+#else
-+        _Py_NewReference(self);
-+#endif
-     }
- #if CYTHON_COMPILING_IN_CPYTHON
-     assert(PyType_IS_GC(self->ob_type) &&
-@@ -692,7 +707,9 @@ static PyTypeObject __pyx_GeneratorType_type = {
- #if PY_VERSION_HEX >= 0x030400a1
-     0,                                  /*tp_del*/
- #else
--    __Pyx_Generator_del,                /*tp_del*/
-+    // Pyston change: we don't currently support types which set a tp_dealloc and tp_del
-+    // __Pyx_Generator_del,                /*tp_del*/
-+    0,
- #endif
-     0,                                  /*tp_version_tag*/
- #if PY_VERSION_HEX >= 0x030400a1
 diff --git a/Cython/Utility/ModuleSetupCode.c b/Cython/Utility/ModuleSetupCode.c
 index 6477fb2..75dcdda 100644
 --- a/Cython/Utility/ModuleSetupCode.c
@@ -197,5 +81,4 @@ index 6477fb2..75dcdda 100644
  #else
 -- 
 1.9.1
-
 

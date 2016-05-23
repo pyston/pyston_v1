@@ -1,6 +1,5 @@
-# expected: fail
-# - finalization not implemented yet
-# This test might also be broken in the presence of GC
+# This test currently fails in the interpreter because we keep dead vreg entries around until the frame exists,
+# which causes D() to get destroyed too late 
 
 class C(object):
     pass

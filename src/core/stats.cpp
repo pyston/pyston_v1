@@ -17,7 +17,6 @@
 #include <algorithm>
 
 #include "core/thread_utils.h"
-#include "gc/gc.h"
 
 namespace pyston {
 
@@ -126,8 +125,6 @@ void Stats::dump(bool includeZeros) {
     double cycles_per_us = Stats::estimateCPUFreq();
     fprintf(stderr, "Stats:\n");
     fprintf(stderr, "estimated_cpu_mhz: %5.5f\n", cycles_per_us);
-
-    gc::dumpHeapStatistics(0);
 
     fprintf(stderr, "Counters:\n");
 

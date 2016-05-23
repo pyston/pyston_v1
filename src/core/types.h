@@ -23,13 +23,13 @@
 #include <stddef.h>
 #include <vector>
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/iterator_range.h"
 #include "Python.h"
 
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/stringpool.h"
-#include "gc/gc.h"
 
 namespace llvm {
 class Function;
@@ -38,8 +38,6 @@ class Value;
 }
 
 namespace pyston {
-
-using gc::GCVisitor;
 
 // The "effort" which we will put into compiling a Python function.  This applies to the LLVM tier,
 // where it can affect things such as the amount of type analysis we do, whether or not to run expensive
@@ -58,9 +56,12 @@ enum class EffortLevel {
 // determine when to emit code in one style or the other.
 // Many runtime functions support being called in either style, and can get passed one of these enum values
 // as a template parameter to switch between them.
+// "NOEXC" is a special exception style that says that no exception (of either type) will get thrown.
 enum ExceptionStyle {
     CAPI,
     CXX,
+
+    NOEXC,
 };
 
 // Much of our runtime supports "rewriting" aka tracing itself.  Our tracing JIT requires support from the
@@ -73,6 +74,17 @@ enum ExceptionStyle {
 enum Rewritable {
     NOT_REWRITABLE,
     REWRITABLE,
+};
+
+enum class RefType {
+    UNKNOWN
+#ifndef NDEBUG
+    // Set this to non-zero to make it possible for the debugger to
+    = 1
+#endif
+    ,
+    OWNED,
+    BORROWED,
 };
 
 template <typename T> struct ExceptionSwitchable {
@@ -180,6 +192,11 @@ struct ArgPassSpec {
 
     int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
 
+    int starargsIndex() const {
+        assert(has_starargs);
+        return num_args + num_keywords;
+    }
+
     int kwargsIndex() const {
         assert(has_kwargs);
         return num_args + num_keywords + (has_starargs ? 1 : 0);
@@ -245,15 +262,16 @@ struct ParamReceiveSpec {
         assert(num_defaults <= MAX_DEFAULTS);
     }
 
-    bool operator==(ParamReceiveSpec rhs) {
+    bool operator==(ParamReceiveSpec rhs) const {
         return takes_varargs == rhs.takes_varargs && takes_kwargs == rhs.takes_kwargs
                && num_defaults == rhs.num_defaults && num_args == rhs.num_args;
     }
 
-    bool operator!=(ParamReceiveSpec rhs) { return !(*this == rhs); }
+    bool operator!=(ParamReceiveSpec rhs) const { return !(*this == rhs); }
 
-    int totalReceived() { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
-    int kwargsIndex() { return num_args + (takes_varargs ? 1 : 0); }
+    int totalReceived() const { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
+    int varargsIndex() const { return num_args; }
+    int kwargsIndex() const { return num_args + (takes_varargs ? 1 : 0); }
 };
 
 // Inline-caches contain fastpath code, and need to know that their fastpath is valid for a particular set
@@ -295,7 +313,11 @@ class ICInfo;
 class LocationMap;
 class JitCodeBlock;
 
-// A specific compilation of a FunctionMetadata.  Usually these will be created by the LLVM JIT, which will take a FunctionMetadata
+extern std::vector<Box*> constants;
+extern std::vector<Box*> late_constants; // constants that should be freed after normal constants
+
+// A specific compilation of a FunctionMetadata.  Usually these will be created by the LLVM JIT, which will take a
+// FunctionMetadata
 // and some compilation settings, and produce a CompiledFunction
 // CompiledFunctions can also be created from raw function pointers, using FunctionMetadata::create.
 // A single FunctionMetadata can have multiple CompiledFunctions associated with it, if they have different settings.
@@ -362,8 +384,6 @@ public:
 
     // Call this when a speculation inside this version failed
     void speculationFailed();
-
-    static void visitAllCompiledFunctions(GCVisitor* visitor);
 };
 
 typedef int FutureFlags;
@@ -396,8 +416,8 @@ public:
     // body and we have to create one.  Ideally, we'd be able to avoid the space duplication for non-lambdas.
     const std::vector<AST_stmt*> body;
 
-    BoxedString* getName();
-    BoxedString* getFn() { return fn; }
+    BORROWED(BoxedString*) getName();
+    BORROWED(BoxedString*) getFn();
 
     InternedString mangleName(InternedString id);
 
@@ -467,7 +487,7 @@ public:
 
     int numReceivedArgs() { return num_args + takes_varargs + takes_kwargs; }
 
-    BoxedCode* getCode();
+    BORROWED(BoxedCode*) getCode();
 
     bool isGenerator() const {
         if (source)
@@ -484,6 +504,7 @@ public:
                     ExceptionStyle exception_style = CXX);
 
     int calculateNumVRegs();
+    int calculateNumUserVisibleVRegs();
 
     // Helper function, meant for the C++ runtime, which allocates a FunctionMetadata object and calls addVersion
     // once to it.
@@ -537,14 +558,21 @@ class BinopIC;
 
 class Box;
 
-class BoxIteratorImpl : public gc::GCAllocatedRuntime {
+#define Py_TRAVERSE(obj)                                                                                               \
+    do {                                                                                                               \
+        int vret = (obj).traverse(visit, arg);                                                                         \
+        if (vret)                                                                                                      \
+            return vret;                                                                                               \
+    } while (0)
+
+
+class BoxIteratorImpl {
 public:
     virtual ~BoxIteratorImpl() = default;
     virtual void next() = 0;
     virtual Box* getValue() = 0;
     virtual bool isSame(const BoxIteratorImpl* rhs) = 0;
-
-    virtual void gc_visit(GCVisitor* v) = 0;
+    virtual int traverse(visitproc visit, void* arg) = 0;
 };
 
 class BoxIterator {
@@ -552,9 +580,7 @@ public:
     BoxIteratorImpl* impl;
 
     BoxIterator(BoxIteratorImpl* impl) : impl(impl) {}
-    ~BoxIterator() = default;
 
-    static llvm::iterator_range<BoxIterator> getRange(Box* container);
     bool operator==(BoxIterator const& rhs) const { return impl->isSame(rhs.impl); }
     bool operator!=(BoxIterator const& rhs) const { return !(*this == rhs); }
 
@@ -565,8 +591,83 @@ public:
 
     Box* operator*() const { return impl->getValue(); }
     Box* operator*() { return impl->getValue(); }
+};
 
-    void gcHandler(GCVisitor* v) { v->visitPotential(impl); }
+// Similar to std::unique_ptr<>, but allocates its data on the stack.
+// This means that it should only be used with types that can be relocated trivially.
+// TODO add assertions for that, similar to SmallFunction.
+// Also, if you copy the SmallUniquePtr, the address that it represents changes (since you
+// copy the data as well).  In debug mode, this class will enforce that once you get the
+// pointer value, it does not get copied again.
+template <typename T, int N> class SmallUniquePtr {
+private:
+    char _data[N];
+    bool owned;
+#ifndef NDEBUG
+    bool address_taken = false;
+#endif
+
+    template <typename ConcreteType, typename... Args> SmallUniquePtr(ConcreteType* dummy, Args... args) {
+        static_assert(sizeof(ConcreteType) <= N, "SmallUniquePtr not large enough to contain this object");
+        new (_data) ConcreteType(std::forward<Args>(args)...);
+        owned = true;
+    }
+
+public:
+    template <typename ConcreteType, typename... Args> static SmallUniquePtr emplace(Args... args) {
+        return SmallUniquePtr<T, N>((ConcreteType*)nullptr, args...);
+    }
+
+    SmallUniquePtr(const SmallUniquePtr&) = delete;
+    SmallUniquePtr(SmallUniquePtr&& rhs) { *this = std::move(rhs); }
+    void operator=(const SmallUniquePtr&) = delete;
+    void operator=(SmallUniquePtr&& rhs) {
+        assert(!rhs.address_taken && "Invalid copy after being converted to a pointer");
+        std::swap(_data, rhs._data);
+        owned = false;
+        std::swap(owned, rhs.owned);
+    }
+
+    ~SmallUniquePtr() {
+        if (owned)
+            ((T*)this)->~T();
+    }
+    operator T*() {
+#ifndef NDEBUG
+        address_taken = true;
+#endif
+        return reinterpret_cast<T*>(_data);
+    }
+};
+
+// A custom "range" container that helps manage lifetimes.  We need to free the underlying Impl object
+// when the range loop is done; previously we had the iterator itself handle this, but that started
+// to get complicated since they get copied around, and the management of the begin() and end() iterators
+// is slightly different.
+// So to simplify, have the range object take care of it.
+//
+// Note: be careful when explicitly calling begin().  The returned iterator points into this BoxIteratorRange
+// object, so once you call begin() it is a bug to move/copy this BoxIteratorRange object (the SmallUniquePtr
+// should complain).
+class BoxIteratorRange {
+private:
+    typedef SmallUniquePtr<BoxIteratorImpl, 32> UniquePtr;
+    UniquePtr begin_impl;
+    BoxIteratorImpl* end_impl;
+
+public:
+    template <typename ImplType, typename T>
+    BoxIteratorRange(BoxIteratorImpl* end, T&& arg, ImplType* dummy)
+        : begin_impl(UniquePtr::emplace<ImplType, T>(arg)), end_impl(end) {}
+
+    BoxIterator begin() { return BoxIterator(begin_impl); }
+    BoxIterator end() { return BoxIterator(end_impl); }
+
+    int traverse(visitproc visit, void* arg) {
+        Py_TRAVERSE(*begin_impl);
+        Py_TRAVERSE(*end_impl);
+        return 0;
+    }
 };
 
 class HiddenClass;
@@ -577,16 +678,21 @@ struct GetattrRewriteArgs;
 struct DelattrRewriteArgs;
 
 // Helper function around PyString_InternFromString:
-BoxedString* internStringImmortal(llvm::StringRef s);
+BoxedString* internStringImmortal(llvm::StringRef s) noexcept;
 
 // Callers should use this function if they can accept mortal string objects.
 // FIXME For now it just returns immortal strings, but at least we can use it
 // to start documenting the places that can take mortal strings.
-inline BoxedString* internStringMortal(llvm::StringRef s) {
+inline BoxedString* internStringMortal(llvm::StringRef s) noexcept {
     return internStringImmortal(s);
 }
 
 // TODO this is an immortal intern for now
+// Ref usage: this transfers a ref from the passed-in string to the new one.
+// Typical usage:
+// Py_INCREF(s); // or otherwise make sure it was owned
+// internStringMortalInplace(s);
+// AUTO_DECREF(s);
 inline void internStringMortalInplace(BoxedString*& s) noexcept {
     PyString_InternInPlace((PyObject**)&s);
 }
@@ -602,98 +708,56 @@ public:
     HiddenClass* hcls;
     AttrList* attr_list;
 
-    HCAttrs(HiddenClass* hcls = root_hcls) : hcls(hcls), attr_list(nullptr) {}
+    HCAttrs(HiddenClass* hcls = NULL) : hcls(hcls), attr_list(nullptr) {}
+
+    int traverse(visitproc visit, void* arg) noexcept;
+
+    void _clearRaw() noexcept;       // Raw clear -- clears out and decrefs all the attrs.
+                                     // Meant for implementing other clear-like functions
+    void clearForDealloc() noexcept; // meant for normal object deallocation.  converts the attrwrapper
+    void moduleClear() noexcept;     // Meant for _PyModule_Clear.  doesn't clear all attributes.
 };
 static_assert(sizeof(HCAttrs) == sizeof(struct _hcattrs), "");
+
+extern std::vector<BoxedClass*> classes;
+
+// Debugging helper: pass this as a tp_clear function to say that you have explicitly verified
+// that you don't need a tp_clear (as opposed to haven't added one yet)
+#define NOCLEAR ((inquiry)-1)
 
 class BoxedDict;
 class BoxedString;
 
-// "Box" is the base class of any C++ type that implements a Python type.  For example,
-// BoxedString is the data structure that implements Python's str type, and BoxedString
-// inherits from Box.
-//
-// This is the same as CPython's PyObject (and they are interchangeable), with the difference
-// since we are in C++ (whereas CPython is in C) we can use C++ inheritance to implement
-// Python inheritance, and avoid the raw pointer casts that CPython needs everywhere.
-class Box {
-private:
-    BoxedDict** getDictPtr();
-
-    // Appends a new value to the hcattrs array.
-    void appendNewHCAttr(Box* val, SetattrRewriteArgs* rewrite_args);
-
-public:
-    // Add a no-op constructor to make sure that we don't zero-initialize cls
-    Box() {}
-
-    void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default")));
-    void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
-
-    // Note: cls gets initialized in the new() function.
-    BoxedClass* cls;
-
-    llvm::iterator_range<BoxIterator> pyElements();
-
-    // For instances with hc attrs:
-    size_t getHCAttrsOffset();
-    HCAttrs* getHCAttrsPtr();
-    void setDictBacked(Box* d);
-    // For instances with dict attrs:
-    BoxedDict* getDict();
-    void setDict(BoxedDict* d);
-
-
-    void setattr(BoxedString* attr, Box* val, SetattrRewriteArgs* rewrite_args);
-    void giveAttr(const char* attr, Box* val) { giveAttr(internStringMortal(attr), val); }
-    void giveAttr(BoxedString* attr, Box* val) {
-        assert(!this->hasattr(attr));
-        this->setattr(attr, val, NULL);
+#if STAT_ALLOCATION_TYPES
+#define ALLOC_STATS(cls)                                                                                               \
+    if (cls->tp_name) {                                                                                                \
+        std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
+        std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
+        Stats::log(Stats::getStatCounter(per_name_alloc_name));                                                        \
+        Stats::log(Stats::getStatCounter(per_name_allocsize_name), size);                                              \
     }
-
-    void giveAttrDescriptor(const char* attr, Box* (*get)(Box*, void*),
-            void (*set)(Box*, Box*, void*));
-
-    // getattr() does the equivalent of PyDict_GetItem(obj->dict, attr): it looks up the attribute's value on the
-    // object's attribute storage. it doesn't look at other objects or do any descriptor logic.
-    template <Rewritable rewritable = REWRITABLE>
-    Box* getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args);
-    Box* getattr(BoxedString* attr) { return getattr<NOT_REWRITABLE>(attr, NULL); }
-    bool hasattr(BoxedString* attr) { return getattr(attr) != NULL; }
-    void delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args);
-
-    // Only valid for hc-backed instances:
-    Box* getAttrWrapper();
-
-    Box* reprIC();
-    BoxedString* reprICAsString();
-    bool nonzeroIC();
-    Box* hasnextOrNullIC();
-
-    friend class AttrWrapper;
-
-    static void gcHandler(GCVisitor* v, Box* b);
-};
-static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
-
-// Our default for tp_alloc:
-extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
-
-// These are some macros for tying the C++ type hiercharchy to the Pyston type hiercharchy.
-// Classes that inherit from Box have a special operator new() that takes a class object (as
-// a BoxedClass*) since the class is necessary for object allocation.
-// To enable expressions such as `new BoxedString()` instead of having to type
-// `new (str_cls) BoxedString()` everywhere, we need to tell C++ what the default class is.
-// We can do this by putting `DEFAULT_CLASS(str_cls);` anywhere in the definition of BoxedString.
-#define DEFAULT_CLASS(default_cls)                                                                                     \
-    void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
-        assert(cls->tp_itemsize == 0);                                                                                 \
-        return Box::operator new(size, cls);                                                                           \
-    }                                                                                                                  \
-    void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
-        assert(default_cls->tp_itemsize == 0);                                                                         \
-        return Box::operator new(size, default_cls);                                                                   \
+#define ALLOC_STATS_VAR(cls)                                                                                           \
+    if (cls->tp_name) {                                                                                                \
+        std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
+        std::string per_name_alloc_name0 = "alloc." + std::string(cls->tp_name) + "(0)";                               \
+        std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
+        std::string per_name_allocsize_name0 = "allocsize." + std::string(cls->tp_name) + "(0)";                       \
+        static StatCounter alloc_name(per_name_alloc_name);                                                            \
+        static StatCounter alloc_name0(per_name_alloc_name0);                                                          \
+        static StatCounter allocsize_name(per_name_allocsize_name);                                                    \
+        static StatCounter allocsize_name0(per_name_allocsize_name0);                                                  \
+        if (nitems == 0) {                                                                                             \
+            alloc_name0.log();                                                                                         \
+            allocsize_name0.log(_PyObject_VAR_SIZE(cls, nitems));                                                      \
+        } else {                                                                                                       \
+            alloc_name.log();                                                                                          \
+            allocsize_name.log(_PyObject_VAR_SIZE(cls, nitems));                                                       \
+        }                                                                                                              \
     }
+#else
+#define ALLOC_STATS(cls)
+#define ALLOC_STATS_VAR(cls)
+#endif
 
 #if STAT_ALLOCATION_TYPES
 #define ALLOC_STATS(cls)                                                                                               \
@@ -727,39 +791,138 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 #endif
 
 
-// In the simple cases, we can inline the fast paths of the following methods and improve allocation speed quite a bit:
-// - Box::operator new
-// - cls->tp_alloc
-// - PystonType_GenericAlloc
-// - PyObject_Init
-// The restrictions on when you can use the SIMPLE (ie fast) variant are encoded as
-// asserts in the 1-arg operator new function:
-#define DEFAULT_CLASS_SIMPLE(default_cls)                                                                              \
+// These are just dummy objects to help us differentiate operator new() versions from each other, since we can't use
+// normal templating or different function names.
+struct FastToken {};
+extern FastToken FAST;
+struct FastGCToken {};
+extern FastGCToken FAST_GC;
+
+
+// "Box" is the base class of any C++ type that implements a Python type.  For example,
+// BoxedString is the data structure that implements Python's str type, and BoxedString
+// inherits from Box.
+//
+// This is the same as CPython's PyObject (and they are interchangeable), with the difference
+// since we are in C++ (whereas CPython is in C) we can use C++ inheritance to implement
+// Python inheritance, and avoid the raw pointer casts that CPython needs everywhere.
+class Box {
+private:
+    BoxedDict** getDictPtr();
+
+    // Appends a new value to the hcattrs array.
+    void appendNewHCAttr(BORROWED(Box*) val, SetattrRewriteArgs* rewrite_args);
+
+protected:
+    // newFast(): a fast implementation of operator new() that optimizes for the common case.  It does this
+    // by inlining the following methods and skipping most of the dynamic checks:
+    // - Box::operator new
+    // - cls->tp_alloc
+    // - PyType_GenericAlloc
+    // - PyObject_Init
+    // The restrictions on when you can use the fast variant are encoded as assertions in the implementation
+    // (see runtime/types.h)
+    template <bool is_gc> static void* newFast(size_t size, BoxedClass* cls);
+
+public:
+    // Add a no-op constructor to make sure that we don't zero-initialize cls
+    Box() {}
+
+    void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default")));
+
+    void* operator new(size_t size, BoxedClass* cls, FastToken _dummy) { return newFast<false>(size, cls); }
+    void* operator new(size_t size, BoxedClass* cls, FastGCToken _dummy) { return newFast<true>(size, cls); }
+
+    void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
+
+    _PyObject_HEAD_EXTRA;
+
+    Py_ssize_t ob_refcnt;
+
+    // Note: cls gets initialized in the new() function.
+    BoxedClass* cls;
+
+    BoxIteratorRange pyElements();
+
+    // For instances with hc attrs:
+    size_t getHCAttrsOffset();
+    HCAttrs* getHCAttrsPtr();
+    void setDictBacked(STOLEN(Box*) d);
+    // For instances with dict attrs:
+    BORROWED(BoxedDict*) getDict();
+
+
+    // Note, setattr does *not* steal a reference, but it probably should
+    void setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rewrite_args);
+    // giveAttr consumes a reference to val and attr
+    void giveAttr(const char* attr, STOLEN(Box*) val) { giveAttr(internStringMortal(attr), val); }
+    // giveAttrBorrowed consumes a reference only to attr (but it only has the const char* variant
+    // which creates the reference).  should probably switch the names to stay consistent; most functions
+    // don't steal references.
+    void giveAttrBorrowed(const char* attr, Box* val) {
+        Py_INCREF(val);
+        giveAttr(internStringMortal(attr), val);
+    }
+    void giveAttr(STOLEN(BoxedString*) attr, STOLEN(Box*) val);
+
+    void clearAttrsForDealloc();
+
+    void giveAttrDescriptor(const char* attr, Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*));
+    void giveCapiAttrDescriptor(const char* attr, Box* (*get)(Box*, void*), int (*set)(Box*, Box*, void*));
+
+    // getattr() does the equivalent of PyDict_GetItem(obj->dict, attr): it looks up the attribute's value on the
+    // object's attribute storage. it doesn't look at other objects or do any descriptor logic.
+    template <Rewritable rewritable = REWRITABLE>
+    BORROWED(Box*) getattr(BoxedString* attr, GetattrRewriteArgs* rewrite_args);
+    BORROWED(Box*) getattr(BoxedString* attr) { return getattr<NOT_REWRITABLE>(attr, NULL); }
+    BORROWED(Box*) getattrString(const char* attr);
+
+    bool hasattr(BoxedString* attr) { return getattr(attr) != NULL; }
+    void delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args);
+
+    // Only valid for hc-backed instances:
+    BORROWED(Box*) getAttrWrapper();
+
+    Box* reprIC();
+    BoxedString* reprICAsString();
+    bool nonzeroIC();
+    Box* hasnextOrNullIC();
+
+    friend class AttrWrapper;
+
+#ifdef Py_TRACE_REFS
+    static Box createRefchain() {
+        Box rtn;
+        rtn._ob_next = &rtn;
+        rtn._ob_prev = &rtn;
+        return rtn;
+    }
+#endif
+};
+static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
+
+// These are some macros for tying the C++ type hiercharchy to the Pyston type hiercharchy.
+// Classes that inherit from Box have a special operator new() that takes a class object (as
+// a BoxedClass*) since the class is necessary for object allocation.
+// To enable expressions such as `new BoxedString()` instead of having to type
+// `new (str_cls) BoxedString()` everywhere, we need to tell C++ what the default class is.
+// We can do this by putting `DEFAULT_CLASS(str_cls);` anywhere in the definition of BoxedString.
+#define DEFAULT_CLASS(default_cls)                                                                                     \
     void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
+        assert(cls->tp_itemsize == 0);                                                                                 \
         return Box::operator new(size, cls);                                                                           \
     }                                                                                                                  \
     void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
-        ALLOC_STATS(default_cls);                                                                                      \
-        assert(default_cls->tp_alloc == PystonType_GenericAlloc);                                                      \
         assert(default_cls->tp_itemsize == 0);                                                                         \
-        assert(default_cls->tp_basicsize == size);                                                                     \
-        assert(default_cls->is_pyston_class);                                                                          \
-        assert(default_cls->attrs_offset == 0);                                                                        \
-                                                                                                                       \
-        /* Don't allocate classes through this -- we need to keep track of all class objects. */                       \
-        assert(default_cls != type_cls);                                                                               \
-        assert(!gc::hasOrderedFinalizer(default_cls));                                                                 \
-                                                                                                                       \
-        /* note: we want to use size instead of tp_basicsize, since size is a compile-time constant */                 \
-        void* mem = gc_alloc(size, gc::GCKind::PYTHON);                                                                \
-        assert(mem);                                                                                                   \
-                                                                                                                       \
-        Box* rtn = static_cast<Box*>(mem);                                                                             \
-                                                                                                                       \
-        rtn->cls = default_cls;                                                                                        \
-        return rtn;                                                                                                    \
-        /* TODO: there should be a way to not have to do this nested inlining by hand */                               \
+        return Box::operator new(size, default_cls);                                                                   \
     }
+
+// A faster version that can be used for classes that can use "FAST" operator new
+#define DEFAULT_CLASS_SIMPLE(default_cls, is_gc)                                                                       \
+    void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
+        return Box::operator new(size, cls);                                                                           \
+    }                                                                                                                  \
+    void* operator new(size_t size) __attribute__((visibility("default"))) { return newFast<is_gc>(size, default_cls); }
 
 // This corresponds to CPython's PyVarObject, for objects with a variable number of "items" that are stored inline.
 // For example, strings and tuples store their data in line in the main object allocation, so are BoxVars.  Lists,
@@ -793,6 +956,7 @@ static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size),
         return BoxVar::operator new(size, default_cls, nitems);                                                        \
     }
 
+// TODO: extract out newFastVar like we did with newFast
 #define DEFAULT_CLASS_VAR_SIMPLE(default_cls, itemsize)                                                                \
     static_assert(itemsize > 0, "");                                                                                   \
     inline void _base_check() {                                                                                        \
@@ -805,17 +969,18 @@ static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size),
     }                                                                                                                  \
     void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {                            \
         ALLOC_STATS_VAR(default_cls)                                                                                   \
-        assert(default_cls->tp_alloc == PystonType_GenericAlloc);                                                      \
+        assert(default_cls->tp_alloc == PyType_GenericAlloc);                                                          \
         assert(default_cls->tp_itemsize == itemsize);                                                                  \
         assert(default_cls->tp_basicsize == size);                                                                     \
         assert(default_cls->is_pyston_class);                                                                          \
         assert(default_cls->attrs_offset == 0);                                                                        \
                                                                                                                        \
-        void* mem = gc_alloc(size + nitems * itemsize, gc::GCKind::PYTHON);                                            \
+        void* mem = PyObject_MALLOC(size + nitems * itemsize);                                                         \
         assert(mem);                                                                                                   \
                                                                                                                        \
         BoxVar* rtn = static_cast<BoxVar*>(mem);                                                                       \
         rtn->cls = default_cls;                                                                                        \
+        _Py_NewReference(rtn);                                                                                         \
         rtn->ob_size = nitems;                                                                                         \
         return rtn;                                                                                                    \
     }
@@ -824,9 +989,8 @@ class BoxedClass;
 
 // TODO these shouldn't be here
 void setupRuntime();
-void teardownRuntime();
 Box* createAndRunModule(BoxedString* name, const std::string& fn);
-BoxedModule* createModule(BoxedString* name, const char* fn = NULL, const char* doc = NULL);
+BORROWED(BoxedModule*) createModule(BoxedString* name, const char* fn = NULL, const char* doc = NULL) noexcept;
 Box* moduleInit(BoxedModule* self, Box* name, Box* doc = NULL);
 
 // TODO where to put this
@@ -860,6 +1024,7 @@ struct ExcInfo {
     Box* type, *value, *traceback;
 
     constexpr ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {}
+    void clear();
     bool matches(BoxedClass* cls) const;
     void printExcAndTraceback() const;
 };
@@ -884,27 +1049,46 @@ struct FrameInfo {
     // uninitialized.  When one wants to access any of the values, you need to check if exc.type
     // is NULL, and if so crawl up the stack looking for the first frame with a non-null exc.type
     // and copy that.
+    //
+    // Note: Adding / moving any fields here requires updating the "getXxxGEP()" functions in irgenerator.cpp
     ExcInfo exc;
 
     // This field is always initialized:
     Box* boxedLocals;
 
     BoxedFrame* frame_obj;
-    BoxedClosure* passed_closure;
+    BORROWED(BoxedClosure*) passed_closure;
 
     Box** vregs;
+    int num_vregs;
+
     AST_stmt* stmt; // current statement
     // This is either a module or a dict
-    Box* globals;
+    BORROWED(Box*) globals;
 
     FrameInfo* back;
     FunctionMetadata* md;
 
-    Box* updateBoxedLocals();
+    BORROWED(Box*) updateBoxedLocals();
 
-    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), frame_obj(0), passed_closure(0), vregs(0), stmt(0), globals(0), back(0), md(0) {}
+    static FrameInfo* const NO_DEINIT;
 
-    void gcVisit(GCVisitor* visitor);
+    // Calling disableDeinit makes future deinitFrameMaybe() frames not call deinitFrame().
+    // For use by deopt(), which takes over deinit responsibility for its caller.
+    void disableDeinit(FrameInfo* replacement_frame);
+    bool isDisabledFrame() const { return back == NO_DEINIT; }
+
+    FrameInfo(ExcInfo exc)
+        : exc(exc),
+          boxedLocals(NULL),
+          frame_obj(0),
+          passed_closure(0),
+          vregs(0),
+          num_vregs(INT_MAX),
+          stmt(0),
+          globals(0),
+          back(0),
+          md(0) {}
 };
 
 // callattr() takes a number of flags and arguments, and for performance we pack them into a single register:
@@ -970,11 +1154,4 @@ int binarySearch(T needle, RandomAccessIterator start, RandomAccessIterator end,
     return -(l + 1);
 }
 }
-
-// We need to override these functions so that our GC can know about them.
-namespace std {
-template <> std::pair<pyston::Box**, std::ptrdiff_t> get_temporary_buffer<pyston::Box*>(std::ptrdiff_t count) noexcept;
-template <> void return_temporary_buffer<pyston::Box*>(pyston::Box** p);
-}
-
 #endif

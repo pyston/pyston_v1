@@ -18,5 +18,4 @@ class C(object):
 for i in xrange(100000):
     C()
 
-print "This will break"
 print basic_test.load()

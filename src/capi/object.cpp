@@ -191,6 +191,7 @@ static PyObject* _generic_dir(PyObject* obj) noexcept {
     } else if (dict->cls == attrwrapper_cls) {
         auto new_dict = PyDict_New();
         PyDict_Update(new_dict, dict);
+        Py_DECREF(dict);
         dict = new_dict;
     } else if (!PyDict_Check(dict)) {
         Py_DECREF(dict);
@@ -328,7 +329,7 @@ extern "C" PyObject* PyObject_Unicode(PyObject* v) noexcept {
         /* We're an instance of a classic class */
         /* Try __unicode__ from the instance -- alas we have no type */
         if (!unicodestr) {
-            unicodestr = PyString_InternFromString("__unicode__");
+            unicodestr = getStaticString("__unicode__");
             if (!unicodestr)
                 return NULL;
         }
@@ -475,6 +476,7 @@ extern "C" PyObject* PyObject_Str(PyObject* v) noexcept {
 }
 
 extern "C" PyObject* PyObject_SelfIter(PyObject* obj) noexcept {
+    Py_INCREF(obj);
     return obj;
 }
 
@@ -488,17 +490,22 @@ extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* 
             PyErr_Format(PyExc_TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(name)->tp_name);
             return -1;
         }
+    } else {
+        Py_INCREF(name);
     }
+    AUTO_DECREF(name);
 
     BoxedString* str = static_cast<BoxedString*>(name);
+    incref(str);
     internStringMortalInplace(str);
+    AUTO_DECREF(str);
 
     assert(PyString_Check(name));
     try {
         if (value == NULL)
             delattrGeneric(obj, str, NULL);
         else
-            setattrGeneric<NOT_REWRITABLE>(obj, str, value, NULL);
+            setattrGeneric<NOT_REWRITABLE>(obj, str, incref(value), NULL);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -519,14 +526,16 @@ extern "C" int PyObject_SetAttr(PyObject* obj, PyObject* name, PyObject* value) 
     }
 
     BoxedString* name_str = static_cast<BoxedString*>(name);
+    Py_INCREF(name_str);
     internStringMortalInplace(name_str);
+    AUTO_DECREF(name_str);
 
     assert(PyString_Check(name));
     try {
         if (value == NULL)
             delattr(obj, name_str);
         else
-            setattr(obj, name_str, value);
+            setattr(obj, name_str, incref(value));
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -536,7 +545,7 @@ extern "C" int PyObject_SetAttr(PyObject* obj, PyObject* name, PyObject* value) 
 
 extern "C" int PyObject_SetAttrString(PyObject* v, const char* name, PyObject* w) noexcept {
     try {
-        setattr(v, internStringMortal(name), w);
+        setattr(v, autoDecref(internStringMortal(name)), incref(w));
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -546,7 +555,7 @@ extern "C" int PyObject_SetAttrString(PyObject* v, const char* name, PyObject* w
 
 extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) noexcept {
     try {
-        Box* r = getattrInternal<ExceptionStyle::CXX>(o, internStringMortal(attr));
+        Box* r = getattrInternal<ExceptionStyle::CXX>(o, autoDecref(internStringMortal(attr)));
         if (!r)
             PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name, attr);
         return r;
@@ -1105,4 +1114,218 @@ extern "C" int PyObject_RichCompareBool(PyObject* v, PyObject* w, int op) noexce
     Py_DECREF(res);
     return ok;
 }
+
+#ifdef Py_REF_DEBUG
+extern "C" {
+Py_ssize_t _Py_RefTotal;
+}
+
+extern "C" Py_ssize_t _Py_GetRefTotal(void) noexcept {
+    PyObject* o;
+    Py_ssize_t total = _Py_RefTotal;
+/* ignore the references to the dummy object of the dicts and sets
+ *        because they are not reliable and not useful (now that the
+ *               hash table code is well-tested) */
+
+// Pyston change: not sure what these are
+#if 0
+    o = _PyDict_Dummy();
+    if (o != NULL)
+        total -= o->ob_refcnt;
+    o = _PySet_Dummy();
+    if (o != NULL)
+        total -= o->ob_refcnt;
+#endif
+    return total;
+}
+#endif /* Py_REF_DEBUG */
+
+#ifdef Py_REF_DEBUG
+/* Log a fatal error; doesn't return. */
+extern "C" void _Py_NegativeRefcount(const char* fname, int lineno, PyObject* op) noexcept {
+    char buf[300];
+
+    PyOS_snprintf(buf, sizeof(buf), "%s:%i object at %p has negative ref count "
+                                    "%" PY_FORMAT_SIZE_T "d.  \033[40mwatch -l *(long*)%p\033[0m",
+                  fname, lineno, op, op->ob_refcnt, &op->ob_refcnt);
+    Py_FatalError(buf);
+}
+
+#endif /* Py_REF_DEBUG */
+
+extern "C" {
+int _PyTrash_delete_nesting = 0;
+PyObject* _PyTrash_delete_later = NULL;
+}
+
+extern "C" void _PyTrash_thread_deposit_object(PyObject* op) noexcept {
+    PyThreadState* tstate = PyThreadState_GET();
+    assert(PyObject_IS_GC(op));
+    assert(_Py_AS_GC(op)->gc.gc_refs == _PyGC_REFS_UNTRACKED);
+    assert(op->ob_refcnt == 0);
+    _Py_AS_GC(op)->gc.gc_prev = (PyGC_Head*)tstate->trash_delete_later;
+    tstate->trash_delete_later = op;
+}
+
+extern "C" void _PyTrash_thread_destroy_chain() noexcept {
+    PyThreadState* tstate = PyThreadState_GET();
+    while (tstate->trash_delete_later) {
+        PyObject* op = tstate->trash_delete_later;
+        destructor dealloc = Py_TYPE(op)->tp_dealloc;
+
+        tstate->trash_delete_later = (PyObject*)_Py_AS_GC(op)->gc.gc_prev;
+
+        /* Call the deallocator directly.  This used to try to
+         * fool Py_DECREF into calling it indirectly, but
+         * Py_DECREF was already called on this object, and in
+         * assorted non-release builds calling Py_DECREF again ends
+         * up distorting allocation statistics.
+         */
+        assert(op->ob_refcnt == 0);
+        ++tstate->trash_delete_nesting;
+        (*dealloc)(op);
+        --tstate->trash_delete_nesting;
+    }
+}
+
+#ifdef Py_TRACE_REFS
+/* Head of circular doubly-linked list of all objects.  These are linked
+ * together via the _ob_prev and _ob_next members of a PyObject, which
+ * exist only in a Py_TRACE_REFS build.
+ */
+extern "C" {
+// static PyObject refchain = { &refchain, &refchain };
+static PyObject refchain(Box::createRefchain());
+}
+
+/* Insert op at the front of the list of all objects.  If force is true,
+ * op is added even if _ob_prev and _ob_next are non-NULL already.  If
+ * force is false amd _ob_prev or _ob_next are non-NULL, do nothing.
+ * force should be true if and only if op points to freshly allocated,
+ * uninitialized memory, or you've unlinked op from the list and are
+ * relinking it into the front.
+ * Note that objects are normally added to the list via _Py_NewReference,
+ * which is called by PyObject_Init.  Not all objects are initialized that
+ * way, though; exceptions include statically allocated type objects, and
+ * statically allocated singletons (like Py_True and Py_None).
+ */
+extern "C" void _Py_AddToAllObjects(PyObject* op, int force) noexcept {
+#ifdef Py_DEBUG
+    if (!force) {
+        /* If it's initialized memory, op must be in or out of
+         * the list unambiguously.
+         */
+        assert((op->_ob_prev == NULL) == (op->_ob_next == NULL));
+    }
+#endif
+    if (force || op->_ob_prev == NULL) {
+        op->_ob_next = refchain._ob_next;
+        op->_ob_prev = &refchain;
+        refchain._ob_next->_ob_prev = op;
+        refchain._ob_next = op;
+    }
+}
+#endif /* Py_TRACE_REFS */
+
+#ifdef Py_TRACE_REFS
+
+extern "C" void _Py_NewReference(PyObject* op) noexcept {
+    _Py_INC_REFTOTAL;
+    op->ob_refcnt = 1;
+    _Py_AddToAllObjects(op, 1);
+    _Py_INC_TPALLOCS(op);
+}
+
+extern "C" void _Py_ForgetReference(register PyObject* op) noexcept {
+#ifdef SLOW_UNREF_CHECK
+    register PyObject* p;
+#endif
+    if (op->ob_refcnt < 0)
+        Py_FatalError("UNREF negative refcnt");
+    if (op == &refchain || op->_ob_prev->_ob_next != op || op->_ob_next->_ob_prev != op)
+        Py_FatalError("UNREF invalid object");
+#ifdef SLOW_UNREF_CHECK
+    for (p = refchain._ob_next; p != &refchain; p = p->_ob_next) {
+        if (p == op)
+            break;
+    }
+    if (p == &refchain) /* Not found */
+        Py_FatalError("UNREF unknown object");
+#endif
+    op->_ob_next->_ob_prev = op->_ob_prev;
+    op->_ob_prev->_ob_next = op->_ob_next;
+    op->_ob_next = op->_ob_prev = NULL;
+    _Py_INC_TPFREES(op);
+}
+
+extern "C" void _Py_Dealloc(PyObject* op) noexcept {
+    destructor dealloc = Py_TYPE(op)->tp_dealloc;
+    _Py_ForgetReference(op);
+    (*dealloc)(op);
+}
+
+/* Print all live objects.  Because PyObject_Print is called, the
+ * interpreter must be in a healthy state.
+ */
+extern "C" void _Py_PrintReferences(FILE* fp) noexcept {
+    PyObject* op;
+    fprintf(fp, "Remaining objects:\n");
+    for (op = refchain._ob_next; op != &refchain; op = op->_ob_next) {
+        fprintf(fp, "%p [%" PY_FORMAT_SIZE_T "d] ", op, op->ob_refcnt);
+        if (PyObject_Print(op, fp, 0) != 0)
+            PyErr_Clear();
+        putc('\n', fp);
+    }
+}
+
+/* Print the addresses of all live objects.  Unlike _Py_PrintReferences, this
+ * doesn't make any calls to the Python C API, so is always safe to call.
+ */
+extern "C" void _Py_PrintReferenceAddresses(FILE* fp) noexcept {
+    _Py_PrintReferenceAddressesCapped(fp, INT_MAX);
+}
+
+extern "C" void _Py_PrintReferenceAddressesCapped(FILE* fp, int max_to_print) noexcept {
+    PyObject* op;
+    fprintf(fp, "Remaining object addresses:\n");
+    int found = 0;
+    for (op = refchain._ob_next; op != &refchain; op = op->_ob_next) {
+        found++;
+        if (found <= max_to_print) {
+            fprintf(fp, "%p [%" PY_FORMAT_SIZE_T "d] %s     \033[40mwatch -l ((PyObject*)%p)->ob_refcnt\033[0m\n", op,
+                    op->ob_refcnt, Py_TYPE(op)->tp_name, op);
+        }
+    }
+    if (found > max_to_print) {
+        fprintf(fp, "%d more found (but not printed)\n", found - max_to_print);
+    }
+}
+
+extern "C" PyObject* _Py_GetObjects(PyObject* self, PyObject* args) noexcept {
+    int i, n;
+    PyObject* t = NULL;
+    PyObject* res, *op;
+
+    if (!PyArg_ParseTuple(args, "i|O", &n, &t))
+        return NULL;
+    op = refchain._ob_next;
+    res = PyList_New(0);
+    if (res == NULL)
+        return NULL;
+    for (i = 0; (n == 0 || i < n) && op != &refchain; i++) {
+        while (op == self || op == args || op == res || op == t || (t != NULL && Py_TYPE(op) != (PyTypeObject*)t)) {
+            op = op->_ob_next;
+            if (op == &refchain)
+                return res;
+        }
+        if (PyList_Append(res, op) < 0) {
+            Py_DECREF(res);
+            return NULL;
+        }
+        op = op->_ob_next;
+    }
+    return res;
+}
+
+#endif
 }

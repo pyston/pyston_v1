@@ -368,7 +368,6 @@ class IntTestCases(IntLongCommonTests, unittest.TestCase):
     def test_error_on_string_base(self):
         self.assertRaises(TypeError, int, 100, base='foo')
 
-    @test_support.cpython_only
     def test_small_ints(self):
         self.assertIs(int('10'), 10)
         self.assertIs(int('-1'), -1)

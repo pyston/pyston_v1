@@ -51,6 +51,7 @@ ETAGS := ctags-exuberant -e
 NINJA := ninja
 
 CMAKE_DIR_DBG := $(BUILD_DIR)/Debug
+CMAKE_DIR_DBG_TO_SRC := ../.. # Relative path from $(CAMKE_DIR_DBG) to $(SRC_DIR).  Not sure how to calculate this automatically.
 CMAKE_DIR_RELEASE := $(BUILD_DIR)/Release
 CMAKE_DIR_GCC := $(BUILD_DIR)/Debug-gcc
 CMAKE_DIR_RELEASE_GCC := $(BUILD_DIR)/Release-gcc
@@ -397,7 +398,7 @@ all: pyston_dbg pyston_release pyston_gcc unittests check-deps $(RUN_DEPS)
 ALL_HEADERS := $(wildcard src/*/*.h) $(wildcard src/*/*/*.h) $(wildcard from_cpython/Include/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(FROM_CPYTHON_SRCS) $(ALL_HEADERS)
 	$(ECHO) Calculating tags...
-	$(VERB) $(CTAGS) $^
+	$(VERB) $(CTAGS) -I noexcept -I noexcept+ -I PYSTON_NOEXCEPT -I STOLEN -I BORROWED $^
 
 TAGS: $(SRCS) $(OPTIONAL_SRCS) $(FROM_CPYTHON_SRCS) $(ALL_HEADERS)
 	$(ECHO) Calculating TAGS...
@@ -420,7 +421,7 @@ run_unittests:: run_$1_unittests
 )
 endef
 
-GDB_CMDS := $(GDB_PRE_CMDS) --ex "set confirm off" --ex "handle SIGUSR2 pass nostop noprint" --ex run --ex "bt 20" $(GDB_POST_CMDS)
+GDB_CMDS := $(GDB_PRE_CMDS) --ex "source pyston_gdbinit.txt" --ex "run" --ex "bt 20" $(GDB_POST_CMDS)
 BR ?=
 ARGS ?=
 ifneq ($(BR),)
@@ -775,7 +776,7 @@ check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1
 	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing -t50 $(TEST_DIR)/cpython $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t600 $(TEST_DIR)/integration $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-X -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-X -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -t50 -k $(TESTS_DIR) $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-O -a=-S -k $(TESTS_DIR) $(ARGS)
 
 .PHONY: run$1 dbg$1
@@ -921,7 +922,7 @@ watch_%:
 		TARGET=$(dir $@)$(patsubst watch_%,%,$(notdir $@)); \
 		clear; $(MAKE) $$TARGET $(WATCH_ARGS); true; \
 		while inotifywait -q -e modify -e attrib -e move -e move_self -e create -e delete -e delete_self \
-		Makefile $$(find src test \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; \
+		Makefile $$(find src test plugins \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; \
 			$(MAKE) $$TARGET $(WATCH_ARGS); \
 		done )
 		# Makefile $$(find \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) -o -type d ); do clear; $(MAKE) $(patsubst watch_%,%,$@); done )
@@ -1074,8 +1075,22 @@ lint_%: %.cpp plugins/clang_linter.so
 	$(ECHO) Linting $<
 	$(VERB) $(CLANG_CXX) -Xclang -load -Xclang plugins/clang_linter.so -Xclang -plugin -Xclang pyston-linter src/runtime/float.cpp $< -c -Isrc/ -Ifrom_cpython/Include -Ibuild/Debug/from_cpython/Include $(shell $(LLVM_BIN_DBG)/llvm-config --cxxflags) $(COMMON_CXXFLAGS) -no-pedantic -Wno-unused-variable -DNVALGRIND -Wno-invalid-offsetof -Wno-mismatched-tags -Wno-unused-function -Wno-unused-private-field -Wno-sign-compare -DLLVMREV=$(LLVM_REVISION) -Ibuild_deps/lz4/lib -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped  -Ibuild_deps/libpypa/src/ -Wno-covered-switch-default -Ibuild/Debug/libunwind/include -Wno-extern-c-compat -Wno-unused-local-typedef -Wno-inconsistent-missing-override
 
+REFCOUNT_CHECKER_BUILD_PATH := $(CMAKE_DIR_DBG)/plugins/refcount_checker/llvm/bin/refcount_checker
+REFCOUNT_CHECKER_RUN_PATH := $(CMAKE_DIR_DBG)/llvm/bin/refcount_checker
+$(REFCOUNT_CHECKER_RUN_PATH): refcount_checker
+
+.PHONY: refcount_checker
 refcount_checker:
-	$(NINJA) -C $(CMAKE_DIR_DBG) refcount_checker
+	$(NINJA) -C $(CMAKE_DIR_DBG) refcount_checker copy_stdlib $(NINJAFLAGS)
+	cp $(REFCOUNT_CHECKER_BUILD_PATH) $(REFCOUNT_CHECKER_RUN_PATH)
+
+.PHONY: refcheck_%
+refcheck_%: %.cpp refcount_checker
+	cd $(CMAKE_DIR_DBG); $(REFCOUNT_CHECKER_RUN_PATH) ../../$<
+.PHONY: dbg_refcheck_%
+dbg_refcheck_%: %.cpp refcount_checker
+	cd $(CMAKE_DIR_DBG); $(GDB) --ex run --ex "bt 20" --args $(REFCOUNT_CHECKER_RUN_PATH) ../../$<
+
 
 .PHONY: clang_lint
 clang_lint: $(foreach FN,$(MAIN_SRCS),$(dir $(FN))lint_$(notdir $(FN:.cpp=)))

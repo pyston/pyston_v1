@@ -429,9 +429,7 @@ close_the_file(PyFileObject *f)
     if (local_fp != NULL) {
         local_close = f->f_close;
         if (local_close != NULL && f->unlocked_count > 0) {
-            // Pyston change:
-            // if (f->ob_refcnt > 0) {
-            if (/*f->ob_refcnt*/ 2 > 0) {
+            if (f->ob_refcnt > 0) {
                 PyErr_SetString(PyExc_IOError,
                     "close() called during concurrent "
                     "operation on the same file object.");
@@ -1600,9 +1598,7 @@ PyFile_GetLine(PyObject *f, int n)
                             "EOF when reading a line");
         }
         else if (s[len-1] == '\n') {
-            // Pyston change:
-            // if (result->ob_refcnt == 1) {
-            if (/*result->ob_refcnt*/ 2 == 1) {
+            if (result->ob_refcnt == 1) {
                 if (_PyString_Resize(&result, len-1))
                     return NULL;
             }
@@ -1625,9 +1621,7 @@ PyFile_GetLine(PyObject *f, int n)
                             "EOF when reading a line");
         }
         else if (s[len-1] == '\n') {
-            // Pyston change:
-            // if (result->ob_refcnt == 1)
-            if (/*result->ob_refcnt*/ 2 == 1)
+            if (result->ob_refcnt == 1)
                 PyUnicode_Resize(&result, len-1);
             else {
                 PyObject *v;
@@ -2358,6 +2352,8 @@ file_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 
     if (not_yet_string == NULL) {
         not_yet_string = PyString_InternFromString("<uninitialized file>");
+        // Pyston change:
+        PyGC_RegisterStaticConstant(not_yet_string);
         if (not_yet_string == NULL)
             return NULL;
     }

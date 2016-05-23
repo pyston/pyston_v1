@@ -22,7 +22,6 @@
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
-#include "gc/roots.h"
 #include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -88,6 +87,7 @@ extern "C" Box* listRepr(BoxedList* self) {
             assert(r->cls == str_cls);
             BoxedString* s = static_cast<BoxedString*>(r);
             chars.insert(chars.end(), s->s().begin(), s->s().end());
+            Py_DECREF(s);
         }
         chars.push_back(']');
     } catch (ExcInfo e) {
@@ -198,6 +198,9 @@ Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step, i64 length) {
     if (length > 0) {
         rtn->ensure(length);
         copySlice(&rtn->elts->elts[0], &self->elts->elts[0], start, step, length);
+        for (int i = 0; i < length; i++) {
+            Py_INCREF(rtn->elts->elts[i]);
+        }
         rtn->size += length;
     }
     return rtn;
@@ -235,7 +238,7 @@ static Box* list_slice(Box* o, Py_ssize_t ilow, Py_ssize_t ihigh) noexcept {
     return (PyObject*)np;
 }
 
-static inline Box* listGetitemUnboxed(BoxedList* self, int64_t n) {
+static inline BORROWED(Box*) listGetitemUnboxed(BoxedList* self, int64_t n) {
     assert(PyList_Check(self));
     if (n < 0)
         n = self->size + n;
@@ -249,10 +252,10 @@ static inline Box* listGetitemUnboxed(BoxedList* self, int64_t n) {
 
 extern "C" Box* listGetitemInt(BoxedList* self, BoxedInt* slice) {
     assert(PyInt_Check(slice));
-    return listGetitemUnboxed(self, slice->n);
+    return incref(listGetitemUnboxed(self, slice->n));
 }
 
-extern "C" PyObject* PyList_GetItem(PyObject* op, Py_ssize_t i) noexcept {
+extern "C" BORROWED(PyObject*) PyList_GetItem(PyObject* op, Py_ssize_t i) noexcept {
     RELEASE_ASSERT(PyList_Check(op), "");
     RELEASE_ASSERT(i >= 0, ""); // unlike list.__getitem__, PyList_GetItem doesn't do index wrapping
     try {
@@ -293,7 +296,7 @@ extern "C" Box* listGetslice(BoxedList* self, Box* boxedStart, Box* boxedStop) {
 static PyObject* list_item(PyListObject* a, Py_ssize_t i) noexcept {
     try {
         BoxedList* self = (BoxedList*)a;
-        return listGetitemUnboxed(self, i);
+        return incref(listGetitemUnboxed(self, i));
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -315,7 +318,7 @@ template <ExceptionStyle S> Box* listGetitem(BoxedList* self, Box* slice) {
         Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
         if (i == -1 && PyErr_Occurred())
             throwCAPIException();
-        return listGetitemUnboxed(self, i);
+        return incref(listGetitemUnboxed(self, i));
     } else if (slice->cls == slice_cls) {
         return listGetitemSlice<CXX>(self, static_cast<BoxedSlice*>(slice));
     } else {
@@ -331,13 +334,16 @@ static void _listSetitem(BoxedList* self, int64_t n, Box* v) {
         raiseExcHelper(IndexError, "list index out of range");
     }
 
+    Py_INCREF(v);
+    Box* prev = self->elts->elts[n];
     self->elts->elts[n] = v;
+    Py_DECREF(prev);
 }
 
 extern "C" Box* listSetitemUnboxed(BoxedList* self, int64_t n, Box* v) {
     assert(PyList_Check(self));
     _listSetitem(self, n, v);
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
@@ -519,15 +525,16 @@ static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i
     size_t v_size;
     Box** v_elts;
 
-    RootedBox v_as_seq((Box*)nullptr);
+    Box* v_as_seq = nullptr;
     if (!v) {
         v_size = 0;
         v_elts = NULL;
     } else {
-        if (self == v) // handle self assignment by creating a copy
-            v = _listSlice(self, 0, self->size, 1, self->size);
-
-        v_as_seq = RootedBox(PySequence_Fast(v, "can only assign an iterable"));
+        if (self == v) { // handle self assignment by creating a copy
+            v_as_seq = _listSlice(self, 0, self->size, 1, self->size);
+            assert(v_as_seq->cls == list_cls);
+        } else
+            v_as_seq = PySequence_Fast(v, "can only assign an iterable");
         if (v_as_seq == NULL)
             throwCAPIException();
 
@@ -543,13 +550,29 @@ static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i
     int remaining_elts = self->size - stop;
     self->ensure(delts);
 
+    Box** removed_elts = NULL;
+    if (stop > start) {
+        removed_elts = (Box**)PyMem_MALLOC((stop - start) * sizeof(Box*));
+        RELEASE_ASSERT(removed_elts, "");
+        memcpy(removed_elts, self->elts->elts + start, (stop - start) * sizeof(Box*));
+    }
+
     memmove(self->elts->elts + start + v_size, self->elts->elts + stop, remaining_elts * sizeof(Box*));
     for (int i = 0; i < v_size; i++) {
         Box* r = v_elts[i];
+        Py_XINCREF(r);
         self->elts->elts[start + i] = r;
     }
 
     self->size += delts;
+
+    for (int i = 0; i < stop - start; i++) {
+        Py_XDECREF(removed_elts[i]);
+    }
+    if (removed_elts)
+        PyMem_FREE(removed_elts);
+
+    Py_XDECREF(v_as_seq);
 }
 
 extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
@@ -568,11 +591,11 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
         int r = list_ass_ext_slice(self, slice, v);
         if (r)
             throwCAPIException();
-        return None;
+        Py_RETURN_NONE;
     }
 
     listSetitemSliceInt64(self, start, stop, step, v);
-    return None;
+    Py_RETURN_NONE;
 }
 
 // Analoguous to CPython's, used for sq_ slots.
@@ -590,7 +613,7 @@ extern "C" Box* listSetslice(BoxedList* self, Box* boxedStart, Box* boxedStop, B
     sliceIndex(boxedStop, &stop);
 
     listSetitemSliceInt64(self, start, stop, 1, value);
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
@@ -599,8 +622,8 @@ extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
         Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
         if (i == -1 && PyErr_Occurred())
             throwCAPIException();
-        listSetitemUnboxed(self, i, v);
-        return None;
+        _listSetitem(self, i, v);
+        Py_RETURN_NONE;
     } else if (slice->cls == slice_cls) {
         return listSetitemSlice(self, static_cast<BoxedSlice*>(slice), v);
     } else {
@@ -616,9 +639,11 @@ extern "C" Box* listDelitemInt(BoxedList* self, BoxedInt* slice) {
     if (n < 0 || n >= self->size) {
         raiseExcHelper(IndexError, "list index out of range");
     }
+    Box* e = self->elts->elts[n];
     memmove(self->elts->elts + n, self->elts->elts + n + 1, (self->size - n - 1) * sizeof(Box*));
     self->size--;
-    return None;
+    Py_DECREF(e);
+    Py_RETURN_NONE;
 }
 
 extern "C" Box* listDelitemSlice(BoxedList* self, BoxedSlice* slice) {
@@ -636,7 +661,7 @@ extern "C" Box* listDelitem(BoxedList* self, Box* slice) {
         Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
         if (i == -1 && PyErr_Occurred())
             throwCAPIException();
-        rtn = listDelitemInt(self, (BoxedInt*)boxInt(i));
+        rtn = listDelitemInt(self, (BoxedInt*)autoDecref(boxInt(i)));
     } else if (slice->cls == slice_cls) {
         rtn = listDelitemSlice(self, static_cast<BoxedSlice*>(slice));
     } else {
@@ -666,10 +691,11 @@ extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
         memmove(self->elts->elts + n + 1, self->elts->elts + n, (self->size - n) * sizeof(Box*));
 
         self->size++;
+        Py_INCREF(v);
         self->elts->elts[n] = v;
     }
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" int PyList_Insert(PyObject* op, Py_ssize_t where, PyObject* newitem) noexcept {
@@ -698,7 +724,7 @@ Box* listMul(BoxedList* self, Box* rhs) {
         if (n == -1 && PyErr_Occurred())
             throwCAPIException();
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     int s = self->size;
@@ -726,7 +752,7 @@ Box* listImul(BoxedList* self, Box* rhs) {
         if (n == -1 && PyErr_Occurred())
             throwCAPIException();
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     int s = self->size;
@@ -735,7 +761,7 @@ Box* listImul(BoxedList* self, Box* rhs) {
     if (n == 0) {
         listSetitemSliceInt64(self, 0, s, 1, NULL);
     } else if (n == 1) {
-        return self;
+        return incref(self);
     } else if (s == 1) {
         for (long i = 1; i < n; i++) {
             listAppendInternal(self, self->elts->elts[0]);
@@ -746,7 +772,7 @@ Box* listImul(BoxedList* self, Box* rhs) {
         }
     }
 
-    return self;
+    return incref(self);
 }
 
 Box* listIAdd(BoxedList* self, Box* _rhs) {
@@ -757,14 +783,19 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
         int s1 = self->size;
         int s2 = rhs->size;
 
-        if (s2 == 0)
-            return self;
+        if (s2 == 0) {
+            return incref(self);
+        }
 
         self->ensure(s1 + s2);
 
         memcpy(self->elts->elts + s1, rhs->elts->elts, sizeof(rhs->elts->elts[0]) * s2);
         self->size = s1 + s2;
-        return self;
+        for (int i = 0; i < s2; i++) {
+            Py_INCREF(self->elts->elts[i + s1]);
+        }
+
+        return incref(self);
     }
 
     if (_rhs->cls == tuple_cls) {
@@ -773,32 +804,37 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
         int s1 = self->size;
         int s2 = rhs->ob_size;
 
-        if (s2 == 0)
-            return self;
+        if (s2 == 0) {
+            return incref(self);
+        }
 
         self->ensure(s1 + s2);
 
         memcpy(self->elts->elts + s1, rhs->elts, sizeof(self->elts->elts[0]) * s2);
         self->size = s1 + s2;
-        return self;
+        for (int i = 0; i < s2; i++) {
+            Py_INCREF(self->elts->elts[i + s1]);
+        }
+
+        return incref(self);
     }
 
     RELEASE_ASSERT(_rhs != self, "unsupported");
 
     for (auto* b : _rhs->pyElements())
-        listAppendInternal(self, b);
+        listAppendInternalStolen(self, b);
 
-    return self;
+    return incref(self);
 }
 
 Box* listExtend(BoxedList* self, Box* _rhs) {
-    listIAdd(self, _rhs);
-    return None;
+    autoDecref(listIAdd(self, _rhs));
+    return incref(None);
 }
 
 Box* listAdd(BoxedList* self, Box* _rhs) {
     if (!PyList_Check(_rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
         raiseExcHelper(TypeError, "can only concatenate list (not \"%s\") to list", getTypeName(_rhs));
     }
 
@@ -813,6 +849,9 @@ Box* listAdd(BoxedList* self, Box* _rhs) {
     memcpy(rtn->elts->elts, self->elts->elts, sizeof(self->elts->elts[0]) * s1);
     memcpy(rtn->elts->elts + s1, rhs->elts->elts, sizeof(rhs->elts->elts[0]) * s2);
     rtn->size = s1 + s2;
+    for (int i = 0; i < s1 + s2; i++) {
+        Py_INCREF(rtn->elts->elts[i]);
+    }
     return rtn;
 }
 
@@ -824,7 +863,7 @@ Box* listReverse(BoxedList* self) {
         self->elts->elts[j] = e;
     }
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" int PyList_Reverse(PyObject* v) noexcept {
@@ -834,7 +873,7 @@ extern "C" int PyList_Reverse(PyObject* v) noexcept {
     }
 
     try {
-        listReverse(static_cast<BoxedList*>(v));
+        autoDecref(listReverse(static_cast<BoxedList*>(v)));
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -850,11 +889,66 @@ public:
     PyCmpComparer(Box* cmp) : cmp(cmp) {}
     bool operator()(Box* lhs, Box* rhs) {
         Box* r = runtimeCallInternal<CXX, NOT_REWRITABLE>(cmp, NULL, ArgPassSpec(2), lhs, rhs, NULL, NULL, NULL);
+        AUTO_DECREF(r);
         if (!PyInt_Check(r))
             raiseExcHelper(TypeError, "comparison function must return int, not %.200s", r->cls->tp_name);
         return static_cast<BoxedInt*>(r)->n < 0;
     }
 };
+
+void _sortArray(Box** elts, long num_elts, Box* cmp, Box* key) {
+    // TODO(kmod): maybe we should just switch to CPython's sort.  not sure how the algorithms compare,
+    // but they specifically try to support cases where __lt__ or the cmp function might end up inspecting
+    // the current list being sorted.
+    // I also don't know if std::stable_sort is exception-safe.
+
+    if (cmp) {
+        assert(!key);
+        std::stable_sort<Box**, PyCmpComparer>(elts, elts + num_elts, PyCmpComparer(cmp));
+    } else {
+        int num_keys_added = 0;
+        auto remove_keys = [&]() {
+            for (int i = 0; i < num_keys_added; i++) {
+                Box** obj_loc = &elts[i];
+                assert((*obj_loc)->cls == tuple_cls);
+                BoxedTuple* t = static_cast<BoxedTuple*>(*obj_loc);
+                *obj_loc = t->elts[2];
+                Py_DECREF(t);
+            }
+        };
+
+        try {
+            if (key) {
+                for (int i = 0; i < num_elts; i++) {
+                    Box** obj_loc = &elts[i];
+
+                    Box* key_val = runtimeCall(key, ArgPassSpec(1), *obj_loc, NULL, NULL, NULL, NULL);
+                    AUTO_DECREF(key_val);
+
+                    // Add the index as part of the new tuple so that the comparison never hits the
+                    // original object.
+                    // TODO we could potentially make this faster by copying the CPython approach of
+                    // creating special sortwrapper objects that compare only based on the key.
+                    Box* new_obj = BoxedTuple::create({ key_val, autoDecref(boxInt(i)), *obj_loc });
+
+                    *obj_loc = new_obj;
+                    num_keys_added++;
+                }
+            }
+
+            // We don't need to do a stable sort if there's a keyfunc, since we explicitly added the index
+            // as part of the sort key.
+            // But we might want to get rid of that approach?  CPython doesn't do that (they create special
+            // wrapper objects that compare only based on the key).
+            std::stable_sort<Box**, PyLt>(elts, elts + num_elts, PyLt());
+        } catch (ExcInfo e) {
+            remove_keys();
+            throw e;
+        }
+
+        remove_keys();
+    }
+}
 
 void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
     assert(PyList_Check(self));
@@ -867,62 +961,35 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
 
     RELEASE_ASSERT(!cmp || !key, "Specifying both the 'cmp' and 'key' keywords is currently not supported");
 
-    // TODO(kmod): maybe we should just switch to CPython's sort.  not sure how the algorithms compare,
-    // but they specifically try to support cases where __lt__ or the cmp function might end up inspecting
-    // the current list being sorted.
-    // I also don't know if std::stable_sort is exception-safe.
+    auto orig_size = self->size;
+    auto orig_elts = self->elts;
 
-    if (cmp) {
-        std::stable_sort<Box**, PyCmpComparer>(self->elts->elts, self->elts->elts + self->size, PyCmpComparer(cmp));
-    } else {
-        int num_keys_added = 0;
-        auto remove_keys = [&]() {
-            for (int i = 0; i < num_keys_added; i++) {
-                Box** obj_loc = &self->elts->elts[i];
-                assert((*obj_loc)->cls == tuple_cls);
-                *obj_loc = static_cast<BoxedTuple*>(*obj_loc)->elts[2];
-            }
-        };
+    self->elts = new (0) GCdArray();
+    self->size = 0;
 
-        try {
-            if (key) {
-                for (int i = 0; i < self->size; i++) {
-                    Box** obj_loc = &self->elts->elts[i];
-
-                    Box* key_val = runtimeCall(key, ArgPassSpec(1), *obj_loc, NULL, NULL, NULL, NULL);
-                    // Add the index as part of the new tuple so that the comparison never hits the
-                    // original object.
-                    // TODO we could potentially make this faster by copying the CPython approach of
-                    // creating special sortwrapper objects that compare only based on the key.
-                    Box* new_obj = BoxedTuple::create({ key_val, boxInt(i), *obj_loc });
-
-                    *obj_loc = new_obj;
-                    num_keys_added++;
-                }
-            }
-
-            // We don't need to do a stable sort if there's a keyfunc, since we explicitly added the index
-            // as part of the sort key.
-            // But we might want to get rid of that approach?  CPython doesn't do that (they create special
-            // wrapper objects that compare only based on the key).
-            std::stable_sort<Box**, PyLt>(self->elts->elts, self->elts->elts + self->size, PyLt());
-        } catch (ExcInfo e) {
-            remove_keys();
-            throw e;
-        }
-
-        remove_keys();
+    try {
+        _sortArray(orig_elts->elts, orig_size, cmp, key);
+    } catch (ExcInfo e) {
+        delete self->elts;
+        self->elts = orig_elts;
+        self->size = orig_size;
+        throw e;
     }
 
+    delete self->elts;
+    self->elts = orig_elts;
+    self->size = orig_size;
+
     if (nonzero(reverse)) {
-        listReverse(self);
+        Box* r = listReverse(self);
+        Py_DECREF(r);
     }
 }
 
 Box* listSortFunc(BoxedList* self, Box* cmp, Box* key, Box** _args) {
     Box* reverse = _args[0];
     listSort(self, cmp, key, reverse);
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" int PyList_Sort(PyObject* v) noexcept {
@@ -945,7 +1012,8 @@ extern "C" Box* PyList_GetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh) 
     assert(PyList_Check(a));
     BoxedList* self = static_cast<BoxedList*>(a);
     // Lots of extra copies here; we can do better if we need to:
-    return listGetitemSlice<CAPI>(self, new BoxedSlice(boxInt(ilow), boxInt(ihigh), boxInt(1)));
+    return listGetitemSlice<CAPI>(
+        self, autoDecref(new BoxedSlice(autoDecref(boxInt(ilow)), autoDecref(boxInt(ihigh)), autoDecref(boxInt(1)))));
 }
 
 static inline int listContainsShared(BoxedList* self, Box* elt) {
@@ -1059,6 +1127,7 @@ Box* listIndex(BoxedList* self, Box* elt, Box* _start, Box** args) {
         if (stop < 0)
             stop = 0;
     }
+    stop = std::min(stop, self->size);
 
     for (int64_t i = start; i < stop; i++) {
         Box* e = self->elts->elts[i];
@@ -1072,7 +1141,7 @@ Box* listIndex(BoxedList* self, Box* elt, Box* _start, Box** args) {
     }
 
     BoxedString* tostr = static_cast<BoxedString*>(repr(elt));
-    raiseExcHelper(ValueError, "%s is not in list", tostr->data());
+    raiseExcHelper(ValueError, "%s is not in list", autoDecref(tostr)->data());
 }
 
 Box* listRemove(BoxedList* self, Box* elt) {
@@ -1088,7 +1157,8 @@ Box* listRemove(BoxedList* self, Box* elt) {
         if (r) {
             memmove(self->elts->elts + i, self->elts->elts + i + 1, (self->size - i - 1) * sizeof(Box*));
             self->size--;
-            return None;
+            Py_DECREF(e);
+            Py_RETURN_NONE;
         }
     }
 
@@ -1102,24 +1172,21 @@ Box* listInit(BoxedList* self, Box* container) {
     assert(PyList_Check(self));
 
     if (container) {
-        listIAdd(self, container);
+        Box* r = listIAdd(self, container);
+        Py_DECREF(r);
     }
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 extern "C" PyObject* PyList_New(Py_ssize_t size) noexcept {
     try {
         BoxedList* l = new BoxedList();
         if (size) {
-            // This function is supposed to return a list of `size` NULL elements.
-            // That will probably trip an assert somewhere if we try to create that (ex
-            // I think the GC will expect them to be real objects so they can be relocated),
-            // so put None in instead
             l->ensure(size);
 
             for (Py_ssize_t i = 0; i < size; i++) {
-                l->elts->elts[i] = None;
+                l->elts->elts[i] = NULL;
             }
             l->size = size;
         }
@@ -1138,9 +1205,9 @@ Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {
 
     if (lsz != rsz) {
         if (op_type == AST_TYPE::Eq)
-            return False;
+            Py_RETURN_FALSE;
         if (op_type == AST_TYPE::NotEq)
-            return True;
+            Py_RETURN_TRUE;
     }
 
     int n = std::min(lsz, rsz);
@@ -1184,7 +1251,7 @@ Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {
 
 Box* listEq(BoxedList* self, Box* rhs) {
     if (!PyList_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::Eq);
@@ -1192,7 +1259,7 @@ Box* listEq(BoxedList* self, Box* rhs) {
 
 Box* listNe(BoxedList* self, Box* rhs) {
     if (!PyList_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::NotEq);
@@ -1200,7 +1267,7 @@ Box* listNe(BoxedList* self, Box* rhs) {
 
 Box* listLt(BoxedList* self, Box* rhs) {
     if (!PyList_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::Lt);
@@ -1208,7 +1275,7 @@ Box* listLt(BoxedList* self, Box* rhs) {
 
 Box* listLe(BoxedList* self, Box* rhs) {
     if (!PyList_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::LtE);
@@ -1216,7 +1283,7 @@ Box* listLe(BoxedList* self, Box* rhs) {
 
 Box* listGt(BoxedList* self, Box* rhs) {
     if (!PyList_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::Gt);
@@ -1224,7 +1291,7 @@ Box* listGt(BoxedList* self, Box* rhs) {
 
 Box* listGe(BoxedList* self, Box* rhs) {
     if (!PyList_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::GtE);
@@ -1235,7 +1302,9 @@ extern "C" PyObject* _PyList_Extend(PyListObject* self, PyObject* b) noexcept {
     assert(PyList_Check(l));
 
     try {
-        return listIAdd(l, b);
+        Box* r = listIAdd(l, b);
+        Py_DECREF(r);
+        Py_RETURN_NONE;
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -1251,6 +1320,7 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
     BoxedList* l = (BoxedList*)a;
     ASSERT(PyList_Check(l), "%s", l->cls->tp_name);
 
+    // TODO should just call list_ass_slice
     try {
         adjustNegativeIndicesOnObject(l, &ilow, &ihigh);
         listSetitemSliceInt64(l, ilow, ihigh, 1, v);
@@ -1259,6 +1329,31 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
         setCAPIException(e);
         return -1;
     }
+}
+
+void BoxedList::dealloc(Box* b) noexcept {
+    BoxedList* op = static_cast<BoxedList*>(b);
+
+    Py_ssize_t i;
+    PyObject_GC_UnTrack(op);
+    Py_TRASHCAN_SAFE_BEGIN(op) if (op->elts != NULL) {
+        /* Do it backwards, for Christian Tismer.
+           There's a simple test case where somehow this reduces
+           thrashing when a *very* large list is created and
+           immediately deleted. */
+        i = Py_SIZE(op);
+        while (--i >= 0) {
+            Py_XDECREF(op->elts->elts[i]);
+        }
+        delete op->elts;
+    }
+#if 0
+    if (numfree < PyList_MAXFREELIST && PyList_CheckExact(op))
+        free_list[numfree++] = op;
+    else
+#endif
+    Py_TYPE(op)->tp_free((PyObject*)op);
+    Py_TRASHCAN_SAFE_END(op)
 }
 
 template <ExceptionStyle S> Box* listiterNext(Box* s) noexcept(S == CAPI) {
@@ -1277,25 +1372,36 @@ template <ExceptionStyle S> Box* listiterNext(Box* s) noexcept(S == CAPI) {
 template Box* listiterNext<CAPI>(Box*) noexcept;
 template Box* listiterNext<CXX>(Box*);
 
-void BoxedListIterator::gcHandler(GCVisitor* v, Box* b) {
-    Box::gcHandler(v, b);
-    BoxedListIterator* it = (BoxedListIterator*)b;
-    v->visit(&it->l);
+int BoxedList::traverse(Box* _o, visitproc visit, void* arg) noexcept {
+    PyListObject* o = (PyListObject*)_o;
+    Py_ssize_t i;
+
+    for (i = Py_SIZE(o); --i >= 0;)
+        Py_VISIT(o->ob_item[i]);
+    return 0;
 }
 
-void BoxedList::gcHandler(GCVisitor* v, Box* b) {
-    assert(PyList_Check(b));
-
-    Box::gcHandler(v, b);
-
-    BoxedList* l = (BoxedList*)b;
-    int size = l->size;
-    int capacity = l->capacity;
-    assert(capacity >= size);
-    if (capacity)
-        v->visit(&l->elts);
-    if (size)
-        v->visitRange(&l->elts->elts[0], &l->elts->elts[size]);
+int BoxedList::clear(Box* _a) noexcept {
+    BoxedList* a = (BoxedList*)_a;
+    Py_ssize_t i;
+    if (a->elts) {
+        PyObject** item = a->elts->elts;
+        /* Because XDECREF can recursively invoke operations on
+           this list, we make it empty first. */
+        i = Py_SIZE(a);
+        Py_SIZE(a) = 0;
+        a->capacity = 0;
+        auto old_elts = a->elts;
+        a->elts = NULL;
+        while (--i >= 0) {
+            Py_XDECREF(item[i]);
+        }
+        delete old_elts;
+    }
+    /* Never fails; the return value can be ignored.
+       Note that there is no guarantee that the list is actually empty
+       at this point, because XDECREF may have populated it again! */
+    return 0;
 }
 
 void setupList() {
@@ -1304,10 +1410,12 @@ void setupList() {
     static PyMappingMethods list_as_mapping;
     list_cls->tp_as_mapping = &list_as_mapping;
 
-    list_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
-                                           sizeof(BoxedListIterator), false, "listiterator", false);
-    list_reverse_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedListIterator::gcHandler, 0, 0,
-                                                   sizeof(BoxedListIterator), false, "listreverseiterator");
+    list_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedListIterator), false, "listiterator",
+                                           false, (destructor)BoxedListIterator::dealloc, NULL, true,
+                                           (traverseproc)BoxedListIterator::traverse, NOCLEAR);
+    list_reverse_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedListIterator), false,
+                                                   "listreverseiterator", false, (destructor)BoxedListIterator::dealloc,
+                                                   NULL, true, (traverseproc)BoxedListIterator::traverse, NOCLEAR);
     list_iterator_cls->instances_are_nonzero = list_reverse_iterator_cls->instances_are_nonzero = true;
 
     list_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)listLen, BOXED_INT, 1)));
@@ -1385,7 +1493,7 @@ void setupList() {
     list_cls->giveAttr("remove", new BoxedFunction(FunctionMetadata::create((void*)listRemove, NONE, 2)));
     list_cls->giveAttr("reverse", new BoxedFunction(FunctionMetadata::create((void*)listReverse, NONE, 1)));
 
-    list_cls->giveAttr("__hash__", None);
+    list_cls->giveAttrBorrowed("__hash__", None);
     list_cls->freeze();
     list_cls->tp_iter = listIter;
 
@@ -1427,11 +1535,5 @@ void setupList() {
     list_reverse_iterator_cls->freeze();
     list_reverse_iterator_cls->tp_iternext = listreviter_next;
     list_reverse_iterator_cls->tp_iter = PyObject_SelfIter;
-}
-
-void teardownList() {
-    // TODO do clearattrs?
-    // decref(list_iterator_cls);
-    // decref(list_reverse_iterator_cls);
 }
 }

@@ -1,4 +1,3 @@
-
 # The six.py module exposed some issues with how we were handling imports;
 # an imported name is not necessarily an attribute of the module object itself,
 # it can be a class object too.  It also goes through descriptor logic.

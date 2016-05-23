@@ -69,6 +69,7 @@ print (0.5).as_integer_ratio()
 print (0.5).is_integer()
 print (1.0).is_integer()
 print 1.0.__hash__(), 1.1.__hash__(), -1.1.__hash__()
+print (0.5).conjugate(), (0.6).imag
 
 print 1.0 ** (10 ** 100)
 print (-1.0) ** (10 ** 100)

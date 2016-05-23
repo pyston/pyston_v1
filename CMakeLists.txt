@@ -49,6 +49,11 @@ option(ENABLE_LLVM_DEBUG "LLVM debug symbols" OFF)
 option(ENABLE_OPROFILE "enable oprofile support" OFF)
 option(ENABLE_SELF_HOST "use pyston to test pyston" OFF)
 option(ENABLE_VALGRIND "pyston valgrind support" OFF)
+if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+  option(ENABLE_REF_DEBUG "enable memory and refcounting debugging" ON)
+else()
+  option(ENABLE_REF_DEBUG "enable memory and refcounting debugging" OFF)
+endif()
 
 option(ENABLE_PGO "enable -fprofile-generate/-fprofile-use" OFF)
 option(ENABLE_LTO "enable -flto" OFF)
@@ -103,6 +108,12 @@ if(ENABLE_PGO)
     set(PROFILE_STATE "${PROFILE_STATE}=${PROFILE_DIR}")
   endif()
   set(PGO_FLAGS "-fprofile-${PROFILE_STATE} -fprofile-correction")
+endif()
+
+if(ENABLE_REF_DEBUG)
+ add_definitions(-DPy_REF_DEBUG)
+ add_definitions(-DPYMALLOC_DEBUG)
+ add_definitions(-DPy_TRACE_REFS)
 endif()
 
 macro(ADD_PROFILE_FLAGS)
@@ -290,6 +301,8 @@ link_directories(${LLVM_LIBRARY_DIRS})
 
 ADD_PROFILE_FLAGS()
 
+include(sysconfigdata)
+
 add_subdirectory(lib_pyston)
 add_subdirectory(from_cpython)
 add_subdirectory(src)
@@ -321,7 +334,6 @@ set(PYTHONIOENCODING utf-8)
 
 add_test(NAME lint COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME check-format COMMAND ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_TOOLS_BINARY_DIR}/clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
-add_test(NAME gc_unittest COMMAND gc_unittest)
 add_test(NAME analysis_unittest COMMAND analysis_unittest)
 
 macro(add_pyston_test testname directory)
@@ -408,4 +420,4 @@ include(CPack)
 
 
 # last file added (need to change this if we add a file that is added via a glob):
-# from_cpython/Lib/test/test_zipimport.py
+# from_cpython/Include/genobject.h

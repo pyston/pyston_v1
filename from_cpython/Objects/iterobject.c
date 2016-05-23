@@ -82,7 +82,7 @@ calliter_iternext(calliterobject *it)
     // Pyston change: for __hasnext__ based iteration, return the cached next value
     if (it->it_nextvalue != NULL) {
         PyObject* rv = it->it_nextvalue;
-        Py_CLEAR(it->it_nextvalue);
+        it->it_nextvalue = NULL;
         return rv;
     }
 

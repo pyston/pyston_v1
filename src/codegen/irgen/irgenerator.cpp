@@ -46,7 +46,7 @@ extern "C" void dumpLLVM(void* _v) {
 
 IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* source_info,
                        std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc,
-                       llvm::MDNode* func_dbg_info)
+                       llvm::MDNode* func_dbg_info, RefcountTracker* refcount_tracker)
     : md(md),
       cf(cf),
       source_info(source_info),
@@ -54,6 +54,7 @@ IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* s
       param_names(param_names),
       gc(gc),
       func_dbg_info(func_dbg_info),
+      refcount_tracker(refcount_tracker),
       scratch_space(NULL),
       frame_info(NULL),
       globals(NULL),
@@ -164,19 +165,24 @@ template <typename Builder> static llvm::Value* getVRegsGep(Builder& builder, ll
     return builder.CreateConstInBoundsGEP2_32(v, 0, 4);
 }
 
-template <typename Builder> static llvm::Value* getStmtGep(Builder& builder, llvm::Value* v) {
-    static_assert(offsetof(FrameInfo, stmt) == 56, "");
+template <typename Builder> static llvm::Value* getNumVRegsGep(Builder& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, num_vregs) == 56, "");
     return builder.CreateConstInBoundsGEP2_32(v, 0, 5);
 }
 
-template <typename Builder> static llvm::Value* getGlobalsGep(Builder& builder, llvm::Value* v) {
-    static_assert(offsetof(FrameInfo, globals) == 64, "");
+template <typename Builder> static llvm::Value* getStmtGep(Builder& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, stmt) == 64, "");
     return builder.CreateConstInBoundsGEP2_32(v, 0, 6);
 }
 
+template <typename Builder> static llvm::Value* getGlobalsGep(Builder& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, globals) == 72, "");
+    return builder.CreateConstInBoundsGEP2_32(v, 0, 7);
+}
+
 template <typename Builder> static llvm::Value* getMDGep(Builder& builder, llvm::Value* v) {
-    static_assert(offsetof(FrameInfo, md) == 64 + 16, "");
-    return builder.CreateConstInBoundsGEP2_32(v, 0, 8);
+    static_assert(offsetof(FrameInfo, md) == 72 + 16, "");
+    return builder.CreateConstInBoundsGEP2_32(v, 0, 9);
 }
 
 void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* passed_globals,
@@ -219,23 +225,26 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         assert(!passed_globals);
 
         // The OSR case
-
         this->frame_info = frame_info_arg;
 
         // use vrags array from the interpreter
         vregs = builder.CreateLoad(getVRegsGep(builder, frame_info_arg));
         this->globals = builder.CreateLoad(getGlobalsGep(builder, frame_info_arg));
+        getRefcounts()->setType(this->globals, RefType::BORROWED);
 
         if (getScopeInfo()->usesNameLookup()) {
             // load frame_info.boxedLocals
             this->boxed_locals = builder.CreateLoad(getBoxedLocalsGep(builder, this->frame_info));
+            getRefcounts()->setType(this->boxed_locals, RefType::BORROWED);
         }
 
     } else {
         // The "normal" case
+        llvm::AllocaInst* al = builder.CreateAlloca(g.llvm_frame_info_type, NULL, "frame_info");
+        assert(al->isStaticAlloca());
+
         assert(!vregs);
-        getMD()->calculateNumVRegs();
-        int num_user_visible_vregs = getMD()->source->cfg->sym_vreg_map_user_visible.size();
+        int num_user_visible_vregs = getMD()->calculateNumUserVisibleVRegs();
         if (num_user_visible_vregs > 0) {
             auto* vregs_alloca
                 = builder.CreateAlloca(g.llvm_value_type_ptr, getConstantInt(num_user_visible_vregs), "vregs");
@@ -246,12 +255,10 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         } else
             vregs = getNullPtr(g.llvm_value_type_ptr_ptr);
 
-        llvm::AllocaInst* al = builder.CreateAlloca(g.llvm_frame_info_type, NULL, "frame_info");
-        assert(al->isStaticAlloca());
-
-
         // frame_info.exc.type = NULL
         llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
+        getRefcounts()->setType(null_value, RefType::BORROWED);
+        getRefcounts()->setNullable(null_value, true);
         llvm::Value* exc_info = getExcinfoGep(builder, al);
         builder.CreateStore(null_value,
                             builder.CreateConstInBoundsGEP2_32(exc_info, 0, offsetof(ExcInfo, type) / sizeof(Box*)));
@@ -264,20 +271,26 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
             // frame_info.boxedLocals = createDict()
             // (Since this can call into the GC, we have to initialize it to NULL first as we did above.)
             this->boxed_locals = builder.CreateCall(g.funcs.createDict);
-            builder.CreateStore(this->boxed_locals, boxed_locals_gep);
+            getRefcounts()->setType(this->boxed_locals, RefType::OWNED);
+            auto inst = builder.CreateStore(this->boxed_locals, boxed_locals_gep);
+            getRefcounts()->refConsumed(this->boxed_locals, inst);
         }
 
         // frame_info.frame_obj = NULL
         static llvm::Type* llvm_frame_obj_type_ptr
             = llvm::cast<llvm::StructType>(g.llvm_frame_info_type)->getElementType(2);
-        builder.CreateStore(getNullPtr(llvm_frame_obj_type_ptr), getFrameObjGep(builder, al));
+        auto null_frame = getNullPtr(llvm_frame_obj_type_ptr);
+        getRefcounts()->setType(null_frame, RefType::BORROWED);
+        builder.CreateStore(null_frame, getFrameObjGep(builder, al));
 
         // set  frame_info.passed_closure
         builder.CreateStore(passed_closure, getPassedClosureGep(builder, al));
         // set frame_info.globals
-        builder.CreateStore(passed_globals, getGlobalsGep(builder, al));
+        auto globals_store = builder.CreateStore(passed_globals, getGlobalsGep(builder, al));
+        getRefcounts()->refConsumed(passed_globals, globals_store);
         // set frame_info.vregs
         builder.CreateStore(vregs, getVRegsGep(builder, al));
+        builder.CreateStore(getConstantInt(num_user_visible_vregs, g.i32), getNumVRegsGep(builder, al));
         builder.CreateStore(embedRelocatablePtr(getMD(), g.llvm_functionmetadata_type_ptr), getMDGep(builder, al));
 
         this->frame_info = al;
@@ -340,6 +353,13 @@ llvm::Value* IRGenState::getGlobalsIfCustom() {
     return getGlobals();
 }
 
+// This is a hacky little constant that should only be used by the underlying exception-propagation code.
+// But it means that we are calling a function that 1) throws a C++ exception, and 2) we explicitly want to
+// disable generation of a C++ fixup.  This is really just for propagating an exception after it had gotten caught.
+#define NO_CXX_INTERCEPTION ((llvm::BasicBlock*)-1)
+
+llvm::Value* IREmitter::ALWAYS_THROWS = ((llvm::Value*)1);
+
 class IREmitterImpl : public IREmitter {
 private:
     IRGenState* irstate;
@@ -348,6 +368,7 @@ private:
     IRGenerator* irgenerator;
 
     void emitPendingCallsCheck(llvm::BasicBlock* exc_dest) {
+#if ENABLE_SIGNAL_CHECKING
         auto&& builder = *getBuilder();
 
         llvm::GlobalVariable* pendingcalls_to_do_gv = g.cur_module->getGlobalVariable("_pendingcalls_to_do");
@@ -389,13 +410,51 @@ private:
 
         cur_block = join_block;
         setCurrentBasicBlock(join_block);
+#endif
+    }
+
+    void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val, llvm::Value* exc_val) {
+        assert(exc_val);
+
+        llvm::BasicBlock* normal_dest
+            = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
+        normal_dest->moveAfter(curblock);
+
+        llvm::BasicBlock* exc_dest
+            = irgenerator->getCAPIExcDest(curblock, unw_info.exc_dest, unw_info.current_stmt, unw_info.is_after_deopt);
+
+        if (exc_val == ALWAYS_THROWS) {
+            assert(returned_val->getType() == g.void_);
+
+            llvm::BasicBlock* exc_dest = irgenerator->getCAPIExcDest(curblock, unw_info.exc_dest, unw_info.current_stmt,
+                                                                     unw_info.is_after_deopt);
+            getBuilder()->CreateBr(exc_dest);
+        } else {
+            assert(returned_val->getType() == exc_val->getType());
+            llvm::Value* check_val = getBuilder()->CreateICmpEQ(returned_val, exc_val);
+            llvm::BranchInst* nullcheck = getBuilder()->CreateCondBr(check_val, exc_dest, normal_dest);
+        }
+
+        setCurrentBasicBlock(normal_dest);
     }
 
     llvm::CallSite emitCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
-                            ExceptionStyle target_exception_style) {
+                            ExceptionStyle target_exception_style, llvm::Value* capi_exc_value) {
         emitSetCurrentStmt(unw_info.current_stmt);
 
-        if (target_exception_style == CXX && (unw_info.hasHandler() || irstate->getExceptionStyle() == CAPI)) {
+        if (target_exception_style == CAPI)
+            assert(capi_exc_value);
+
+        bool needs_cxx_interception;
+        if (unw_info.exc_dest == NO_CXX_INTERCEPTION) {
+            needs_cxx_interception = false;
+        } else {
+            bool needs_refcounting_fixup = false;
+            needs_cxx_interception = (target_exception_style == CXX && (needs_refcounting_fixup || unw_info.hasHandler()
+                                                                        || irstate->getExceptionStyle() == CAPI));
+        }
+
+        if (needs_cxx_interception) {
             // Create the invoke:
             llvm::BasicBlock* normal_dest
                 = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
@@ -404,26 +463,39 @@ private:
             if (unw_info.hasHandler()) {
                 final_exc_dest = unw_info.exc_dest;
             } else {
-                assert(irstate->getExceptionStyle() == CAPI && "shoudn't have bothered creating an invoke");
-
                 final_exc_dest = NULL; // signal to reraise as a capi exception
             }
 
-            llvm::BasicBlock* exc_dest = irgenerator->getCXXExcDest(final_exc_dest);
+            llvm::BasicBlock* exc_dest = irgenerator->getCXXExcDest(unw_info);
             normal_dest->moveAfter(curblock);
 
             llvm::InvokeInst* rtn = getBuilder()->CreateInvoke(callee, normal_dest, exc_dest, args);
 
+            ASSERT(target_exception_style == CXX, "otherwise need to call checkAndPropagateCapiException");
+
+            // Note -- this code can often create critical edges between LLVM blocks.
+            // The refcounting system has some support for handling this, but if we start generating
+            // IR that it can't handle, we might have to break the critical edges here (or teach the
+            // refcounting system how to do that.)
+
             // Normal case:
             getBuilder()->SetInsertPoint(normal_dest);
             curblock = normal_dest;
-            emitPendingCallsCheck(exc_dest);
+            if (unw_info.hasHandler())
+                emitPendingCallsCheck(irgenerator->getCXXExcDest(unw_info));
+            else
+                emitPendingCallsCheck(NULL);
             return rtn;
         } else {
-
             llvm::CallInst* cs = getBuilder()->CreateCall(callee, args);
+
             if (target_exception_style == CXX)
-                emitPendingCallsCheck(NULL);
+                irstate->getRefcounts()->setMayThrow(cs);
+
+            if (target_exception_style == CAPI)
+                checkAndPropagateCapiException(unw_info, cs, capi_exc_value);
+
+            emitPendingCallsCheck(NULL);
             return cs;
         }
     }
@@ -431,9 +503,12 @@ private:
     llvm::CallSite emitPatchpoint(llvm::Type* return_type, const ICSetupInfo* pp, llvm::Value* func,
                                   const std::vector<llvm::Value*>& args,
                                   const std::vector<llvm::Value*>& ic_stackmap_args, const UnwindInfo& unw_info,
-                                  ExceptionStyle target_exception_style) {
+                                  ExceptionStyle target_exception_style, llvm::Value* capi_exc_value) {
         if (pp == NULL)
             assert(ic_stackmap_args.size() == 0);
+
+        if (target_exception_style == CAPI)
+            assert(capi_exc_value);
 
         // Retrieve address of called function, currently handles the IR
         // embedConstantPtr() and embedRelocatablePtr() create.
@@ -477,6 +552,9 @@ private:
         llvm::Intrinsic::ID intrinsic_id;
         if (return_type->isIntegerTy() || return_type->isPointerTy()) {
             intrinsic_id = llvm::Intrinsic::experimental_patchpoint_i64;
+
+            if (capi_exc_value && capi_exc_value->getType()->isPointerTy())
+                capi_exc_value = getBuilder()->CreatePtrToInt(capi_exc_value, g.i64);
         } else if (return_type->isVoidTy()) {
             intrinsic_id = llvm::Intrinsic::experimental_patchpoint_void;
         } else if (return_type->isDoubleTy()) {
@@ -486,7 +564,7 @@ private:
             abort();
         }
         llvm::Function* patchpoint = this->getIntrinsic(intrinsic_id);
-        llvm::CallSite rtn = this->emitCall(unw_info, patchpoint, pp_args, target_exception_style);
+        llvm::CallSite rtn = this->emitCall(unw_info, patchpoint, pp_args, target_exception_style, capi_exc_value);
         return rtn;
     }
 
@@ -529,13 +607,15 @@ public:
     // to a function which could throw an exception, inspect the python call frame,...
     // Only patchpoint don't need to set the current statement because the stmt will be inluded in the stackmap args.
     void emitSetCurrentStmt(AST_stmt* stmt) {
-        getBuilder()->CreateStore(stmt ? embedRelocatablePtr(stmt, g.llvm_aststmt_type_ptr)
-                                       : getNullPtr(g.llvm_aststmt_type_ptr),
-                                  irstate->getStmtVar());
+        if (stmt)
+            getBuilder()->CreateStore(stmt ? embedRelocatablePtr(stmt, g.llvm_aststmt_type_ptr)
+                                           : getNullPtr(g.llvm_aststmt_type_ptr),
+                                      irstate->getStmtVar());
     }
 
-    llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args,
-                            ExceptionStyle target_exception_style = CXX) override {
+    llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
+                                  const std::vector<llvm::Value*>& args, ExceptionStyle target_exception_style = CXX,
+                                  llvm::Value* capi_exc_value = NULL) override {
 #ifndef NDEBUG
         // Copied the argument-type-checking from CallInst::init, since the patchpoint arguments don't
         // get checked.
@@ -553,36 +633,42 @@ public:
             }
         }
 #endif
-        return emitCall(unw_info, callee, args, target_exception_style).getInstruction();
+        return emitCall(unw_info, callee, args, target_exception_style, capi_exc_value).getInstruction();
     }
 
-    llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
-                            ExceptionStyle target_exception_style = CXX) override {
-        return createCall(unw_info, callee, std::vector<llvm::Value*>(), target_exception_style);
+    llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
+                                  ExceptionStyle target_exception_style = CXX,
+                                  llvm::Value* capi_exc_value = NULL) override {
+        return createCall(unw_info, callee, std::vector<llvm::Value*>(), target_exception_style, capi_exc_value);
     }
 
-    llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
-                            ExceptionStyle target_exception_style = CXX) override {
-        return createCall(unw_info, callee, std::vector<llvm::Value*>({ arg1 }), target_exception_style);
+    llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                  ExceptionStyle target_exception_style = CXX,
+                                  llvm::Value* capi_exc_value = NULL) override {
+        return createCall(unw_info, callee, std::vector<llvm::Value*>({ arg1 }), target_exception_style,
+                          capi_exc_value);
     }
 
-    llvm::Value* createCall2(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
-                             ExceptionStyle target_exception_style = CXX) override {
-        return createCall(unw_info, callee, { arg1, arg2 }, target_exception_style);
+    llvm::Instruction* createCall2(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                   llvm::Value* arg2, ExceptionStyle target_exception_style = CXX,
+                                   llvm::Value* capi_exc_value = NULL) override {
+        return createCall(unw_info, callee, { arg1, arg2 }, target_exception_style, capi_exc_value);
     }
 
-    llvm::Value* createCall3(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
-                             llvm::Value* arg3, ExceptionStyle target_exception_style = CXX) override {
-        return createCall(unw_info, callee, { arg1, arg2, arg3 }, target_exception_style);
+    llvm::Instruction* createCall3(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                   llvm::Value* arg2, llvm::Value* arg3, ExceptionStyle target_exception_style = CXX,
+                                   llvm::Value* capi_exc_value = NULL) override {
+        return createCall(unw_info, callee, { arg1, arg2, arg3 }, target_exception_style, capi_exc_value);
     }
 
-    llvm::Value* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
-                          const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX) override {
+    llvm::Instruction* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
+                                const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX,
+                                llvm::Value* capi_exc_value = NULL) override {
         std::vector<llvm::Value*> stackmap_args;
 
         llvm::CallSite rtn = emitPatchpoint(pp->hasReturnValue() ? g.i64 : g.void_, pp,
                                             embedConstantPtr(func_addr, g.i8->getPointerTo()), args, stackmap_args,
-                                            unw_info, target_exception_style);
+                                            unw_info, target_exception_style, capi_exc_value);
 
         rtn.setCallingConv(pp->getCallingConvention());
         return rtn.getInstruction();
@@ -592,30 +678,39 @@ public:
         ICSetupInfo* pp = createDeoptIC();
         llvm::Value* v
             = createIC(pp, (void*)pyston::deopt, { embedRelocatablePtr(node, g.llvm_astexpr_type_ptr), node_value },
-                       UnwindInfo(current_stmt, NULL));
-        return getBuilder()->CreateIntToPtr(v, g.llvm_value_type_ptr);
-    }
-
-    void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val, llvm::Value* exc_val,
-                                        bool double_check = false) override {
-        assert(!double_check); // need to call PyErr_Occurred
-
-        llvm::BasicBlock* normal_dest
-            = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
-        normal_dest->moveAfter(curblock);
-
-        llvm::BasicBlock* exc_dest = irgenerator->getCAPIExcDest(curblock, unw_info.exc_dest, unw_info.current_stmt);
-
-        assert(returned_val->getType() == exc_val->getType());
-        llvm::Value* check_val = getBuilder()->CreateICmpEQ(returned_val, exc_val);
-        llvm::BranchInst* nullcheck = getBuilder()->CreateCondBr(check_val, exc_dest, normal_dest);
-
-        setCurrentBasicBlock(normal_dest);
+                       UnwindInfo(current_stmt, NULL, /* is_after_deopt*/ true));
+        llvm::Value* rtn = getBuilder()->CreateIntToPtr(v, g.llvm_value_type_ptr);
+        setType(rtn, RefType::OWNED);
+        return rtn;
     }
 
     Box* getIntConstant(int64_t n) override { return irstate->getSourceInfo()->parent_module->getIntConstant(n); }
 
     Box* getFloatConstant(double d) override { return irstate->getSourceInfo()->parent_module->getFloatConstant(d); }
+
+    void refConsumed(llvm::Value* v, llvm::Instruction* inst) override {
+        irstate->getRefcounts()->refConsumed(v, inst);
+    }
+
+    void refUsed(llvm::Value* v, llvm::Instruction* inst) override { irstate->getRefcounts()->refUsed(v, inst); }
+
+    llvm::Value* setType(llvm::Value* v, RefType reftype) override {
+        assert(llvm::isa<PointerType>(v->getType()));
+
+        irstate->getRefcounts()->setType(v, reftype);
+        return v;
+    }
+
+    llvm::Value* setNullable(llvm::Value* v, bool nullable) override {
+        irstate->getRefcounts()->setNullable(v, nullable);
+        return v;
+    }
+
+    ConcreteCompilerVariable* getNone() override {
+        llvm::Constant* none = embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone");
+        setType(none, RefType::BORROWED);
+        return new ConcreteCompilerVariable(typeFromClass(none_cls), none);
+    }
 };
 
 IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator) {
@@ -677,7 +772,6 @@ private:
     llvm::SmallVector<ExceptionState, 2> incoming_exc_state;
     // These are the values that are outgoing of an invoke block:
     llvm::SmallVector<ExceptionState, 2> outgoing_exc_state;
-    llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> cxx_exc_dests;
     llvm::DenseMap<llvm::BasicBlock*, llvm::BasicBlock*> capi_exc_dests;
     llvm::DenseMap<llvm::BasicBlock*, llvm::PHINode*> capi_phis;
 
@@ -697,6 +791,8 @@ public:
           myblock(myblock),
           types(types),
           state(RUNNING) {}
+
+    virtual CFGBlock* getCFGBlock() override { return myblock; }
 
 private:
     OpInfo getOpInfoForNode(AST* ast, const UnwindInfo& unw_info) {
@@ -744,7 +840,8 @@ private:
         curblock = deopt_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
         llvm::Value* v = emitter.createDeopt(current_statement, (AST_expr*)node, node_value);
-        emitter.getBuilder()->CreateRet(v);
+        llvm::Instruction* ret_inst = emitter.getBuilder()->CreateRet(v);
+        irstate->getRefcounts()->refConsumed(v, ret_inst);
 
         curblock = success_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
@@ -762,14 +859,12 @@ private:
         CompilerVariable* value = evalExpr(node->value, unw_info);
 
         CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), node->attr.getBox(), false);
-        value->decvref(emitter);
         return rtn;
     }
 
     CompilerVariable* evalClsAttribute(AST_ClsAttribute* node, const UnwindInfo& unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);
         CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), node->attr.getBox(), true);
-        value->decvref(emitter);
         return rtn;
     }
 
@@ -782,8 +877,6 @@ private:
 
                 ConcreteCompilerVariable* converted_obj = obj->makeConverted(emitter, obj->getBoxType());
                 ConcreteCompilerVariable* converted_cls = cls->makeConverted(emitter, cls->getBoxType());
-                obj->decvref(emitter);
-                cls->decvref(emitter);
 
                 llvm::Value* v = emitter.createCall(unw_info, g.funcs.exceptionMatches,
                                                     { converted_obj->getValue(), converted_cls->getValue() });
@@ -808,14 +901,20 @@ private:
                             = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, incoming_exc_state.size());
                         llvm::PHINode* phi_exc_tb
                             = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, incoming_exc_state.size());
+                        emitter.setType(phi_exc_type, RefType::OWNED);
+                        emitter.setType(phi_exc_value, RefType::OWNED);
+                        emitter.setType(phi_exc_tb, RefType::OWNED);
                         for (auto e : this->incoming_exc_state) {
                             phi_exc_type->addIncoming(e.exc_type->getValue(), e.from_block);
                             phi_exc_value->addIncoming(e.exc_value->getValue(), e.from_block);
                             phi_exc_tb->addIncoming(e.exc_tb->getValue(), e.from_block);
+                            emitter.refConsumed(e.exc_type->getValue(), e.from_block->getTerminator());
+                            emitter.refConsumed(e.exc_value->getValue(), e.from_block->getTerminator());
+                            emitter.refConsumed(e.exc_tb->getValue(), e.from_block->getTerminator());
                         }
-                        exc_type = new ConcreteCompilerVariable(UNKNOWN, phi_exc_type, true);
-                        exc_value = new ConcreteCompilerVariable(UNKNOWN, phi_exc_value, true);
-                        exc_tb = new ConcreteCompilerVariable(UNKNOWN, phi_exc_tb, true);
+                        exc_type = new ConcreteCompilerVariable(UNKNOWN, phi_exc_type);
+                        exc_value = new ConcreteCompilerVariable(UNKNOWN, phi_exc_value);
+                        exc_tb = new ConcreteCompilerVariable(UNKNOWN, phi_exc_tb);
                     }
                 } else {
                     // There can be no incoming exception if the irgenerator was able to prove that
@@ -823,9 +922,11 @@ private:
                     // For example, the cfg code will conservatively assume that any name-access can
                     // trigger an exception, but the irgenerator will know that definitely-defined
                     // local symbols will not throw.
-                    exc_type = undefVariable();
-                    exc_value = undefVariable();
-                    exc_tb = undefVariable();
+                    emitter.getBuilder()->CreateUnreachable();
+                    exc_type = exc_value = exc_tb = undefVariable();
+                    // TODO: should we not emit the rest of the block? I (kmod) think I tried that and
+                    // ran into some sort of issue, but I don't remember what it was.
+                    // endBlock(DEAD);
                 }
 
                 // clear this out to signal that we consumed them:
@@ -834,13 +935,12 @@ private:
                 return makeTuple({ exc_type, exc_value, exc_tb });
             }
             case AST_LangPrimitive::LOCALS: {
-                return new ConcreteCompilerVariable(UNKNOWN, irstate->getBoxedLocalsVar(), true);
+                return new ConcreteCompilerVariable(UNKNOWN, irstate->getBoxedLocalsVar());
             }
             case AST_LangPrimitive::GET_ITER: {
                 assert(node->args.size() == 1);
                 CompilerVariable* obj = evalExpr(node->args[0], unw_info);
                 auto rtn = obj->getPystonIter(emitter, getOpInfoForNode(node, unw_info));
-                obj->decvref(emitter);
                 return rtn;
             }
             case AST_LangPrimitive::IMPORT_FROM: {
@@ -850,7 +950,6 @@ private:
 
                 CompilerVariable* module = evalExpr(node->args[0], unw_info);
                 ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
-                module->decvref(emitter);
 
                 auto ast_str = ast_cast<AST_Str>(node->args[1]);
                 assert(ast_str->str_type == AST_Str::STR);
@@ -860,12 +959,12 @@ private:
                 llvm::Value* name_arg
                     = embedRelocatablePtr(irstate->getSourceInfo()->parent_module->getStringConstant(name, true),
                                           g.llvm_boxedstring_type_ptr);
+                emitter.setType(name_arg, RefType::BORROWED);
                 llvm::Value* r
                     = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(), name_arg);
+                emitter.setType(r, RefType::OWNED);
 
-                CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
-
-                converted_module->decvref(emitter);
+                CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r);
                 return v;
             }
             case AST_LangPrimitive::IMPORT_STAR: {
@@ -877,13 +976,11 @@ private:
 
                 CompilerVariable* module = evalExpr(node->args[0], unw_info);
                 ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
-                module->decvref(emitter);
 
                 llvm::Value* r = emitter.createCall2(unw_info, g.funcs.importStar, converted_module->getValue(),
                                                      irstate->getGlobals());
-                CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
-
-                converted_module->decvref(emitter);
+                emitter.setType(r, RefType::OWNED);
+                CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r);
                 return v;
             }
             case AST_LangPrimitive::IMPORT_NAME: {
@@ -897,30 +994,28 @@ private:
                 // TODO this could be a constant Box* too
                 CompilerVariable* froms = evalExpr(node->args[1], unw_info);
                 ConcreteCompilerVariable* converted_froms = froms->makeConverted(emitter, froms->getBoxType());
-                froms->decvref(emitter);
 
                 auto ast_str = ast_cast<AST_Str>(node->args[2]);
                 assert(ast_str->str_type == AST_Str::STR);
                 const std::string& module_name = ast_str->str_data;
 
-                llvm::Value* imported = emitter.createCall(unw_info, g.funcs.import,
-                                                           { getConstantInt(level, g.i32), converted_froms->getValue(),
-                                                             embedRelocatablePtr(module_name.c_str(), g.i8_ptr),
-                                                             getConstantInt(module_name.size(), g.i64) });
-                ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported, true);
-
-                converted_froms->decvref(emitter);
+                llvm::Value* imported = emitter.createCall(
+                    unw_info, g.funcs.import,
+                    { getConstantInt(level, g.i32), converted_froms->getValue(),
+                      emitter.setType(embedRelocatablePtr(module_name.c_str(), g.i8_ptr), RefType::BORROWED),
+                      getConstantInt(module_name.size(), g.i64) });
+                emitter.setType(imported, RefType::OWNED);
+                ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported);
                 return v;
             }
             case AST_LangPrimitive::NONE: {
-                return getNone();
+                return emitter.getNone();
             }
             case AST_LangPrimitive::NONZERO: {
                 assert(node->args.size() == 1);
                 CompilerVariable* obj = evalExpr(node->args[0], unw_info);
 
                 CompilerVariable* rtn = obj->nonzero(emitter, getOpInfoForNode(node, unw_info));
-                obj->decvref(emitter);
                 return rtn;
             }
             case AST_LangPrimitive::HASNEXT: {
@@ -928,7 +1023,6 @@ private:
                 CompilerVariable* obj = evalExpr(node->args[0], unw_info);
 
                 CompilerVariable* rtn = obj->hasnext(emitter, getOpInfoForNode(node, unw_info));
-                obj->decvref(emitter);
                 return rtn;
             }
             case AST_LangPrimitive::SET_EXC_INFO: {
@@ -940,21 +1034,20 @@ private:
                 auto* builder = emitter.getBuilder();
 
                 llvm::Value* frame_info = irstate->getFrameInfoVar();
-                llvm::Value* exc_info = builder->CreateConstInBoundsGEP2_32(frame_info, 0, 0);
-                assert(exc_info->getType() == g.llvm_excinfo_type->getPointerTo());
 
                 ConcreteCompilerVariable* converted_type = type->makeConverted(emitter, UNKNOWN);
-                builder->CreateStore(converted_type->getValue(), builder->CreateConstInBoundsGEP2_32(exc_info, 0, 0));
-                converted_type->decvref(emitter);
                 ConcreteCompilerVariable* converted_value = value->makeConverted(emitter, UNKNOWN);
-                builder->CreateStore(converted_value->getValue(), builder->CreateConstInBoundsGEP2_32(exc_info, 0, 1));
-                converted_value->decvref(emitter);
                 ConcreteCompilerVariable* converted_traceback = traceback->makeConverted(emitter, UNKNOWN);
-                builder->CreateStore(converted_traceback->getValue(),
-                                     builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
-                converted_traceback->decvref(emitter);
 
-                return getNone();
+                auto inst = emitter.createCall(UnwindInfo::cantUnwind(), g.funcs.setFrameExcInfo,
+                                               { frame_info, converted_type->getValue(), converted_value->getValue(),
+                                                 converted_traceback->getValue() },
+                                               NOEXC);
+                emitter.refConsumed(converted_type->getValue(), inst);
+                emitter.refConsumed(converted_value->getValue(), inst);
+                emitter.refConsumed(converted_traceback->getValue(), inst);
+
+                return emitter.getNone();
             }
             case AST_LangPrimitive::UNCACHE_EXC_INFO: {
                 assert(node->args.empty());
@@ -962,15 +1055,12 @@ private:
                 auto* builder = emitter.getBuilder();
 
                 llvm::Value* frame_info = irstate->getFrameInfoVar();
-                llvm::Value* exc_info = builder->CreateConstInBoundsGEP2_32(frame_info, 0, 0);
-                assert(exc_info->getType() == g.llvm_excinfo_type->getPointerTo());
-
                 llvm::Constant* v = getNullPtr(g.llvm_value_type_ptr);
-                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 0));
-                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 1));
-                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
+                emitter.setType(v, RefType::BORROWED);
 
-                return getNone();
+                emitter.createCall(UnwindInfo::cantUnwind(), g.funcs.setFrameExcInfo, { frame_info, v, v, v }, NOEXC);
+
+                return emitter.getNone();
             }
             case AST_LangPrimitive::PRINT_EXPR: {
                 assert(node->args.size() == 1);
@@ -980,7 +1070,7 @@ private:
 
                 emitter.createCall(unw_info, g.funcs.printExprHelper, converted->getValue());
 
-                return getNone();
+                return emitter.getNone();
             }
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
@@ -1016,8 +1106,6 @@ private:
         assert(node->op_type != AST_TYPE::Is && node->op_type != AST_TYPE::IsNot && "not tested yet");
 
         CompilerVariable* rtn = this->_evalBinExp(node, left, right, node->op_type, BinOp, unw_info);
-        left->decvref(emitter);
-        right->decvref(emitter);
         return rtn;
     }
 
@@ -1028,8 +1116,6 @@ private:
         assert(node->op_type != AST_TYPE::Is && node->op_type != AST_TYPE::IsNot && "not tested yet");
 
         CompilerVariable* rtn = this->_evalBinExp(node, left, right, node->op_type, AugBinOp, unw_info);
-        left->decvref(emitter);
-        right->decvref(emitter);
         return rtn;
     }
 
@@ -1047,8 +1133,6 @@ private:
         }
 
         CompilerVariable* rtn = _evalBinExp(node, left, right, node->ops[0], Compare, unw_info);
-        left->decvref(emitter);
-        right->decvref(emitter);
         return rtn;
     }
 
@@ -1109,19 +1193,15 @@ private:
             rtn = func->call(emitter, getOpInfoForNode(node, unw_info), argspec, args, keyword_names);
         }
 
-        func->decvref(emitter);
-        for (int i = 0; i < args.size(); i++) {
-            args[i]->decvref(emitter);
-        }
-
         return rtn;
     }
 
     CompilerVariable* evalDict(AST_Dict* node, const UnwindInfo& unw_info) {
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
-        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v, true);
+        emitter.setType(v, RefType::OWNED);
+        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v);
         if (node->keys.size()) {
-            static BoxedString* setitem_str = internStringImmortal("__setitem__");
+            static BoxedString* setitem_str = getStaticString("__setitem__");
             CompilerVariable* setitem = rtn->getattr(emitter, getEmptyOpInfo(unw_info), setitem_str, true);
             for (int i = 0; i < node->keys.size(); i++) {
                 CompilerVariable* key = evalExpr(node->keys[i], unw_info);
@@ -1134,12 +1214,7 @@ private:
                 args.push_back(value);
                 // TODO should use callattr
                 CompilerVariable* rtn = setitem->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(2), args, NULL);
-                rtn->decvref(emitter);
-
-                key->decvref(emitter);
-                value->decvref(emitter);
             }
-            setitem->decvref(emitter);
         }
         return rtn;
     }
@@ -1161,7 +1236,6 @@ private:
         std::vector<AST_stmt*> body = { expr };
         CompilerVariable* func = _createFunction(node, unw_info, node->args, body);
         ConcreteCompilerVariable* converted = func->makeConverted(emitter, func->getBoxType());
-        func->decvref(emitter);
 
         return converted;
     }
@@ -1175,7 +1249,8 @@ private:
         }
 
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createList);
-        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(LIST, v, true);
+        emitter.setType(v, RefType::OWNED);
+        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(LIST, v);
 
         llvm::Value* f = g.funcs.listAppendInternal;
         llvm::Value* bitcast = emitter.getBuilder()->CreateBitCast(
@@ -1185,23 +1260,22 @@ private:
         for (int i = 0; i < node->elts.size(); i++) {
             CompilerVariable* elt = elts[i];
             ConcreteCompilerVariable* converted = elt->makeConverted(emitter, elt->getBoxType());
-            elt->decvref(emitter);
 
             emitter.createCall2(unw_info, f, bitcast, converted->getValue());
-            converted->decvref(emitter);
         }
         return rtn;
     }
 
     ConcreteCompilerVariable* getEllipsis() {
         llvm::Constant* ellipsis = embedRelocatablePtr(Ellipsis, g.llvm_value_type_ptr, "cEllipsis");
+        emitter.setType(ellipsis, RefType::BORROWED);
         auto ellipsis_cls = Ellipsis->cls;
-        return new ConcreteCompilerVariable(typeFromClass(ellipsis_cls), ellipsis, false);
+        return new ConcreteCompilerVariable(typeFromClass(ellipsis_cls), ellipsis);
     }
 
     ConcreteCompilerVariable* _getGlobal(AST_Name* node, const UnwindInfo& unw_info) {
         if (node->id.s() == "None")
-            return getNone();
+            return emitter.getNone();
 
         bool do_patchpoint = ENABLE_ICGETGLOBALS;
         if (do_patchpoint) {
@@ -1209,15 +1283,20 @@ private:
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(irstate->getGlobals());
-            llvm_args.push_back(embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr));
+            llvm_args.push_back(emitter.setType(embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr),
+                                                RefType::BORROWED));
 
             llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::getGlobal, llvm_args, unw_info);
             llvm::Value* r = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
-            return new ConcreteCompilerVariable(UNKNOWN, r, true);
+            emitter.setType(r, RefType::OWNED);
+            return new ConcreteCompilerVariable(UNKNOWN, r);
         } else {
-            llvm::Value* r = emitter.createCall2(unw_info, g.funcs.getGlobal, irstate->getGlobals(),
-                                                 embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr));
-            return new ConcreteCompilerVariable(UNKNOWN, r, true);
+            llvm::Value* r = emitter.createCall2(
+                unw_info, g.funcs.getGlobal, irstate->getGlobals(),
+                emitter.setType(embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr),
+                                RefType::BORROWED));
+            emitter.setType(r, RefType::OWNED);
+            return new ConcreteCompilerVariable(UNKNOWN, r);
         }
     }
 
@@ -1247,12 +1326,13 @@ private:
             // Where the parent lookup is done `deref_info.num_parents_from_passed_closure` times
             CompilerVariable* closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
             llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
-            closure->decvref(emitter);
             for (int i = 0; i < deref_info.num_parents_from_passed_closure; i++) {
                 closureValue = emitter.getBuilder()->CreateLoad(getClosureParentGep(emitter, closureValue));
+                emitter.setType(closureValue, RefType::BORROWED);
             }
             llvm::Value* lookupResult
                 = emitter.getBuilder()->CreateLoad(getClosureElementGep(emitter, closureValue, deref_info.offset));
+            emitter.setType(lookupResult, RefType::BORROWED);
 
             // If the value is NULL, the variable is undefined.
             // Create a branch on if the value is NULL.
@@ -1262,8 +1342,9 @@ private:
             llvm::BasicBlock* fail_bb
                 = llvm::BasicBlock::Create(g.context, "deref_undefined", irstate->getLLVMFunction());
 
-            llvm::Value* check_val
-                = emitter.getBuilder()->CreateICmpEQ(lookupResult, getNullPtr(g.llvm_value_type_ptr));
+            llvm::Constant* null_value = getNullPtr(g.llvm_value_type_ptr);
+            emitter.setType(null_value, RefType::BORROWED);
+            llvm::Value* check_val = emitter.getBuilder()->CreateICmpEQ(lookupResult, null_value);
             llvm::BranchInst* non_null_check = emitter.getBuilder()->CreateCondBr(check_val, fail_bb, success_bb);
 
             // Case that it is undefined: call the assert fail function.
@@ -1279,13 +1360,15 @@ private:
             curblock = success_bb;
             emitter.getBuilder()->SetInsertPoint(curblock);
 
-            return new ConcreteCompilerVariable(UNKNOWN, lookupResult, true);
+            return new ConcreteCompilerVariable(UNKNOWN, lookupResult);
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
             llvm::Value* attr = embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr);
+            emitter.setType(attr, RefType::BORROWED);
             llvm::Value* module = irstate->getGlobals();
             llvm::Value* r = emitter.createCall3(unw_info, g.funcs.boxedLocalsGet, boxedLocals, attr, module);
-            return new ConcreteCompilerVariable(UNKNOWN, r, true);
+            emitter.setType(r, RefType::OWNED);
+            return new ConcreteCompilerVariable(UNKNOWN, r);
         } else {
             // vst is one of {FAST, CLOSURE}
             if (symbol_table.find(node->id) == symbol_table.end()) {
@@ -1294,7 +1377,8 @@ private:
                 llvm::CallSite call = emitter.createCall(
                     unw_info, g.funcs.assertNameDefined,
                     { getConstantInt(0, g.i1), embedRelocatablePtr(node->id.c_str(), g.i8_ptr),
-                      embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), getConstantInt(true, g.i1) });
+                      emitter.setType(embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), RefType::BORROWED),
+                      getConstantInt(true, g.i1) });
                 call.setDoesNotReturn();
                 return undefVariable();
             }
@@ -1307,7 +1391,8 @@ private:
                 emitter.createCall(
                     unw_info, g.funcs.assertNameDefined,
                     { i1FromBool(emitter, is_defined_var), embedRelocatablePtr(node->id.c_str(), g.i8_ptr),
-                      embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), getConstantInt(true, g.i1) });
+                      emitter.setType(embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), RefType::BORROWED),
+                      getConstantInt(true, g.i1) });
 
                 // At this point we know the name must be defined (otherwise the assert would have fired):
                 _popFake(defined_name);
@@ -1316,8 +1401,6 @@ private:
             CompilerVariable* rtn = symbol_table[node->id];
             if (is_kill)
                 symbol_table.erase(node->id);
-            else
-                rtn->incvref();
             return rtn;
         }
     }
@@ -1330,23 +1413,24 @@ private:
         } else if (node->num_type == AST_Num::FLOAT) {
             return makeFloat(node->n_float);
         } else if (node->num_type == AST_Num::COMPLEX) {
-            return makePureImaginary(irstate->getSourceInfo()->parent_module->getPureImaginaryConstant(node->n_float));
+            return makePureImaginary(emitter,
+                                     irstate->getSourceInfo()->parent_module->getPureImaginaryConstant(node->n_float));
         } else {
-            return makeLong(irstate->getSourceInfo()->parent_module->getLongConstant(node->n_long));
+            return makeLong(emitter, irstate->getSourceInfo()->parent_module->getLongConstant(node->n_long));
         }
     }
 
     CompilerVariable* evalRepr(AST_Repr* node, const UnwindInfo& unw_info) {
         CompilerVariable* var = evalExpr(node->value, unw_info);
         ConcreteCompilerVariable* cvar = var->makeConverted(emitter, var->getBoxType());
-        var->decvref(emitter);
 
         std::vector<llvm::Value*> args{ cvar->getValue() };
         llvm::Value* rtn = emitter.createCall(unw_info, g.funcs.repr, args);
-        cvar->decvref(emitter);
+        emitter.setType(rtn, RefType::BORROWED); // Well, really it's owned, and we handoff the ref to the bitcast
         rtn = emitter.getBuilder()->CreateBitCast(rtn, g.llvm_value_type_ptr);
+        emitter.setType(rtn, RefType::OWNED);
 
-        return new ConcreteCompilerVariable(STR, rtn, true);
+        return new ConcreteCompilerVariable(STR, rtn);
     }
 
     CompilerVariable* evalSet(AST_Set* node, const UnwindInfo& unw_info) {
@@ -1357,17 +1441,18 @@ private:
         }
 
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createSet);
-        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(SET, v, true);
+        emitter.setType(v, RefType::OWNED);
+        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(SET, v);
 
-        static BoxedString* add_str = internStringImmortal("add");
+        static BoxedString* add_str = getStaticString("add");
 
-        for (int i = 0; i < node->elts.size(); i++) {
-            CompilerVariable* elt = elts[i];
+        // insert the elements in reverse like cpython does
+        // important for {1, 1L}
+        for (auto it = elts.rbegin(), it_end = elts.rend(); it != it_end; ++it) {
+            CompilerVariable* elt = *it;
             CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(1) };
             CompilerVariable* r
                 = rtn->callattr(emitter, getOpInfoForNode(node, unw_info), add_str, flags, { elt }, NULL);
-            r->decvref(emitter);
-            elt->decvref(emitter);
         }
 
         return rtn;
@@ -1388,11 +1473,7 @@ private:
             elts.push_back(evalSlice(e, unw_info));
         }
 
-        // TODO makeTuple should probably just transfer the vref, but I want to keep things consistent
         CompilerVariable* rtn = makeTuple(elts);
-        for (auto* e : elts) {
-            e->decvref(emitter);
-        }
         return rtn;
     }
 
@@ -1401,13 +1482,15 @@ private:
             llvm::Value* rtn
                 = embedRelocatablePtr(irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data, true),
                                       g.llvm_value_type_ptr);
+            emitter.setType(rtn, RefType::BORROWED);
 
-            return new ConcreteCompilerVariable(STR, rtn, true);
+            return new ConcreteCompilerVariable(STR, rtn);
         } else if (node->str_type == AST_Str::UNICODE) {
             llvm::Value* rtn = embedRelocatablePtr(
                 irstate->getSourceInfo()->parent_module->getUnicodeConstant(node->str_data), g.llvm_value_type_ptr);
+            emitter.setType(rtn, RefType::BORROWED);
 
-            return new ConcreteCompilerVariable(typeFromClass(unicode_cls), rtn, true);
+            return new ConcreteCompilerVariable(typeFromClass(unicode_cls), rtn);
         } else {
             RELEASE_ASSERT(0, "%d", node->str_type);
         }
@@ -1418,8 +1501,6 @@ private:
         CompilerVariable* slice = evalSlice(node->slice, unw_info);
 
         CompilerVariable* rtn = value->getitem(emitter, getOpInfoForNode(node, unw_info), slice);
-        value->decvref(emitter);
-        slice->decvref(emitter);
         return rtn;
     }
 
@@ -1430,11 +1511,7 @@ private:
             elts.push_back(value);
         }
 
-        // TODO makeTuple should probably just transfer the vref, but I want to keep things consistent
         CompilerVariable* rtn = makeTuple(elts);
-        for (int i = 0; i < node->elts.size(); i++) {
-            elts[i]->decvref(emitter);
-        }
         return rtn;
     }
 
@@ -1443,18 +1520,15 @@ private:
 
         if (node->op_type == AST_TYPE::Not) {
             CompilerVariable* rtn = operand->nonzero(emitter, getOpInfoForNode(node, unw_info));
-            operand->decvref(emitter);
 
             assert(rtn->getType() == BOOL);
             llvm::Value* v = i1FromBool(emitter, static_cast<ConcreteCompilerVariable*>(rtn));
             assert(v->getType() == g.i1);
 
             llvm::Value* negated = emitter.getBuilder()->CreateNot(v);
-            rtn->decvref(emitter);
             return boolFromI1(emitter, negated);
         } else {
             CompilerVariable* rtn = operand->unaryop(emitter, getOpInfoForNode(node, unw_info), node->op_type);
-            operand->decvref(emitter);
             return rtn;
         }
     }
@@ -1464,17 +1538,28 @@ private:
         assert(generator);
         ConcreteCompilerVariable* convertedGenerator = generator->makeConverted(emitter, generator->getBoxType());
 
-
-        CompilerVariable* value = node->value ? evalExpr(node->value, unw_info) : getNone();
+        CompilerVariable* value = node->value ? evalExpr(node->value, unw_info) : emitter.getNone();
         ConcreteCompilerVariable* convertedValue = value->makeConverted(emitter, value->getBoxType());
-        value->decvref(emitter);
 
-        llvm::Value* rtn
-            = emitter.createCall2(unw_info, g.funcs.yield, convertedGenerator->getValue(), convertedValue->getValue());
-        convertedGenerator->decvref(emitter);
-        convertedValue->decvref(emitter);
+        std::vector<llvm::Value*> args;
+        args.push_back(convertedGenerator->getValue());
+        args.push_back(convertedValue->getValue());
+        args.push_back(getConstantInt(0, g.i32)); // the refcounting inserter handles yields specially and adds all
+                                                  // owned objects as additional arguments to it
 
-        return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+        // put the yield call at the beginning of a new basic block to make it easier for the refcounting inserter.
+        llvm::BasicBlock* yield_block = emitter.createBasicBlock("yield_block");
+        emitter.getBuilder()->CreateBr(yield_block);
+        emitter.setCurrentBasicBlock(yield_block);
+
+        // we do a capi call because it makes it easier for the refcounter to replace the instruction
+        llvm::Instruction* rtn
+            = emitter.createCall(unw_info, g.funcs.yield_capi, args, CAPI, getNullPtr(g.llvm_value_type_ptr));
+        emitter.refConsumed(convertedValue->getValue(), rtn);
+        emitter.setType(rtn, RefType::OWNED);
+        emitter.setNullable(rtn, true);
+
+        return new ConcreteCompilerVariable(UNKNOWN, rtn);
     }
 
     CompilerVariable* evalMakeClass(AST_MakeClass* mkclass, const UnwindInfo& unw_info) {
@@ -1490,12 +1575,7 @@ private:
         }
 
         CompilerVariable* _bases_tuple = makeTuple(bases);
-        for (auto b : bases) {
-            b->decvref(emitter);
-        }
-
         ConcreteCompilerVariable* bases_tuple = _bases_tuple->makeConverted(emitter, _bases_tuple->getBoxType());
-        _bases_tuple->decvref(emitter);
 
         std::vector<CompilerVariable*> decorators;
         for (auto d : node->decorator_list) {
@@ -1525,24 +1605,21 @@ private:
 
         CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(0), {}, NULL);
 
-        func->decvref(emitter);
-
         ConcreteCompilerVariable* converted_attr_dict = attr_dict->makeConverted(emitter, attr_dict->getBoxType());
-        attr_dict->decvref(emitter);
 
         llvm::Value* classobj = emitter.createCall3(
-            unw_info, g.funcs.createUserClass, embedRelocatablePtr(node->name.getBox(), g.llvm_boxedstring_type_ptr),
+            unw_info, g.funcs.createUserClass,
+            emitter.setType(embedRelocatablePtr(node->name.getBox(), g.llvm_boxedstring_type_ptr), RefType::BORROWED),
             bases_tuple->getValue(), converted_attr_dict->getValue());
+        emitter.setType(classobj, RefType::OWNED);
 
         // Note: createuserClass is free to manufacture non-class objects
-        CompilerVariable* cls = new ConcreteCompilerVariable(UNKNOWN, classobj, true);
+        CompilerVariable* cls = new ConcreteCompilerVariable(UNKNOWN, classobj);
 
         for (int i = decorators.size() - 1; i >= 0; i--) {
             cls = decorators[i]->call(emitter, getOpInfoForNode(node, unw_info), ArgPassSpec(1), { cls }, NULL);
-            decorators[i]->decvref(emitter);
         }
 
-        // do we need to decvref this?
         return cls;
     }
 
@@ -1554,7 +1631,6 @@ private:
         for (auto d : args->defaults) {
             CompilerVariable* e = evalExpr(d, unw_info);
             ConcreteCompilerVariable* converted = e->makeConverted(emitter, e->getBoxType());
-            e->decvref(emitter);
             defaults.push_back(converted);
         }
 
@@ -1586,10 +1662,6 @@ private:
 
         CompilerVariable* func = makeFunction(emitter, md, created_closure, irstate->getGlobalsIfCustom(), defaults);
 
-        for (auto d : defaults) {
-            d->decvref(emitter);
-        }
-
         return func;
     }
 
@@ -1604,14 +1676,13 @@ private:
 
         for (int i = decorators.size() - 1; i >= 0; i--) {
             func = decorators[i]->call(emitter, getOpInfoForNode(node, unw_info), ArgPassSpec(1), { func }, NULL);
-            decorators[i]->decvref(emitter);
         }
 
         return func;
     }
 
     // Note: the behavior of this function must match type_analysis.cpp:unboxedType()
-    CompilerVariable* unboxVar(ConcreteCompilerType* t, llvm::Value* v, bool grabbed) {
+    CompilerVariable* unboxVar(ConcreteCompilerType* t, llvm::Value* v) {
         if (t == BOXED_INT) {
             return makeUnboxedInt(emitter, v);
         }
@@ -1622,7 +1693,7 @@ private:
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, v);
             return boolFromI1(emitter, unboxed);
         }
-        return new ConcreteCompilerVariable(t, v, grabbed);
+        return new ConcreteCompilerVariable(t, v);
     }
 
     template <typename AstType>
@@ -1658,13 +1729,12 @@ private:
 #endif
 
             ConcreteCompilerVariable* old_rtn = rtn->makeConverted(emitter, UNKNOWN);
-            rtn->decvref(emitter);
 
             llvm::Value* guard_check = old_rtn->makeClassCheck(emitter, speculated_class);
             assert(guard_check->getType() == g.i1);
             createExprTypeGuard(guard_check, node, old_rtn->getValue(), unw_info.current_stmt);
 
-            rtn = unboxVar(speculated_type, old_rtn->getValue(), true);
+            rtn = unboxVar(speculated_type, old_rtn->getValue());
         }
 
         assert(rtn);
@@ -1813,86 +1883,104 @@ private:
         return rtn;
     }
 
-    template <typename GetLLVMValCB> void _setVRegIfUserVisible(InternedString name, GetLLVMValCB get_llvm_val_cb) {
+    template <typename GetLLVMValCB>
+    void _setVRegIfUserVisible(int vreg, GetLLVMValCB get_llvm_val_cb, CompilerVariable* prev,
+                               bool potentially_undefined) {
         auto cfg = irstate->getSourceInfo()->cfg;
-        if (!cfg->hasVregsAssigned())
-            irstate->getMD()->calculateNumVRegs();
-        assert(cfg->sym_vreg_map.count(name));
-        int vreg = cfg->sym_vreg_map[name];
         assert(vreg >= 0);
 
         if (vreg < cfg->sym_vreg_map_user_visible.size()) {
             // looks like this store don't have to be volatile because llvm knows that the vregs are visible thru the
             // FrameInfo which escapes.
             auto* gep = emitter.getBuilder()->CreateConstInBoundsGEP1_64(irstate->getVRegsVar(), vreg);
-            emitter.getBuilder()->CreateStore(get_llvm_val_cb(), gep);
+            if (prev) {
+                auto* old_value = emitter.getBuilder()->CreateLoad(gep);
+                emitter.setType(old_value, RefType::OWNED);
+                if (potentially_undefined)
+                    emitter.setNullable(old_value, true);
+            }
+
+            llvm::Value* new_val = get_llvm_val_cb();
+            auto* store = emitter.getBuilder()->CreateStore(new_val, gep);
+            emitter.refConsumed(new_val, store);
         }
     }
 
     // only updates symbol_table if we're *not* setting a global
-    void _doSet(InternedString name, CompilerVariable* val, const UnwindInfo& unw_info) {
+    void _doSet(int vreg, InternedString name, ScopeInfo::VarScopeType vst, CompilerVariable* val,
+                const UnwindInfo& unw_info) {
         assert(name.s() != "None");
         assert(name.s() != FRAME_INFO_PTR_NAME);
         assert(val->getType()->isUsable());
 
-        auto scope_info = irstate->getScopeInfo();
-        ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
         assert(vst != ScopeInfo::VarScopeType::DEREF);
 
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             if (irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
                 auto parent_module = irstate->getGlobals();
-                ConcreteCompilerVariable* module = new ConcreteCompilerVariable(MODULE, parent_module, false);
+                ConcreteCompilerVariable* module = new ConcreteCompilerVariable(MODULE, parent_module);
                 module->setattr(emitter, getEmptyOpInfo(unw_info), name.getBox(), val);
-                module->decvref(emitter);
             } else {
                 auto converted = val->makeConverted(emitter, val->getBoxType());
-                emitter.createCall3(unw_info, g.funcs.setGlobal, irstate->getGlobals(),
-                                    embedRelocatablePtr(name.getBox(), g.llvm_boxedstring_type_ptr),
-                                    converted->getValue());
-                converted->decvref(emitter);
+                auto cs = emitter.createCall3(
+                    unw_info, g.funcs.setGlobal, irstate->getGlobals(),
+                    emitter.setType(embedRelocatablePtr(name.getBox(), g.llvm_boxedstring_type_ptr), RefType::BORROWED),
+                    converted->getValue());
+                emitter.refConsumed(converted->getValue(), cs);
             }
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             // TODO inefficient
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
             llvm::Value* attr = embedRelocatablePtr(name.getBox(), g.llvm_boxedstring_type_ptr);
+            emitter.setType(attr, RefType::BORROWED);
             emitter.createCall3(unw_info, g.funcs.boxedLocalsSet, boxedLocals, attr,
                                 val->makeConverted(emitter, UNKNOWN)->getValue());
         } else {
             // FAST or CLOSURE
 
-            CompilerVariable*& prev = symbol_table[name];
-            if (prev != NULL) {
-                prev->decvref(emitter);
-            }
-            prev = val;
-            val->incvref();
+            CompilerVariable* prev = symbol_table[name];
+            symbol_table[name] = val;
 
             // Clear out the is_defined name since it is now definitely defined:
             assert(!isIsDefinedName(name.s()));
             InternedString defined_name = getIsDefinedName(name);
-            _popFake(defined_name, true);
+            bool maybe_was_undefined = _popFake(defined_name, true);
 
             if (vst == ScopeInfo::VarScopeType::CLOSURE) {
-                size_t offset = scope_info->getClosureOffset(name);
+                size_t offset = irstate->getScopeInfo()->getClosureOffset(name);
 
                 // This is basically `closure->elts[offset] = val;`
                 CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
                 llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
-                closure->decvref(emitter);
                 llvm::Value* gep = getClosureElementGep(emitter, closureValue, offset);
-                emitter.getBuilder()->CreateStore(val->makeConverted(emitter, UNKNOWN)->getValue(), gep);
+                if (prev) {
+                    auto load = emitter.getBuilder()->CreateLoad(gep);
+                    emitter.setType(load, RefType::OWNED);
+                    if (maybe_was_undefined)
+                        emitter.setNullable(load, true);
+                }
+                llvm::Value* v = val->makeConverted(emitter, UNKNOWN)->getValue();
+                auto store = emitter.getBuilder()->CreateStore(v, gep);
+                emitter.refConsumed(v, store);
             }
 
             auto&& get_llvm_val = [&]() { return val->makeConverted(emitter, UNKNOWN)->getValue(); };
-            _setVRegIfUserVisible(name, get_llvm_val);
+            _setVRegIfUserVisible(vreg, get_llvm_val, prev, maybe_was_undefined);
         }
+    }
+
+    void _doSet(AST_Name* name, CompilerVariable* val, const UnwindInfo& unw_info) {
+        auto scope_info = irstate->getScopeInfo();
+        auto vst = name->lookup_type;
+        if (vst == ScopeInfo::VarScopeType::UNKNOWN)
+            vst = scope_info->getScopeTypeOfName(name->id);
+        assert(vst != ScopeInfo::VarScopeType::DEREF);
+        _doSet(name->vreg, name->id, vst, val, unw_info);
     }
 
     void _doSetattr(AST_Attribute* target, CompilerVariable* val, const UnwindInfo& unw_info) {
         CompilerVariable* t = evalExpr(target->value, unw_info);
         t->setattr(emitter, getEmptyOpInfo(unw_info), target->attr.getBox(), val);
-        t->decvref(emitter);
     }
 
     void _doSetitem(AST_Subscript* target, CompilerVariable* val, const UnwindInfo& unw_info) {
@@ -1901,8 +1989,6 @@ private:
 
         ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
         ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
-        tget->decvref(emitter);
-        slice->decvref(emitter);
 
         ConcreteCompilerVariable* converted_val = val->makeConverted(emitter, val->getBoxType());
 
@@ -1923,10 +2009,6 @@ private:
             emitter.createCall3(unw_info, g.funcs.setitem, converted_target->getValue(), converted_slice->getValue(),
                                 converted_val->getValue());
         }
-
-        converted_target->decvref(emitter);
-        converted_slice->decvref(emitter);
-        converted_val->decvref(emitter);
     }
 
     void _doUnpackTuple(AST_Tuple* target, CompilerVariable* val, const UnwindInfo& unw_info) {
@@ -1944,7 +2026,6 @@ private:
         for (int i = 0; i < ntargets; i++) {
             CompilerVariable* thisval = unpacked[i];
             _doSet(target->elts[i], thisval, unw_info);
-            thisval->decvref(emitter);
         }
     }
 
@@ -1954,7 +2035,7 @@ private:
                 _doSetattr(ast_cast<AST_Attribute>(target), val, unw_info);
                 break;
             case AST_TYPE::Name:
-                _doSet(ast_cast<AST_Name>(target)->id, val, unw_info);
+                _doSet(ast_cast<AST_Name>(target), val, unw_info);
                 break;
             case AST_TYPE::Subscript:
                 _doSetitem(ast_cast<AST_Subscript>(target), val, unw_info);
@@ -1980,21 +2061,26 @@ private:
 
         // We could patchpoint this or try to avoid the overhead, but this should only
         // happen when the assertion is actually thrown so I don't think it will be necessary.
-        static BoxedString* AssertionError_str = internStringImmortal("AssertionError");
-        llvm_args.push_back(emitter.createCall2(unw_info, g.funcs.getGlobal, irstate->getGlobals(),
-                                                embedRelocatablePtr(AssertionError_str, g.llvm_boxedstring_type_ptr)));
+        static BoxedString* AssertionError_str = getStaticString("AssertionError");
+        llvm_args.push_back(emitter.setType(
+            emitter.createCall2(unw_info, g.funcs.getGlobal, irstate->getGlobals(),
+                                emitter.setType(embedRelocatablePtr(AssertionError_str, g.llvm_boxedstring_type_ptr),
+                                                RefType::BORROWED)),
+            RefType::OWNED));
 
         ConcreteCompilerVariable* converted_msg = NULL;
         if (node->msg) {
             CompilerVariable* msg = evalExpr(node->msg, unw_info);
             converted_msg = msg->makeConverted(emitter, msg->getBoxType());
-            msg->decvref(emitter);
             llvm_args.push_back(converted_msg->getValue());
         } else {
-            llvm_args.push_back(getNullPtr(g.llvm_value_type_ptr));
+            llvm_args.push_back(emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED));
         }
         llvm::CallSite call = emitter.createCall(unw_info, g.funcs.assertFail, llvm_args);
         call.setDoesNotReturn();
+
+        emitter.getBuilder()->CreateUnreachable();
+        endBlock(DEAD);
     }
 
     void doAssign(AST_Assign* node, const UnwindInfo& unw_info) {
@@ -2003,7 +2089,6 @@ private:
         for (int i = 0; i < node->targets.size(); i++) {
             _doSet(node->targets[i], val, unw_info);
         }
-        val->decvref(emitter);
     }
 
     void doDelete(AST_Delete* node, const UnwindInfo& unw_info) {
@@ -2032,8 +2117,6 @@ private:
 
         ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
         ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
-        tget->decvref(emitter);
-        slice->decvref(emitter);
 
         bool do_patchpoint = ENABLE_ICDELITEMS;
         if (do_patchpoint) {
@@ -2047,9 +2130,6 @@ private:
         } else {
             emitter.createCall2(unw_info, g.funcs.delitem, converted_target->getValue(), converted_slice->getValue());
         }
-
-        converted_target->decvref(emitter);
-        converted_slice->decvref(emitter);
     }
 
     void _doDelAttr(AST_Attribute* node, const UnwindInfo& unw_info) {
@@ -2058,18 +2138,26 @@ private:
     }
 
     void _doDelName(AST_Name* target, const UnwindInfo& unw_info) {
+        // Hack: we don't have a bytecode for temporary-kills:
+        if (target->id.s()[0] == '#') {
+            // The refcounter will automatically delete this object.
+            return;
+        }
+
         auto scope_info = irstate->getScopeInfo();
         ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             // Can't use delattr since the errors are different:
             emitter.createCall2(unw_info, g.funcs.delGlobal, irstate->getGlobals(),
-                                embedRelocatablePtr(target->id.getBox(), g.llvm_boxedstring_type_ptr));
+                                emitter.setType(embedRelocatablePtr(target->id.getBox(), g.llvm_boxedstring_type_ptr),
+                                                RefType::BORROWED));
             return;
         }
 
         if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
             llvm::Value* attr = embedRelocatablePtr(target->id.getBox(), g.llvm_boxedstring_type_ptr);
+            emitter.setType(attr, RefType::BORROWED);
             emitter.createCall2(unw_info, g.funcs.boxedLocalsDel, boxedLocals, attr);
             return;
         }
@@ -2078,26 +2166,30 @@ private:
         // SyntaxError: can not delete variable 'x' referenced in nested scope
         assert(vst == ScopeInfo::VarScopeType::FAST);
 
-        _setVRegIfUserVisible(target->id, []() { return getNullPtr(g.llvm_value_type_ptr); });
-
-        if (symbol_table.count(target->id) == 0) {
-            llvm::CallSite call
-                = emitter.createCall(unw_info, g.funcs.assertNameDefined,
-                                     { getConstantInt(0, g.i1), embedConstantPtr(target->id.c_str(), g.i8_ptr),
-                                       embedRelocatablePtr(NameError, g.llvm_class_type_ptr),
-                                       getConstantInt(true /*local_error_msg*/, g.i1) });
-            call.setDoesNotReturn();
-            return;
-        }
+        CompilerVariable* prev = symbol_table.count(target->id) ? symbol_table[target->id] : NULL;
 
         InternedString defined_name = getIsDefinedName(target->id);
         ConcreteCompilerVariable* is_defined_var = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
 
+        _setVRegIfUserVisible(target->vreg, []() { return getNullPtr(g.llvm_value_type_ptr); }, prev,
+                              (bool)is_defined_var);
+
+        if (symbol_table.count(target->id) == 0) {
+            llvm::CallSite call = emitter.createCall(
+                unw_info, g.funcs.assertNameDefined,
+                { getConstantInt(0, g.i1), embedConstantPtr(target->id.c_str(), g.i8_ptr),
+                  emitter.setType(embedRelocatablePtr(NameError, g.llvm_class_type_ptr), RefType::BORROWED),
+                  getConstantInt(true /*local_error_msg*/, g.i1) });
+            call.setDoesNotReturn();
+            return;
+        }
+
         if (is_defined_var) {
-            emitter.createCall(unw_info, g.funcs.assertNameDefined,
-                               { i1FromBool(emitter, is_defined_var), embedConstantPtr(target->id.c_str(), g.i8_ptr),
-                                 embedRelocatablePtr(NameError, g.llvm_class_type_ptr),
-                                 getConstantInt(true /*local_error_msg*/, g.i1) });
+            emitter.createCall(
+                unw_info, g.funcs.assertNameDefined,
+                { i1FromBool(emitter, is_defined_var), embedConstantPtr(target->id.c_str(), g.i8_ptr),
+                  emitter.setType(embedRelocatablePtr(NameError, g.llvm_class_type_ptr), RefType::BORROWED),
+                  getConstantInt(true /*local_error_msg*/, g.i1) });
             _popFake(defined_name);
         }
 
@@ -2107,13 +2199,11 @@ private:
     void doExec(AST_Exec* node, const UnwindInfo& unw_info) {
         CompilerVariable* body = evalExpr(node->body, unw_info);
         llvm::Value* vbody = body->makeConverted(emitter, body->getBoxType())->getValue();
-        body->decvref(emitter);
 
         llvm::Value* vglobals;
         if (node->globals) {
             CompilerVariable* globals = evalExpr(node->globals, unw_info);
             vglobals = globals->makeConverted(emitter, globals->getBoxType())->getValue();
-            globals->decvref(emitter);
         } else {
             vglobals = getNullPtr(g.llvm_value_type_ptr);
         }
@@ -2122,7 +2212,6 @@ private:
         if (node->locals) {
             CompilerVariable* locals = evalExpr(node->locals, unw_info);
             vlocals = locals->makeConverted(emitter, locals->getBoxType())->getValue();
-            locals->decvref(emitter);
         } else {
             vlocals = getNullPtr(g.llvm_value_type_ptr);
         }
@@ -2137,9 +2226,9 @@ private:
         if (node->dest) {
             auto d = evalExpr(node->dest, unw_info);
             dest = d->makeConverted(emitter, d->getBoxType());
-            d->decvref(emitter);
         } else {
-            dest = new ConcreteCompilerVariable(UNKNOWN, getNullPtr(g.llvm_value_type_ptr), true);
+            dest = new ConcreteCompilerVariable(UNKNOWN,
+                                                emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED));
         }
         assert(dest);
 
@@ -2149,16 +2238,12 @@ private:
         if (node->values.size() == 1) {
             CompilerVariable* var = evalExpr(node->values[0], unw_info);
             converted = var->makeConverted(emitter, var->getBoxType());
-            var->decvref(emitter);
         } else {
-            converted = new ConcreteCompilerVariable(UNKNOWN, getNullPtr(g.llvm_value_type_ptr), true);
+            converted = new ConcreteCompilerVariable(UNKNOWN, getNullPtr(g.llvm_value_type_ptr));
         }
 
         emitter.createCall3(unw_info, g.funcs.printHelper, dest->getValue(), converted->getValue(),
                             getConstantInt(node->nl, g.i1));
-
-        dest->decvref(emitter);
-        converted->decvref(emitter);
     }
 
     void doReturn(AST_Return* node, const UnwindInfo& unw_info) {
@@ -2166,43 +2251,29 @@ private:
 
         CompilerVariable* val;
         if (node->value == NULL) {
-            val = getNone();
+            val = emitter.getNone();
         } else {
             val = evalExpr(node->value, unw_info);
         }
         assert(val);
 
-        // If we ask the return variable to become UNKNOWN (the typical return type),
-        // it will be forced to split a copy of itself and incref.
-        // But often the return variable will already be in the right shape, so in
-        // that case asking it to convert to itself ends up just being an incvref
-        // and doesn't end up emitting an incref+decref pair.
-        // This could also be handled by casting from the CompilerVariable to
-        // ConcreteCompilerVariable, but this way feels a little more robust to me.
         ConcreteCompilerType* opt_rtn_type = irstate->getReturnType();
         if (irstate->getReturnType()->llvmType() == val->getConcreteType()->llvmType())
             opt_rtn_type = val->getConcreteType();
 
         ConcreteCompilerVariable* rtn = val->makeConverted(emitter, opt_rtn_type);
-        rtn->ensureGrabbed(emitter);
-        val->decvref(emitter);
 
-
-        // Don't call deinitFrame when this is a OSR function because the interpreter will call it
         if (!irstate->getCurFunction()->entry_descriptor)
             emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
 
-        for (auto& p : symbol_table) {
-            p.second->decvref(emitter);
-        }
+        assert(rtn->getValue());
+        auto ret_inst = emitter.getBuilder()->CreateRet(rtn->getValue());
+
+        irstate->getRefcounts()->refConsumed(rtn->getValue(), ret_inst);
+
         symbol_table.clear();
 
         endBlock(DEAD);
-
-        // This is tripping in test/tests/return_selfreferential.py. kmod says it should be removed.
-        // ASSERT(rtn->getVrefs() == 1, "%d", rtn->getVrefs());
-        assert(rtn->getValue());
-        emitter.getBuilder()->CreateRet(rtn->getValue());
     }
 
     void doBranch(AST_Branch* node, const UnwindInfo& unw_info) {
@@ -2228,11 +2299,7 @@ private:
         emitter.getBuilder()->CreateCondBr(v, iftrue, iffalse);
     }
 
-    void doExpr(AST_Expr* node, const UnwindInfo& unw_info) {
-        CompilerVariable* var = evalExpr(node->value, unw_info);
-
-        var->decvref(emitter);
-    }
+    void doExpr(AST_Expr* node, const UnwindInfo& unw_info) { CompilerVariable* var = evalExpr(node->value, unw_info); }
 
     void doOSRExit(llvm::BasicBlock* normal_target, AST_Jump* osr_key) {
         llvm::BasicBlock* starting_block = curblock;
@@ -2273,7 +2340,7 @@ private:
         SortedSymbolTable sorted_symbol_table(symbol_table.begin(), symbol_table.end());
 
         sorted_symbol_table[internString(FRAME_INFO_PTR_NAME)]
-            = new ConcreteCompilerVariable(FRAME_INFO, irstate->getFrameInfoVar(), true);
+            = new ConcreteCompilerVariable(FRAME_INFO, irstate->getFrameInfoVar());
 
         // For OSR calls, we use the same calling convention as in some other places; namely,
         // arg1, arg2, arg3, argarray [nargs is ommitted]
@@ -2322,12 +2389,6 @@ private:
             assert(var->getType() != BOXED_INT);
             assert(var->getType() != BOXED_FLOAT
                    && "should probably unbox it, but why is it boxed in the first place?");
-
-            // This line can never get hit right now for the same reason that the variables must already be
-            // concrete,
-            // because we're over-generating phis.
-            ASSERT(var->isGrabbed(), "%s", p.first.c_str());
-            // var->ensureGrabbed(emitter);
 
             llvm::Value* val = var->getValue();
 
@@ -2391,10 +2452,8 @@ private:
             emitter.getBuilder()->CreateCall(l_free, malloc_save);
         }
 
-        for (int i = 0; i < converted_args.size(); i++) {
-            converted_args[i]->decvref(emitter);
-        }
-
+        if (!irstate->getCurFunction()->entry_descriptor)
+            emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
         emitter.getBuilder()->CreateRet(rtn);
 
         emitter.getBuilder()->SetInsertPoint(starting_block);
@@ -2430,9 +2489,7 @@ private:
 
             llvm::Value* exc_info = emitter.getBuilder()->CreateConstInBoundsGEP2_32(irstate->getFrameInfoVar(), 0, 0);
             if (target_exception_style == CAPI) {
-                emitter.createCall(unw_info, g.funcs.raise0_capi, exc_info, CAPI);
-                emitter.checkAndPropagateCapiException(unw_info, getNullPtr(g.llvm_value_type_ptr),
-                                                       getNullPtr(g.llvm_value_type_ptr));
+                emitter.createCall(unw_info, g.funcs.raise0_capi, exc_info, CAPI, IREmitter::ALWAYS_THROWS);
                 emitter.getBuilder()->CreateUnreachable();
             } else {
                 emitter.createCall(unw_info, g.funcs.raise0, exc_info);
@@ -2448,20 +2505,23 @@ private:
             if (a) {
                 CompilerVariable* v = evalExpr(a, unw_info);
                 ConcreteCompilerVariable* converted = v->makeConverted(emitter, v->getBoxType());
-                v->decvref(emitter);
                 args.push_back(converted->getValue());
             } else {
-                args.push_back(embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone"));
+                args.push_back(emitter.getNone()->getValue());
             }
         }
 
+        llvm::Instruction* inst;
         if (target_exception_style == CAPI) {
-            emitter.createCall(unw_info, g.funcs.raise3_capi, args, CAPI);
-            emitter.checkAndPropagateCapiException(unw_info, getNullPtr(g.llvm_value_type_ptr),
-                                                   getNullPtr(g.llvm_value_type_ptr));
+            inst = emitter.createCall(unw_info, g.funcs.raise3_capi, args, CAPI, IREmitter::ALWAYS_THROWS);
         } else {
-            emitter.createCall(unw_info, g.funcs.raise3, args, CXX);
+            inst = emitter.createCall(unw_info, g.funcs.raise3, args, CXX);
         }
+
+        for (auto a : args) {
+            emitter.refConsumed(a, inst);
+        }
+
         emitter.getBuilder()->CreateUnreachable();
 
         endBlock(DEAD);
@@ -2545,15 +2605,20 @@ private:
 
     void loadArgument(InternedString name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {
         assert(name.s() != FRAME_INFO_PTR_NAME);
-        CompilerVariable* var = unboxVar(t, v, false);
-        _doSet(name, var, unw_info);
-        var->decvref(emitter);
+        CompilerVariable* var = unboxVar(t, v);
+        auto cfg = irstate->getSourceInfo()->cfg;
+        auto vst = irstate->getScopeInfo()->getScopeTypeOfName(name);
+        int vreg = -1;
+        if (vst == ScopeInfo::VarScopeType::FAST || vst == ScopeInfo::VarScopeType::CLOSURE) {
+            assert(cfg->sym_vreg_map.count(name));
+            vreg = cfg->sym_vreg_map[name];
+        }
+        _doSet(vreg, name, vst, var, unw_info);
     }
 
     void loadArgument(AST_expr* name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {
-        CompilerVariable* var = unboxVar(t, v, false);
+        CompilerVariable* var = unboxVar(t, v);
         _doSet(name, var, unw_info);
-        var->decvref(emitter);
     }
 
     bool allowableFakeEndingSymbol(InternedString name) {
@@ -2582,10 +2647,6 @@ private:
             // symbol table? '%s'", p.first.c_str());
 
             if (!irstate->getLiveness()->isLiveAtEnd(p.first, myblock)) {
-                // printf("%s dead at end of %d; grabbed = %d, %d vrefs\n", p.first.c_str(), myblock->idx,
-                //        p.second->isGrabbed(), p.second->getVrefs());
-
-                p.second->decvref(emitter);
                 symbol_table.erase(getIsDefinedName(p.first));
                 symbol_table.erase(p.first);
             } else if (irstate->getPhis()->isRequiredAfter(p.first, myblock)) {
@@ -2597,8 +2658,7 @@ private:
                 // printf("have to convert %s from %s to %s\n", p.first.c_str(),
                 // p.second->getType()->debugName().c_str(), phi_type->debugName().c_str());
                 ConcreteCompilerVariable* v = p.second->makeConverted(emitter, phi_type);
-                p.second->decvref(emitter);
-                symbol_table[p.first] = v->split(emitter);
+                symbol_table[p.first] = v;
             } else {
 #ifndef NDEBUG
                 if (myblock->successors.size()) {
@@ -2643,7 +2703,18 @@ private:
                 // printf("no st entry, setting undefined\n");
                 ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(*it, myblock);
                 assert(phi_type->isUsable());
-                cur = new ConcreteCompilerVariable(phi_type, llvm::UndefValue::get(phi_type->llvmType()), true);
+
+                // Forward an incref'd None instead of a NULL.
+                // TODO Change to using NULL to represent not-defined for boxed types, similar
+                // to CPython?
+                llvm::Value* v;
+                if (phi_type == phi_type->getBoxType()) {
+                    v = emitter.getNone()->getValue();
+                } else {
+                    v = llvm::UndefValue::get(phi_type->llvmType());
+                }
+
+                cur = new ConcreteCompilerVariable(phi_type, v);
                 _setFake(defined_name, makeBool(0));
             }
         }
@@ -2682,10 +2753,6 @@ public:
     EndingState getEndingSymbolTable() override {
         assert(state == FINISHED || state == DEAD);
 
-        // for (SymbolTable::iterator it = symbol_table.begin(); it != symbol_table.end(); ++it) {
-        // printf("%s %p %d\n", it->first.c_str(), it->second, it->second->getVrefs());
-        //}
-
         SourceInfo* source = irstate->getSourceInfo();
 
         SymbolTable* st = new SymbolTable(symbol_table);
@@ -2699,9 +2766,6 @@ public:
         }
 
         if (myblock->successors.size() == 0) {
-            for (auto& p : *st) {
-                p.second->decvref(emitter);
-            }
             st->clear();
             symbol_table.clear();
             return EndingState(st, phi_st, curblock, outgoing_exc_state);
@@ -2725,8 +2789,6 @@ public:
         // We're going to sort out which symbols need to go in phi_st and which belong inst.
         for (SymbolTable::iterator it = st->begin(); it != st->end();) {
             if (allowableFakeEndingSymbol(it->first) || irstate->getPhis()->isRequiredAfter(it->first, myblock)) {
-                ASSERT(it->second->isGrabbed(), "%s", it->first.c_str());
-                assert(it->second->getVrefs() == 1);
                 // this conversion should have already happened... should refactor this.
                 ConcreteCompilerType* ending_type;
                 if (isIsDefinedName(it->first.s())) {
@@ -2745,8 +2807,7 @@ public:
                 }
                 assert(ending_type->isUsable());
                 //(*phi_st)[it->first] = it->second->makeConverted(emitter, it->second->getConcreteType());
-                // printf("%s %p %d\n", it->first.c_str(), it->second, it->second->getVrefs());
-                (*phi_st)[it->first] = it->second->split(emitter)->makeConverted(emitter, ending_type);
+                (*phi_st)[it->first] = it->second->makeConverted(emitter, ending_type);
                 it = st->erase(it);
             } else {
                 ++it;
@@ -2772,11 +2833,9 @@ public:
         assert(st);
         DupCache cache;
         for (SymbolTable::iterator it = st->begin(); it != st->end(); ++it) {
-            // printf("Copying in %s: %p, %d\n", it->first.c_str(), it->second, it->second->getVrefs());
             // printf("Copying in %s, a %s\n", it->first.c_str(), it->second->getType()->debugName().c_str());
             symbol_table[it->first] = it->second->dup(cache);
             assert(symbol_table[it->first]->getType()->isUsable());
-            // printf("got: %p, %d\n", symbol_table[it->first], symbol_table[it->first]->getVrefs());
         }
     }
 
@@ -2804,39 +2863,45 @@ public:
         if (scope_info->takesClosure()) {
             passed_closure = AI;
             ++AI;
-        } else
+            emitter.setType(passed_closure, RefType::BORROWED);
+        } else {
             passed_closure = getNullPtr(g.llvm_closure_type_ptr);
+            emitter.setType(passed_closure, RefType::BORROWED);
+        }
 
         if (irstate->getSourceInfo()->is_generator) {
             generator = AI;
+            emitter.setType(generator, RefType::BORROWED);
             ++AI;
         }
 
         if (!irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
             globals = AI;
+            emitter.setType(globals, RefType::BORROWED);
             ++AI;
         } else {
             BoxedModule* parent_module = irstate->getSourceInfo()->parent_module;
             globals = embedRelocatablePtr(parent_module, g.llvm_value_type_ptr, "cParentModule");
+            emitter.setType(globals, RefType::BORROWED);
         }
 
         irstate->setupFrameInfoVar(passed_closure, globals);
 
         if (scope_info->takesClosure()) {
             symbol_table[internString(PASSED_CLOSURE_NAME)]
-                = new ConcreteCompilerVariable(getPassedClosureType(), passed_closure, true);
+                = new ConcreteCompilerVariable(getPassedClosureType(), passed_closure);
         }
 
         if (scope_info->createsClosure()) {
             llvm::Value* new_closure = emitter.getBuilder()->CreateCall2(
                 g.funcs.createClosure, passed_closure, getConstantInt(scope_info->getClosureSize(), g.i64));
+            emitter.setType(new_closure, RefType::OWNED);
             symbol_table[internString(CREATED_CLOSURE_NAME)]
-                = new ConcreteCompilerVariable(getCreatedClosureType(), new_closure, true);
+                = new ConcreteCompilerVariable(getCreatedClosureType(), new_closure);
         }
 
         if (irstate->getSourceInfo()->is_generator)
-            symbol_table[internString(PASSED_GENERATOR_NAME)]
-                = new ConcreteCompilerVariable(GENERATOR, generator, true);
+            symbol_table[internString(PASSED_GENERATOR_NAME)] = new ConcreteCompilerVariable(GENERATOR, generator);
 
         std::vector<llvm::Value*> python_parameters;
         for (int i = 0; i < arg_types.size(); i++) {
@@ -2849,8 +2914,10 @@ public:
 
                     if (arg_types[i]->llvmType() == g.i64)
                         loaded = emitter.getBuilder()->CreatePtrToInt(loaded, arg_types[i]->llvmType());
-                    else
+                    else {
                         assert(arg_types[i]->llvmType() == g.llvm_value_type_ptr);
+                        emitter.setType(loaded, RefType::BORROWED);
+                    }
 
                     python_parameters.push_back(loaded);
                 }
@@ -2859,6 +2926,7 @@ public:
             }
 
             python_parameters.push_back(AI);
+            emitter.setType(AI, RefType::BORROWED);
             ++AI;
         }
 
@@ -2878,22 +2946,30 @@ public:
         }
 
         if (param_names.kwarg.size()) {
+            llvm::Value* passed_dict = python_parameters[i];
+            emitter.setNullable(passed_dict, true);
+
             llvm::BasicBlock* starting_block = emitter.currentBasicBlock();
             llvm::BasicBlock* isnull_bb = emitter.createBasicBlock("isnull");
             llvm::BasicBlock* continue_bb = emitter.createBasicBlock("kwargs_join");
 
             llvm::Value* kwargs_null
-                = emitter.getBuilder()->CreateICmpEQ(python_parameters[i], getNullPtr(g.llvm_value_type_ptr));
+                = emitter.getBuilder()->CreateICmpEQ(passed_dict, getNullPtr(g.llvm_value_type_ptr));
             llvm::BranchInst* null_check = emitter.getBuilder()->CreateCondBr(kwargs_null, isnull_bb, continue_bb);
 
             emitter.setCurrentBasicBlock(isnull_bb);
             llvm::Value* created_dict = emitter.getBuilder()->CreateCall(g.funcs.createDict);
-            emitter.getBuilder()->CreateBr(continue_bb);
+            emitter.setType(created_dict, RefType::OWNED);
+            auto isnull_terminator = emitter.getBuilder()->CreateBr(continue_bb);
 
             emitter.setCurrentBasicBlock(continue_bb);
             llvm::PHINode* phi = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, 2);
-            phi->addIncoming(python_parameters[i], starting_block);
+            phi->addIncoming(passed_dict, starting_block);
             phi->addIncoming(created_dict, isnull_bb);
+
+            emitter.setType(phi, RefType::OWNED);
+            emitter.refConsumed(passed_dict, null_check);
+            emitter.refConsumed(created_dict, isnull_terminator);
 
             loadArgument(internString(param_names.kwarg), arg_types[i], phi, UnwindInfo::cantUnwind());
             i++;
@@ -2942,15 +3018,15 @@ public:
     // LANDINGPAD, and this function will create a helper block that fetches the exception.
     // As a special-case, a NULL value for final_dest means that this helper block should
     // instead propagate the exception out of the function.
-    llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* from_block, llvm::BasicBlock* final_dest,
-                                     AST_stmt* current_stmt) override {
+    llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* from_block, llvm::BasicBlock* final_dest, AST_stmt* current_stmt,
+                                     bool is_after_deopt) override {
         llvm::BasicBlock*& capi_exc_dest = capi_exc_dests[final_dest];
         llvm::PHINode*& phi_node = capi_phis[final_dest];
 
         if (!capi_exc_dest) {
             auto orig_block = curblock;
 
-            capi_exc_dest = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+            capi_exc_dest = llvm::BasicBlock::Create(g.context, "capi_exc_dest", irstate->getLLVMFunction());
 
             emitter.setCurrentBasicBlock(capi_exc_dest);
             assert(!phi_node);
@@ -2965,7 +3041,8 @@ public:
                     emitter.getBuilder()->CreateCall(g.funcs.reraiseCapiExcAsCxx);
                     emitter.getBuilder()->CreateUnreachable();
                 } else {
-                    emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
+                    if (!irstate->getCurFunction()->entry_descriptor && !is_after_deopt)
+                        emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
                     emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
                 }
             } else {
@@ -2987,10 +3064,14 @@ public:
                 llvm::Value* exc_value = emitter.getBuilder()->CreateLoad(exc_value_ptr);
                 llvm::Value* exc_traceback = emitter.getBuilder()->CreateLoad(exc_traceback_ptr);
 
+                emitter.setType(exc_type, RefType::OWNED);
+                emitter.setType(exc_value, RefType::OWNED);
+                emitter.setType(exc_traceback, RefType::OWNED);
+
                 addOutgoingExceptionState(
-                    IRGenerator::ExceptionState(capi_exc_dest, new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
-                                                new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
-                                                new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true)));
+                    IRGenerator::ExceptionState(capi_exc_dest, new ConcreteCompilerVariable(UNKNOWN, exc_type),
+                                                new ConcreteCompilerVariable(UNKNOWN, exc_value),
+                                                new ConcreteCompilerVariable(UNKNOWN, exc_traceback)));
 
                 emitter.getBuilder()->CreateBr(final_dest);
             }
@@ -3001,65 +3082,64 @@ public:
         assert(capi_exc_dest);
         assert(phi_node);
 
+        // Break a likely critical edge, for the benefit of the refcounter.
+        // We should probably just teach the refcounter to break the edges on-demand though.
+        llvm::BasicBlock* critedge_breaker = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+        critedge_breaker->moveBefore(capi_exc_dest);
+        llvm::BranchInst::Create(capi_exc_dest, critedge_breaker);
 
-        phi_node->addIncoming(embedRelocatablePtr(current_stmt, g.llvm_aststmt_type_ptr), from_block);
+        phi_node->addIncoming(embedRelocatablePtr(current_stmt, g.llvm_aststmt_type_ptr), critedge_breaker);
 
-        return capi_exc_dest;
+        return critedge_breaker;
     }
 
-    llvm::BasicBlock* getCXXExcDest(llvm::BasicBlock* final_dest) override {
-        llvm::BasicBlock*& cxx_exc_dest = cxx_exc_dests[final_dest];
-        if (cxx_exc_dest)
-            return cxx_exc_dest;
+    llvm::BasicBlock* getCXXExcDest(const UnwindInfo& unw_info) override {
+        llvm::BasicBlock* final_dest;
+        if (unw_info.hasHandler()) {
+            final_dest = unw_info.exc_dest;
+        } else {
+            final_dest = NULL;
+        }
 
         llvm::BasicBlock* orig_block = curblock;
 
-        cxx_exc_dest = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+        llvm::BasicBlock* cxx_exc_dest = llvm::BasicBlock::Create(g.context, "cxxwrapper", irstate->getLLVMFunction());
 
         emitter.getBuilder()->SetInsertPoint(cxx_exc_dest);
 
-        llvm::Function* _personality_func = g.stdlib_module->getFunction("__gxx_personality_v0");
-        assert(_personality_func);
-        llvm::Value* personality_func
-            = g.cur_module->getOrInsertFunction(_personality_func->getName(), _personality_func->getFunctionType());
-        assert(personality_func);
-        llvm::LandingPadInst* landing_pad = emitter.getBuilder()->CreateLandingPad(
-            llvm::StructType::create(std::vector<llvm::Type*>{ g.i8_ptr, g.i64 }), personality_func, 1);
-        landing_pad->addClause(getNullPtr(g.i8_ptr));
+        llvm::Value* exc_type, *exc_value, *exc_traceback;
+        std::tie(exc_type, exc_value, exc_traceback) = createLandingpad(cxx_exc_dest);
+        emitter.setType(exc_type, RefType::OWNED);
+        emitter.setType(exc_value, RefType::OWNED);
+        emitter.setType(exc_traceback, RefType::OWNED);
 
-        llvm::Value* cxaexc_pointer = emitter.getBuilder()->CreateExtractValue(landing_pad, { 0 });
-
-        llvm::Function* std_module_catch = g.stdlib_module->getFunction("__cxa_begin_catch");
-        auto begin_catch_func
-            = g.cur_module->getOrInsertFunction(std_module_catch->getName(), std_module_catch->getFunctionType());
-        assert(begin_catch_func);
-
-        llvm::Value* excinfo_pointer = emitter.getBuilder()->CreateCall(begin_catch_func, cxaexc_pointer);
-        llvm::Value* excinfo_pointer_casted
-            = emitter.getBuilder()->CreateBitCast(excinfo_pointer, g.llvm_excinfo_type->getPointerTo());
-
-        auto* builder = emitter.getBuilder();
-        llvm::Value* exc_type = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 0));
-        llvm::Value* exc_value = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 1));
-        llvm::Value* exc_traceback
-            = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
-
+        // final_dest==NULL => propagate the exception out of the function.
         if (final_dest) {
             // Catch the exception and forward to final_dest:
-            addOutgoingExceptionState(ExceptionState(cxx_exc_dest,
-                                                     new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
-                                                     new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
-                                                     new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true)));
+            addOutgoingExceptionState(ExceptionState(cxx_exc_dest, new ConcreteCompilerVariable(UNKNOWN, exc_type),
+                                                     new ConcreteCompilerVariable(UNKNOWN, exc_value),
+                                                     new ConcreteCompilerVariable(UNKNOWN, exc_traceback)));
 
-            builder->CreateBr(final_dest);
+            emitter.getBuilder()->CreateBr(final_dest);
+        } else if (irstate->getExceptionStyle() == CAPI) {
+            auto call_inst
+                = emitter.getBuilder()->CreateCall3(g.funcs.PyErr_Restore, exc_type, exc_value, exc_traceback);
+            irstate->getRefcounts()->refConsumed(exc_type, call_inst);
+            irstate->getRefcounts()->refConsumed(exc_value, call_inst);
+            irstate->getRefcounts()->refConsumed(exc_traceback, call_inst);
+            if (!irstate->getCurFunction()->entry_descriptor && !unw_info.is_after_deopt) {
+                emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
+            }
+            emitter.getBuilder()->CreateRet(getNullPtr(g.llvm_value_type_ptr));
         } else {
-            // Propagate the exception out of the function.
-            // We shouldn't be hitting this case if the current function is CXX-style; then we should have
-            // just not created an Invoke and let the exception machinery propagate it for us.
-            assert(irstate->getExceptionStyle() == CAPI);
-            builder->CreateCall3(g.funcs.PyErr_Restore, exc_type, exc_value, exc_traceback);
-            builder->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
-            builder->CreateRet(getNullPtr(g.llvm_value_type_ptr));
+            // auto call_inst = emitter.createCall3(UnwindInfo(unw_info.current_stmt, NO_CXX_INTERCEPTION),
+            // g.funcs.rawReraise, exc_type, exc_value, exc_traceback);
+            auto call_inst = emitter.getBuilder()->CreateCall3(g.funcs.rawReraise, exc_type, exc_value, exc_traceback);
+            irstate->getRefcounts()->refConsumed(exc_type, call_inst);
+            irstate->getRefcounts()->refConsumed(exc_value, call_inst);
+            irstate->getRefcounts()->refConsumed(exc_traceback, call_inst);
+
+            emitter.getBuilder()->CreateUnreachable();
         }
 
         emitter.setCurrentBasicBlock(orig_block);
@@ -3076,6 +3156,37 @@ public:
         this->incoming_exc_state = std::move(exc_state);
     }
 };
+
+std::tuple<llvm::Value*, llvm::Value*, llvm::Value*> createLandingpad(llvm::BasicBlock* bb) {
+    assert(bb->begin() == bb->end());
+
+    llvm::IRBuilder<true> builder(bb);
+
+    static llvm::Function* _personality_func = g.stdlib_module->getFunction("__gxx_personality_v0");
+    assert(_personality_func);
+    llvm::Value* personality_func
+        = g.cur_module->getOrInsertFunction(_personality_func->getName(), _personality_func->getFunctionType());
+    assert(personality_func);
+    llvm::LandingPadInst* landing_pad = builder.CreateLandingPad(
+        llvm::StructType::create(std::vector<llvm::Type*>{ g.i8_ptr, g.i64 }), personality_func, 1);
+    landing_pad->addClause(getNullPtr(g.i8_ptr));
+
+    llvm::Value* cxaexc_pointer = builder.CreateExtractValue(landing_pad, { 0 });
+
+    static llvm::Function* std_module_catch = g.stdlib_module->getFunction("__cxa_begin_catch");
+    auto begin_catch_func
+        = g.cur_module->getOrInsertFunction(std_module_catch->getName(), std_module_catch->getFunctionType());
+    assert(begin_catch_func);
+
+    llvm::Value* excinfo_pointer = builder.CreateCall(begin_catch_func, cxaexc_pointer);
+    llvm::Value* excinfo_pointer_casted = builder.CreateBitCast(excinfo_pointer, g.llvm_excinfo_type->getPointerTo());
+
+    llvm::Value* exc_type = builder.CreateLoad(builder.CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 0));
+    llvm::Value* exc_value = builder.CreateLoad(builder.CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 1));
+    llvm::Value* exc_traceback = builder.CreateLoad(builder.CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
+
+    return std::make_tuple(exc_type, exc_value, exc_traceback);
+}
 
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                                CFGBlock* myblock, TypeAnalysis* types) {

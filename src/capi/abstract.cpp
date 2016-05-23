@@ -57,7 +57,7 @@ extern "C" int PyObject_Cmp(PyObject* o1, PyObject* o2, int* result) noexcept {
 extern "C" PyObject* PyObject_Type(PyObject* o) noexcept {
     if (o == NULL)
         return null_error();
-    return o->cls;
+    return incref(o->cls);
 }
 
 extern "C" Py_ssize_t _PyObject_LengthHint(PyObject* o, Py_ssize_t defaultvalue) noexcept {
@@ -321,7 +321,7 @@ static PyObject* abstract_get_bases(PyObject* cls) noexcept {
 
     static PyObject* __bases__ = NULL;
     if (__bases__ == NULL) {
-        __bases__ = PyString_InternFromString("__bases__");
+        __bases__ = getStaticString("__bases__");
         if (__bases__ == NULL)
             return NULL;
     }
@@ -394,7 +394,7 @@ static int recursive_isinstance(PyObject* inst, PyObject* cls) noexcept {
 
     static PyObject* __class__ = NULL;
     if (__class__ == NULL) {
-        __class__ = PyString_InternFromString("__class__");
+        __class__ = getStaticString("__class__");
         if (__class__ == NULL)
             return -1;
     }
@@ -415,7 +415,7 @@ static int recursive_isinstance(PyObject* inst, PyObject* cls) noexcept {
             // We don't need to worry about __getattr__, since the default __class__ will always resolve.
             bool has_custom_class = inst->cls->has___class__ || inst->cls->has_getattribute;
             if (!has_custom_class) {
-                assert(PyObject_GetAttr(inst, __class__) == inst->cls);
+                assert(autoDecref(PyObject_GetAttr(inst, __class__)) == inst->cls);
             } else {
                 c = PyObject_GetAttr(inst, __class__);
                 if (!c)
@@ -659,8 +659,9 @@ extern "C" PyObject* PyObject_CallMethod(PyObject* o, const char* name, const ch
             argspec = ArgPassSpec(1);
     } else
         argspec = ArgPassSpec(0);
-    retval = callattrInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(o, internStringMortal(name), CLASS_OR_INST, NULL,
-                                                                    argspec, args, NULL, NULL, NULL, NULL);
+    AUTO_XDECREF(args);
+    retval = callattrInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(
+        o, autoDecref(internStringMortal(name)), CLASS_OR_INST, NULL, argspec, args, NULL, NULL, NULL, NULL);
     if (!retval && !PyErr_Occurred())
         PyErr_SetString(PyExc_AttributeError, name);
 
@@ -695,7 +696,9 @@ extern "C" PyObject* PyObject_CallMethodObjArgs(PyObject* callable, PyObject* na
         }
     }
 
+    Py_INCREF(attr);
     internStringMortalInplace(attr);
+    AUTO_DECREF(attr);
     tmp = callattrInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(
         callable, attr, CLASS_OR_INST, NULL, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
     if (!tmp && !PyErr_Occurred())
@@ -704,7 +707,6 @@ extern "C" PyObject* PyObject_CallMethodObjArgs(PyObject* callable, PyObject* na
 
 
     Py_DECREF(args);
-    Py_DECREF(callable);
 
     return tmp;
 }
@@ -729,15 +731,12 @@ extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, const char* name, c
             argspec = ArgPassSpec(1);
     } else
         argspec = ArgPassSpec(0);
+    AUTO_XDECREF(args);
 
-    tmp = callattrInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(o, internStringMortal(name), CLASS_OR_INST, NULL,
-                                                                 argspec, args, NULL, NULL, NULL, NULL);
+    tmp = callattrInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(o, autoDecref(internStringMortal(name)), CLASS_OR_INST,
+                                                                 NULL, argspec, args, NULL, NULL, NULL, NULL);
     if (!tmp && !PyErr_Occurred())
         PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name, name);
-
-
-    Py_DECREF(args);
-    Py_DECREF(o);
 
     return tmp;
 }
@@ -746,6 +745,7 @@ extern "C" Py_ssize_t PyObject_Size(PyObject* o) noexcept {
     BoxedInt* r = lenInternal<ExceptionStyle::CAPI, NOT_REWRITABLE>(o, NULL);
     if (!r)
         return -1;
+    AUTO_DECREF(r);
     return r->n;
 }
 
@@ -1913,6 +1913,7 @@ extern "C" PyObject* PyNumber_Divmod(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::DivMod);
     } catch (ExcInfo e) {
+        e.clear();
         fatalOrError(PyExc_NotImplementedError, "unimplemented");
         return nullptr;
     }
@@ -2152,11 +2153,11 @@ extern "C" int PyNumber_CoerceEx(PyObject** pv, PyObject** pw) noexcept {
     return 1;
 }
 
-extern "C" PyObject* _PyNumber_ConvertIntegralToInt(PyObject* integral, const char* error_format) noexcept {
+extern "C" PyObject* _PyNumber_ConvertIntegralToInt(STOLEN(PyObject*) integral, const char* error_format) noexcept {
     const char* type_name;
     static PyObject* int_name = NULL;
     if (int_name == NULL) {
-        int_name = PyString_InternFromString("__int__");
+        int_name = getStaticString("__int__");
         if (int_name == NULL)
             return NULL;
     }
@@ -2236,7 +2237,7 @@ extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
 
     // Pyston change: this should be an optimization
     // PyObject* trunc_func = PyObject_GetAttrString(o, "__trunc__");
-    static BoxedString* trunc_str = internStringImmortal("__trunc__");
+    static BoxedString* trunc_str = getStaticString("__trunc__");
     PyObject* trunc_func = getattrInternal<ExceptionStyle::CAPI>(o, trunc_str);
 
     if (trunc_func) {
@@ -2287,7 +2288,7 @@ extern "C" PyObject* PyNumber_Long(PyObject* o) noexcept {
     Py_ssize_t buffer_len;
 
     if (trunc_name == NULL) {
-        trunc_name = PyString_InternFromString("__trunc__");
+        trunc_name = getStaticString("__trunc__");
         if (trunc_name == NULL)
             return NULL;
     }
@@ -2355,8 +2356,10 @@ extern "C" PyObject* PyNumber_Float(PyObject* o) noexcept {
     if (o == NULL)
         return null_error();
 
-    if (o->cls == float_cls)
+    if (o->cls == float_cls) {
+        Py_INCREF(o);
         return o;
+    }
 
     PyNumberMethods* m;
     m = o->cls->tp_as_number;
@@ -2387,6 +2390,7 @@ extern "C" PyObject* PyNumber_Index(PyObject* o) noexcept {
     if (o == NULL)
         return null_error();
     if (PyInt_Check(o) || PyLong_Check(o)) {
+        Py_INCREF(o);
         return o;
     }
 

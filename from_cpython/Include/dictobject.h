@@ -130,7 +130,7 @@ PyAPI_DATA(PyTypeObject*) dictiteritem_cls;
     (PyDictKeys_Check(op) || PyDictItems_Check(op))
 
 PyAPI_FUNC(PyObject *) PyDict_New(void) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject *) PyDict_GetItem(PyObject *mp, PyObject *key) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PyDict_GetItem(PyObject *mp, PyObject *key) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyDict_SetItem(PyObject *mp, PyObject *key, PyObject *item) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyDict_DelItem(PyObject *mp, PyObject *key) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyDict_Clear(PyObject *mp) PYSTON_NOEXCEPT;
@@ -169,7 +169,7 @@ PyAPI_FUNC(int) PyDict_MergeFromSeq2(PyObject *d,
                                            PyObject *seq2,
                                            int override) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(PyObject *) PyDict_GetItemString(PyObject *dp, const char *key) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PyDict_GetItemString(PyObject *dp, const char *key) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyDict_SetItemString(PyObject *dp, const char *key, PyObject *item) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyDict_DelItemString(PyObject *dp, const char *key) PYSTON_NOEXCEPT;
 

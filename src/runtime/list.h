@@ -28,9 +28,16 @@ public:
     int pos;
     BoxedListIterator(BoxedList* l, int start);
 
-    DEFAULT_CLASS(list_iterator_cls);
+    static void dealloc(BoxedListIterator* o) noexcept {
+        PyObject_GC_UnTrack(o);
+        Py_XDECREF(o->l);
+        o->cls->tp_free(o);
+    }
 
-    static void gcHandler(GCVisitor* v, Box* b);
+    static int traverse(BoxedListIterator* self, visitproc visit, void* arg) noexcept {
+        Py_VISIT(self->l);
+        return 0;
+    }
 };
 
 Box* listIter(Box* self) noexcept;

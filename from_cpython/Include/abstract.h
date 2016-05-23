@@ -875,7 +875,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      PyAPI_FUNC(PyObject *) _PyNumber_ConvertIntegralToInt(
-         PyObject *integral,
+         STOLEN(PyObject *) integral,
          const char* error_format) PYSTON_NOEXCEPT;
 
        /*

@@ -29,7 +29,7 @@ inline void BoxedList::grow(int min_free) {
         capacity = initial;
     } else {
         int new_capacity = std::max(capacity * 2, size + min_free);
-        elts = GCdArray::realloc(elts, new_capacity);
+        elts = GCdArray::grow(elts, new_capacity);
         capacity = new_capacity;
     }
 }
@@ -42,7 +42,7 @@ inline void BoxedList::ensure(int min_free) {
 }
 
 // TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?
-extern "C" inline void listAppendInternal(Box* s, Box* v) {
+extern "C" inline void listAppendInternalStolen(Box* s, Box* v) {
     // Lock must be held!
 
     assert(PyList_Check(s));
@@ -54,6 +54,11 @@ extern "C" inline void listAppendInternal(Box* s, Box* v) {
     assert(self->size < self->capacity);
     self->elts->elts[self->size] = v;
     self->size++;
+}
+
+extern "C" inline void listAppendInternal(Box* s, Box* v) {
+    Py_INCREF(v);
+    listAppendInternalStolen(s, v);
 }
 }
 

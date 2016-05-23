@@ -63,7 +63,7 @@ const char* Py_FileSystemDefaultEncoding = "UTF-8"; // Pyston change: modified t
 extern "C" Box* trap() {
     raise(SIGTRAP);
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 /* Helper for PyObject_Dir.
@@ -83,9 +83,9 @@ extern "C" Box* dir(Box* obj) {
 
 extern "C" Box* vars(Box* obj) {
     if (!obj)
-        return fastLocalsToBoxedLocals();
+        return incref(PyEval_GetLocals());
 
-    static BoxedString* dict_str = internStringImmortal("__dict__");
+    static BoxedString* dict_str = getStaticString("__dict__");
     Box* rtn = getattrInternal<ExceptionStyle::CAPI>(obj, dict_str);
     if (!rtn)
         raiseExcHelper(TypeError, "vars() argument must have __dict__ attribute");
@@ -100,7 +100,7 @@ extern "C" Box* abs_(Box* x) {
 }
 
 extern "C" Box* binFunc(Box* x) {
-    static BoxedString* bin_str = internStringImmortal("__bin__");
+    static BoxedString* bin_str = getStaticString("__bin__");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
     Box* r = callattr(x, bin_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     if (!r)
@@ -113,7 +113,7 @@ extern "C" Box* binFunc(Box* x) {
 }
 
 extern "C" Box* hexFunc(Box* x) {
-    static BoxedString* hex_str = internStringImmortal("__hex__");
+    static BoxedString* hex_str = getStaticString("__hex__");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
     Box* r = callattr(x, hex_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     if (!r)
@@ -126,7 +126,7 @@ extern "C" Box* hexFunc(Box* x) {
 }
 
 extern "C" Box* octFunc(Box* x) {
-    static BoxedString* oct_str = internStringImmortal("__oct__");
+    static BoxedString* oct_str = getStaticString("__oct__");
     CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
     Box* r = callattr(x, oct_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
     if (!r)
@@ -140,6 +140,7 @@ extern "C" Box* octFunc(Box* x) {
 
 extern "C" Box* all(Box* container) {
     for (Box* e : container->pyElements()) {
+        AUTO_DECREF(e);
         if (!nonzero(e)) {
             return boxBool(false);
         }
@@ -149,6 +150,7 @@ extern "C" Box* all(Box* container) {
 
 extern "C" Box* any(Box* container) {
     for (Box* e : container->pyElements()) {
+        AUTO_DECREF(e);
         if (nonzero(e)) {
             return boxBool(true);
         }
@@ -167,7 +169,7 @@ Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
     Box* extremVal;
 
     if (kwargs && kwargs->d.size()) {
-        static BoxedString* key_str = static_cast<BoxedString*>(PyString_InternFromString("key"));
+        static BoxedString* key_str = static_cast<BoxedString*>(getStaticString("key"));
         auto it = kwargs->d.find(key_str);
         if (it != kwargs->d.end() && kwargs->d.size() == 1) {
             key_func = it->second;
@@ -179,17 +181,19 @@ Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
         }
     }
 
+    XKEEP_ALIVE(key_func); // probably not necessary
+
     if (args->size() == 0) {
         extremElement = nullptr;
         extremVal = nullptr;
         container = arg0;
     } else {
-        extremElement = arg0;
         if (key_func != NULL) {
-            extremVal = runtimeCall(key_func, ArgPassSpec(1), extremElement, NULL, NULL, NULL, NULL);
+            extremVal = runtimeCall(key_func, ArgPassSpec(1), arg0, NULL, NULL, NULL, NULL);
         } else {
-            extremVal = extremElement;
+            extremVal = incref(arg0);
         }
+        extremElement = incref(arg0);
         container = args;
     }
 
@@ -201,23 +205,41 @@ Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
                 extremElement = e;
                 continue;
             }
-            curVal = runtimeCall(key_func, ArgPassSpec(1), e, NULL, NULL, NULL, NULL);
+            try {
+                curVal = runtimeCall(key_func, ArgPassSpec(1), e, NULL, NULL, NULL, NULL);
+            } catch (ExcInfo ex) {
+                Py_DECREF(e);
+                Py_DECREF(extremVal);
+                Py_DECREF(extremElement);
+                throw ex;
+            }
         } else {
             if (!extremElement) {
-                extremVal = e;
+                extremVal = incref(e);
                 extremElement = e;
                 continue;
             }
-            curVal = e;
+            curVal = incref(e);
         }
         int r = PyObject_RichCompareBool(curVal, extremVal, opid);
-        if (r == -1)
+        if (r == -1) {
+            Py_DECREF(e);
+            Py_DECREF(extremVal);
+            Py_DECREF(extremElement);
+            Py_DECREF(curVal);
             throwCAPIException();
+        }
         if (r) {
+            Py_DECREF(extremElement);
+            Py_DECREF(extremVal);
             extremElement = e;
             extremVal = curVal;
+        } else {
+            Py_DECREF(curVal);
+            Py_DECREF(e);
         }
     }
+    Py_XDECREF(extremVal);
     return extremElement;
 }
 
@@ -286,11 +308,13 @@ extern "C" Box* sum(Box* container, Box* initial) {
     static RuntimeICCache<BinopIC, 3> runtime_ic_cache;
     std::shared_ptr<BinopIC> pp = runtime_ic_cache.getIC(__builtin_return_address(0));
 
-    Box* cur = initial;
+    Py_INCREF(initial);
+    auto cur = autoDecref(initial);
     for (Box* e : container->pyElements()) {
+        AUTO_DECREF(e);
         cur = pp->call(cur, e, AST_TYPE::Add);
     }
-    return cur;
+    return incref(cur.get());
 }
 
 extern "C" Box* id(Box* arg) {
@@ -326,7 +350,7 @@ extern "C" Box* unichr(Box* arg) {
 
     Box* rtn = PyUnicode_FromOrdinal(n);
     if (!rtn)
-        checkAndThrowCAPIException();
+        throwCAPIException();
     return rtn;
 }
 
@@ -339,6 +363,8 @@ Box* coerceFunc(Box* vv, Box* ww) {
     if (PyNumber_Coerce(&vv, &ww) < 0)
         throwCAPIException();
     res = PyTuple_Pack(2, vv, ww);
+    Py_DECREF(vv);
+    Py_DECREF(ww);
     return res;
 }
 
@@ -383,21 +409,27 @@ Box* range(Box* start, Box* stop, Box* step) {
     if (stop == NULL) {
         istart = 0;
         istop = PyLong_AsLong(start);
-        checkAndThrowCAPIException();
+        if ((istop == -1) && PyErr_Occurred())
+            throwCAPIException();
         istep = 1;
     } else if (step == NULL) {
         istart = PyLong_AsLong(start);
-        checkAndThrowCAPIException();
+        if ((istart == -1) && PyErr_Occurred())
+            throwCAPIException();
         istop = PyLong_AsLong(stop);
-        checkAndThrowCAPIException();
+        if ((istop == -1) && PyErr_Occurred())
+            throwCAPIException();
         istep = 1;
     } else {
         istart = PyLong_AsLong(start);
-        checkAndThrowCAPIException();
+        if ((istart == -1) && PyErr_Occurred())
+            throwCAPIException();
         istop = PyLong_AsLong(stop);
-        checkAndThrowCAPIException();
+        if ((istop == -1) && PyErr_Occurred())
+            throwCAPIException();
         istep = PyLong_AsLong(step);
-        checkAndThrowCAPIException();
+        if ((istep == -1) && PyErr_Occurred())
+            throwCAPIException();
     }
 
     BoxedList* rtn = new BoxedList();
@@ -405,12 +437,12 @@ Box* range(Box* start, Box* stop, Box* step) {
     if (istep > 0) {
         for (i64 i = istart; i < istop; i += istep) {
             Box* bi = boxInt(i);
-            listAppendInternal(rtn, bi);
+            listAppendInternalStolen(rtn, bi);
         }
     } else {
         for (i64 i = istart; i > istop; i += istep) {
             Box* bi = boxInt(i);
-            listAppendInternal(rtn, bi);
+            listAppendInternalStolen(rtn, bi);
         }
     }
     return rtn;
@@ -425,12 +457,13 @@ Box* sorted(Box* obj, Box* cmp, Box* key, Box** args) {
     Box* reverse = args[0];
 
     BoxedList* rtn = new BoxedList();
+    AUTO_DECREF(rtn);
     for (Box* e : obj->pyElements()) {
-        listAppendInternal(rtn, e);
+        listAppendInternalStolen(rtn, e);
     }
 
     listSort(rtn, cmp, key, reverse);
-    return rtn;
+    return incref(rtn);
 }
 
 Box* isinstance_func(Box* obj, Box* cls) {
@@ -443,15 +476,15 @@ Box* isinstance_func(Box* obj, Box* cls) {
 Box* issubclass_func(Box* child, Box* parent) {
     int rtn = PyObject_IsSubclass(child, parent);
     if (rtn < 0)
-        checkAndThrowCAPIException();
+        throwCAPIException();
     return boxBool(rtn);
 }
 
 Box* intern_func(Box* str) {
     if (!PyString_CheckExact(str)) // have to use exact check!
         raiseExcHelper(TypeError, "can't intern subclass of string");
+    Py_INCREF(str);
     PyString_InternInPlace(&str);
-    checkAndThrowCAPIException();
     return str;
 }
 
@@ -464,6 +497,7 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
     // which ignores it.  So we don't even pass it through.
 
     name = coerceUnicodeToStr<CXX>(name);
+    AUTO_DECREF(name);
 
     if (name->cls != str_cls) {
         raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(name));
@@ -483,16 +517,19 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
 Box* delattrFunc(Box* obj, Box* _str) {
     _str = coerceUnicodeToStr<CXX>(_str);
 
-    if (_str->cls != str_cls)
+    if (_str->cls != str_cls) {
+        Py_DECREF(_str);
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(_str));
+    }
     BoxedString* str = static_cast<BoxedString*>(_str);
     internStringMortalInplace(str);
+    AUTO_DECREF(str);
 
     delattr(obj, str);
-    return None;
+    return incref(None);
 }
 
-static Box* getattrFuncHelper(Box* return_val, Box* obj, BoxedString* str, Box* default_val) noexcept {
+static Box* getattrFuncHelper(STOLEN(Box*) return_val, Box* obj, BoxedString* str, Box* default_val) noexcept {
     assert(PyString_Check(str));
 
     if (return_val)
@@ -505,7 +542,7 @@ static Box* getattrFuncHelper(Box* return_val, Box* obj, BoxedString* str, Box* 
     if (default_val) {
         if (exc)
             PyErr_Clear();
-        return default_val;
+        return incref(default_val);
     }
     if (!exc)
         raiseAttributeErrorCapi(obj, str->s());
@@ -516,115 +553,127 @@ template <ExceptionStyle S>
 Box* getattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                          Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
     static Box* defaults[] = { NULL };
-    bool rewrite_success = false;
-    rearrangeArguments(ParamReceiveSpec(3, 1, false, false), NULL, "getattr", defaults, rewrite_args, rewrite_success,
-                       argspec, arg1, arg2, arg3, args, NULL, keyword_names);
-    if (!rewrite_success)
-        rewrite_args = NULL;
 
-    Box* obj = arg1;
-    Box* _str = arg2;
-    Box* default_value = arg3;
+    auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+        Box* obj = arg1;
+        Box* _str = arg2;
+        Box* default_value = arg3;
 
-    if (rewrite_args) {
-        // We need to make sure that the attribute string will be the same.
-        // Even though the passed string might not be the exact attribute name
-        // that we end up looking up (because we need to encode it or intern it),
-        // guarding on that object means (for strings and unicode) that the string
-        // value is fixed.
-        if (!PyString_CheckExact(_str) && !PyUnicode_CheckExact(_str))
-            rewrite_args = NULL;
-        else {
-            if (PyString_CheckExact(_str) && PyString_CHECK_INTERNED(_str) == SSTATE_INTERNED_IMMORTAL) {
-                // can avoid keeping the extra gc reference
-            } else {
-                rewrite_args->rewriter->addGCReference(_str);
+        if (rewrite_args) {
+            // We need to make sure that the attribute string will be the same.
+            // Even though the passed string might not be the exact attribute name
+            // that we end up looking up (because we need to encode it or intern it),
+            // guarding on that object means (for strings and unicode) that the string
+            // value is fixed.
+            if (!PyString_CheckExact(_str) && !PyUnicode_CheckExact(_str))
+                rewrite_args = NULL;
+            else {
+                if (PyString_CheckExact(_str) && PyString_CHECK_INTERNED(_str) == SSTATE_INTERNED_IMMORTAL) {
+                    // can avoid keeping the extra gc reference
+                } else {
+                    rewrite_args->rewriter->addGCReference(_str);
+                }
+
+                rewrite_args->arg2->addGuard((intptr_t)arg2);
             }
-
-            rewrite_args->arg2->addGuard((intptr_t)arg2);
         }
-    }
 
-    _str = coerceUnicodeToStr<S>(_str);
-    if (S == CAPI && !_str)
-        return NULL;
+        _str = coerceUnicodeToStr<S>(_str);
 
-    if (!PyString_Check(_str)) {
-        if (S == CAPI) {
-            PyErr_SetString(TypeError, "getattr(): attribute name must be string");
-            return NULL;
-        } else
-            raiseExcHelper(TypeError, "getattr(): attribute name must be string");
-    }
+        if (S == CAPI && !_str)
+            return (Box*)NULL;
 
-    BoxedString* str = static_cast<BoxedString*>(_str);
-    if (!PyString_CHECK_INTERNED(str))
-        internStringMortalInplace(str);
+        if (!PyString_Check(_str)) {
+            Py_DECREF(_str);
+            if (S == CAPI) {
+                PyErr_SetString(TypeError, "getattr(): attribute name must be string");
+                return (Box*)NULL;
+            } else
+                raiseExcHelper(TypeError, "getattr(): attribute name must be string");
+        }
 
-    Box* rtn;
-    RewriterVar* r_rtn;
-    if (rewrite_args) {
-        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
-        rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
-        // TODO could make the return valid in the NOEXC_POSSIBLE case via a helper
-        if (!grewrite_args.isSuccessful())
-            rewrite_args = NULL;
-        else {
-            ReturnConvention return_convention;
-            std::tie(r_rtn, return_convention) = grewrite_args.getReturn();
+        BoxedString* str = static_cast<BoxedString*>(_str);
+        if (!PyString_CHECK_INTERNED(str))
+            internStringMortalInplace(str);
+        AUTO_DECREF(str);
 
-            // Convert to NOEXC_POSSIBLE:
-            if (return_convention == ReturnConvention::NO_RETURN) {
-                return_convention = ReturnConvention::NOEXC_POSSIBLE;
-                r_rtn = rewrite_args->rewriter->loadConst(0);
-            } else if (return_convention == ReturnConvention::MAYBE_EXC) {
-                if (default_value)
-                    rewrite_args = NULL;
+        Box* rtn;
+        RewriterVar* r_rtn;
+        if (rewrite_args) {
+            GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
+            rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
+            // TODO could make the return valid in the NOEXC_POSSIBLE case via a helper
+            if (!grewrite_args.isSuccessful())
+                rewrite_args = NULL;
+            else {
+                ReturnConvention return_convention;
+                std::tie(r_rtn, return_convention) = grewrite_args.getReturn();
+
+                // Convert to NOEXC_POSSIBLE:
+                if (return_convention == ReturnConvention::NO_RETURN) {
+                    return_convention = ReturnConvention::NOEXC_POSSIBLE;
+                    r_rtn = rewrite_args->rewriter->loadConst(0);
+                } else if (return_convention == ReturnConvention::MAYBE_EXC) {
+                    if (default_value)
+                        rewrite_args = NULL;
+                }
+                assert(!rewrite_args || return_convention == ReturnConvention::NOEXC_POSSIBLE
+                       || return_convention == ReturnConvention::HAS_RETURN
+                       || return_convention == ReturnConvention::CAPI_RETURN
+                       || (default_value == NULL && return_convention == ReturnConvention::MAYBE_EXC));
             }
-            assert(!rewrite_args || return_convention == ReturnConvention::NOEXC_POSSIBLE
-                   || return_convention == ReturnConvention::HAS_RETURN
-                   || return_convention == ReturnConvention::CAPI_RETURN
-                   || (default_value == NULL && return_convention == ReturnConvention::MAYBE_EXC));
+        } else {
+            rtn = getattrInternal<CAPI>(obj, str);
         }
-    } else {
-        rtn = getattrInternal<CAPI>(obj, str);
-    }
 
-    if (rewrite_args) {
-        assert(PyString_CHECK_INTERNED(str) == SSTATE_INTERNED_IMMORTAL);
-        RewriterVar* r_str = rewrite_args->rewriter->loadConst((intptr_t)str, Location::forArg(2));
-        RewriterVar* final_rtn = rewrite_args->rewriter->call(false, (void*)getattrFuncHelper, r_rtn,
-                                                              rewrite_args->arg1, r_str, rewrite_args->arg3);
+        if (rewrite_args) {
+            assert(PyString_CHECK_INTERNED(str) == SSTATE_INTERNED_IMMORTAL);
+            RewriterVar* r_str = rewrite_args->rewriter->loadConst((intptr_t)str, Location::forArg(2));
+            RewriterVar* final_rtn
+                = rewrite_args->rewriter->call(false, (void*)getattrFuncHelper, r_rtn, rewrite_args->arg1, r_str,
+                                               rewrite_args->arg3)->setType(RefType::OWNED);
+            r_rtn->refConsumed();
 
-        if (S == CXX)
-            rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);
-        rewrite_args->out_success = true;
-        rewrite_args->out_rtn = final_rtn;
-    }
+            if (S == CXX)
+                rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = final_rtn;
+        }
 
-    Box* r = getattrFuncHelper(rtn, obj, str, default_value);
-    if (S == CXX && !r)
-        throwCAPIException();
-    return r;
+        Box* r = getattrFuncHelper(rtn, obj, str, default_value);
+        if (S == CXX && !r)
+            throwCAPIException();
+        return r;
+    };
+
+    return callCXXFromStyle<S>([&]() {
+        return rearrangeArgumentsAndCall(ParamReceiveSpec(3, 1, false, false), NULL, "getattr", defaults, rewrite_args,
+                                         argspec, arg1, arg2, arg3, args, keyword_names, continuation);
+    });
 }
 
 Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     _str = coerceUnicodeToStr<CXX>(_str);
 
     if (_str->cls != str_cls) {
+        Py_DECREF(_str);
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", _str->cls->tp_name);
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
     internStringMortalInplace(str);
+    AUTO_DECREF(str);
 
-    setattr(obj, str, value);
-    return None;
+    setattr(obj, str, incref(value));
+    return incref(None);
 }
 
-static Box* hasattrFuncHelper(Box* return_val) noexcept {
+// Not sure if this should be stealing or not:
+static Box* hasattrFuncHelper(STOLEN(Box*) return_val) noexcept {
+    AUTO_XDECREF(return_val);
+
     if (return_val)
-        return True;
+        Py_RETURN_TRUE;
 
     if (PyErr_Occurred()) {
         if (!PyErr_ExceptionMatches(PyExc_Exception))
@@ -632,109 +681,119 @@ static Box* hasattrFuncHelper(Box* return_val) noexcept {
 
         PyErr_Clear();
     }
-    return False;
+    Py_RETURN_FALSE;
 }
 
 template <ExceptionStyle S>
 Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                          Box* arg2, Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
-    bool rewrite_success = false;
-    rearrangeArguments(ParamReceiveSpec(2, 0, false, false), NULL, "hasattr", NULL, rewrite_args, rewrite_success,
-                       argspec, arg1, arg2, arg3, args, NULL, keyword_names);
-    if (!rewrite_success)
-        rewrite_args = NULL;
+    auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+        Box* obj = arg1;
+        Box* _str = arg2;
 
-    Box* obj = arg1;
-    Box* _str = arg2;
-
-    if (rewrite_args) {
-        // We need to make sure that the attribute string will be the same.
-        // Even though the passed string might not be the exact attribute name
-        // that we end up looking up (because we need to encode it or intern it),
-        // guarding on that object means (for strings and unicode) that the string
-        // value is fixed.
-        if (!PyString_CheckExact(_str) && !PyUnicode_CheckExact(_str))
-            rewrite_args = NULL;
-        else {
-            if (PyString_CheckExact(_str) && PyString_CHECK_INTERNED(_str) == SSTATE_INTERNED_IMMORTAL) {
-                // can avoid keeping the extra gc reference
-            } else {
-                rewrite_args->rewriter->addGCReference(_str);
-            }
-
-            rewrite_args->arg2->addGuard((intptr_t)arg2);
-        }
-    }
-
-    _str = coerceUnicodeToStr<S>(_str);
-    if (S == CAPI && !_str)
-        return NULL;
-
-    if (!PyString_Check(_str)) {
-        if (S == CAPI) {
-            PyErr_SetString(TypeError, "hasattr(): attribute name must be string");
-            return NULL;
-        } else
-            raiseExcHelper(TypeError, "hasattr(): attribute name must be string");
-    }
-
-    BoxedString* str = static_cast<BoxedString*>(_str);
-    if (!PyString_CHECK_INTERNED(str))
-        internStringMortalInplace(str);
-
-    Box* rtn;
-    RewriterVar* r_rtn;
-    if (rewrite_args) {
-        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
-        rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
-        if (!grewrite_args.isSuccessful())
-            rewrite_args = NULL;
-        else {
-            ReturnConvention return_convention;
-            std::tie(r_rtn, return_convention) = grewrite_args.getReturn();
-
-            // Convert to NOEXC_POSSIBLE:
-            if (return_convention == ReturnConvention::NO_RETURN) {
-                return_convention = ReturnConvention::NOEXC_POSSIBLE;
-                r_rtn = rewrite_args->rewriter->loadConst(0);
-            } else if (return_convention == ReturnConvention::MAYBE_EXC) {
+        if (rewrite_args) {
+            // We need to make sure that the attribute string will be the same.
+            // Even though the passed string might not be the exact attribute name
+            // that we end up looking up (because we need to encode it or intern it),
+            // guarding on that object means (for strings and unicode) that the string
+            // value is fixed.
+            if (!PyString_CheckExact(_str) && !PyUnicode_CheckExact(_str))
                 rewrite_args = NULL;
+            else {
+                if (PyString_CheckExact(_str) && PyString_CHECK_INTERNED(_str) == SSTATE_INTERNED_IMMORTAL) {
+                    // can avoid keeping the extra gc reference
+                } else {
+                    rewrite_args->rewriter->addGCReference(_str);
+                }
+
+                rewrite_args->arg2->addGuard((intptr_t)arg2);
             }
-            assert(!rewrite_args || return_convention == ReturnConvention::NOEXC_POSSIBLE
-                   || return_convention == ReturnConvention::HAS_RETURN
-                   || return_convention == ReturnConvention::CAPI_RETURN);
         }
-    } else {
-        rtn = getattrInternal<CAPI>(obj, str);
-    }
 
-    if (rewrite_args) {
-        RewriterVar* final_rtn = rewrite_args->rewriter->call(false, (void*)hasattrFuncHelper, r_rtn);
+        _str = coerceUnicodeToStr<S>(_str);
 
-        if (S == CXX)
-            rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);
-        rewrite_args->out_success = true;
-        rewrite_args->out_rtn = final_rtn;
-    }
+        if (S == CAPI && !_str)
+            return (Box*)NULL;
 
-    Box* r = hasattrFuncHelper(rtn);
-    if (S == CXX && !r)
-        throwCAPIException();
-    return r;
+        if (!PyString_Check(_str)) {
+            Py_DECREF(_str);
+            if (S == CAPI) {
+                PyErr_SetString(TypeError, "hasattr(): attribute name must be string");
+                return (Box*)NULL;
+            } else
+                raiseExcHelper(TypeError, "hasattr(): attribute name must be string");
+        }
+
+        BoxedString* str = static_cast<BoxedString*>(_str);
+
+        if (!PyString_CHECK_INTERNED(str))
+            internStringMortalInplace(str);
+        AUTO_DECREF(str);
+
+        Box* rtn;
+        RewriterVar* r_rtn;
+        if (rewrite_args) {
+            GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
+            rtn = getattrInternal<CAPI>(obj, str, &grewrite_args);
+            if (!grewrite_args.isSuccessful())
+                rewrite_args = NULL;
+            else {
+                ReturnConvention return_convention;
+                std::tie(r_rtn, return_convention) = grewrite_args.getReturn();
+
+                // Convert to NOEXC_POSSIBLE:
+                if (return_convention == ReturnConvention::NO_RETURN) {
+                    return_convention = ReturnConvention::NOEXC_POSSIBLE;
+                    r_rtn = rewrite_args->rewriter->loadConst(0);
+                } else if (return_convention == ReturnConvention::MAYBE_EXC) {
+                    rewrite_args = NULL;
+                }
+                assert(!rewrite_args || return_convention == ReturnConvention::NOEXC_POSSIBLE
+                       || return_convention == ReturnConvention::HAS_RETURN
+                       || return_convention == ReturnConvention::CAPI_RETURN);
+            }
+        } else {
+            rtn = getattrInternal<CAPI>(obj, str);
+        }
+
+        if (rewrite_args) {
+            RewriterVar* final_rtn
+                = rewrite_args->rewriter->call(false, (void*)hasattrFuncHelper, r_rtn)->setType(RefType::OWNED);
+            r_rtn->refConsumed();
+
+            if (S == CXX)
+                rewrite_args->rewriter->checkAndThrowCAPIException(final_rtn);
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = final_rtn;
+        }
+
+        Box* r = hasattrFuncHelper(rtn);
+        if (S == CXX && !r)
+            throwCAPIException();
+        return r;
+    };
+
+    return callCXXFromStyle<S>([&]() {
+        return rearrangeArgumentsAndCall(ParamReceiveSpec(2, 0, false, false), NULL, "hasattr", NULL, rewrite_args,
+                                         argspec, arg1, arg2, arg3, args, keyword_names, continuation);
+    });
 }
 
 Box* map2(Box* f, Box* container) {
     Box* rtn = new BoxedList();
+    AUTO_DECREF(rtn);
     bool use_identity_func = f == None;
     for (Box* e : container->pyElements()) {
         Box* val;
         if (use_identity_func)
             val = e;
-        else
+        else {
+            AUTO_DECREF(e);
             val = runtimeCall(f, ArgPassSpec(1), e, NULL, NULL, NULL, NULL);
-        listAppendInternal(rtn, val);
+        }
+        listAppendInternalStolen(rtn, val);
     }
-    return rtn;
+    return incref(rtn);
 }
 
 Box* map(Box* f, BoxedTuple* args) {
@@ -747,30 +806,39 @@ Box* map(Box* f, BoxedTuple* args) {
     if (num_iterable == 1)
         return map2(f, args->elts[0]);
 
-    std::vector<BoxIterator, StlCompatAllocator<BoxIterator>> args_it;
-    std::vector<BoxIterator, StlCompatAllocator<BoxIterator>> args_end;
+    std::vector<BoxIteratorRange> ranges;
+    std::vector<BoxIterator> args_it;
+    std::vector<BoxIterator> args_end;
+
+    ranges.reserve(args->size());
+    args_it.reserve(args->size());
+    args_end.reserve(args->size());
 
     for (auto e : *args) {
         auto range = e->pyElements();
-        args_it.emplace_back(range.begin());
-        args_end.emplace_back(range.end());
+        ranges.push_back(std::move(range));
+        args_it.emplace_back(ranges.back().begin());
+        args_end.emplace_back(ranges.back().end());
     }
     assert(args_it.size() == num_iterable);
     assert(args_end.size() == num_iterable);
 
     bool use_identity_func = f == None;
     Box* rtn = new BoxedList();
-    std::vector<Box*, StlCompatAllocator<Box*>> current_val(num_iterable);
+    AUTO_DECREF(rtn);
+    std::vector<Box*> current_val(num_iterable);
     while (true) {
         int num_done = 0;
         for (int i = 0; i < num_iterable; ++i) {
             if (args_it[i] == args_end[i]) {
                 ++num_done;
-                current_val[i] = None;
+                current_val[i] = incref(None);
             } else {
                 current_val[i] = *args_it[i];
             }
         }
+
+        AUTO_DECREF_ARRAY(&current_val[0], num_iterable);
 
         if (num_done == num_iterable)
             break;
@@ -782,24 +850,26 @@ Box* map(Box* f, BoxedTuple* args) {
                                 std::get<3>(v), NULL);
         } else
             entry = BoxedTuple::create(num_iterable, &current_val[0]);
-        listAppendInternal(rtn, entry);
+        listAppendInternalStolen(rtn, entry);
 
         for (int i = 0; i < num_iterable; ++i) {
             if (args_it[i] != args_end[i])
                 ++args_it[i];
         }
     }
-    return rtn;
+    return incref(rtn);
 }
 
 Box* reduce(Box* f, Box* container, Box* initial) {
-    Box* current = initial;
+    Box* current = xincref(initial);
 
     for (Box* e : container->pyElements()) {
         assert(e);
         if (current == NULL) {
             current = e;
         } else {
+            AUTO_DECREF(current);
+            AUTO_DECREF(e);
             current = runtimeCall(f, ArgPassSpec(2), current, e, NULL, NULL, NULL);
         }
     }
@@ -1137,39 +1207,46 @@ Box* filter2(Box* f, Box* container) {
     }
 
     Box* rtn = new BoxedList();
+    AUTO_DECREF(rtn);
     for (Box* e : container->pyElements()) {
+        AUTO_DECREF(e);
         Box* r = runtimeCall(f, ArgPassSpec(1), e, NULL, NULL, NULL, NULL);
+        AUTO_DECREF(r);
         bool b = nonzero(r);
         if (b)
             listAppendInternal(rtn, e);
     }
-    return rtn;
+    return incref(rtn);
 }
 
 Box* zip(BoxedTuple* containers) {
     assert(containers->cls == tuple_cls);
 
     BoxedList* rtn = new BoxedList();
+    AUTO_DECREF(rtn);
     if (containers->size() == 0)
-        return rtn;
+        return incref(rtn);
 
-    std::vector<llvm::iterator_range<BoxIterator>, StlCompatAllocator<llvm::iterator_range<BoxIterator>>> ranges;
+    std::vector<BoxIteratorRange> ranges;
+    ranges.reserve(containers->size());
     for (auto container : *containers) {
         ranges.push_back(container->pyElements());
     }
 
-    std::vector<BoxIterator, StlCompatAllocator<BoxIterator>> iterators;
-    for (auto range : ranges) {
-        iterators.push_back(range.begin());
+    std::vector<BoxIterator> iterators;
+    iterators.reserve(containers->size());
+    for (auto&& range : ranges) {
+        iterators.push_back(std::move(range.begin()));
     }
 
     while (true) {
         for (int i = 0; i < iterators.size(); i++) {
             if (iterators[i] == ranges[i].end())
-                return rtn;
+                return incref(rtn);
         }
 
         auto el = BoxedTuple::create(iterators.size());
+        AUTO_DECREF(el);
         for (int i = 0; i < iterators.size(); i++) {
             el->elts[i] = *iterators[i];
             ++(iterators[i]);
@@ -1197,77 +1274,23 @@ public:
     }
 };
 
-Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
-    if (!PyType_Check(cls))
-        raiseExcHelper(TypeError, "exceptions.__new__(X): X is not a type object (%s)", getTypeName(cls));
-
-    if (!isSubclass(cls, BaseException))
-        raiseExcHelper(TypeError, "BaseException.__new__(%s): %s is not a subtype of BaseException",
-                       getNameOfClass(cls), getNameOfClass(cls));
-
-    BoxedException* rtn = new (cls) BoxedException();
-
-    // TODO: this should be a MemberDescriptor and set during init
-    if (args->size() == 1)
-        rtn->giveAttr("message", args->elts[0]);
-    else
-        rtn->giveAttr("message", boxString(""));
-    return rtn;
-}
-
-Box* exceptionStr(Box* b) {
-    // TODO In CPython __str__ and __repr__ pull from an internalized message field, but for now do this:
-    static BoxedString* message_str = internStringImmortal("message");
-    Box* message = b->getattr(message_str);
-    assert(message);
-    message = str(message);
-    assert(message->cls == str_cls);
-
-    return message;
-}
-
-Box* exceptionRepr(Box* b) {
-    // TODO In CPython __str__ and __repr__ pull from an internalized message field, but for now do this:
-    static BoxedString* message_str = internStringImmortal("message");
-    Box* message = b->getattr(message_str);
-    assert(message);
-    message = repr(message);
-    assert(message->cls == str_cls);
-
-    BoxedString* message_s = static_cast<BoxedString*>(message);
-    return boxStringTwine(llvm::Twine(getTypeName(b)) + "(" + message_s->s() + ",)");
-}
-
-static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int size = 0) {
-    if (size == 0)
-        size = base->tp_basicsize;
-
-    BoxedClass* cls = BoxedClass::create(type_cls, base, NULL, offsetof(BoxedException, attrs), 0, size, false, name);
-    cls->giveAttr("__module__", boxString("exceptions"));
-
-    if (base == object_cls) {
-        cls->giveAttr("__new__",
-                      new BoxedFunction(FunctionMetadata::create((void*)exceptionNew, UNKNOWN, 1, true, true)));
-        cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)exceptionStr, STR, 1)));
-        cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)exceptionRepr, STR, 1)));
-    }
-
-    cls->freeze();
-
-    builtins_module->giveAttr(name, cls);
-    return cls;
-}
-
 BoxedClass* enumerate_cls;
 class BoxedEnumerate : public Box {
 private:
+    BoxIteratorRange range;
     BoxIterator iterator, iterator_end;
     int64_t idx;
     BoxedLong* idx_long;
 
 public:
-    BoxedEnumerate(BoxIterator iterator_begin, BoxIterator iterator_end, int64_t idx, BoxedLong* idx_long)
-        : iterator(iterator_begin), iterator_end(iterator_end), idx(idx), idx_long(idx_long) {}
+    BoxedEnumerate(BoxIteratorRange range, int64_t idx, BoxedLong* idx_long)
+        : range(std::move(range)),
+          iterator(this->range.begin()),
+          iterator_end(this->range.end()),
+          idx(idx),
+          idx_long(idx_long) {
+        Py_XINCREF(idx_long);
+    }
 
     DEFAULT_CLASS(enumerate_cls);
 
@@ -1281,22 +1304,27 @@ public:
             assert(PyLong_Check(start));
             idx_long = (BoxedLong*)start;
         }
-        llvm::iterator_range<BoxIterator> range = obj->pyElements();
-        return new BoxedEnumerate(range.begin(), range.end(), idx, idx_long);
+        auto&& range = obj->pyElements();
+        return new BoxedEnumerate(std::move(range), idx, idx_long);
     }
 
     static Box* iter(Box* _self) noexcept {
         assert(_self->cls == enumerate_cls);
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
-        return self;
+        return incref(self);
     }
 
     static Box* next(Box* _self) {
         assert(_self->cls == enumerate_cls);
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
         Box* val = *self->iterator;
+        AUTO_DECREF(val);
         ++self->iterator;
-        Box* rtn = BoxedTuple::create({ self->idx_long ? self->idx_long : boxInt(self->idx), val });
+        Box* rtn;
+        if (self->idx_long)
+            rtn = BoxedTuple::create({ self->idx_long, val });
+        else
+            rtn = BoxedTuple::create({ autoDecref(boxInt(self->idx)), val });
 
         // check if incrementing the counter would overflow it, if so switch to long counter
         if (self->idx == PY_SSIZE_T_MAX) {
@@ -1305,7 +1333,7 @@ public:
             self->idx = -1;
         }
         if (self->idx_long)
-            self->idx_long = (BoxedLong*)longAdd(self->idx_long, boxInt(1));
+            self->idx_long = (BoxedLong*)longAdd(autoDecref(self->idx_long), autoDecref(boxInt(1)));
         else
             ++self->idx;
         return rtn;
@@ -1317,45 +1345,59 @@ public:
         return boxBool(self->iterator != self->iterator_end);
     }
 
-    static void gcHandler(GCVisitor* v, Box* b) {
-        Box::gcHandler(v, b);
+    static void dealloc(Box* b) noexcept {
+        assert(b->cls == enumerate_cls);
+        BoxedEnumerate* self = static_cast<BoxedEnumerate*>(b);
 
-        BoxedEnumerate* it = (BoxedEnumerate*)b;
-        it->iterator.gcHandler(v);
-        it->iterator_end.gcHandler(v);
-        v->visit(&it->idx_long);
+        PyObject_GC_UnTrack(self);
+
+        Py_XDECREF(self->idx_long);
+        self->iterator.~BoxIterator();
+        self->iterator_end.~BoxIterator();
+        self->range.~BoxIteratorRange();
+
+        self->cls->tp_free(self);
+    }
+
+    static int traverse(Box* b, visitproc visit, void* arg) noexcept {
+        assert(b->cls == enumerate_cls);
+        BoxedEnumerate* self = static_cast<BoxedEnumerate*>(b);
+
+        Py_VISIT(self->idx_long);
+        Py_TRAVERSE(self->range);
+
+        return 0;
     }
 };
 
-Box* globals() {
-    // TODO is it ok that we don't return a real dict here?
-    return getGlobalsDict();
+static Box* globals() {
+    return incref(getGlobalsDict());
 }
 
-Box* locals() {
-    return fastLocalsToBoxedLocals();
+static Box* locals() {
+    return incref(fastLocalsToBoxedLocals());
 }
 
-extern "C" PyObject* PyEval_GetLocals(void) noexcept {
+extern "C" BORROWED(PyObject*) PyEval_GetLocals(void) noexcept {
     try {
-        return locals();
+        return fastLocalsToBoxedLocals();
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
     }
 }
 
-extern "C" PyObject* PyEval_GetGlobals(void) noexcept {
+extern "C" BORROWED(PyObject*) PyEval_GetGlobals(void) noexcept {
     try {
-        return globals();
+        return getGlobalsDict();
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
     }
 }
 
-extern "C" PyObject* PyEval_GetBuiltins(void) noexcept {
-    return builtins_module;
+extern "C" BORROWED(PyObject*) PyEval_GetBuiltins(void) noexcept {
+    return builtins_module->getAttrWrapper();
 }
 
 Box* ellipsisRepr(Box* self) {
@@ -1367,7 +1409,8 @@ Box* divmod(Box* lhs, Box* rhs) {
 
 Box* powFunc(Box* x, Box* y, Box* z) {
     Box* rtn = PyNumber_Power(x, y, z);
-    checkAndThrowCAPIException();
+    if (!rtn)
+        throwCAPIException();
     return rtn;
 }
 
@@ -1383,16 +1426,19 @@ static PyObject* builtin_print(PyObject* self, PyObject* args, PyObject* kwds) n
     if (dummy_args == NULL) {
         if (!(dummy_args = PyTuple_New(0)))
             return NULL;
+        constants.push_back(dummy_args);
     }
     if (str_newline == NULL) {
         str_newline = PyString_FromString("\n");
         if (str_newline == NULL)
             return NULL;
+        constants.push_back(str_newline);
         str_space = PyString_FromString(" ");
         if (str_space == NULL) {
             Py_CLEAR(str_newline);
             return NULL;
         }
+        constants.push_back(str_space);
 #ifdef Py_USING_UNICODE
         unicode_newline = PyUnicode_FromString("\n");
         if (unicode_newline == NULL) {
@@ -1400,6 +1446,7 @@ static PyObject* builtin_print(PyObject* self, PyObject* args, PyObject* kwds) n
             Py_CLEAR(str_space);
             return NULL;
         }
+        constants.push_back(unicode_newline);
         unicode_space = PyUnicode_FromString(" ");
         if (unicode_space == NULL) {
             Py_CLEAR(str_newline);
@@ -1407,6 +1454,7 @@ static PyObject* builtin_print(PyObject* self, PyObject* args, PyObject* kwds) n
             Py_CLEAR(unicode_space);
             return NULL;
         }
+        constants.push_back(unicode_space);
 #endif
     }
     if (!PyArg_ParseTupleAndKeywords(dummy_args, kwds, "|OOO:print", const_cast<char**>(kwlist), &sep, &end, &file))
@@ -1486,7 +1534,7 @@ static PyObject* builtin_reload(PyObject* self, PyObject* v) noexcept {
 }
 
 Box* getreversed(Box* o) {
-    static BoxedString* reversed_str = internStringImmortal("__reversed__");
+    static BoxedString* reversed_str = getStaticString("__reversed__");
 
     // common case:
     if (o->cls == list_cls) {
@@ -1499,7 +1547,7 @@ Box* getreversed(Box* o) {
     if (r)
         return r;
 
-    static BoxedString* getitem_str = internStringImmortal("__getitem__");
+    static BoxedString* getitem_str = getStaticString("__getitem__");
     if (!typeLookup(o->cls, getitem_str)) {
         raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
     }
@@ -1510,7 +1558,7 @@ Box* getreversed(Box* o) {
 
 Box* pydump(Box* p, BoxedInt* level) {
     dumpEx(p, level->n);
-    return None;
+    return incref(None);
 }
 
 Box* pydumpAddr(Box* p) {
@@ -1518,7 +1566,7 @@ Box* pydumpAddr(Box* p) {
         raiseExcHelper(TypeError, "Requires an int");
 
     dump((void*)static_cast<BoxedInt*>(p)->n);
-    return None;
+    return incref(None);
 }
 
 Box* builtinIter(Box* obj, Box* sentinel) {
@@ -1608,6 +1656,7 @@ Box* rawInput(Box* prompt) {
 
 Box* input(Box* prompt) {
     PyObject* line = rawInput(prompt);
+    AUTO_DECREF(line);
 
     char* str = NULL;
     if (!PyArg_Parse(line, "s;embedded '\\0' in input line", &str))
@@ -1616,8 +1665,8 @@ Box* input(Box* prompt) {
     while (*str == ' ' || *str == '\t')
         str++;
 
-    Box* gbls = globals();
-    Box* lcls = locals();
+    Box* gbls = PyEval_GetGlobals();
+    Box* lcls = PyEval_GetLocals();
 
     // CPython has these safety checks that the builtin functions exist
     // in the current global scope.
@@ -1680,13 +1729,20 @@ Box* builtinCmp(Box* a, Box* b) {
     return PyInt_FromLong((long)c);
 }
 
-Box* builtinApply(Box* func, Box* args, Box* keywords) {
-    if (!PyTuple_Check(args)) {
-        if (!PySequence_Check(args))
-            raiseExcHelper(TypeError, "apply() arg 2 expected sequence, found %s", getTypeName(args));
-        args = PySequence_Tuple(args);
-        checkAndThrowCAPIException();
+Box* builtinApply(Box* func, Box* _args, Box* keywords) {
+    Box* args;
+    if (!PyTuple_Check(_args)) {
+        if (!PySequence_Check(_args))
+            raiseExcHelper(TypeError, "apply() arg 2 expected sequence, found %s", getTypeName(_args));
+        args = PySequence_Tuple(_args);
+        if (!args)
+            throwCAPIException();
+    } else {
+        args = incref(_args);
     }
+
+    AUTO_DECREF(args);
+
     if (keywords && !PyDict_Check(keywords))
         raiseExcHelper(TypeError, "apply() arg 3 expected dictionary, found %s", getTypeName(keywords));
     return runtimeCall(func, ArgPassSpec(0, 0, true, keywords != NULL), args, keywords, NULL, NULL, NULL);
@@ -2064,12 +2120,12 @@ Return the absolute value of the argument.");
 PyDoc_STRVAR(all_doc, "all(iterable) -> bool\n\
 \n\
 Return True if bool(x) is True for all values x in the iterable.\n\
-If the iterable is empty, return True.");
+If the iterable is empty, Py_RETURN_TRUE.");
 
 PyDoc_STRVAR(any_doc, "any(iterable) -> bool\n\
 \n\
 Return True if bool(x) is True for any x in the iterable.\n\
-If the iterable is empty, return False.");
+If the iterable is empty, Py_RETURN_FALSE.");
 
 PyDoc_STRVAR(apply_doc, "apply(object[, args[, kwargs]]) -> value\n\
 \n\
@@ -2273,31 +2329,44 @@ PyDoc_STRVAR(pow_doc, "pow(x, y[, z]) -> number\n\
 With two arguments, equivalent to x**y.  With three arguments,\n\
 equivalent to (x**y) % z, but may be more efficient (e.g. for longs).");
 
+static Box* lenCallInternalCapi(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                                Box* arg2, Box* arg3, Box** args,
+                                const std::vector<BoxedString*>* keyword_names) noexcept {
+    try {
+        return lenCallInternal(func, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 void setupBuiltins() {
-    builtins_module = createModule(boxString("__builtin__"), NULL,
+    builtins_module = createModule(autoDecref(boxString("__builtin__")), NULL,
                                    "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
                                    "the `nil' object; Ellipsis represents `...' in slices.");
 
-    ellipsis_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "ellipsis", false);
+    ellipsis_cls
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "ellipsis", false, NULL, NULL, false);
     ellipsis_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)ellipsisRepr, STR, 1)));
     Ellipsis = new (ellipsis_cls) Box();
     assert(Ellipsis->cls);
-    gc::registerPermanentRoot(Ellipsis);
 
-    builtins_module->giveAttr("Ellipsis", Ellipsis);
-    builtins_module->giveAttr("None", None);
+    constants.push_back(Ellipsis);
+    builtins_module->giveAttrBorrowed("Ellipsis", Ellipsis);
+    builtins_module->giveAttrBorrowed("None", None);
 
-    builtins_module->giveAttr("__debug__", False);
+    builtins_module->giveAttrBorrowed("__debug__", False);
 
-    notimplemented_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "NotImplementedType");
+    notimplemented_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "NotImplementedType", false,
+                                            NULL, NULL, false);
     notimplemented_cls->giveAttr("__repr__",
                                  new BoxedFunction(FunctionMetadata::create((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
     notimplemented_cls->instances_are_nonzero = true;
     NotImplemented = new (notimplemented_cls) Box();
-    gc::registerPermanentRoot(NotImplemented);
 
-    builtins_module->giveAttr("NotImplemented", NotImplemented);
+    constants.push_back(NotImplemented);
+    builtins_module->giveAttrBorrowed("NotImplemented", NotImplemented);
 
     builtins_module->giveAttr(
         "all", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)all, BOXED_BOOL, 1), "all", all_doc));
@@ -2312,6 +2381,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("repr", repr_obj);
 
     auto len_func = FunctionMetadata::create((void*)len, UNKNOWN, 1);
+    len_func->internal_callable.capi_val = lenCallInternalCapi;
     len_func->internal_callable.cxx_val = lenCallInternal;
     len_obj = new BoxedBuiltinFunctionOrMethod(len_func, "len", len_doc);
     builtins_module->giveAttr("len", len_obj);
@@ -2342,7 +2412,7 @@ void setupBuiltins() {
 
     builtins_module->giveAttr(
         "sum", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)sum, UNKNOWN, 2, false, false), "sum",
-                                                { boxInt(0) }, NULL, sum_doc));
+                                                { autoDecref(boxInt(0)) }, NULL, sum_doc));
 
     id_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)id, BOXED_INT, 1), "id", id_doc);
     builtins_module->giveAttr("id", id_obj);
@@ -2354,8 +2424,9 @@ void setupBuiltins() {
     builtins_module->giveAttr("ord", ord_obj);
     trap_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)trap, UNKNOWN, 0), "trap");
     builtins_module->giveAttr("trap", trap_obj);
-    builtins_module->giveAttr("dump", new BoxedBuiltinFunctionOrMethod(
-                                          FunctionMetadata::create((void*)pydump, UNKNOWN, 2), "dump", { boxInt(0) }));
+    builtins_module->giveAttr("dump",
+                              new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)pydump, UNKNOWN, 2),
+                                                               "dump", { autoDecref(boxInt(0)) }));
     builtins_module->giveAttr("dumpAddr", new BoxedBuiltinFunctionOrMethod(
                                               FunctionMetadata::create((void*)pydumpAddr, UNKNOWN, 1), "dumpAddr"));
 
@@ -2397,16 +2468,16 @@ void setupBuiltins() {
     FunctionMetadata* import_func
         = FunctionMetadata::create((void*)bltinImport, UNKNOWN, 5, false, false,
                                    ParamNames({ "name", "globals", "locals", "fromlist", "level" }, "", ""));
-    builtins_module->giveAttr("__import__",
-                              new BoxedBuiltinFunctionOrMethod(import_func, "__import__",
-                                                               { NULL, NULL, NULL, boxInt(-1) }, NULL, import_doc));
+    builtins_module->giveAttr(
+        "__import__", new BoxedBuiltinFunctionOrMethod(import_func, "__import__",
+                                                       { NULL, NULL, NULL, autoDecref(boxInt(-1)) }, NULL, import_doc));
 
-    enumerate_cls = BoxedClass::create(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, 0, sizeof(BoxedEnumerate),
-                                       false, "enumerate");
+    enumerate_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedEnumerate), false, "enumerate", true,
+                                       BoxedEnumerate::dealloc, NULL, true, BoxedEnumerate::traverse, NOCLEAR);
     enumerate_cls->giveAttr("__new__",
                             new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::new_, UNKNOWN, 3,
                                                                        ParamNames({ "", "sequence", "start" }, "", "")),
-                                              { boxInt(0) }));
+                                              { autoDecref(boxInt(0)) }));
     enumerate_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::iter,
                                                                                    typeFromClass(enumerate_cls), 1)));
     enumerate_cls->giveAttr("next",
@@ -2415,7 +2486,7 @@ void setupBuiltins() {
                             new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::hasnext, BOXED_BOOL, 1)));
     enumerate_cls->freeze();
     enumerate_cls->tp_iter = PyObject_SelfIter;
-    builtins_module->giveAttr("enumerate", enumerate_cls);
+    builtins_module->giveAttrBorrowed("enumerate", enumerate_cls);
 
 
     FunctionMetadata* sorted_func
@@ -2424,8 +2495,8 @@ void setupBuiltins() {
     builtins_module->giveAttr(
         "sorted", new BoxedBuiltinFunctionOrMethod(sorted_func, "sorted", { None, None, False }, NULL, sorted_doc));
 
-    builtins_module->giveAttr("True", True);
-    builtins_module->giveAttr("False", False);
+    builtins_module->giveAttrBorrowed("True", True);
+    builtins_module->giveAttrBorrowed("False", False);
 
     range_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)range, LIST, 3, false, false), "range",
                                                  { NULL, NULL }, NULL, range_doc);
@@ -2433,16 +2504,16 @@ void setupBuiltins() {
 
     auto* round_obj = new BoxedBuiltinFunctionOrMethod(
         FunctionMetadata::create((void*)builtinRound, BOXED_FLOAT, 2, ParamNames({ "number", "ndigits" }, "", "")),
-        "round", { boxInt(0) }, NULL, round_doc);
+        "round", { autoDecref(boxInt(0)) }, NULL, round_doc);
     builtins_module->giveAttr("round", round_obj);
 
     setupXrange();
-    builtins_module->giveAttr("xrange", xrange_cls);
+    builtins_module->giveAttrBorrowed("xrange", xrange_cls);
 
     open_obj = new BoxedBuiltinFunctionOrMethod(
         FunctionMetadata::create((void*)open, typeFromClass(&PyFile_Type), 3, false, false,
                                  ParamNames({ "name", "mode", "buffering" }, "", "")),
-        "open", { boxString("r"), boxInt(-1) }, NULL, open_doc);
+        "open", { autoDecref(boxString("r")), autoDecref(boxInt(-1)) }, NULL, open_doc);
     builtins_module->giveAttr("open", open_obj);
 
     builtins_module->giveAttr(
@@ -2480,40 +2551,40 @@ void setupBuiltins() {
     builtins_module->giveAttr(
         "vars", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)vars, UNKNOWN, 1, false, false),
                                                  "vars", { NULL }, NULL, vars_doc));
-    builtins_module->giveAttr("object", object_cls);
-    builtins_module->giveAttr("str", str_cls);
-    builtins_module->giveAttr("bytes", str_cls);
+    builtins_module->giveAttrBorrowed("object", object_cls);
+    builtins_module->giveAttrBorrowed("str", str_cls);
+    builtins_module->giveAttrBorrowed("bytes", str_cls);
     assert(unicode_cls);
-    builtins_module->giveAttr("unicode", unicode_cls);
-    builtins_module->giveAttr("basestring", basestring_cls);
+    builtins_module->giveAttrBorrowed("unicode", unicode_cls);
+    builtins_module->giveAttrBorrowed("basestring", basestring_cls);
     // builtins_module->giveAttr("unicode", unicode_cls);
-    builtins_module->giveAttr("int", int_cls);
-    builtins_module->giveAttr("long", long_cls);
-    builtins_module->giveAttr("float", float_cls);
-    builtins_module->giveAttr("list", list_cls);
-    builtins_module->giveAttr("slice", slice_cls);
-    builtins_module->giveAttr("type", type_cls);
-    builtins_module->giveAttr("file", &PyFile_Type);
-    builtins_module->giveAttr("bool", bool_cls);
-    builtins_module->giveAttr("dict", dict_cls);
-    builtins_module->giveAttr("set", set_cls);
-    builtins_module->giveAttr("frozenset", frozenset_cls);
-    builtins_module->giveAttr("tuple", tuple_cls);
-    builtins_module->giveAttr("complex", complex_cls);
-    builtins_module->giveAttr("super", super_cls);
-    builtins_module->giveAttr("property", property_cls);
-    builtins_module->giveAttr("staticmethod", staticmethod_cls);
-    builtins_module->giveAttr("classmethod", classmethod_cls);
+    builtins_module->giveAttrBorrowed("int", int_cls);
+    builtins_module->giveAttrBorrowed("long", long_cls);
+    builtins_module->giveAttrBorrowed("float", float_cls);
+    builtins_module->giveAttrBorrowed("list", list_cls);
+    builtins_module->giveAttrBorrowed("slice", slice_cls);
+    builtins_module->giveAttrBorrowed("type", type_cls);
+    builtins_module->giveAttrBorrowed("file", &PyFile_Type);
+    builtins_module->giveAttrBorrowed("bool", bool_cls);
+    builtins_module->giveAttrBorrowed("dict", dict_cls);
+    builtins_module->giveAttrBorrowed("set", set_cls);
+    builtins_module->giveAttrBorrowed("frozenset", frozenset_cls);
+    builtins_module->giveAttrBorrowed("tuple", tuple_cls);
+    builtins_module->giveAttrBorrowed("complex", complex_cls);
+    builtins_module->giveAttrBorrowed("super", super_cls);
+    builtins_module->giveAttrBorrowed("property", property_cls);
+    builtins_module->giveAttrBorrowed("staticmethod", staticmethod_cls);
+    builtins_module->giveAttrBorrowed("classmethod", classmethod_cls);
 
     assert(memoryview_cls);
     Py_TYPE(&PyMemoryView_Type) = &PyType_Type;
     PyType_Ready(&PyMemoryView_Type);
-    builtins_module->giveAttr("memoryview", memoryview_cls);
+    builtins_module->giveAttrBorrowed("memoryview", memoryview_cls);
     PyType_Ready(&PyByteArray_Type);
-    builtins_module->giveAttr("bytearray", &PyByteArray_Type);
+    builtins_module->giveAttrBorrowed("bytearray", &PyByteArray_Type);
     Py_TYPE(&PyBuffer_Type) = &PyType_Type;
     PyType_Ready(&PyBuffer_Type);
-    builtins_module->giveAttr("buffer", &PyBuffer_Type);
+    builtins_module->giveAttrBorrowed("buffer", &PyBuffer_Type);
 
     builtins_module->giveAttr("callable",
                               new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)callable, UNKNOWN, 1),
@@ -2540,7 +2611,7 @@ void setupBuiltins() {
         { "reload", builtin_reload, METH_O, reload_doc },
     };
     for (auto& md : builtin_methods) {
-        builtins_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, NULL, boxString("__builtin__")));
+        builtins_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, NULL, autoDecref(boxString("__builtin__"))));
     }
 }
 }

@@ -51,10 +51,12 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <windows.h>
 #endif
 
+#define UNLIKELY(value) __builtin_expect((value), 0)
+#define LIKELY(value) __builtin_expect((value), 1)
+
 /* Limit for the Unicode object free list */
 
-// Pyston change: set this to 0 (was 1024) to disable the free list since we can't track that through our GC.
-#define PyUnicode_MAXFREELIST       0
+#define PyUnicode_MAXFREELIST       1024
 
 /* Limit for the Unicode object free list stay alive optimization.
 
@@ -108,10 +110,9 @@ PyUnicodeObject *unicode_empty = NULL;
         if (unicode_empty != NULL)                      \
             Py_INCREF(unicode_empty);                   \
         else {                                          \
-            unicode_empty = (PyUnicodeObject*)PyGC_AddRoot((PyObject*)_PyUnicode_New(0)); \
-            if (unicode_empty != NULL) {                \
+            unicode_empty = _PyUnicode_New(0);          \
+            if (unicode_empty != NULL)                  \
                 Py_INCREF(unicode_empty);               \
-            }                                           \
         }                                               \
         return (PyObject *)unicode_empty;               \
     } while (0)
@@ -317,7 +318,76 @@ int unicode_resize(register PyUnicodeObject *unicode,
 
 */
 
-extern PyUnicodeObject *_PyUnicode_New(Py_ssize_t length);
+static
+PyUnicodeObject *_PyUnicode_New(Py_ssize_t length)
+{
+    register PyUnicodeObject *unicode;
+
+    /* Optimization for empty strings */
+    if (UNLIKELY(length == 0 && unicode_empty != NULL)) {
+        Py_INCREF(unicode_empty);
+        return unicode_empty;
+    }
+
+    /* Ensure we won't overflow the size. */
+    if (UNLIKELY(length > ((PY_SSIZE_T_MAX / sizeof(Py_UNICODE)) - 1))) {
+        return (PyUnicodeObject *)PyErr_NoMemory();
+    }
+
+    /* Unicode freelist & memory allocation */
+    if (LIKELY((intptr_t)free_list)) {
+        unicode = free_list;
+        free_list = *(PyUnicodeObject **)unicode;
+        numfree--;
+        if ((intptr_t)unicode->str) {
+            /* Keep-Alive optimization: we only upsize the buffer,
+               never downsize it. */
+            if ((unicode->length < length) &&
+                unicode_resize(unicode, length) < 0) {
+                PyObject_DEL(unicode->str);
+                unicode->str = NULL;
+            }
+        }
+        else {
+            size_t new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
+            unicode->str = (Py_UNICODE*) PyObject_MALLOC(new_size);
+        }
+        PyObject_INIT(unicode, &PyUnicode_Type);
+    }
+    else {
+        size_t new_size;
+        unicode = PyObject_New(PyUnicodeObject, &PyUnicode_Type);
+        if (unicode == NULL)
+            return NULL;
+        new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
+        unicode->str = (Py_UNICODE*) PyObject_MALLOC(new_size);
+    }
+
+    if (UNLIKELY(!unicode->str)) {
+        PyErr_NoMemory();
+        goto onError;
+    }
+    /* Initialize the first element to guard against cases where
+     * the caller fails before initializing str -- unicode_resize()
+     * reads str[0], and the Keep-Alive optimization can keep memory
+     * allocated for str alive across a call to unicode_dealloc(unicode).
+     * We don't want unicode_resize to read uninitialized memory in
+     * that case.
+     */
+    unicode->str[0] = 0;
+    unicode->str[length] = 0;
+    unicode->length = length;
+    unicode->hash = -1;
+    unicode->defenc = NULL;
+    return unicode;
+
+  onError:
+    /* XXX UNREF/NEWREF interface should be more symmetrical */
+    _Py_DEC_REFTOTAL;
+    _Py_ForgetReference((PyObject *)unicode);
+    PyObject_Del(unicode);
+    return NULL;
+}
 
 static
 void unicode_dealloc(register PyUnicodeObject *unicode)
@@ -356,7 +426,7 @@ int _PyUnicode_Resize(PyUnicodeObject **unicode, Py_ssize_t length)
         return -1;
     }
     v = *unicode;
-    if (v == NULL || !PyUnicode_Check(v) || /* Pyston change, can't check this: Py_REFCNT(v) != 1 || */ length < 0) {
+    if (v == NULL || !PyUnicode_Check(v) || Py_REFCNT(v) != 1 || length < 0) {
         PyErr_BadInternalCall();
         return -1;
     }
@@ -404,7 +474,7 @@ PyObject *PyUnicode_FromUnicode(const Py_UNICODE *u,
         if (size == 1 && *u < 256) {
             unicode = unicode_latin1[*u];
             if (!unicode) {
-                unicode = (PyUnicodeObject*)PyGC_AddRoot((PyObject*)_PyUnicode_New(1));
+                unicode = _PyUnicode_New(1);
                 if (!unicode)
                     return NULL;
                 unicode->str[0] = *u;
@@ -451,7 +521,7 @@ PyObject *PyUnicode_FromStringAndSize(const char *u, Py_ssize_t size)
         if (size == 1 && Py_CHARMASK(*u) < 128) {
             unicode = unicode_latin1[Py_CHARMASK(*u)];
             if (!unicode) {
-                unicode = (PyUnicodeObject*)PyGC_AddRoot((PyObject*)_PyUnicode_New(1));
+                unicode = _PyUnicode_New(1);
                 if (!unicode)
                     return NULL;
                 unicode->str[0] = Py_CHARMASK(*u);
@@ -8888,7 +8958,7 @@ void _PyUnicode_Init(void)
 
     /* Init the implementation */
     if (!unicode_empty) {
-        unicode_empty = (PyUnicodeObject*)PyGC_AddRoot((PyObject*)_PyUnicode_New(0));
+        unicode_empty = _PyUnicode_New(0);
         if (!unicode_empty)
             return;
     }

@@ -159,7 +159,7 @@ get_handler_name(struct HandlerInfo *hinfo)
 {
     PyObject *name = hinfo->nameobj;
     if (name == NULL) {
-        name = PyGC_AddRoot(PyString_FromString(hinfo->name));
+        name = PyString_FromString(hinfo->name);
         hinfo->nameobj = name;
     }
     Py_XINCREF(name);
@@ -1143,9 +1143,7 @@ xmlparse_ExternalEntityParserCreate(xmlparseobject *self, PyObject *args)
     for (i = 0; handler_info[i].name != NULL; i++)
         /* do nothing */;
 
-    // Pyston change: use GC alloc routine because those contain Python objects
-    // new_parser->handlers = malloc(sizeof(PyObject *) * i);
-    new_parser->handlers = PyMem_Malloc(sizeof(PyObject *) * i);
+    new_parser->handlers = malloc(sizeof(PyObject *) * i);
     if (!new_parser->handlers) {
         Py_DECREF(new_parser);
         return PyErr_NoMemory();
@@ -1364,9 +1362,7 @@ newxmlparseobject(char *encoding, char *namespace_separator, PyObject *intern)
     for (i = 0; handler_info[i].name != NULL; i++)
         /* do nothing */;
 
-    // Pyston change: use GC alloc routine because those contain Python objects
-    // self->handlers = malloc(sizeof(PyObject *) * i);
-    self->handlers = PyMem_Malloc(sizeof(PyObject *) * i);
+    self->handlers = malloc(sizeof(PyObject *) * i);
     if (!self->handlers) {
         Py_DECREF(self);
         return PyErr_NoMemory();
@@ -1397,8 +1393,7 @@ xmlparse_dealloc(xmlparseobject *self)
             self->handlers[i] = NULL;
             Py_XDECREF(temp);
         }
-        // Pyston change: object are allocated using the GC not malloc
-        // free(self->handlers);
+        free(self->handlers);
         self->handlers = NULL;
     }
     if (self->buffer != NULL) {
@@ -1891,8 +1886,7 @@ MODULE_INITFUNC(void)
 
     /* Add some symbolic constants to the module */
     if (ErrorObject == NULL) {
-        ErrorObject = PyGC_AddRoot(PyErr_NewException("xml.parsers.expat.ExpatError",
-                                         NULL, NULL));
+        ErrorObject = PyErr_NewException("xml.parsers.expat.ExpatError", NULL, NULL);
         if (ErrorObject == NULL)
             return;
     }

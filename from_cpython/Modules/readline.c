@@ -930,8 +930,9 @@ setup_readline(void)
         strdup(" \t\n`~!@#$%^&*()-=+[{]}\\|;:'\",<>/?");
         /* All nonalphanums except '.' */
 
-    begidx = PyInt_FromLong(0L);
-    endidx = PyInt_FromLong(0L);
+    begidx = PyGC_RegisterStaticConstant(PyInt_FromLong(0L));
+    endidx = PyGC_RegisterStaticConstant(PyInt_FromLong(0L));
+    PyGC_RegisterStaticConstantLocation(&completer);
     /* Initialize (allows .inputrc to override)
      *
      * XXX: A bug in the readline-2.2 library causes a memory leak

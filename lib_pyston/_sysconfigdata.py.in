@@ -1,0 +1,13 @@
+# TODO: there are many things missing here
+
+build_time_vars = {
+        "CC": "gcc -pthread",
+        "CXX": "g++ -pthread",
+        "OPT": "@EXT_BUILD_FLAGS@ -fwrapv -Wall -Wstrict-prototypes",
+        "CFLAGS": "-fno-strict-aliasing @EXT_BUILD_FLAGS@  -fwrapv -Wall -Wstrict-prototypes",
+        "CCSHARED": "-fPIC",
+        "LDSHARED": "gcc -pthread -shared",
+        "SO": ".pyston.so",
+        "AR": "ar",
+        "ARFLAGS": "rc",
+        }

@@ -73,7 +73,9 @@ void force() {
     FORCE(decodeUTF8StringPtr);
     FORCE(initFrame);
     FORCE(deinitFrame);
+    FORCE(deinitFrameMaybe);
     FORCE(makePendingCalls);
+    FORCE(setFrameExcInfo);
 
     FORCE(getattr);
     FORCE(getattr_capi);
@@ -99,7 +101,7 @@ void force() {
     FORCE(repr);
     FORCE(str);
     FORCE(exceptionMatches);
-    FORCE(yield);
+    FORCE(yield_capi);
     FORCE(getiterHelper);
     FORCE(hasnext);
     FORCE(apply_slice);
@@ -119,6 +121,7 @@ void force() {
     FORCE(printHelper);
 
     FORCE(listAppendInternal);
+    FORCE(dictSetInternal);
 
     FORCE(runtimeCall);
     FORCE(runtimeCallCapi);
@@ -129,12 +132,15 @@ void force() {
     FORCE(raise0_capi);
     FORCE(raise3);
     FORCE(raise3_capi);
+    FORCE(rawReraise);
     FORCE(PyErr_Fetch);
     FORCE(PyErr_NormalizeException);
     FORCE(PyErr_Restore);
     FORCE(caughtCapiException);
     FORCE(reraiseCapiExcAsCxx);
     FORCE(deopt);
+    FORCE(checkRefs);
+    FORCE(xdecrefAndRethrow);
 
     FORCE(div_i64_i64);
     FORCE(mod_i64_i64);
@@ -152,8 +158,6 @@ void force() {
     FORCE(boxFloat);
 
     FORCE(createModule);
-
-    FORCE(gc::sizes);
 
     FORCE(boxedLocalsSet);
     FORCE(boxedLocalsGet);

@@ -38,6 +38,69 @@ extern "C" long PyInt_GetMax() noexcept {
     return LONG_MAX; /* To initialize sys.maxint */
 }
 
+/* Integers are quite normal objects, to make object handling uniform.
+   (Using odd pointers to represent integers would save much space
+   but require extra checks for this special case throughout the code.)
+   Since a typical Python program spends much of its time allocating
+   and deallocating integers, these operations should be very fast.
+   Therefore we use a dedicated allocation scheme with a much lower
+   overhead (in space and time) than straight malloc(): a simple
+   dedicated free list, filled when necessary with memory from malloc().
+
+   block_list is a singly-linked list of all PyIntBlocks ever allocated,
+   linked via their next members.  PyIntBlocks are never returned to the
+   system before shutdown (PyInt_Fini).
+
+   free_list is a singly-linked list of available PyIntObjects, linked
+   via abuse of their ob_type members.
+*/
+
+#define BLOCK_SIZE 1000 /* 1K less typical malloc overhead */
+#define BHEAD_SIZE 8    /* Enough for a 64-bit pointer */
+#define N_INTOBJECTS ((BLOCK_SIZE - BHEAD_SIZE) / sizeof(PyIntObject))
+
+struct _intblock {
+    struct _intblock* next;
+    PyIntObject objects[N_INTOBJECTS];
+};
+
+typedef struct _intblock PyIntBlock;
+
+static PyIntBlock* block_list = NULL;
+PyIntObject* BoxedInt::free_list = NULL;
+
+PyIntObject* BoxedInt::fill_free_list(void) noexcept {
+    PyIntObject* p, *q;
+    /* Python's object allocator isn't appropriate for large blocks. */
+    p = (PyIntObject*)PyMem_MALLOC(sizeof(PyIntBlock));
+    if (p == NULL)
+        return (PyIntObject*)PyErr_NoMemory();
+    ((PyIntBlock*)p)->next = block_list;
+    block_list = (PyIntBlock*)p;
+    /* Link the int objects together, from rear to front, then return
+       the address of the last int object in the block. */
+    p = &((PyIntBlock*)p)->objects[0];
+    q = p + N_INTOBJECTS;
+    while (--q > p)
+        q->ob_type = (struct _typeobject*)(q - 1);
+    q->ob_type = NULL;
+    return p + N_INTOBJECTS - 1;
+}
+
+void BoxedInt::tp_dealloc(Box* b) noexcept {
+#ifdef DISABLE_INT_FREELIST
+    b->cls->tp_free(b);
+#else
+    if (PyInt_CheckExact(b)) {
+        PyIntObject* v = (PyIntObject*)(b);
+        v->ob_type = (struct _typeobject*)free_list;
+        free_list = v;
+    } else {
+        b->cls->tp_free(b);
+    }
+#endif
+}
+
 extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) noexcept {
     if (op && PyInt_Check(op))
         return PyInt_AS_LONG((PyIntObject*)op);
@@ -309,20 +372,18 @@ bool __builtin_smull_overflow(i64 lhs, i64 rhs, i64* result) {
 
 #endif
 
-// Could add this to the others, but the inliner should be smart enough
-// that this isn't needed:
 extern "C" Box* add_i64_i64(i64 lhs, i64 rhs) {
     i64 result;
     if (!__builtin_saddl_overflow(lhs, rhs, &result))
         return boxInt(result);
-    return longAdd(boxLong(lhs), boxLong(rhs));
+    return longAdd(autoDecref(boxLong(lhs)), autoDecref(boxLong(rhs)));
 }
 
 extern "C" Box* sub_i64_i64(i64 lhs, i64 rhs) {
     i64 result;
     if (!__builtin_ssubl_overflow(lhs, rhs, &result))
         return boxInt(result);
-    return longSub(boxLong(lhs), boxLong(rhs));
+    return longSub(autoDecref(boxLong(lhs)), autoDecref(boxLong(rhs)));
 }
 
 extern "C" Box* div_i64_i64(i64 lhs, i64 rhs) {
@@ -335,7 +396,7 @@ extern "C" Box* div_i64_i64(i64 lhs, i64 rhs) {
     static_assert(PYSTON_INT_MIN == -PYSTON_INT_MAX - 1, "");
 
     if (lhs == PYSTON_INT_MIN && rhs == -1) {
-        return longDiv(boxLong(lhs), boxLong(rhs));
+        return longDiv(autoDecref(boxLong(lhs)), autoDecref(boxLong(rhs)));
     }
 #endif
 
@@ -384,7 +445,7 @@ extern "C" Box* mod_i64_i64(i64 lhs, i64 rhs) {
 extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs, Box* mod) {
     if (mod != None) {
         if (!PyInt_Check(mod)) {
-            return NotImplemented;
+            return incref(NotImplemented);
         }
         BoxedInt* mod_int = static_cast<BoxedInt*>(mod);
         if (mod_int->n == 0) {
@@ -401,14 +462,14 @@ extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs, Box* mod) {
         return boxFloat(pow_float_float(lhs, rhs));
 
     // let longPow do the checks.
-    return longPow(boxLong(lhs), boxLong(rhs), mod);
+    return longPow(autoDecref(boxLong(lhs)), autoDecref(boxLong(rhs)), mod);
 }
 
 extern "C" Box* mul_i64_i64(i64 lhs, i64 rhs) {
     i64 result;
     if (!__builtin_smull_overflow(lhs, rhs, &result))
         return boxInt(result);
-    return longMul(boxLong(lhs), boxLong(rhs));
+    return longMul(autoDecref(boxLong(lhs)), autoDecref(boxLong(rhs)));
 }
 
 extern "C" Box* intAddInt(BoxedInt* lhs, BoxedInt* rhs) {
@@ -434,7 +495,7 @@ extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return boxFloat(lhs->n + rhs_float->d);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -447,7 +508,7 @@ Box* intRAdd(BoxedInt* lhs, Box* rhs) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return add_i64_i64(lhs->n, rhs_int->n);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -462,7 +523,7 @@ extern "C" Box* intAnd(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__and__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n & rhs_int->n);
@@ -474,7 +535,7 @@ Box* intRAnd(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n & rhs_int->n);
@@ -491,7 +552,7 @@ extern "C" Box* intOr(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__or__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n | rhs_int->n);
@@ -502,7 +563,7 @@ Box* intROr(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__ror__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n | rhs_int->n);
@@ -519,7 +580,7 @@ extern "C" Box* intXor(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n ^ rhs_int->n);
@@ -531,7 +592,7 @@ Box* intRXor(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n ^ rhs_int->n);
@@ -562,7 +623,7 @@ extern "C" Box* intDiv(BoxedInt* lhs, Box* rhs) {
     } else if (PyFloat_CheckExact(rhs)) {
         return intDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -574,7 +635,7 @@ Box* intRDiv(BoxedInt* lhs, Box* rhs) {
     if (PyInt_Check(rhs)) {
         return div_i64_i64(static_cast<BoxedInt*>(rhs)->n, lhs->n);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -604,7 +665,7 @@ extern "C" Box* intFloordiv(BoxedInt* lhs, Box* rhs) {
     } else if (PyFloat_CheckExact(rhs)) {
         return intFloordivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -614,7 +675,7 @@ Box* intRFloordiv(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     return div_i64_i64(static_cast<BoxedInt*>(rhs)->n, lhs->n);
@@ -650,7 +711,7 @@ extern "C" Box* intTruediv(BoxedInt* lhs, Box* rhs) {
     } else if (PyFloat_CheckExact(rhs)) {
         return intTruedivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -662,7 +723,7 @@ Box* intRTruediv(BoxedInt* lhs, Box* rhs) {
     if (PyInt_Check(rhs)) {
         return intTruedivInt(static_cast<BoxedInt*>(rhs), lhs);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -679,7 +740,7 @@ extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
         if ((res >> rhs->n) == lhs->n)
             return boxInt(lhs->n << rhs->n);
     }
-    return longLShiftLong(boxLong(lhs->n), rhs);
+    return longLShiftLong(autoDecref(boxLong(lhs->n)), rhs);
 }
 
 extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
@@ -688,10 +749,10 @@ extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (PyLong_Check(rhs))
-        return longLShiftLong(boxLong(lhs->n), rhs);
+        return longLShiftLong(autoDecref(boxLong(lhs->n)), rhs);
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return intLShiftInt(lhs, rhs_int);
@@ -704,7 +765,7 @@ Box* intRLShift(BoxedInt* lhs, Box* rhs) {
 
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return intLShiftInt(rhs_int, lhs);
@@ -721,7 +782,7 @@ extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__mod__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return mod_i64_i64(lhs->n, rhs_int->n);
@@ -733,7 +794,7 @@ Box* intRMod(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return mod_i64_i64(rhs_int->n, lhs->n);
@@ -747,14 +808,18 @@ extern "C" Box* intDivmod(BoxedInt* lhs, Box* rhs) {
     Box* divResult = intDiv(lhs, rhs);
 
     if (divResult == NotImplemented) {
-        return NotImplemented;
+        return divResult;
     }
+
+    AUTO_DECREF(divResult);
 
     Box* modResult = intMod(lhs, rhs);
 
     if (modResult == NotImplemented) {
-        return NotImplemented;
+        return modResult;
     }
+
+    AUTO_DECREF(modResult);
 
     Box* arg[2] = { divResult, modResult };
     return createTuple(2, arg);
@@ -766,7 +831,7 @@ Box* intRDivmod(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     return intDivmod(static_cast<BoxedInt*>(rhs), lhs);
 }
@@ -794,7 +859,7 @@ extern "C" Box* intMul(BoxedInt* lhs, Box* rhs) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return intMulFloat(lhs, rhs_float);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -804,7 +869,7 @@ Box* intRMul(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     return intMul(lhs, rhs);
 }
@@ -823,7 +888,7 @@ extern "C" Box* intPowLong(BoxedInt* lhs, BoxedLong* rhs, Box* mod) {
     assert(PyInt_Check(lhs));
     assert(PyLong_Check(rhs));
     BoxedLong* lhs_long = boxLong(lhs->n);
-    return longPow(lhs_long, rhs, mod);
+    return longPow(autoDecref(lhs_long), rhs, mod);
 }
 
 extern "C" Box* intPowFloat(BoxedInt* lhs, BoxedFloat* rhs, Box* mod) {
@@ -845,7 +910,7 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs, Box* mod) {
     else if (PyFloat_CheckExact(rhs))
         return intPowFloat(lhs, static_cast<BoxedFloat*>(rhs), mod);
     else if (!PyInt_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     if (mod != None) {
@@ -856,7 +921,7 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs, Box* mod) {
 
     Box* rtn = pow_i64_i64(lhs->n, rhs_int->n, mod);
     if (PyLong_Check(rtn))
-        return longInt(rtn);
+        return longInt(autoDecref(rtn));
     return rtn;
 }
 
@@ -866,7 +931,7 @@ Box* intRPow(BoxedInt* lhs, Box* rhs, Box* mod) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     if (mod != None) {
         if (lhs->n < 0)
@@ -875,7 +940,7 @@ Box* intRPow(BoxedInt* lhs, Box* rhs, Box* mod) {
     }
     Box* rtn = pow_i64_i64(rhs_int->n, lhs->n, mod);
     if (PyLong_Check(rtn))
-        return longInt(rtn);
+        return longInt(autoDecref(rtn));
     return rtn;
 }
 
@@ -897,10 +962,10 @@ extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (PyLong_Check(rhs))
-        return longRShiftLong(boxLong(lhs->n), rhs);
+        return longRShiftLong(autoDecref(boxLong(lhs->n)), rhs);
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return intRShiftInt(lhs, rhs_int);
@@ -912,7 +977,7 @@ Box* intRRShift(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return intRShiftInt(rhs_int, lhs);
@@ -941,7 +1006,7 @@ extern "C" Box* intSub(BoxedInt* lhs, Box* rhs) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return intSubFloat(lhs, rhs_float);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -954,7 +1019,7 @@ Box* intRSub(BoxedInt* lhs, Box* rhs) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return sub_i64_i64(rhs_int->n, lhs->n);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -971,7 +1036,7 @@ extern "C" Box* intPos(BoxedInt* v) {
         raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'int' object but received a '%s'", getTypeName(v));
 
     if (v->cls == int_cls)
-        return v;
+        return incref(v);
     return boxInt(v->n);
 }
 
@@ -985,7 +1050,7 @@ extern "C" Box* intNeg(BoxedInt* v) {
     static_assert(PYSTON_INT_MIN == -PYSTON_INT_MAX - 1, "");
 
     if (v->n == PYSTON_INT_MIN) {
-        return longNeg(boxLong(v->n));
+        return longNeg(autoDecref(boxLong(v->n)));
     }
 #endif
 
@@ -1018,7 +1083,7 @@ extern "C" Box* intHash(BoxedInt* self) {
         return boxInt(-2);
 
     if (self->cls == int_cls)
-        return self;
+        return incref(self);
     return boxInt(self->n);
 }
 
@@ -1027,7 +1092,7 @@ Box* intAbs(BoxedInt* v) {
         raiseExcHelper(TypeError, "descriptor '__abs__' requires a 'int' object but received a '%s'", getTypeName(v));
 
     if (v->n == PYSTON_INT_MIN) {
-        return longNeg(boxLong(v->n));
+        return longNeg(autoDecref(boxLong(v->n)));
     }
     return boxInt(std::abs(v->n));
 }
@@ -1046,7 +1111,7 @@ Box* intCoerce(BoxedInt* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (!PyInt_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -1090,7 +1155,7 @@ extern "C" Box* intTrunc(BoxedInt* self) {
                        getTypeName(self));
 
     if (self->cls == int_cls)
-        return self;
+        return incref(self);
     return boxInt(self->n);
 }
 
@@ -1100,7 +1165,7 @@ extern "C" Box* intInt(BoxedInt* self) {
                        getTypeName(self));
 
     if (self->cls == int_cls)
-        return self;
+        return incref(self);
     return boxInt(self->n);
 }
 
@@ -1122,7 +1187,7 @@ Box* intLong(BoxedInt* self) {
 
 extern "C" Box* intIndex(BoxedInt* v) {
     if (PyInt_CheckExact(v))
-        return v;
+        return incref(v);
     return boxInt(v->n);
 }
 
@@ -1175,6 +1240,7 @@ template <ExceptionStyle S> static Box* _intNew(Box* val, Box* _base) noexcept(S
 
         if (s->size() != strlen(s->data())) {
             Box* srepr = PyObject_Repr(val);
+            AUTO_DECREF(srepr);
             if (S == CAPI) {
                 PyErr_Format(PyExc_ValueError, "invalid literal for int() with base %d: %s", base,
                              PyString_AS_STRING(srepr));
@@ -1238,12 +1304,16 @@ template <ExceptionStyle S> Box* intNew(Box* _cls, Box* val, Box* base) noexcept
         if (cls == int_cls)
             return n;
 
+        Py_DECREF(n);
+
         if (S == CAPI) {
             PyErr_SetString(OverflowError, "Python int too large to convert to C long");
             return NULL;
         } else
             raiseExcHelper(OverflowError, "Python int too large to convert to C long");
     }
+
+    AUTO_DECREF(n);
     return new (cls) BoxedInt(n->n);
 }
 
@@ -1262,7 +1332,7 @@ static Box* intNewPacked(BoxedClass* type, Box* args, Box* kwds) noexcept {
     if (base == -909)
         return intNew<CAPI>(type, x, NULL);
     else
-        return intNew<CAPI>(type, x, boxInt(base));
+        return intNew<CAPI>(type, x, autoDecref(boxInt(base)));
 }
 
 static const unsigned char BitLengthTable[32]
@@ -1327,7 +1397,7 @@ static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type,
 
 static Box* intIntGetset(Box* b, void*) {
     if (b->cls == int_cls) {
-        return b;
+        return incref(b);
     } else {
         assert(PyInt_Check(b));
         return boxInt(static_cast<BoxedInt*>(b)->n);
@@ -1380,6 +1450,49 @@ static PyObject* int_getnewargs(BoxedInt* v) noexcept {
     return Py_BuildValue("(l)", v->n);
 }
 
+extern "C" int PyInt_ClearFreeList() noexcept {
+    PyIntObject* p;
+    PyIntBlock* list, *next;
+    int i;
+    int u; /* remaining unfreed ints per block */
+    int freelist_size = 0;
+
+    list = block_list;
+    block_list = NULL;
+    BoxedInt::free_list = NULL;
+    while (list != NULL) {
+        u = 0;
+        for (i = 0, p = &list->objects[0]; i < N_INTOBJECTS; i++, p++) {
+            if (PyInt_CheckExact((BoxedInt*)p) && p->ob_refcnt != 0)
+                u++;
+        }
+        next = list->next;
+        if (u) {
+            list->next = block_list;
+            block_list = list;
+            for (i = 0, p = &list->objects[0]; i < N_INTOBJECTS; i++, p++) {
+                if (!PyInt_CheckExact((BoxedInt*)p) || p->ob_refcnt == 0) {
+                    p->ob_type = (struct _typeobject*)BoxedInt::free_list;
+                    BoxedInt::free_list = p;
+                }
+#if NSMALLNEGINTS + NSMALLPOSINTS > 0
+                else if (-NSMALLNEGINTS <= p->ob_ival && p->ob_ival < NSMALLPOSINTS
+                         && small_ints[p->ob_ival + NSMALLNEGINTS] == NULL) {
+                    Py_INCREF(p);
+                    small_ints[p->ob_ival + NSMALLNEGINTS] = p;
+                }
+#endif
+            }
+        } else {
+            PyMem_FREE(list);
+        }
+        freelist_size += u;
+        list = next;
+    }
+
+    return freelist_size;
+}
+
 static Box* intFormat(PyObject* self, Box* format_spec) {
     if (PyBytes_Check(format_spec)) {
         Box* rtn = _PyInt_FormatAdvanced(self, PyBytes_AS_STRING(format_spec), PyBytes_GET_SIZE(format_spec));
@@ -1410,12 +1523,10 @@ void setupInt() {
 
     for (int i = MIN_INTERNED_INT; i <= MAX_INTERNED_INT; i++) {
         interned_ints[-MIN_INTERNED_INT + i] = new BoxedInt(i);
-        gc::registerPermanentRoot(interned_ints[-MIN_INTERNED_INT + i]);
     }
 
     int_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)int_getnewargs, UNKNOWN, 1,
                                                                                    ParamNames::empty(), CAPI)));
-
     _addFuncIntFloatUnknown("__add__", (void*)intAddInt, (void*)intAddFloat, (void*)intAdd);
     _addFuncIntUnknown("__and__", BOXED_INT, (void*)intAndInt, (void*)intAnd);
     _addFuncIntUnknown("__or__", BOXED_INT, (void*)intOrInt, (void*)intOr);
@@ -1508,8 +1619,5 @@ void setupInt() {
 
     int_cls->tp_repr = (reprfunc)int_to_decimal_string;
     int_cls->tp_new = (newfunc)intNewPacked;
-}
-
-void teardownInt() {
 }
 }

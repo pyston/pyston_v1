@@ -1246,8 +1246,8 @@ initzipimport(void)
     if (mod == NULL)
         return;
 
-    ZipImportError = PyGC_AddRoot(PyErr_NewException("zipimport.ZipImportError",
-                                        PyExc_ImportError, NULL));
+    ZipImportError = PyErr_NewException("zipimport.ZipImportError",
+                                        PyExc_ImportError, NULL);
     if (ZipImportError == NULL)
         return;
 
@@ -1261,9 +1261,10 @@ initzipimport(void)
                            (PyObject *)&ZipImporter_Type) < 0)
         return;
 
-    zip_directory_cache = PyGC_AddRoot(PyDict_New());
+    zip_directory_cache = PyDict_New();
     if (zip_directory_cache == NULL)
         return;
+    PyGC_RegisterStaticConstant(zip_directory_cache);
     Py_INCREF(zip_directory_cache);
     if (PyModule_AddObject(mod, "_zip_directory_cache",
                            zip_directory_cache) < 0)
@@ -1272,4 +1273,5 @@ initzipimport(void)
     // Pyston change: register zip module import hook
     PyObject* zipimporter = PyObject_GetAttrString(mod, "zipimporter");
     PyList_Append(PySys_GetObject("path_hooks"), zipimporter);
+    Py_DECREF(zipimporter);
 }

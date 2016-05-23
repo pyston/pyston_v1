@@ -41,9 +41,6 @@ PyStructSequence_New(PyTypeObject *type)
     return (PyObject*) obj;
 }
 
-// Pyston change: we currently don't support finalizers, and this one is just a
-// no-op (only decrefs and a final free), so we can just skip it.
-#if 0
 static void
 structseq_dealloc(PyStructSequence *obj)
 {
@@ -55,7 +52,6 @@ structseq_dealloc(PyStructSequence *obj)
     }
     PyObject_Del(obj);
 }
-#endif
 
 static Py_ssize_t
 structseq_length(PyStructSequence *obj)
@@ -447,8 +443,7 @@ static PyTypeObject _struct_sequence_template = {
     NULL,                                       /* tp_name */
     0,                                          /* tp_basicsize */
     0,                                          /* tp_itemsize */
-    // Pyston change: nulled this out:
-    0,                                          /* tp_dealloc */
+    (destructor)structseq_dealloc,              /* tp_dealloc */
     0,                                          /* tp_print */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
@@ -533,7 +528,11 @@ PyStructSequence_InitType(PyTypeObject *type, PyStructSequence_Desc *desc)
 
     if (PyType_Ready(type) < 0)
         return;
-    Py_INCREF(type);
+
+    // Pyston change: took out this INCREF.
+    // The type already got one base ref when it was constructed, and it looks like the
+    // users in the std modules don't expect this additional one.
+    //Py_INCREF(type);
 
     dict = type->tp_dict;
 #define SET_DICT_FROM_INT(key, value)                           \

@@ -46,4 +46,8 @@ initbasic_test(void)
     m = Py_InitModule("basic_test", TestMethods);
     if (m == NULL)
         return;
+
+#ifdef PYSTON_VERSION
+    PyGC_RegisterStaticConstantLocation(&stored);
+#endif
 }

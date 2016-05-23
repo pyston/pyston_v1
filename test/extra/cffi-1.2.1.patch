@@ -1,28 +1,3 @@
-diff -ur cffi-1.2.1_orig/c/_cffi_backend.c cffi-1.2.1/c/_cffi_backend.c
---- cffi-1.2.1_orig/c/_cffi_backend.c	2016-02-22 18:48:06.861772302 +0000
-+++ cffi-1.2.1/c/_cffi_backend.c	2016-02-24 18:57:47.479889228 +0000
-@@ -5065,6 +5065,10 @@
-     cd->c_weakreflist = NULL;
-     PyObject_GC_Track(cd);
- 
-+    // Pyston change: HACK which leaks mem but seems necessary at the moment to prevent crashes with our GC
-+    PyGC_AddRoot((PyObject*)cd);
-+    PyGC_AddRoot((PyObject*)infotuple);
-+
-     cif_descr = (cif_description_t *)ct->ct_extra;
-     if (cif_descr == NULL) {
-         PyErr_Format(PyExc_NotImplementedError,
-@@ -5572,7 +5576,9 @@
-         return NULL;
-     }
-     x = (PyObject *)(raw + 42);
--    if (Py_REFCNT(x) <= 0) {
-+    // Pyston change:
-+    // if (Py_REFCNT(x) <= 0) {
-+    if (0) {
-         Py_FatalError("ffi.from_handle() detected that the address passed "
-                       "points to garbage. If it is really the result of "
-                       "ffi.new_handle(), then the Python object has already "
 diff -ur cffi-1.2.1_orig/c/cglob.c cffi-1.2.1/c/cglob.c
 --- cffi-1.2.1_orig/c/cglob.c	2016-02-22 18:48:06.853772302 +0000
 +++ cffi-1.2.1/c/cglob.c	2016-02-25 11:02:26.319738004 +0000

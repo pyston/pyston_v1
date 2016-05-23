@@ -13,7 +13,6 @@ macro(add_unittest unittest)
   add_dependencies(unittests ${unittest}_unittest)
 endmacro()
 
-add_unittest(gc)
 add_unittest(analysis)
 add_custom_command(TARGET analysis_unittest POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/test/unittests/analysis_listcomp.py ${CMAKE_BINARY_DIR}/test/unittests/analysis_listcomp.py)
 add_custom_command(TARGET analysis_unittest POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/test/unittests/analysis_osr.py ${CMAKE_BINARY_DIR}/test/unittests/analysis_osr.py)

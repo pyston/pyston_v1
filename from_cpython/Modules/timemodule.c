@@ -864,8 +864,9 @@ inittime(void)
     */
     Py_XDECREF(moddict);
     /* Squirrel away the module's dictionary for the y2k check */
-    moddict = PyGC_AddRoot(PyModule_GetDict(m));
+    moddict = PyModule_GetDict(m);
     Py_INCREF(moddict);
+    PyGC_RegisterStaticConstant(moddict);
 
     /* Set, or reset, module variables like time.timezone */
     inittimezone(m);

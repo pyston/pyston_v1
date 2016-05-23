@@ -93,6 +93,7 @@ std::string AssemblyLogger::finalize_log(uint8_t const* start_addr, uint8_t cons
         int AsmPrinterVariant = MAI->getAssemblerDialect(); // 0 is ATT, 1 is Intel
         IP = target->createMCInstPrinter(AsmPrinterVariant, *MAI, *MII, *MRI, *STI);
         assert(IP);
+        IP->setPrintImmHex(true);
         llvm::MCObjectFileInfo* MOFI = new llvm::MCObjectFileInfo();
         assert(MOFI);
         llvm::MCContext* Ctx = new llvm::MCContext(MAI, MRI, MOFI);
@@ -107,20 +108,39 @@ std::string AssemblyLogger::finalize_log(uint8_t const* start_addr, uint8_t cons
     size_t pos = 0;
     append_comments(stream, pos);
 
+    int nnops = 0;
+    auto print_nops = [&]() {
+        if (nnops == 1)
+            stream << start_addr + pos - nnops << "        nop\n";
+        else if (nnops)
+            stream << start_addr + pos - nnops << "        nop * " << nnops << '\n';
+        nnops = 0;
+    };
+
     while (pos < (end_addr - start_addr)) {
         llvm::MCInst inst;
         uint64_t size;
+        if (*(start_addr + pos) == 0x90) {
+            nnops++;
+            pos++;
+            append_comments(stream, pos);
+            continue;
+        } else {
+            print_nops();
+        }
         llvm::MCDisassembler::DecodeStatus s = DisAsm->getInstruction(
             inst /* out */, size /* out */, llvm::ArrayRef<uint8_t>(start_addr + pos, end_addr), 0, llvm::nulls(),
             llvm::nulls());
         assert(s == llvm::MCDisassembler::Success);
 
+        stream << start_addr + pos;
         IP->printInst(&inst, stream, "");
         stream << "\n";
 
         pos += size;
         append_comments(stream, pos);
     }
+    print_nops();
 
     return stream.str();
 }

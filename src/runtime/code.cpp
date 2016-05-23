@@ -26,16 +26,7 @@ extern "C" {
 BoxedClass* code_cls;
 }
 
-void BoxedCode::gcHandler(GCVisitor* v, Box* b) {
-    assert(b->cls == code_cls);
-    Box::gcHandler(v, b);
-
-    BoxedCode* code = (BoxedCode*)b;
-    v->visit(&code->_filename);
-    v->visit(&code->_name);
-}
-
-Box* BoxedCode::name(Box* b, void*) {
+BORROWED(Box*) BoxedCode::name(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
     if (code->_name)
@@ -43,12 +34,20 @@ Box* BoxedCode::name(Box* b, void*) {
     return code->f->source->getName();
 }
 
-Box* BoxedCode::filename(Box* b, void*) {
+Box* BoxedCode::co_name(Box* b, void* arg) {
+    return incref(name(b, arg));
+}
+
+BORROWED(Box*) BoxedCode::filename(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
     if (code->_filename)
         return code->_filename;
     return code->f->source->getFn();
+}
+
+Box* BoxedCode::co_filename(Box* b, void* arg) {
+    return incref(filename(b, arg));
 }
 
 Box* BoxedCode::firstlineno(Box* b, void*) {
@@ -67,7 +66,6 @@ Box* BoxedCode::firstlineno(Box* b, void*) {
 
 Box* BoxedCode::argcount(Box* b, void*) {
     RELEASE_ASSERT(b->cls == code_cls, "");
-
     return boxInt(static_cast<BoxedCode*>(b)->f->num_args);
 }
 
@@ -77,16 +75,19 @@ Box* BoxedCode::varnames(Box* b, void*) {
 
     auto& param_names = code->f->param_names;
     if (!param_names.takes_param_names)
-        return EmptyTuple;
+        return incref(EmptyTuple);
 
-    std::vector<Box*, StlCompatAllocator<Box*>> elts;
+    std::vector<Box*> elts;
     for (auto sr : param_names.args)
         elts.push_back(boxString(sr));
     if (param_names.vararg.size())
         elts.push_back(boxString(param_names.vararg));
     if (param_names.kwarg.size())
         elts.push_back(boxString(param_names.kwarg));
-    return BoxedTuple::create(elts.size(), &elts[0]);
+    auto rtn = BoxedTuple::create(elts.size(), &elts[0]);
+    for (auto e : elts)
+        Py_DECREF(e);
+    return rtn;
 }
 
 Box* BoxedCode::flags(Box* b, void*) {
@@ -103,8 +104,22 @@ Box* BoxedCode::flags(Box* b, void*) {
     return boxInt(flags);
 }
 
-Box* codeForFunction(BoxedFunction* f) {
-    return f->md->getCode();
+int BoxedCode::traverse(Box* self, visitproc visit, void* arg) noexcept {
+    BoxedCode* o = static_cast<BoxedCode*>(self);
+    Py_VISIT(o->_filename);
+    Py_VISIT(o->_name);
+    return 0;
+}
+
+void BoxedCode::dealloc(Box* b) noexcept {
+    BoxedCode* o = static_cast<BoxedCode*>(b);
+
+    PyObject_GC_UnTrack(o);
+
+    Py_XDECREF(o->_filename);
+    Py_XDECREF(o->_name);
+
+    o->cls->tp_free(o);
 }
 
 FunctionMetadata* metadataFromCode(Box* code) {
@@ -138,12 +153,12 @@ extern "C" PyCodeObject* PyCode_NewEmpty(const char* filename, const char* funcn
     PyObject* funcname_ob = NULL;
     PyCodeObject* result = NULL;
     if (emptystring == NULL) {
-        emptystring = PyString_FromString("");
+        emptystring = PyGC_RegisterStaticConstant(PyString_FromString(""));
         if (emptystring == NULL)
             goto failed;
     }
     if (nulltuple == NULL) {
-        nulltuple = PyTuple_New(0);
+        nulltuple = PyGC_RegisterStaticConstant(PyTuple_New(0));
         if (nulltuple == NULL)
             goto failed;
     }
@@ -178,26 +193,27 @@ failed:
 
 extern "C" int PyCode_GetArgCount(PyCodeObject* op) noexcept {
     RELEASE_ASSERT(PyCode_Check((Box*)op), "");
-    return unboxInt(BoxedCode::argcount((Box*)op, NULL));
+    return unboxInt(autoDecref(BoxedCode::argcount((Box*)op, NULL)));
 }
 
-extern "C" PyObject* PyCode_GetFilename(PyCodeObject* op) noexcept {
+extern "C" BORROWED(PyObject*) PyCode_GetFilename(PyCodeObject* op) noexcept {
     RELEASE_ASSERT(PyCode_Check((Box*)op), "");
     return BoxedCode::filename((Box*)op, NULL);
 }
-extern "C" PyObject* PyCode_GetName(PyCodeObject* op) noexcept {
+extern "C" BORROWED(PyObject*) PyCode_GetName(PyCodeObject* op) noexcept {
     RELEASE_ASSERT(PyCode_Check((Box*)op), "");
     return BoxedCode::name((Box*)op, NULL);
 }
 
 void setupCode() {
-    code_cls = BoxedClass::create(type_cls, object_cls, &BoxedCode::gcHandler, 0, 0, sizeof(BoxedCode), false, "code",
-                                  false);
+    code_cls
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedCode), false, "code", false,
+                             (destructor)BoxedCode::dealloc, NULL, true, (traverseproc)BoxedCode::traverse, NOCLEAR);
 
-    code_cls->giveAttr("__new__", None); // Hacky way of preventing users from instantiating this
+    code_cls->giveAttrBorrowed("__new__", None); // Hacky way of preventing users from instantiating this
 
-    code_cls->giveAttrDescriptor("co_name", BoxedCode::name, NULL);
-    code_cls->giveAttrDescriptor("co_filename", BoxedCode::filename, NULL);
+    code_cls->giveAttrDescriptor("co_name", BoxedCode::co_name, NULL);
+    code_cls->giveAttrDescriptor("co_filename", BoxedCode::co_filename, NULL);
     code_cls->giveAttrDescriptor("co_firstlineno", BoxedCode::firstlineno, NULL);
     code_cls->giveAttrDescriptor("co_argcount", BoxedCode::argcount, NULL);
     code_cls->giveAttrDescriptor("co_varnames", BoxedCode::varnames, NULL);

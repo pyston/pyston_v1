@@ -53,6 +53,8 @@ extern "C" PyObject* _formatter_field_name_split(PyStringObject* self) noexcept;
 #define RIGHTSTRIP 1
 #define BOTHSTRIP 2
 
+#define PyStringObject_SIZE (offsetof(PyStringObject, ob_sval) + 1)
+
 namespace pyston {
 
 BoxedString* EmptyString;
@@ -339,20 +341,22 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
 
     if (isSubclass(_rhs->cls, unicode_cls)) {
         Box* rtn = PyUnicode_Concat(lhs, _rhs);
-        checkAndThrowCAPIException();
+        if (!rtn)
+            throwCAPIException();
         return rtn;
     }
 
     if (!PyString_Check(_rhs)) {
         if (PyByteArray_Check(_rhs)) {
             Box* rtn = PyByteArray_Concat(lhs, _rhs);
-            checkAndThrowCAPIException();
+            if (!rtn)
+                throwCAPIException();
             return rtn;
         } else {
             // This is a compatibility break with CPython, which has their sq_concat method
             // directly throw a TypeError.  Since we're not implementing this as a sq_concat,
-            // return NotImplemented for now.
-            return NotImplemented;
+            // Give NotImplemented for now.
+            return incref(NotImplemented);
         }
     }
 
@@ -367,14 +371,15 @@ extern "C" PyObject* PyString_InternFromString(const char* s) noexcept {
     return internStringImmortal(s);
 }
 
-BoxedString* internStringImmortal(llvm::StringRef s) {
+BoxedString* internStringImmortal(llvm::StringRef s) noexcept {
     auto& entry = interned_strings[s];
     if (!entry) {
         num_interned_strings.log();
-        entry = (BoxedString*)PyGC_AddRoot(boxString(s));
+        entry = boxString(s);
         // CPython returns mortal but in our current implementation they are inmortal
         entry->interned_state = SSTATE_INTERNED_IMMORTAL;
     }
+    Py_INCREF(entry);
     return entry;
 }
 
@@ -391,15 +396,28 @@ extern "C" void PyString_InternInPlace(PyObject** p) noexcept {
         return;
 
     auto& entry = interned_strings[s->s()];
-    if (entry)
+    if (entry) {
+        Py_INCREF(entry);
+        Py_DECREF(*p);
         *p = entry;
-    else {
+    } else {
+        // TODO: do CPython's refcounting here
         num_interned_strings.log();
-        entry = (BoxedString*)PyGC_AddRoot(s);
+        entry = s;
+
+        Py_INCREF(s);
 
         // CPython returns mortal but in our current implementation they are inmortal
         s->interned_state = SSTATE_INTERNED_IMMORTAL;
     }
+}
+
+extern "C" void _Py_ReleaseInternedStrings() noexcept {
+    // printf("%ld interned strings\n", interned_strings.size());
+    for (const auto& p : interned_strings) {
+        Py_DECREF(p.second);
+    }
+    interned_strings.clear();
 }
 
 extern "C" int _PyString_CheckInterned(PyObject* p) noexcept {
@@ -1138,38 +1156,43 @@ error:
     }
     return NULL;
 }
+
 extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
     Box* rtn = PyString_Format(lhs, rhs);
-    checkAndThrowCAPIException();
-    assert(rtn);
+    if (!rtn)
+        throwCAPIException();
+    return rtn;
+}
+
+Box* strRMod(BoxedString* lhs, Box* rhs) {
+    Box* rtn = PyString_Format(rhs, lhs);
+    if (!rtn)
+        throwCAPIException();
     return rtn;
 }
 
 extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
     assert(PyString_Check(lhs));
 
-    int n;
-
-    if (PyIndex_Check(rhs)) {
-        Box* index = PyNumber_Index(rhs);
-        if (!index) {
-            throwCAPIException();
-        }
-        rhs = index;
-    }
+    Py_ssize_t n;
 
     if (PyInt_Check(rhs))
         n = static_cast<BoxedInt*>(rhs)->n;
-    else if (isSubclass(rhs->cls, long_cls)) {
+    else if (PyLong_Check(rhs)) {
         n = _PyLong_AsInt(rhs);
         if (PyErr_Occurred()) {
             PyErr_Clear();
             raiseExcHelper(OverflowError, "cannot fit 'long' into index-sized integer");
         }
+    } else if (PyIndex_Check(rhs)) {
+        n = PyNumber_AsSsize_t(rhs, PyExc_OverflowError);
+        if (n == -1 && PyErr_Occurred())
+            throwCAPIException();
     } else
-        return NotImplemented;
+        return incref(NotImplemented);
+
     if (n <= 0)
-        return EmptyString;
+        return incref(EmptyString);
 
     // TODO: use createUninitializedString and getWriteableStringContents
     int sz = lhs->size();
@@ -1187,7 +1210,7 @@ Box* str_richcompare(Box* lhs, Box* rhs, int op) {
     // statement, rather than out here.  It's functionally equivalent but the
     // generated assembly is somehow quite better:
     // if (unlikely(!PyString_Check(rhs)))
-    // return NotImplemented;
+    // return incref(NotImplemented);
 
     BoxedString* slhs = static_cast<BoxedString*>(lhs);
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
@@ -1195,27 +1218,27 @@ Box* str_richcompare(Box* lhs, Box* rhs, int op) {
     switch (op) {
         case Py_EQ:
             if (unlikely(!PyString_Check(rhs)))
-                return NotImplemented;
+                return incref(NotImplemented);
             return boxBool(slhs->s() == srhs->s());
         case Py_NE:
             if (unlikely(!PyString_Check(rhs)))
-                return NotImplemented;
+                return incref(NotImplemented);
             return boxBool(slhs->s() != srhs->s());
         case Py_LT:
             if (unlikely(!PyString_Check(rhs)))
-                return NotImplemented;
+                return incref(NotImplemented);
             return boxBool(slhs->s() < srhs->s());
         case Py_LE:
             if (unlikely(!PyString_Check(rhs)))
-                return NotImplemented;
+                return incref(NotImplemented);
             return boxBool(slhs->s() <= srhs->s());
         case Py_GT:
             if (unlikely(!PyString_Check(rhs)))
-                return NotImplemented;
+                return incref(NotImplemented);
             return boxBool(slhs->s() > srhs->s());
         case Py_GE:
             if (unlikely(!PyString_Check(rhs)))
-                return NotImplemented;
+                return incref(NotImplemented);
             return boxBool(slhs->s() >= srhs->s());
         default:
             llvm_unreachable("invalid op");
@@ -1238,7 +1261,7 @@ static Box* pad(BoxedString* self, Box* width, Box* fillchar, int justType) {
 
     if (curWidth >= targetWidth) {
         if (self->cls == str_cls) {
-            return self;
+            return incref(self);
         } else {
             // If self isn't a string but a subclass of str, then make a new string to return
             return boxString(self->s());
@@ -1290,7 +1313,7 @@ extern "C" Box* str_str(Box* _self) noexcept {
     BoxedString* self = (BoxedString*)_self;
 
     if (self->cls == str_cls)
-        return self;
+        return incref(self);
 
     return boxString(self->s());
 }
@@ -1637,6 +1660,7 @@ template <ExceptionStyle S> Box* strNew(BoxedClass* cls, Box* obj) noexcept(S ==
 
     if (cls != str_cls) {
         Box* tmp = strNew<S>(str_cls, obj);
+        AUTO_DECREF(tmp);
         assert(PyString_Check(tmp));
         BoxedString* tmp_s = static_cast<BoxedString*>(tmp);
 
@@ -1690,11 +1714,11 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
     assert(length >= 0);
 
     if (length == 0)
-        return EmptyString;
+        return incref(EmptyString);
 
     if (length == 1) {
         char c = self->s()[start];
-        return characters[c & UCHAR_MAX];
+        return incref(characters[c & UCHAR_MAX]);
     }
 
     BoxedString* bs = BoxedString::createUninitializedString(length);
@@ -1730,14 +1754,14 @@ Box* strIsAlpha(BoxedString* self) {
 
     llvm::StringRef str(self->s());
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
 
     for (const auto& c : str) {
         if (!std::isalpha(c))
-            return False;
+            Py_RETURN_FALSE;
     }
 
-    return True;
+    Py_RETURN_TRUE;
 }
 
 Box* strIsDigit(BoxedString* self) {
@@ -1745,14 +1769,14 @@ Box* strIsDigit(BoxedString* self) {
 
     llvm::StringRef str(self->s());
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
 
     for (const auto& c : str) {
         if (!std::isdigit(c))
-            return False;
+            Py_RETURN_FALSE;
     }
 
-    return True;
+    Py_RETURN_TRUE;
 }
 
 Box* strIsAlnum(BoxedString* self) {
@@ -1760,14 +1784,14 @@ Box* strIsAlnum(BoxedString* self) {
 
     llvm::StringRef str(self->s());
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
 
     for (const auto& c : str) {
         if (!std::isalnum(c))
-            return False;
+            Py_RETURN_FALSE;
     }
 
-    return True;
+    Py_RETURN_TRUE;
 }
 
 Box* strIsLower(BoxedString* self) {
@@ -1777,13 +1801,13 @@ Box* strIsLower(BoxedString* self) {
     bool lowered = false;
 
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
 
     for (const auto& c : str) {
         if (std::isspace(c) || std::isdigit(c)) {
             continue;
         } else if (!std::islower(c)) {
-            return False;
+            Py_RETURN_FALSE;
         } else {
             lowered = true;
         }
@@ -1798,12 +1822,12 @@ Box* strIsUpper(BoxedString* self) {
     llvm::StringRef str(self->s());
 
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
 
     bool cased = false;
     for (const auto& c : str) {
         if (std::islower(c))
-            return False;
+            Py_RETURN_FALSE;
         else if (!cased && isupper(c))
             cased = true;
     }
@@ -1816,14 +1840,14 @@ Box* strIsSpace(BoxedString* self) {
 
     llvm::StringRef str(self->s());
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
 
     for (const auto& c : str) {
         if (!std::isspace(c))
-            return False;
+            Py_RETURN_FALSE;
     }
 
-    return True;
+    Py_RETURN_TRUE;
 }
 
 Box* strIsTitle(BoxedString* self) {
@@ -1832,7 +1856,7 @@ Box* strIsTitle(BoxedString* self) {
     llvm::StringRef str(self->s());
 
     if (str.empty())
-        return False;
+        Py_RETURN_FALSE;
     if (str.size() == 1)
         return boxBool(std::isupper(str[0]));
 
@@ -1841,14 +1865,14 @@ Box* strIsTitle(BoxedString* self) {
     for (const auto& c : str) {
         if (std::isupper(c)) {
             if (!start_of_word) {
-                return False;
+                Py_RETURN_FALSE;
             }
 
             start_of_word = false;
             cased = true;
         } else if (std::islower(c)) {
             if (start_of_word) {
-                return False;
+                Py_RETURN_FALSE;
             }
 
             start_of_word = false;
@@ -1879,10 +1903,10 @@ Box* strPartition(BoxedString* self, BoxedString* sep) {
         return BoxedTuple::create({ self, EmptyString, EmptyString });
 
 
-    return BoxedTuple::create(
-        { boxString(llvm::StringRef(self->data(), found_idx)),
-          boxString(llvm::StringRef(self->data() + found_idx, sep->size())),
-          boxString(llvm::StringRef(self->data() + found_idx + sep->size(), self->size() - found_idx - sep->size())) });
+    return BoxedTuple::create({ autoDecref(boxString(llvm::StringRef(self->data(), found_idx))),
+                                autoDecref(boxString(llvm::StringRef(self->data() + found_idx, sep->size()))),
+                                autoDecref(boxString(llvm::StringRef(self->data() + found_idx + sep->size(),
+                                                                     self->size() - found_idx - sep->size()))) });
 }
 
 Box* strRpartition(BoxedString* self, BoxedString* sep) {
@@ -1893,10 +1917,10 @@ Box* strRpartition(BoxedString* self, BoxedString* sep) {
     if (found_idx == std::string::npos)
         return BoxedTuple::create({ EmptyString, EmptyString, self });
 
-    return BoxedTuple::create(
-        { boxString(llvm::StringRef(self->data(), found_idx)),
-          boxString(llvm::StringRef(self->data() + found_idx, sep->size())),
-          boxString(llvm::StringRef(self->data() + found_idx + sep->size(), self->size() - found_idx - sep->size())) });
+    return BoxedTuple::create({ autoDecref(boxString(llvm::StringRef(self->data(), found_idx))),
+                                autoDecref(boxString(llvm::StringRef(self->data() + found_idx, sep->size()))),
+                                autoDecref(boxString(llvm::StringRef(self->data() + found_idx + sep->size(),
+                                                                     self->size() - found_idx - sep->size()))) });
 }
 
 extern "C" PyObject* _do_string_format(PyObject* self, PyObject* args, PyObject* kwargs);
@@ -1906,8 +1930,8 @@ Box* strFormat(BoxedString* self, BoxedTuple* args, BoxedDict* kwargs) {
     assert(!kwargs || kwargs->cls == dict_cls);
 
     Box* rtn = _do_string_format(self, args, kwargs);
-    checkAndThrowCAPIException();
-    assert(rtn);
+    if (!rtn)
+        throwCAPIException();
     return rtn;
 }
 
@@ -1926,9 +1950,9 @@ Box* strStrip(BoxedString* self, Box* chars) {
         if (uniself == NULL)
             throwCAPIException();
         res = _PyUnicode_XStrip((PyUnicodeObject*)uniself, BOTHSTRIP, chars);
+        Py_DECREF(uniself);
         if (!res)
             throwCAPIException();
-        Py_DECREF(uniself);
         return res;
     } else {
         raiseExcHelper(TypeError, "strip arg must be None, str or unicode");
@@ -1950,9 +1974,9 @@ Box* strLStrip(BoxedString* self, Box* chars) {
         if (uniself == NULL)
             throwCAPIException();
         res = _PyUnicode_XStrip((PyUnicodeObject*)uniself, LEFTSTRIP, chars);
+        Py_DECREF(uniself);
         if (!res)
             throwCAPIException();
-        Py_DECREF(uniself);
         return res;
     } else {
         raiseExcHelper(TypeError, "lstrip arg must be None, str or unicode");
@@ -1974,9 +1998,9 @@ Box* strRStrip(BoxedString* self, Box* chars) {
         if (uniself == NULL)
             throwCAPIException();
         res = _PyUnicode_XStrip((PyUnicodeObject*)uniself, RIGHTSTRIP, chars);
+        Py_DECREF(uniself);
         if (!res)
             throwCAPIException();
-        Py_DECREF(uniself);
         return res;
     } else {
         raiseExcHelper(TypeError, "rstrip arg must be None, str or unicode");
@@ -2163,9 +2187,10 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
             auto b = strStartswith(self, e, start, _args);
             assert(b->cls == bool_cls);
             if (b == True)
-                return True;
+                return b;
+            Py_DECREF(b);
         }
-        return False;
+        Py_RETURN_FALSE;
     }
 
     if (isSubclass(elt->cls, unicode_cls)) {
@@ -2195,9 +2220,9 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
 
     Py_ssize_t compare_len = iend - istart;
     if (compare_len < 0)
-        return False;
+        Py_RETURN_FALSE;
     if (sub->size() > compare_len)
-        return False;
+        Py_RETURN_FALSE;
     return boxBool(compareStringRefs(self->s(), istart, sub->size(), sub->s()) == 0);
 }
 
@@ -2234,9 +2259,10 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
             auto b = strEndswith(self, e, start, _args);
             assert(b->cls == bool_cls);
             if (b == True)
-                return True;
+                return b;
+            Py_DECREF(b);
         }
-        return False;
+        Py_RETURN_FALSE;
     }
 
     if (!PyString_Check(elt))
@@ -2258,9 +2284,9 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
 
     Py_ssize_t compare_len = iend - istart;
     if (compare_len < 0)
-        return False;
+        Py_RETURN_FALSE;
     if (sub->size() > compare_len)
-        return False;
+        Py_RETURN_FALSE;
     // XXX: this line is the only difference between startswith and endswith:
     istart += compare_len - sub->size();
     return boxBool(compareStringRefs(self->s(), istart, sub->size(), sub->s()) == 0);
@@ -2287,7 +2313,8 @@ Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
 
     Box* result = PyString_AsDecodedObject(self, encoding_str ? encoding_str->data() : NULL,
                                            error_str ? error_str->data() : NULL);
-    checkAndThrowCAPIException();
+    if (!result)
+        throwCAPIException();
     return result;
 }
 
@@ -2295,8 +2322,8 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     if (!PyString_Check(self))
         raiseExcHelper(TypeError, "descriptor 'encode' requires a 'str' object but received a '%s'", getTypeName(self));
 
-    BoxedString* encoding_str = (BoxedString*)encoding;
-    BoxedString* error_str = (BoxedString*)error;
+    BORROWED(BoxedString*)encoding_str = (BoxedString*)encoding;
+    BORROWED(BoxedString*)error_str = (BoxedString*)error;
 
     if (encoding_str && encoding_str->cls == unicode_cls)
         encoding_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(encoding_str, NULL);
@@ -2312,7 +2339,8 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
 
     Box* result = PyString_AsEncodedObject(self, encoding_str ? encoding_str->data() : PyUnicode_GetDefaultEncoding(),
                                            error_str ? error_str->data() : NULL);
-    checkAndThrowCAPIException();
+    if (!result)
+        throwCAPIException();
     return result;
 }
 
@@ -2325,7 +2353,7 @@ static PyObject* string_item(PyStringObject* self, register Py_ssize_t i) noexce
     }
 
     char c = boxedString->s()[i];
-    return characters[c & UCHAR_MAX];
+    return incref(characters[c & UCHAR_MAX]);
 }
 
 template <ExceptionStyle S> Box* strGetitem(BoxedString* self, Box* slice) {
@@ -2352,7 +2380,7 @@ template <ExceptionStyle S> Box* strGetitem(BoxedString* self, Box* slice) {
         }
 
         char c = self->s()[n];
-        return characters[c & UCHAR_MAX];
+        return incref(characters[c & UCHAR_MAX]);
     } else if (slice->cls == slice_cls) {
         BoxedSlice* sslice = static_cast<BoxedSlice*>(slice);
 
@@ -2388,7 +2416,7 @@ public:
     BoxedString* s;
     std::string::const_iterator it, end;
 
-    BoxedStringIterator(BoxedString* s) : s(s), it(s->s().begin()), end(s->s().end()) {}
+    BoxedStringIterator(BoxedString* s) : s(s), it(s->s().begin()), end(s->s().end()) { Py_INCREF(s); }
 
     DEFAULT_CLASS(str_iterator_cls);
 
@@ -2404,7 +2432,7 @@ public:
 
     static Box* iter(BoxedStringIterator* self) {
         assert(self->cls == str_iterator_cls);
-        return self;
+        return incref(self);
     }
 
     static Box* next(BoxedStringIterator* self) {
@@ -2414,7 +2442,7 @@ public:
 
         char c = *self->it;
         ++self->it;
-        return characters[c & UCHAR_MAX];
+        return incref(characters[c & UCHAR_MAX]);
     }
 
     static Box* next_capi(Box* _self) noexcept {
@@ -2425,13 +2453,18 @@ public:
 
         char c = *self->it;
         ++self->it;
-        return characters[c & UCHAR_MAX];
+        return incref(characters[c & UCHAR_MAX]);
     }
 
-    static void gcHandler(GCVisitor* v, Box* b) {
-        Box::gcHandler(v, b);
-        BoxedStringIterator* it = (BoxedStringIterator*)b;
-        v->visit(&it->s);
+    static void dealloc(BoxedStringIterator* o) noexcept {
+        PyObject_GC_UnTrack(o);
+        Py_DECREF(o->s);
+        o->cls->tp_free(o);
+    }
+
+    static int traverse(BoxedStringIterator* self, visitproc visit, void* arg) noexcept {
+        Py_VISIT(self->s);
+        return 0;
     }
 };
 
@@ -2514,36 +2547,29 @@ extern "C" Py_ssize_t PyString_Size(PyObject* op) noexcept {
 }
 
 extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
-    // This is only allowed to be called when there is only one user of the string (ie a refcount of 1 in CPython)
-
-    assert(pv);
-    assert(PyString_Check(*pv));
-    BoxedString* s = static_cast<BoxedString*>(*pv);
-
-    if (newsize == s->size())
-        return 0;
-
-    if (PyString_CHECK_INTERNED(s)) {
+    PyObject* v;
+    PyStringObject* sv;
+    v = *pv;
+    if (!PyString_Check(v) || Py_REFCNT(v) != 1 || newsize < 0 || PyString_CHECK_INTERNED(v)) {
         *pv = 0;
+        Py_DECREF(v);
+        PyErr_BadInternalCall();
         return -1;
     }
-
-    if (newsize < s->size()) {
-        // XXX resize the box (by reallocating) smaller if it makes sense
-        s->ob_size = newsize;
-        s->hash = -1; /* invalidate cached hash value */
-        s->data()[newsize] = 0;
-        return 0;
+    /* XXX UNREF/NEWREF interface should be more symmetrical */
+    _Py_DEC_REFTOTAL;
+    _Py_ForgetReference(v);
+    *pv = (PyObject*)PyObject_REALLOC((char*)v, PyStringObject_SIZE + newsize);
+    if (*pv == NULL) {
+        PyObject_Del(v);
+        PyErr_NoMemory();
+        return -1;
     }
-
-    BoxedString* resized;
-    if (s->cls == str_cls)
-        resized = BoxedString::createUninitializedString(newsize);
-    else
-        resized = BoxedString::createUninitializedString(s->cls, newsize);
-    memcpy(resized->data(), s->data(), s->size());
-    resized->data()[newsize] = 0;
-    *pv = resized;
+    _Py_NewReference(*pv);
+    sv = (PyStringObject*)*pv;
+    Py_SIZE(sv) = newsize;
+    sv->ob_sval[newsize] = '\0';
+    sv->ob_shash = -1; /* invalidate cached hash value */
     return 0;
 }
 
@@ -2551,6 +2577,8 @@ extern "C" void PyString_Concat(register PyObject** pv, register PyObject* w) no
     try {
         if (*pv == NULL)
             return;
+
+        AUTO_DECREF(*pv);
 
         if (w == NULL || !PyString_Check(*pv)) {
             *pv = NULL;
@@ -2566,6 +2594,7 @@ extern "C" void PyString_Concat(register PyObject** pv, register PyObject* w) no
 
 extern "C" void PyString_ConcatAndDel(register PyObject** pv, register PyObject* w) noexcept {
     PyString_Concat(pv, w);
+    Py_XDECREF(w);
 }
 
 static PyObject* string_expandtabs(PyStringObject* self, PyObject* args) noexcept {
@@ -2645,7 +2674,7 @@ overflow1:
     return NULL;
 }
 
-static PyObject* string_zfill(PyObject* self, PyObject* args) {
+static PyObject* string_zfill(PyObject* self, PyObject* args) noexcept {
     Py_ssize_t fill;
     PyObject* s;
     char* p;
@@ -2666,7 +2695,7 @@ static PyObject* string_zfill(PyObject* self, PyObject* args) {
 
     // Pyston change:
     // s = pad(self, fill, 0, '0');
-    s = pad((BoxedString*)self, boxInt(width), characters['0' & UCHAR_MAX], JUST_RIGHT);
+    s = pad((BoxedString*)self, autoDecref(boxInt(width)), characters['0' & UCHAR_MAX], JUST_RIGHT);
 
     if (s == NULL)
         return NULL;
@@ -2777,7 +2806,7 @@ static Py_ssize_t string_buffer_getsegcount(PyObject* o, Py_ssize_t* lenp) noexc
     return 1;
 }
 
-static Py_ssize_t string_buffer_getcharbuf(PyStringObject* self, Py_ssize_t index, const char** ptr) {
+static Py_ssize_t string_buffer_getcharbuf(PyStringObject* self, Py_ssize_t index, const char** ptr) noexcept {
     if (index != 0) {
         PyErr_SetString(PyExc_SystemError, "accessing non-existent string segment");
         return -1;
@@ -2831,8 +2860,11 @@ void setupStr() {
 
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
-    str_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedStringIterator::gcHandler, 0, 0,
-                                          sizeof(BoxedStringIterator), false, "striterator", false);
+    assert(str_cls->tp_basicsize == PyStringObject_SIZE);
+
+    str_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedStringIterator), false, "striterator",
+                                          false, (destructor)BoxedStringIterator::dealloc, NULL, true,
+                                          (traverseproc)BoxedStringIterator::traverse, NOCLEAR);
     str_iterator_cls->giveAttr(
         "__hasnext__", new BoxedFunction(FunctionMetadata::create((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
     str_iterator_cls->giveAttr(
@@ -2851,7 +2883,8 @@ void setupStr() {
 
     str_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)strLen, BOXED_INT, 1)));
     str_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)str_str, STR, 1)));
-    str_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)strRepr, STR, 1)));
+    str_cls->giveAttr("__repr__",
+                      new BoxedFunction(FunctionMetadata::create((void*)strRepr, STR, 1, ParamNames::empty(), CAPI)));
     str_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)strHash, UNKNOWN, 1)));
     str_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)strNonzero, BOXED_BOOL, 1)));
 
@@ -2900,6 +2933,7 @@ void setupStr() {
 
     str_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)strAdd, UNKNOWN, 2)));
     str_cls->giveAttr("__mod__", new BoxedFunction(FunctionMetadata::create((void*)strMod, UNKNOWN, 2)));
+    str_cls->giveAttr("__rmod__", new BoxedFunction(FunctionMetadata::create((void*)strRMod, UNKNOWN, 2)));
     str_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)strMul, UNKNOWN, 2)));
     // TODO not sure if this is right in all cases:
     str_cls->giveAttr("__rmul__", new BoxedFunction(FunctionMetadata::create((void*)strMul, UNKNOWN, 2)));
@@ -2952,8 +2986,5 @@ void setupStr() {
     basestring_cls->giveAttr("__new__",
                              new BoxedFunction(FunctionMetadata::create((void*)basestringNew, UNKNOWN, 1, true, true)));
     basestring_cls->freeze();
-}
-
-void teardownStr() {
 }
 }

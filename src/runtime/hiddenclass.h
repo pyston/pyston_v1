@@ -24,7 +24,7 @@
 
 namespace pyston {
 
-class HiddenClass : public gc::GCAllocatedRuntime {
+class HiddenClass {
 public:
     // We have a couple different storage strategies for attributes, which
     // are distinguished by having a different hidden class type.
@@ -35,6 +35,7 @@ public:
     } const type;
 
     static HiddenClass* dict_backed;
+    void dump() noexcept;
 
 private:
     HiddenClass(HCType type) : type(type) {}
@@ -75,8 +76,6 @@ public:
         return new HiddenClass(DICT_BACKED);
     }
 
-    void gc_visit(GCVisitor* visitor);
-
     // The total size of the attribute array.  The slots in the attribute array may not correspond 1:1 to Python
     // attributes.
     int attributeArraySize() {
@@ -93,7 +92,7 @@ public:
     // The mapping from string attribute names to attribute offsets.  There may be other objects in the attributes
     // array.
     // Only valid for NORMAL or SINGLETON hidden classes
-    const llvm::DenseMap<BoxedString*, int>& getStrAttrOffsets() {
+    BORROWED(const llvm::DenseMap<BoxedString*, int>&) getStrAttrOffsets() {
         assert(type == NORMAL || type == SINGLETON);
         return attr_offsets;
     }

@@ -18,11 +18,21 @@
 // Cython depends on having this define set:
 #define Py_PYTHON_H
 
-#define PYSTON_VERSION "0.3"
+#define PYSTON_VERSION "0.5"
+
+#define WITH_PYMALLOC
 
 // These include orders come from CPython:
 #include "patchlevel.h"
 #include "pyconfig.h"
+
+/* Cyclic gc is always enabled, starting with release 2.3a1.  Supply the
+ * old symbol for the benefit of extension modules written before then
+ * that may be conditionalizing on it.  The core doesn't use it anymore.
+ */
+#ifndef WITH_CYCLE_GC
+#define WITH_CYCLE_GC 1
+#endif
 
 #include <limits.h>
 
@@ -78,9 +88,14 @@
 #include "traceback.h"
 #include "sliceobject.h"
 #include "iterobject.h"
+#include "genobject.h"
 #include "descrobject.h"
 #include "warnings.h"
 #include "weakrefobject.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // Pyston additions:
 // These new APIS give access to our fast hidden-class-based attributes implementation.
@@ -96,10 +111,10 @@ typedef struct _hcattrs PyHcAttrs;
 namespace pyston {
 class HCAttrs;
 }
-typedef int PyHcAttrs;
+typedef pyston::HCAttrs PyHcAttrs;
 #endif
 PyAPI_FUNC(void) PyObject_InitHcAttrs(PyHcAttrs*) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject*) PyObject_GetAttrWrapper(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject*)) PyObject_GetAttrWrapper(PyObject*) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyType_RequestHcAttrs(PyTypeObject*, int offset) PYSTON_NOEXCEPT;
 // Sets a descriptor on the type so that the attrs are available via __dict__
 PyAPI_FUNC(void) PyType_GiveHcAttrsDictDescr(PyTypeObject*) PYSTON_NOEXCEPT;
@@ -111,9 +126,28 @@ PyAPI_FUNC(void) PyType_GiveHcAttrsDictDescr(PyTypeObject*) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject*) PyObject_GetHcAttrString(PyObject*, const char*) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyObject_SetHcAttrString(PyObject*, const char*, PyObject*) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyObject_DelHcAttrString(PyObject*, const char*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyObject_ClearHcAttrs(PyHcAttrs*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyObject_TraverseHcAttrs(PyHcAttrs*, visitproc visit, void* arg) PYSTON_NOEXCEPT;
 
 // Workaround: call this instead of setting tp_dict.
-PyAPI_FUNC(void) PyType_SetDict(PyTypeObject*, PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyType_SetDict(PyTypeObject*, STOLEN(PyObject*)) PYSTON_NOEXCEPT;
+
+// Pyston addition: register an object as a "static constant".  Current purpose is that this will
+// get decref'd when the interpreter shuts down.  This functions returns its argument.
+// PyType_Ready calls this automatically.
+PyAPI_FUNC(PyObject*) PyGC_RegisterStaticConstant(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyGC_RegisterStaticConstantLocation(PyObject**) PYSTON_NOEXCEPT;
+
+// Gets gc.garbage
+PyAPI_FUNC(PyObject*) _PyGC_GetGarbage(void) PYSTON_NOEXCEPT;
+
+// Pyston addition:
+PyAPI_FUNC(void) PyGC_Enable(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyGC_Disable(void) PYSTON_NOEXCEPT;
+
+#ifdef __cplusplus
+}
+#endif
 
 #include "codecs.h"
 #include "pyerrors.h"
@@ -154,34 +188,15 @@ PyAPI_FUNC(void) PyType_SetDict(PyTypeObject*, PyObject*) PYSTON_NOEXCEPT;
 extern "C" {
 #endif
 
-PyObject* PyModule_GetDict(PyObject*) PYSTON_NOEXCEPT;
-
-// Pyston addition:
-// Our goal is to not make exception modules declare their static memory.  But until we can identify
-// that in an automated way, we have to modify extension modules to call this:
-PyObject* PyGC_AddRoot(PyObject*) PYSTON_NOEXCEPT;
-// PyGC_AddRoot returns its argument, with the intention that you do something like
-//      static PyObject* obj = PyGC_AddRoot(foo());
-// rather than
-//      static PyObject* obj = foo();
-//      PyGC_AddRoot(obj);
-// to reduce any chances of compiler reorderings or a GC somehow happening between the assignment
-// to the static slot and the call to PyGC_AddRoot.
-//
-
-// Similarly, some extension modules have static non-type objects that our GC thinks are errors
-// since they are not in the heap, unless we root them. This function should be used purely as
-// a temporary patching mechanism - we want to have a better way of dealing with such objects
-// in the future (even if it's an invalid use of CPython APIs).
-PyObject* PyGC_AddNonHeapRoot(PyObject* obj, int size) PYSTON_NOEXCEPT;
-void* PyGC_AddPotentialRoot(void* obj, int size) PYSTON_NOEXCEPT;
-
 // Pyston change : expose these type objects
 extern PyTypeObject Pattern_Type;
 extern PyTypeObject Match_Type;
 extern PyTypeObject Scanner_Type;
 
 extern PyTypeObject* Itertool_SafeDealloc_Types[];
+
+// In CPython this is in frameobject.h:
+PyAPI_FUNC(int) PyFrame_ClearFreeList(void) PYSTON_NOEXCEPT;
 
 #define PyDoc_VAR(name) static char name[]
 #define PyDoc_STRVAR(name, str) PyDoc_VAR(name) = PyDoc_STR(str)

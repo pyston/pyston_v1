@@ -29,7 +29,16 @@ public:
 
     DEFAULT_CLASS(tuple_iterator_cls);
 
-    static void gcHandler(GCVisitor* v, Box* _o);
+    static void dealloc(BoxedTupleIterator* o) noexcept {
+        PyObject_GC_UnTrack(o);
+        Py_DECREF(o->t);
+        o->cls->tp_free(o);
+    }
+
+    static int traverse(BoxedTupleIterator* self, visitproc visit, void* arg) noexcept {
+        Py_VISIT(self->t);
+        return 0;
+    }
 };
 
 Box* tupleIter(Box* self) noexcept;

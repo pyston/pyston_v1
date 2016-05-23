@@ -32,12 +32,16 @@
 
 namespace pyston {
 
+#ifdef Py_REF_DEBUG
+bool imported_foreign_cextension = false;
+#endif
+
 static void removeModule(BoxedString* name) {
     BoxedDict* d = getSysModulesDict();
-    d->d.erase(name);
+    PyDict_DelItem(d, name);
 }
 
-extern "C" PyObject* PyImport_GetModuleDict(void) noexcept {
+extern "C" BORROWED(PyObject*) PyImport_GetModuleDict(void) noexcept {
     try {
         return getSysModulesDict();
     } catch (ExcInfo e) {
@@ -48,10 +52,13 @@ extern "C" PyObject* PyImport_GetModuleDict(void) noexcept {
 
 extern "C" PyObject* _PyImport_LoadDynamicModule(char* name, char* pathname, FILE* fp) noexcept {
     BoxedString* name_boxed = boxString(name);
+    AUTO_DECREF(name_boxed);
     try {
         PyObject* m = _PyImport_FindExtension(name, pathname);
-        if (m != NULL)
+        if (m != NULL) {
+            Py_INCREF(m);
             return m;
+        }
 
         const char* lastdot = strrchr(name, '.');
         const char* shortname;
@@ -63,8 +70,10 @@ extern "C" PyObject* _PyImport_LoadDynamicModule(char* name, char* pathname, FIL
 
         m = importCExtension(name_boxed, shortname, pathname);
 
-        if (_PyImport_FixupExtension(name, pathname) == NULL)
+        if (_PyImport_FixupExtension(name, pathname) == NULL) {
+            Py_DECREF(m);
             return NULL;
+        }
 
         return m;
     } catch (ExcInfo e) {
@@ -76,6 +85,7 @@ extern "C" PyObject* _PyImport_LoadDynamicModule(char* name, char* pathname, FIL
 
 extern "C" PyObject* load_source_module(char* name, char* pathname, FILE* fp) noexcept {
     BoxedString* name_boxed = boxString(name);
+    AUTO_DECREF(name_boxed);
     try {
         BoxedModule* module = createModule(name_boxed, pathname);
         AST_Module* ast = caching_parse_file(pathname, /* future_flags = */ 0);
@@ -88,7 +98,7 @@ extern "C" PyObject* load_source_module(char* name, char* pathname, FILE* fp) no
         }
         if (Py_VerboseFlag)
             PySys_WriteStderr("import %s # from %s\n", name, pathname);
-        return r;
+        return incref(r);
     } catch (ExcInfo e) {
         removeModule(name_boxed);
         setCAPIException(e);
@@ -98,6 +108,7 @@ extern "C" PyObject* load_source_module(char* name, char* pathname, FILE* fp) no
 
 extern "C" PyObject* PyImport_ExecCodeModuleEx(const char* name, PyObject* co, char* pathname) noexcept {
     BoxedString* s = boxString(name);
+    AUTO_DECREF(s);
     try {
         RELEASE_ASSERT(co->cls == str_cls, "");
         BoxedString* code = (BoxedString*)co;
@@ -106,11 +117,11 @@ extern "C" PyObject* PyImport_ExecCodeModuleEx(const char* name, PyObject* co, c
         if (module == NULL)
             return NULL;
 
-        static BoxedString* file_str = internStringImmortal("__file__");
-        module->setattr(file_str, boxString(pathname), NULL);
+        static BoxedString* file_str = getStaticString("__file__");
+        module->setattr(file_str, autoDecref(boxString(pathname)), NULL);
         AST_Module* ast = parse_string(code->data(), /* future_flags = */ 0);
         compileAndRunModule(ast, module);
-        return module;
+        return incref(module);
     } catch (ExcInfo e) {
         removeModule(s);
         setCAPIException(e);
@@ -123,68 +134,6 @@ extern "C" Box* import(int level, Box* from_imports, llvm::StringRef module_name
     if (!rtn)
         throwCAPIException();
     return rtn;
-}
-
-// Parses the memory map and registers all memory regions with "rwxp" permission and which contain the requested file
-// path with the GC. In addition adds the BSS segment.
-static void registerDataSegment(void* dl_handle) {
-    // get library path and resolve symlinks
-    link_map* map = NULL;
-    dlinfo(dl_handle, RTLD_DI_LINKMAP, &map);
-    RELEASE_ASSERT(map && map->l_name, "this should never be NULL");
-    char* converted_path = realpath(map->l_name, NULL);
-    RELEASE_ASSERT(converted_path, "");
-    std::string lib_path = converted_path;
-    free(converted_path);
-
-    std::ifstream mapmap("/proc/self/maps");
-    std::string line;
-    llvm::SmallVector<std::pair<uint64_t, uint64_t>, 4> mem_ranges;
-    while (std::getline(mapmap, line)) {
-        // format is:
-        // address perms offset dev inode pathname
-        llvm::SmallVector<llvm::StringRef, 6> line_split;
-        llvm::StringRef(line).split(line_split, " ", 5, false);
-        RELEASE_ASSERT(line_split.size() >= 5, "%zu", line_split.size());
-        if (line_split.size() < 6)
-            continue; // pathname is missing
-
-        llvm::StringRef permissions = line_split[1].trim();
-        llvm::StringRef pathname = line_split[5].trim();
-
-        if (permissions == "rwxp" && pathname == lib_path) {
-            llvm::StringRef mem_range = line_split[0].trim();
-            auto mem_range_split = mem_range.split('-');
-            uint64_t lower_addr = 0;
-            bool error = mem_range_split.first.getAsInteger(16, lower_addr);
-            RELEASE_ASSERT(!error, "");
-            uint64_t upper_addr = 0;
-            error = mem_range_split.second.getAsInteger(16, upper_addr);
-            RELEASE_ASSERT(!error, "");
-
-            RELEASE_ASSERT(lower_addr < upper_addr, "");
-            RELEASE_ASSERT(upper_addr - lower_addr < 1000000,
-                           "Large data section detected - there maybe something wrong");
-
-            mem_ranges.emplace_back(lower_addr, upper_addr);
-        }
-    }
-    RELEASE_ASSERT(mem_ranges.size() >= 1, "");
-
-    uintptr_t bss_start = (uintptr_t)dlsym(dl_handle, "__bss_start");
-    uintptr_t bss_end = (uintptr_t)dlsym(dl_handle, "_end");
-    RELEASE_ASSERT(bss_end - bss_start < 1000000, "Large BSS section detected - there maybe something wrong");
-
-    // most of the time the BSS section is inside one of memory regions, in that case we don't have to register it.
-    bool should_add_bss = true;
-    for (auto r : mem_ranges) {
-        if (r.first <= bss_start && bss_end <= r.second)
-            should_add_bss = false;
-        gc::registerPotentialRootRange((void*)r.first, (void*)r.second);
-    }
-
-    if (should_add_bss)
-        gc::registerPotentialRootRange((void*)bss_start, (void*)bss_end);
 }
 
 BoxedModule* importCExtension(BoxedString* full_name, const std::string& last_name, const std::string& path) {
@@ -208,9 +157,6 @@ BoxedModule* importCExtension(BoxedString* full_name, const std::string& last_na
 
     assert(init);
 
-    // Let the GC know about the static variables.
-    registerDataSegment(handle);
-
     char* packagecontext = strdup(full_name->c_str());
     char* oldcontext = _Py_PackageContext;
     _Py_PackageContext = packagecontext;
@@ -226,12 +172,18 @@ BoxedModule* importCExtension(BoxedString* full_name, const std::string& last_na
     assert(_m->cls == module_cls);
 
     BoxedModule* m = static_cast<BoxedModule*>(_m);
-    static BoxedString* file_str = internStringImmortal("__file__");
-    m->setattr(file_str, boxString(path), NULL);
+    static BoxedString* file_str = getStaticString("__file__");
+    m->setattr(file_str, autoDecref(boxString(path)), NULL);
 
     if (Py_VerboseFlag)
         PySys_WriteStderr("import %s # dynamically loaded from %s\n", full_name->c_str(), path.c_str());
 
-    return m;
+#ifdef Py_REF_DEBUG
+    // if we load a foreign C extension we can't check that _Py_RefTotal == 0
+    if (!llvm::StringRef(path).endswith("from_cpython/Lib/" + last_name + ".pyston.so"))
+        imported_foreign_cextension = true;
+#endif
+
+    return incref(m);
 }
 }

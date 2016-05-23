@@ -590,8 +590,8 @@ AST_Module* read_module(BufferedReader* reader) {
     AST_Module* rtn = new AST_Module(reader->createInternedPool());
 
     readStmtVector(rtn->body, reader);
-    rtn->col_offset = -1;
-    rtn->lineno = -1;
+    rtn->col_offset = 0;
+    rtn->lineno = 0;
     return rtn;
 }
 

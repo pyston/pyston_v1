@@ -12,7 +12,6 @@ extern "C" {
 /* State shared between threads */
 
 // Pyston change: this is not our format
-#if 0
 struct _ts; /* Forward */
 struct _is; /* Forward */
 
@@ -21,6 +20,9 @@ typedef struct _is {
     struct _is *next;
     struct _ts *tstate_head;
 
+    // Pyston change
+    // Note: any changes here need to show up in PyInterpreterState_Clear as well
+#if 0
     PyObject *modules;
     PyObject *sysdict;
     PyObject *builtins;
@@ -37,10 +39,8 @@ typedef struct _is {
     int tscdump;
 #endif
 
-} PyInterpreterState;
 #endif
-struct _PyInterpreterState;
-typedef struct _PyInterpreterState PyInterpreterState;
+} PyInterpreterState;
 
 
 /* State unique per thread */
@@ -59,16 +59,32 @@ typedef int (*Py_tracefunc)(PyObject *, struct _frame *, int, PyObject *);
 #define PyTrace_C_EXCEPTION 5
 #define PyTrace_C_RETURN 6
 
-// Pyston change: this is not our format
-#if 0
 typedef struct _ts {
     /* See Python/ceval.c for comments explaining most fields */
 
     struct _ts *next;
     PyInterpreterState *interp;
 
-    struct _frame *frame;
+    // Pyston change:
+    //struct _frame *frame;
+    void* frame_info;
+
     int recursion_depth;
+
+    int gilstate_counter;
+
+    PyObject *curexc_type;
+    PyObject *curexc_value;
+    PyObject *curexc_traceback;
+
+    PyObject *dict;  /* Stores per-thread state */
+
+    int trash_delete_nesting;
+    PyObject *trash_delete_later;
+
+    // Pyston change:
+    // Pyston note: additions in here need to be mirrored in PyThreadState_Clear
+#if 0
     /* 'tracing' keeps track of the execution depth when tracing/profiling.
        This is to prevent the actual trace/profile code from being recorded in
        the trace/profile. */
@@ -80,15 +96,9 @@ typedef struct _ts {
     PyObject *c_profileobj;
     PyObject *c_traceobj;
 
-    PyObject *curexc_type;
-    PyObject *curexc_value;
-    PyObject *curexc_traceback;
-
     PyObject *exc_type;
     PyObject *exc_value;
     PyObject *exc_traceback;
-
-    PyObject *dict;  /* Stores per-thread state */
 
     /* tick_counter is incremented whenever the check_interval ticker
      * reaches zero. The purpose is to give a useful measure of the number
@@ -98,33 +108,12 @@ typedef struct _ts {
      */
     int tick_counter;
 
-    int gilstate_counter;
-
     PyObject *async_exc; /* Asynchronous exception to raise */
     long thread_id; /* Thread id where this tstate was created */
 
-    int trash_delete_nesting;
-    PyObject *trash_delete_later;
-
     /* XXX signal handlers should also be here */
-
-} PyThreadState;
 #endif
-typedef struct _ts {
-    void* frame_info; // This points to top python FrameInfo object
-
-    int recursion_depth;
-    int gilstate_counter;
-
-    PyObject *curexc_type;
-    PyObject *curexc_value;
-    PyObject *curexc_traceback;
-
-    PyObject *dict;  /* Stores per-thread state */
-
-    // Pyston note: additions in here need to be mirrored in ThreadStateInternal::accept
 } PyThreadState;
-
 
 PyAPI_FUNC(PyInterpreterState *) PyInterpreterState_New(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyInterpreterState_Clear(PyInterpreterState *) PYSTON_NOEXCEPT;
@@ -141,7 +130,7 @@ PyAPI_FUNC(void) PyThreadState_DeleteCurrent(void) PYSTON_NOEXCEPT;
 
 PyAPI_FUNC(PyThreadState *) PyThreadState_Get(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyThreadState *) PyThreadState_Swap(PyThreadState *) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject *) PyThreadState_GetDict(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PyThreadState_GetDict(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyThreadState_SetAsyncExc(long, PyObject *) PYSTON_NOEXCEPT;
 
 

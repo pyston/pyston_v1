@@ -378,7 +378,7 @@ static void handle_sigprof_investigate_stattimer(int signum) {
 }
 #endif
 
-void initCodegen() {
+extern "C" void Py_Initialize() noexcept {
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
@@ -530,18 +530,5 @@ void teardownCodegen() {
 void printAllIR() {
     assert(0 && "unimplemented");
     fprintf(stderr, "==============\n");
-}
-
-int joinRuntime() {
-    // In the future this will have to wait for non-daemon
-    // threads to finish
-
-    if (PROFILE)
-        g.func_addr_registry.dumpPerfMap();
-
-    teardownRuntime();
-    teardownCodegen();
-
-    return 0;
 }
 }

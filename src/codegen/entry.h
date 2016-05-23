@@ -20,10 +20,8 @@ namespace pyston {
 class AST_Module;
 class BoxedModule;
 
-void initCodegen();
 void teardownCodegen();
 void printAllIR();
-int joinRuntime();
 }
 
 #endif

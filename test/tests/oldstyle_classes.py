@@ -531,3 +531,16 @@ for i in range(2):
     except AttributeError, e:
         print e
     C._ = (lambda s: 42)
+
+class C:
+    pass
+def __getattr__(self, attr):
+    print attr
+    return lambda *args: 1
+
+c = C()
+c.__getattr__ = __getattr__
+try:
+    print c[1]
+except Exception as e:
+    print e.message

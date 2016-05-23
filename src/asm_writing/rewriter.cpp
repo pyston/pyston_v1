@@ -19,7 +19,7 @@
 #include "codegen/unwinding.h"
 #include "core/common.h"
 #include "core/stats.h"
-#include "gc/heap.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -47,6 +47,14 @@ static const assembler::XMMRegister allocatable_xmm_regs[]
     = { assembler::XMM0,  assembler::XMM1,  assembler::XMM2,  assembler::XMM3, assembler::XMM4,  assembler::XMM5,
         assembler::XMM6,  assembler::XMM7,  assembler::XMM8,  assembler::XMM9, assembler::XMM10, assembler::XMM11,
         assembler::XMM12, assembler::XMM13, assembler::XMM14, assembler::XMM15 };
+
+static const Location caller_save_registers[]{
+    assembler::RAX,   assembler::RCX,   assembler::RDX,   assembler::RSI,   assembler::RDI,
+    assembler::R8,    assembler::R9,    assembler::R10,   assembler::R11,   assembler::XMM0,
+    assembler::XMM1,  assembler::XMM2,  assembler::XMM3,  assembler::XMM4,  assembler::XMM5,
+    assembler::XMM6,  assembler::XMM7,  assembler::XMM8,  assembler::XMM9,  assembler::XMM10,
+    assembler::XMM11, assembler::XMM12, assembler::XMM13, assembler::XMM14, assembler::XMM15,
+};
 
 Location Location::forArg(int argnum) {
     assert(argnum >= 0);
@@ -297,7 +305,8 @@ void Rewriter::_slowpathJump(bool condition_eq) {
 }
 
 void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
-    assembler->comment("_addGuard");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_addGuard");
 
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
@@ -328,7 +337,8 @@ void RewriterVar::addGuardNotEq(uint64_t val) {
 }
 
 void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
-    assembler->comment("_addGuardNotEq");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_addGuardNotEq");
 
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
@@ -363,7 +373,8 @@ void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
 }
 
 void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_constant, bool negate) {
-    assembler->comment("_addAttrGuard");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_addAttrGuard");
 
     assert(val_constant->is_constant);
     uint64_t val = val_constant->constant_value;
@@ -411,7 +422,8 @@ RewriterVar* RewriterVar::getAttr(int offset, Location dest, assembler::MovType 
 }
 
 void Rewriter::_getAttr(RewriterVar* result, RewriterVar* ptr, int offset, Location dest, assembler::MovType type) {
-    assembler->comment("_getAttr");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_getAttr");
 
     // TODO if var is a constant, we will end up emitting something like
     //   mov $0x123, %rax
@@ -440,7 +452,8 @@ RewriterVar* RewriterVar::getAttrDouble(int offset, Location dest) {
 }
 
 void Rewriter::_getAttrDouble(RewriterVar* result, RewriterVar* ptr, int offset, Location dest) {
-    assembler->comment("_getAttrDouble");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_getAttrDouble");
 
     assembler::Register ptr_reg = ptr->getInReg();
 
@@ -462,7 +475,8 @@ RewriterVar* RewriterVar::getAttrFloat(int offset, Location dest) {
 }
 
 void Rewriter::_getAttrFloat(RewriterVar* result, RewriterVar* ptr, int offset, Location dest) {
-    assembler->comment("_getAttrFloat");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_getAttrFloat");
 
     assembler::Register ptr_reg = ptr->getInReg();
 
@@ -478,6 +492,130 @@ void Rewriter::_getAttrFloat(RewriterVar* result, RewriterVar* ptr, int offset, 
     assertConsistent();
 }
 
+class Helper {
+public:
+    static void incref(Box* b) { Py_INCREF(b); }
+    static void decref(Box* b) { Py_DECREF(b); }
+    static void xdecref(Box* b) { Py_XDECREF(b); }
+};
+
+void RewriterVar::incref() {
+    rewriter->addAction([=]() {
+        rewriter->_incref(this);
+        this->bumpUse();
+    }, { this }, ActionType::MUTATION);
+}
+
+void RewriterVar::decref() {
+    rewriter->addAction([=]() {
+        rewriter->_decref(this);
+        this->bumpUse();
+    }, { this }, ActionType::MUTATION);
+}
+
+void RewriterVar::xdecref() {
+    rewriter->addAction([=]() {
+        rewriter->_xdecref(this);
+        this->bumpUse();
+    }, { this }, ActionType::MUTATION);
+}
+
+void Rewriter::_incref(RewriterVar* var, int num_refs) {
+    assert(num_refs > 0);
+
+    // Small optimization: skip any time we want to do xincref(NULL)
+    if (var->isConstant() && var->constant_value == 0) {
+        // Maybe we should force people to explicitly annotate NULLs as nullable?
+        // assert(var->nullable);
+        return;
+    }
+
+    assert(!var->nullable);
+// assembler->trap();
+// auto reg = var->getInReg();
+// assembler->incl(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+
+// this->_trap();
+
+// this->_call(NULL, true, (void*)Helper::incref, llvm::ArrayRef<RewriterVar*>(&var, 1),
+// llvm::ArrayRef<RewriterVar*>());
+#ifdef Py_REF_DEBUG
+    // assembler->trap();
+    for (int i = 0; i < num_refs; ++i)
+        assembler->incq(assembler::Immediate(&_Py_RefTotal));
+#endif
+
+    if (var->isConstant() && !Rewriter::isLargeConstant(var->constant_value)) {
+        for (int i = 0; i < num_refs; i++) {
+            assembler->incq(assembler::Immediate((uint64_t)var->constant_value + offsetof(Box, ob_refcnt)));
+        }
+    } else {
+        auto reg = var->getInReg();
+
+        if (num_refs == 1)
+            assembler->incq(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+        else
+            assembler->add(assembler::Immediate(num_refs), assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+    }
+
+    // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
+    // (ie the caller should call bumpUse)
+}
+
+void Rewriter::_decref(RewriterVar* var) {
+    assert(!var->nullable);
+// assembler->trap();
+
+// this->_call(NULL, true, (void*)Helper::decref, llvm::ArrayRef<RewriterVar*>(&var, 1),
+// llvm::ArrayRef<RewriterVar*>(NULL, (int)0));
+
+#ifdef Py_REF_DEBUG
+    // assembler->trap();
+    assembler->decq(assembler::Immediate(&_Py_RefTotal));
+#endif
+
+    _setupCall(true, llvm::ArrayRef<RewriterVar*>(&var, 1), llvm::ArrayRef<RewriterVar*>(NULL, (size_t)0),
+               assembler::RAX);
+
+
+#ifdef Py_REF_DEBUG
+    assembler->mov(assembler::Immediate((void*)assertAlive), assembler::R11);
+    assembler->callq(assembler::R11);
+    assembler->mov(assembler::RAX, assembler::RDI);
+#endif
+    // _setupCall doesn't remember that it added the arg regs to the location set
+    auto reg = assembler::RDI;
+    // auto reg = var->getInReg();
+
+    assembler->decq(assembler::Indirect(reg, offsetof(Box, ob_refcnt)));
+    {
+        assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
+#ifdef Py_TRACE_REFS
+        assembler->mov(assembler::Immediate((void*)_Py_Dealloc), assembler::R11);
+        assembler->callq(assembler::R11);
+#else
+        assembler->movq(assembler::Indirect(reg, offsetof(Box, cls)), assembler::RAX);
+        assembler->callq(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)));
+#endif
+        // assembler->mov(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)), assembler::R11);
+        // assembler->callq(assembler::R11);
+    }
+
+    // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
+    // (ie the caller should call bumpUse)
+}
+
+void Rewriter::_xdecref(RewriterVar* var) {
+    assert(var->nullable);
+    // assembler->trap();
+
+    this->_call(NULL, true, (void*)Helper::xdecref, llvm::ArrayRef<RewriterVar*>(&var, 1),
+                llvm::ArrayRef<RewriterVar*>(NULL, (size_t)0));
+
+    // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
+    // (ie the caller should call bumpUse)
+}
+
 RewriterVar* RewriterVar::cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
@@ -488,7 +626,8 @@ RewriterVar* RewriterVar::cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, L
 }
 
 void Rewriter::_cmp(RewriterVar* result, RewriterVar* v1, AST_TYPE::AST_TYPE cmp_type, RewriterVar* v2, Location dest) {
-    assembler->comment("_cmp");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_cmp");
 
     assembler::Register v1_reg = v1->getInReg();
     assembler::Register v2_reg = v2->getInReg();
@@ -524,7 +663,8 @@ RewriterVar* RewriterVar::toBool(Location dest) {
 }
 
 void Rewriter::_toBool(RewriterVar* result, RewriterVar* var, Location dest) {
-    assembler->comment("_toBool");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_toBool");
 
     assembler::Register this_reg = var->getInReg();
 
@@ -540,14 +680,34 @@ void Rewriter::_toBool(RewriterVar* result, RewriterVar* var, Location dest) {
     assertConsistent();
 }
 
-void RewriterVar::setAttr(int offset, RewriterVar* val) {
+void RewriterVar::setAttr(int offset, RewriterVar* val, SetattrType type) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
+    // Check that the caller promises to handle lifetimes appropriately.
+    // We're only interested in OWNED references, since we are trying to
+    // prevent store-in-array-and-pass situations where the refcounter will
+    // decref between the store and the pass.
+    if (val->reftype == RefType::OWNED)
+        assert(type != SetattrType::UNKNOWN);
     rewriter->addAction([=]() { rewriter->_setAttr(this, offset, val); }, { this, val }, ActionType::MUTATION);
 }
 
+void RewriterVar::replaceAttr(int offset, RewriterVar* val, bool prev_nullable) {
+    RewriterVar* prev = this->getAttr(offset);
+
+    this->setAttr(offset, val, SetattrType::HANDED_OFF);
+    val->refConsumed();
+
+    if (prev_nullable) {
+        prev->setNullable(true);
+        prev->xdecref();
+    } else
+        prev->decref();
+}
+
 void Rewriter::_setAttr(RewriterVar* ptr, int offset, RewriterVar* val) {
-    assembler->comment("_setAttr");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_setAttr");
 
     assembler::Register ptr_reg = ptr->getInReg();
 
@@ -579,6 +739,8 @@ void RewriterVar::dump() {
     printf("RewriterVar at %p: %ld locations:\n", this, locations.size());
     for (Location l : locations)
         l.dump();
+    if (is_constant)
+        printf("Constant value: 0x%lx\n", this->constant_value);
 }
 
 assembler::Immediate RewriterVar::tryGetAsImmediate(bool* is_immediate) {
@@ -590,6 +752,12 @@ assembler::Immediate RewriterVar::tryGetAsImmediate(bool* is_immediate) {
         return assembler::Immediate((uint64_t)0);
     }
 }
+
+#ifndef NDEBUG
+void Rewriter::comment(const llvm::Twine& msg) {
+    addAction([=]() { this->assembler->comment(msg); }, {}, ActionType::NORMAL);
+}
+#endif
 
 assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_reg, Location otherThan) {
     assert(dest.type == Location::Register || dest.type == Location::AnyReg);
@@ -722,21 +890,12 @@ void Rewriter::_trap() {
 }
 
 void Rewriter::addGCReference(void* obj) {
-    assert(gc::isValidGCObject(obj));
+    Py_INCREF((Box*)obj);
     gc_references.push_back(obj);
 }
 
 RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
-
-#if MOVING_GC
-    // Moving GCs need to know all existing references in the program, including those that end
-    // up in compiled code.
-    auto al = gc::global_heap.getAllocationFromInteriorPointer((void*)val);
-    if (al) {
-        gc_references.push_back(al->user_data);
-    }
-#endif
 
     for (auto& p : const_loader.consts) {
         if (p.first != val)
@@ -814,14 +973,6 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar*
     return call(has_side_effects, func_addr, args, args_xmm);
 }
 
-static const Location caller_save_registers[]{
-    assembler::RAX,   assembler::RCX,   assembler::RDX,   assembler::RSI,   assembler::RDI,
-    assembler::R8,    assembler::R9,    assembler::R10,   assembler::R11,   assembler::XMM0,
-    assembler::XMM1,  assembler::XMM2,  assembler::XMM3,  assembler::XMM4,  assembler::XMM5,
-    assembler::XMM6,  assembler::XMM7,  assembler::XMM8,  assembler::XMM9,  assembler::XMM10,
-    assembler::XMM11, assembler::XMM12, assembler::XMM13, assembler::XMM14, assembler::XMM15,
-};
-
 RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
                             const RewriterVar::SmallVector& args_xmm) {
     RewriterVar* result = createNewVar();
@@ -857,6 +1008,10 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const Rewrit
     addAction([args_size, xmm_args_size, has_side_effects, this, result, func_addr, _args, _args_xmm]() {
         this->_call(result, has_side_effects, func_addr, llvm::ArrayRef<RewriterVar*>(_args, args_size),
                     llvm::ArrayRef<RewriterVar*>(_args_xmm, xmm_args_size));
+        for (int i = 0; i < args_size; i++)
+            _args[i]->bumpUse();
+        for (int i = 0; i < xmm_args_size; i++)
+            _args_xmm[i]->bumpUse();
     }, uses, type);
 
     return result;
@@ -880,7 +1035,7 @@ void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> ar
         assert(assembler->bytesWritten() >= IC_INVALDITION_HEADER_SIZE);
     }
 
-    if (has_side_effects) {
+    if (has_side_effects && needs_invalidation_support) {
         if (!marked_inside_ic) {
             uintptr_t counter_addr = (uintptr_t)(&picked_slot->num_inside);
             if (isLargeConstant(counter_addr)) {
@@ -1013,7 +1168,8 @@ void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> ar
 
 void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
                      llvm::ArrayRef<RewriterVar*> args_xmm) {
-    assembler->comment("_call");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_call");
 
     // RewriterVarUsage scratch = createNewVar(Location::any());
     assembler::Register r = allocReg(assembler::R11);
@@ -1022,12 +1178,15 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
 
     _setupCall(has_side_effects, args, args_xmm, assembler::R11);
 
+    // This duty is now on the caller:
+    /*
     for (RewriterVar* arg : args) {
         arg->bumpUse();
     }
     for (RewriterVar* arg_xmm : args_xmm) {
         arg_xmm->bumpUse();
     }
+    */
 
     assertConsistent();
 
@@ -1045,14 +1204,65 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
         assert(assembler->hasFailed() || asm_address == (uint64_t)assembler->curInstPointer());
     }
 
+    // TODO: we don't need to generate the decref info for calls which can't throw
+    registerDecrefInfoHere();
+
     if (!failed) {
         assert(vars_by_location.count(assembler::RAX) == 0);
-        result->initializeInReg(assembler::RAX);
 
+        if (result)
+            result->initializeInReg(assembler::RAX);
         assertConsistent();
     }
 
-    result->releaseIfNoUses();
+    if (result)
+        result->releaseIfNoUses();
+}
+
+std::vector<Location> Rewriter::getDecrefLocations() {
+    std::vector<Location> decref_infos;
+    for (RewriterVar& var : vars) {
+        if (var.locations.size() && var.needsDecref()) {
+            // TODO: add code to handle other location types and choose best location if there are several
+            Location l = *var.locations.begin();
+            if (l.type == Location::Scratch) {
+                // convert to stack based location because later on we may not know the offset of the scratch area from
+                // the SP.
+                decref_infos.emplace_back(Location::Stack, indirectFor(l).offset);
+            } else if (l.type == Location::Register) {
+                // CSRs shouldn't be getting allocated, and we should only be calling this at a callsite:
+                RELEASE_ASSERT(0, "we shouldn't be trying to decref anything in a register");
+            } else
+                RELEASE_ASSERT(0, "not implemented");
+        }
+    }
+
+    for (auto&& p : owned_attrs) {
+        RewriterVar* var = p.first;
+
+        // If you forget to call deregisterOwnedAttr(), and then later do something that needs to emit decref info,
+        // we will try to emit the info for that owned attr even though the rewriter has decided that it doesn't need
+        // to keep it alive any more.
+        ASSERT(var->locations.size() > 0,
+               "owned variable not accessible any more -- maybe forgot to call deregisterOwnedAttr?");
+        ASSERT(var->locations.size() == 1, "this code only looks at one location");
+        Location l = *var->locations.begin();
+
+        assert(l.type == Location::Scratch);
+
+        int offset1 = indirectFor(l).offset;
+        int offset2 = p.second;
+        decref_infos.emplace_back(Location::StackIndirect, offset1, offset2);
+    }
+
+    return decref_infos;
+}
+
+void Rewriter::registerDecrefInfoHere() {
+    std::vector<Location> decref_locations = getDecrefLocations();
+    auto call_offset = assembler->bytesWritten();
+    uint64_t ip = (uint64_t)rewrite->getSlotStart() + call_offset;
+    decref_infos.emplace_back(std::make_pair(ip, std::move(decref_locations)));
 }
 
 void Rewriter::abort() {
@@ -1062,8 +1272,90 @@ void Rewriter::abort() {
     finished = true;
     rewrite->abort();
 
+    for (auto p : gc_references) {
+        Py_DECREF(p);
+    }
+    gc_references.clear();
+
     static StatCounter ic_rewrites_aborted("ic_rewrites_aborted");
     ic_rewrites_aborted.log();
+}
+
+bool RewriterVar::refHandedOff() {
+    return this->reftype == RefType::OWNED && this->num_refs_consumed > 0
+           && this->last_refconsumed_numuses == this->uses.size();
+}
+
+RewriterVar* RewriterVar::setType(RefType type) {
+    assert(type != RefType::UNKNOWN);
+    assert(this->reftype == RefType::UNKNOWN || this->reftype == type);
+
+    if (this->reftype == RefType::UNKNOWN) {
+        this->reftype = type;
+    }
+
+    return this;
+}
+
+void RewriterVar::_release() {
+    if (reftype == RefType::OWNED && !this->refHandedOff()) {
+        if (nullable)
+            this->rewriter->_xdecref(this);
+        else
+            this->rewriter->_decref(this);
+    }
+
+    for (Location loc : locations) {
+        rewriter->vars_by_location.erase(loc);
+    }
+
+    // releases allocated scratch space
+    if (hasScratchAllocation()) {
+        for (int i = 0; i < scratch_allocation.second; ++i) {
+            Location l = Location(Location::Scratch, (scratch_allocation.first + i) * 8);
+            assert(rewriter->vars_by_location[l] == LOCATION_PLACEHOLDER);
+            rewriter->vars_by_location.erase(l);
+        }
+        resetHasScratchAllocation();
+    }
+
+    this->locations.clear();
+}
+
+void RewriterVar::refConsumed(RewriterAction* action) {
+    assert(reftype != RefType::UNKNOWN || (isConstant() && constant_value == 0));
+    num_refs_consumed++;
+    last_refconsumed_numuses = uses.size();
+    if (!action)
+        action = rewriter->getLastAction();
+    action->consumed_refs.emplace_back(this);
+}
+
+void RewriterVar::refUsed() {
+    // TODO: This is a pretty silly implementation that might prevent other optimizations?
+    rewriter->addAction([=]() { this->bumpUse(); }, { this }, ActionType::NORMAL);
+}
+
+bool RewriterVar::needsDecref() {
+    return reftype == RefType::OWNED && !this->refHandedOff();
+}
+
+void RewriterVar::registerOwnedAttr(int byte_offset) {
+    rewriter->addAction([=]() {
+        auto p = std::make_pair(this, byte_offset);
+        assert(!this->rewriter->owned_attrs.count(p));
+        this->rewriter->owned_attrs.insert(p);
+        this->bumpUse();
+    }, { this }, ActionType::NORMAL);
+}
+
+void RewriterVar::deregisterOwnedAttr(int byte_offset) {
+    rewriter->addAction([=]() {
+        auto p = std::make_pair(this, byte_offset);
+        assert(this->rewriter->owned_attrs.count(p));
+        this->rewriter->owned_attrs.erase(p);
+        this->bumpUse();
+    }, { this }, ActionType::NORMAL);
 }
 
 void RewriterVar::bumpUse() {
@@ -1077,51 +1369,27 @@ void RewriterVar::bumpUse() {
             return;
         }
 
-        for (Location loc : locations) {
-            rewriter->vars_by_location.erase(loc);
-        }
-
-        // releases allocated scratch space
-        if (hasScratchAllocation()) {
-            for (int i = 0; i < scratch_allocation.second; ++i) {
-                Location l = Location(Location::Scratch, (scratch_allocation.first + i) * 8);
-                assert(rewriter->vars_by_location[l] == LOCATION_PLACEHOLDER);
-                rewriter->vars_by_location.erase(l);
-            }
-            resetHasScratchAllocation();
-        }
-
-        this->locations.clear();
+        this->_release();
     }
 }
 
-// Call this on the result at the end of the action in which it's created
-// TODO we should have a better way of dealing with variables that have 0 uses
 void RewriterVar::releaseIfNoUses() {
     rewriter->assertPhaseEmitting();
 
     if (uses.size() == 0) {
         assert(next_use == 0);
-        for (Location loc : locations) {
-            rewriter->vars_by_location.erase(loc);
-        }
 
-        // releases allocated scratch space
-        if (hasScratchAllocation()) {
-            for (int i = 0; i < scratch_allocation.second; ++i) {
-                Location l = Location(Location::Scratch, (scratch_allocation.first + i) * 8);
-                assert(rewriter->vars_by_location[l] == LOCATION_PLACEHOLDER);
-                rewriter->vars_by_location.erase(l);
-            }
-            resetHasScratchAllocation();
-        }
-
-        this->locations.clear();
+        this->_release();
     }
 }
 
 void Rewriter::commit() {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
+
+    // The rewriter could add decrefs here, but for now let's make the user add them explicitly
+    // and then call deregisterOwnedAttr().  Making people call it explicitly reduces the chances
+    // of bugs only in the exceptional path, from forgetting to call deregisterOwnedAttr.
+    assert(!owned_attrs.size() && "missing a call to deregisterOwnedAttr");
 
     assert(!finished);
     initPhaseEmitting();
@@ -1133,6 +1401,16 @@ void Rewriter::commit() {
         ic_rewrites_aborted_failed.log();
         this->abort();
         return;
+    }
+
+    for (auto p : gc_references) {
+        if (Py_REFCNT(p) == 1) {
+            // we hold the only ref to this object
+            assert(0 && "untested");
+
+            this->abort();
+            return;
+        }
     }
 
     auto on_assemblyfail = [&]() {
@@ -1178,12 +1456,10 @@ void Rewriter::commit() {
         done_guarding = true;
         for (RewriterVar* arg : args) {
             if (arg->next_use == arg->uses.size()) {
-                for (Location loc : arg->locations) {
-                    vars_by_location.erase(loc);
-                }
-                arg->locations.clear();
+                arg->_release();
             }
         }
+
         assertConsistent();
     };
 
@@ -1199,6 +1475,21 @@ void Rewriter::commit() {
 
     // Now, start emitting assembly; check if we're dong guarding after each.
     for (int i = 0; i < actions.size(); i++) {
+        // add increfs if required
+        for (auto&& var : actions[i].consumed_refs) {
+            if (var->refHandedOff()) {
+                // if this action is the one which the variable gets handed off we don't need to do anything
+                assert(var->last_refconsumed_numuses > 0 && var->last_refconsumed_numuses <= var->uses.size());
+                int last_used_action_id = var->uses[var->last_refconsumed_numuses - 1];
+                if (last_used_action_id == i)
+                    continue;
+                assert(last_used_action_id >= i);
+            }
+
+            assert(isDoneGuarding());
+            _incref(var, 1);
+        }
+
         actions[i].action();
 
         if (failed) {
@@ -1214,7 +1505,10 @@ void Rewriter::commit() {
     }
 
     if (marked_inside_ic) {
-        assembler->comment("mark inside ic");
+        if (LOG_IC_ASSEMBLY)
+            assembler->comment("mark inside ic");
+
+        ASSERT(this->needs_invalidation_support, "why did we mark ourselves as inside this?");
 
         uintptr_t counter_addr = (uintptr_t)(&picked_slot->num_inside);
         if (isLargeConstant(counter_addr)) {
@@ -1226,7 +1520,8 @@ void Rewriter::commit() {
         }
     }
 
-    assembler->comment("live outs");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("live outs");
 
 // Make sure that we have been calling bumpUse correctly.
 // All uses should have been accounted for, other than the live outs
@@ -1325,11 +1620,21 @@ void Rewriter::commit() {
         RewriterVar* var = live_outs[i];
         assert(var->isInLocation(ru));
     }
+#endif
 
     for (RewriterVar* live_out : live_outs) {
+        assert(live_out->reftype == RefType::UNKNOWN); // Otherwise the automatic refcounting might get it wrong
         live_out->bumpUse();
     }
 
+#ifndef NDEBUG
+    // Now we should be completely done with calling bumpUse
+    for (RewriterVar& var : vars) {
+        assert(var.next_use == var.uses.size());
+    }
+#endif
+
+#ifndef NDEBUG
     // At this point, all real variables should have been removed. Check that
     // anything left is the fake LOCATION_PLACEHOLDER.
     for (std::pair<Location, RewriterVar*> p : vars_by_location.getAsMap()) {
@@ -1345,13 +1650,14 @@ void Rewriter::commit() {
     uint64_t asm_size_bytes = assembler->bytesWritten();
 #ifndef NDEBUG
     std::string asm_dump;
-    if (ASSEMBLY_LOGGING) {
+    if (LOG_IC_ASSEMBLY) {
         assembler->comment("size in bytes: " + std::to_string(asm_size_bytes));
         asm_dump = assembler->dump();
     }
 #endif
 
-    rewrite->commit(this, std::move(gc_references));
+    rewrite->commit(this, std::move(gc_references), std::move(decref_infos));
+    assert(gc_references.empty());
 
     if (assembler->hasFailed()) {
         on_assemblyfail();
@@ -1361,7 +1667,7 @@ void Rewriter::commit() {
     finished = true;
 
 #ifndef NDEBUG
-    if (ASSEMBLY_LOGGING) {
+    if (LOG_IC_ASSEMBLY) {
         fprintf(stderr, "%s\n\n", asm_dump.c_str());
     }
 #endif
@@ -1386,8 +1692,28 @@ bool Rewriter::finishAssembly(int continue_offset) {
 void Rewriter::commitReturning(RewriterVar* var) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
+    ASSERT(var->reftype != RefType::UNKNOWN, "%p", var);
+
     addAction([=]() {
-        assembler->comment("commitReturning");
+        if (LOG_IC_ASSEMBLY)
+            assembler->comment("commitReturning");
+        var->getInReg(getReturnDestination(), true /* allow_constant_in_reg */);
+        var->bumpUse();
+    }, { var }, ActionType::NORMAL);
+
+    var->refConsumed();
+
+    commit();
+}
+
+void Rewriter::commitReturningNonPython(RewriterVar* var) {
+    STAT_TIMER(t0, "us_timer_rewriter", 10);
+
+    assert(var->reftype == RefType::UNKNOWN);
+
+    addAction([=]() {
+        if (LOG_IC_ASSEMBLY)
+            assembler->comment("commitReturning");
         var->getInReg(getReturnDestination(), true /* allow_constant_in_reg */);
         var->bumpUse();
     }, { var }, ActionType::NORMAL);
@@ -1397,16 +1723,6 @@ void Rewriter::commitReturning(RewriterVar* var) {
 
 void Rewriter::addDependenceOn(ICInvalidator& invalidator) {
     rewrite->addDependenceOn(invalidator);
-}
-
-void Rewriter::gc_visit(GCVisitor* visitor) {
-    rewrite->gc_visit(visitor);
-
-    // A GC could happen during a rewrite, so we need to scan the list of references
-    // both as it is being built and after the rewrite commits.
-    for (auto& reference : gc_references) {
-        visitor->visitNonRelocatable(reference);
-    }
 }
 
 Location Rewriter::allocScratch() {
@@ -1432,7 +1748,8 @@ RewriterVar* Rewriter::add(RewriterVar* a, int64_t b, Location dest) {
 }
 
 void Rewriter::_add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest) {
-    assembler->comment("_add");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_add");
 
     // TODO better reg alloc (e.g., mov `a` directly to the dest reg)
 
@@ -1464,7 +1781,8 @@ RewriterVar* Rewriter::allocate(int n) {
 }
 
 int Rewriter::_allocate(RewriterVar* result, int n) {
-    assembler->comment("_allocate");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_allocate");
 
     assert(n >= 1);
 
@@ -1516,7 +1834,8 @@ RewriterVar* Rewriter::allocateAndCopy(RewriterVar* array_ptr, int n) {
 }
 
 void Rewriter::_allocateAndCopy(RewriterVar* result, RewriterVar* array_ptr, int n) {
-    assembler->comment("_allocateAndCopy");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_allocateAndCopy");
 
     // TODO smart register allocation
 
@@ -1556,7 +1875,8 @@ RewriterVar* Rewriter::allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar
 }
 
 void Rewriter::_allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_elem, RewriterVar* rest_ptr, int n_rest) {
-    assembler->comment("_allocateAndCopyPlus1");
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_allocateAndCopyPlus1");
 
     int offset = _allocate(result, n_rest + 1);
 
@@ -1582,25 +1902,30 @@ void Rewriter::_allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_ele
     assertConsistent();
 }
 
-void Rewriter::checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val) {
+void Rewriter::checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val, assembler::MovType type) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
-    addAction([=]() { this->_checkAndThrowCAPIException(r, exc_val); }, { r }, ActionType::MUTATION);
+    addAction([=]() { this->_checkAndThrowCAPIException(r, exc_val, type); }, { r }, ActionType::MUTATION);
 }
 
-void Rewriter::_checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val) {
-    assembler->comment("_checkAndThrowCAPIException");
+void Rewriter::_checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val, assembler::MovType type) {
+    if (LOG_IC_ASSEMBLY)
+        assembler->comment("_checkAndThrowCAPIException");
 
     assembler::Register var_reg = r->getInReg();
-    if (exc_val == 0)
+    if (exc_val == 0) {
+        RELEASE_ASSERT(type == assembler::MovType::Q, "unimplemented");
         assembler->test(var_reg, var_reg);
-    else
-        assembler->cmp(var_reg, assembler::Immediate(exc_val));
+    } else
+        assembler->cmp(var_reg, assembler::Immediate(exc_val), type);
 
+    _setupCall(false, RewriterVar::SmallVector(), RewriterVar::SmallVector());
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
         assembler->mov(assembler::Immediate((void*)throwCAPIException), assembler::R11);
         assembler->callq(assembler::R11);
+
+        registerDecrefInfoHere();
     }
 
     r->bumpUse();
@@ -1689,7 +2014,14 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
                 if (!done_guarding && var->is_arg && var->arg_loc == Location(reg)) {
                     continue;
                 }
-                if (var->uses[var->next_use] > best) {
+
+                if (var->next_use == var->uses.size()) {
+                    // If we found a variable that is dead but somehow occupying a location,
+                    // don't touch it.
+                    // This could be something that we are actively working on decref'ing.
+
+                    continue;
+                } else if (var->uses[var->next_use] > best) {
                     found = true;
                     best = var->uses[var->next_use];
                     best_reg = reg;
@@ -1845,13 +2177,15 @@ TypeRecorder* Rewriter::getTypeRecorder() {
     return rewrite->getTypeRecorder();
 }
 
-Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs)
+Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs,
+                   bool needs_invalidation_support)
     : rewrite(std::move(rewrite)),
       assembler(this->rewrite->getAssembler()),
       picked_slot(NULL),
       const_loader(this),
       return_location(this->rewrite->returnRegister()),
       failed(false),
+      needs_invalidation_support(needs_invalidation_support),
       added_changing_action(false),
       marked_inside_ic(false),
       done_guarding(false),
@@ -2190,17 +2524,5 @@ PatchpointInitializationInfo initializePatchpoint3(void* slowpath_func, uint8_t*
     assert(!assem.hasFailed());
 
     return PatchpointInitializationInfo(slowpath_start, slowpath_rtn_addr, continue_addr, std::move(live_outs));
-}
-
-void* Rewriter::RegionAllocator::alloc(size_t bytes) {
-    assert(bytes <= BLOCK_SIZE);
-    if (cur_offset + bytes > BLOCK_SIZE) {
-        blocks.emplace_back();
-        cur_offset = 0;
-    }
-
-    char* rtn = blocks.back() + cur_offset;
-    cur_offset += bytes;
-    return rtn;
 }
 }

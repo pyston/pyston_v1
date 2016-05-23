@@ -32,21 +32,32 @@ public:
     Box* obj;             // "the instance invoking super(); make be None"
     BoxedClass* obj_type; // "the type of the instance invoking super(); may be None"
 
-    BoxedSuper(BoxedClass* type, Box* obj, BoxedClass* obj_type) : type(type), obj(obj), obj_type(obj_type) {}
+    BoxedSuper(BoxedClass* type, Box* obj, BoxedClass* obj_type) : type(type), obj(obj), obj_type(obj_type) {
+        Py_INCREF(type);
+        Py_INCREF(obj);
+        Py_INCREF(obj_type);
+    }
 
     DEFAULT_CLASS(super_cls);
 
-    static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == super_cls);
-        BoxedSuper* o = static_cast<BoxedSuper*>(_o);
+    static void dealloc(Box* b) noexcept {
+        BoxedSuper* self = (BoxedSuper*)b;
 
-        Box::gcHandler(v, o);
-        if (o->type)
-            v->visit(&o->type);
-        if (o->obj)
-            v->visit(&o->obj);
-        if (o->obj_type)
-            v->visit(&o->obj_type);
+        _PyObject_GC_UNTRACK(self);
+        Py_XDECREF(self->obj);
+        Py_XDECREF(self->type);
+        Py_XDECREF(self->obj_type);
+
+        Py_TYPE(self)->tp_free(self);
+    }
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept {
+        BoxedSuper* su = (BoxedSuper*)self;
+
+        Py_VISIT(su->obj);
+        Py_VISIT(su->type);
+        Py_VISIT(su->obj_type);
+
+        return 0;
     }
 };
 
@@ -157,7 +168,8 @@ Box* superRepr(Box* _s) {
 
 
 // Ported from the CPython version:
-template <ExceptionStyle S> BoxedClass* superCheck(BoxedClass* type, Box* obj) noexcept(S == CAPI) {
+// TODO: this returns an owned ref in cpython
+template <ExceptionStyle S> BORROWED(BoxedClass*) superCheck(BoxedClass* type, Box* obj) noexcept(S == CAPI) {
     if (PyType_Check(obj) && isSubclass(static_cast<BoxedClass*>(obj), type))
         return static_cast<BoxedClass*>(obj);
 
@@ -165,7 +177,7 @@ template <ExceptionStyle S> BoxedClass* superCheck(BoxedClass* type, Box* obj) n
         return obj->cls;
     }
 
-    static BoxedString* class_str = internStringImmortal("__class__");
+    static BoxedString* class_str = getStaticString("__class__");
     Box* class_attr = obj->getattr(class_str);
     if (class_attr && PyType_Check(class_attr) && class_attr != obj->cls) {
         Py_FatalError("warning: this path never tested"); // blindly copied from CPython
@@ -185,7 +197,7 @@ static PyObject* superGet(PyObject* _self, PyObject* obj, PyObject* type) noexce
 
     if (obj == NULL || obj == None || self->obj != NULL) {
         /* Not binding to an object, or already bound */
-        return self;
+        return incref(self);
     }
     if (self->cls != super_cls) {
         /* If self is an instance of a (strict) subclass of super,
@@ -212,19 +224,33 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
     BoxedClass* obj_type = NULL;
     if (obj == None)
         obj = NULL;
-    if (obj != NULL)
+    if (obj != NULL) {
         obj_type = superCheck<CXX>(type, obj);
 
-    self->type = type;
+        if (!obj_type)
+            throwCAPIException();
+
+        incref(obj);
+        incref(obj_type);
+    }
+
+    Box* old_type = self->type;
+    Box* old_obj = self->obj;
+    Box* old_obj_type = self->obj_type;
+    self->type = incref(type);
     self->obj = obj;
     self->obj_type = obj_type;
+    Py_XDECREF(old_type);
+    Py_XDECREF(old_obj);
+    Py_XDECREF(old_obj_type);
 
-    return None;
+    return incref(None);
 }
 
 void setupSuper() {
     super_cls
-        = BoxedClass::create(type_cls, object_cls, &BoxedSuper::gcHandler, 0, 0, sizeof(BoxedSuper), false, "super");
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSuper), false, "super", true,
+                             (destructor)BoxedSuper::dealloc, NULL, true, (traverseproc)BoxedSuper::traverse, NOCLEAR);
 
     // super_cls->giveAttr("__getattribute__", new BoxedFunction(FunctionMetadata::create((void*)superGetattribute,
     // UNKNOWN, 2)));

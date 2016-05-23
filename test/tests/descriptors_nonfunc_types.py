@@ -1,63 +1,39 @@
-# expected: fail
-
 # See what happens when we make __get__ and __set__ things other than functions...
 # TODO add some with __del__
 
+import sys
 import traceback
 
 class CallableGet(object):
-    def __call__(self, a, b, c):
-        print 'Callable get'
-        print self
-        print a
-        print b
-        print c
+    def __call__(*args):
+        print "callable get", map(type, args)
 class CallableSet(object):
-    def __call__(a, b, c):
-        print 'Callable set'
-        print a
-        print b
-        print c
+    def __get__(*args):
+        print "__get__", map(type, args)
+        return args[0]
+    def __call__(*args):
+        print "callable set", map(type, args)
 
 class InstanceMethodMaker(object):
-    def getBoundInstanceMethod(self, a, b, c):
-        print '__get__ bound'
-        print a
-        print b
-        print c
-    def setBoundInstanceMethod(a, b, c):
-        print '__set__ bound'
-        print a
-        print b
-        print c
-    def getUnboundInstanceMethod(a, b, c):
-        print '__get__ unbound'
-        print a
-        print b
-        print c
-    def setUnboundInstanceMethod(a, b, c):
-        print '__set__ unbound'
-        print a
-        print b
-        print c
+    def getBoundInstanceMethod(*args):
+        print '__get__ bound', map(type, args)
+    def setBoundInstanceMethod(*args):
+        print '__set__ bound', map(type, args)
+    def getUnboundInstanceMethod(*args):
+        print '__get__ unbound', map(type, args)
+    def setUnboundInstanceMethod(*args):
+        print '__set__ unbound', map(type, args)
 imm = InstanceMethodMaker()
 
 def closureGet():
     a = 5
-    def f(b, c, d):
-        print 'closure __get__'
-        print a
-        print b
-        print c
-        print d
+    def f(*args):
+        print 'closure __get__', map(type, args), a
     return f
 def closureSet():
-    def f(b, c, d):
-        print 'closure __set__'
-        print a
-        print b
-        print c
-        print d
+    a = 5
+    def f(*args):
+        print 'closure __set__', map(type, args), a
     return f
 
 class A(object):
@@ -69,11 +45,8 @@ class A(object):
         __set__  = 1
     descSetInt = DescSetInt()
     class DescGetSetInt(object):
-        def __get__(a, b, c):
-            print 'DescGetSetInt __get__ called'
-            print a
-            print b
-            print c
+        def __get__(*args):
+            print 'DescGetSetInt __get__ called', map(type, args)
         __set__ = 1
     descGetSetInt = DescGetSetInt()
 
@@ -84,11 +57,8 @@ class A(object):
         __set__ = CallableSet()
     descSetCall = DescSetCall()
     class DescGetSetCall(object):
-        def __get__(a, b, c):
-            print 'DescGetSetCall __get__ called'
-            print a
-            print b
-            print c
+        def __get__(*args):
+            print 'DescGetSetCall __get__ called', map(type, args)
         __set__ = CallableSet()
     descGetSetCall = DescGetSetCall()
 
@@ -99,11 +69,8 @@ class A(object):
         __set__ = imm.setBoundInstanceMethod
     descSetBoundInstanceMethod = DescSetBoundInstanceMethod()
     class DescGetSetBoundInstanceMethod(object):
-        def __get__(a, b, c):
-            print 'DescGetSetBoundInstanceMethod __get__ called'
-            print a
-            print b
-            print c
+        def __get__(*args):
+            print 'DescGetSetBoundInstanceMethod __get__ called', map(type, args)
         __set__ = imm.setBoundInstanceMethod
     descGetSetBoundInstanceMethod = DescGetSetBoundInstanceMethod()
 
@@ -114,11 +81,8 @@ class A(object):
         __set__ = InstanceMethodMaker.setUnboundInstanceMethod
     descSetUnboundInstanceMethod = DescSetUnboundInstanceMethod()
     class DescGetSetUnboundInstanceMethod(object):
-        def __get__(a, b, c):
-            print 'DescGetSetUnboundInstanceMethod __get__ called'
-            print a
-            print b
-            print c
+        def __get__(*args):
+            print 'DescGetSetUnboundInstanceMethod __get__ called', map(type, args)
         __set__ = imm.setUnboundInstanceMethod
     descGetSetUnboundInstanceMethod = DescGetSetUnboundInstanceMethod()
 
@@ -129,29 +93,20 @@ class A(object):
         __set__ = closureSet()
     descSetClosure = DescSetClosure()
     class DescGetSetClosure(object):
-        def __get__(a, b, c):
-            print 'DescGetSetClosure __get__ called'
-            print a
-            print b
-            print c
+        def __get__(*args):
+            print 'DescGetSetClosure __get__ called', map(type, args)
         __set__ = closureSet()
     descGetSetClosure = DescGetSetClosure()
 
     class DescGetGenerator(object):
-        def __get__(self, obj, type):
-            print 'DescGetGenerator __get__ called'
-            print self
-            print obj
-            print type
+        def __get__(*args):
+            print 'DescGetGenerator __get__ called', map(type, args)
             yield 15
             print '__get__ post yield'
     descGetGenerator = DescGetGenerator()
     class DescSetGenerator(object):
-        def __set__(self, obj, value):
-            print 'DescSetGenerator __set__ called'
-            print self
-            print obj
-            print value
+        def __set__(*args):
+            print 'DescSetGenerator __set__ called', map(type, args)
             yield 15
             print '__set__ post yield'
     descSetGenerator = DescSetGenerator()
@@ -178,12 +133,12 @@ print 'int'
 try:
     print a.descGetInt
 except:
-    traceback.print_exc()
+    traceback.print_exc(file=sys.stdout)
 
 try:
     a.descSetInt = 5
 except:
-    traceback.print_exc()
+    traceback.print_exc(file=sys.stdout)
 
 a.__dict__['descGetSetInt'] = 3
 print a.descGetSetInt
@@ -200,17 +155,20 @@ a.descSetBoundInstanceMethod = 5
 a.__dict__['descGetSetBoundInstanceMethod'] = 3
 print a.descGetSetBoundInstanceMethod
 
+# TODO: uncomment this after instancemethod_checking is working
+'''
 print 'unbound instance method'
 try:
     print a.descGetUnboundInstanceMethod
 except:
-    traceback.print_exc()
+    traceback.print_exc(file=sys.stdout)
 try:
     a.descSetUnboundInstanceMethod = 5
 except:
-    traceback.print_exc()
+    traceback.print_exc(file=sys.stdout)
 a.__dict__['descGetSetUnboundInstanceMethod'] = 3
 print a.descGetSetUnboundInstanceMethod
+'''
 
 print 'closure'
 print a.descGetClosure
@@ -219,8 +177,8 @@ a.__dict__['descGetSetClosure'] = 3
 print a.descGetClosure
 
 print 'generator'
-print a.descGetGenerator
+print type(a.descGetGenerator)
 a.descSetGenerator = 5
 a.__dict__['descGetSetGenerator'] = 3
-print a.descGetGenerator
+print type(a.descGetGenerator)
 

@@ -87,25 +87,22 @@ private:
     void emitRex(uint8_t rex);
     void emitModRM(uint8_t mod, uint8_t reg, uint8_t rm);
     void emitSIB(uint8_t scalebits, uint8_t index, uint8_t base);
-    void emitArith(Immediate imm, Register reg, int opcode);
+    void emitArith(Immediate imm, Register reg, int opcode, MovType type = MovType::Q);
+    void emitArith(Immediate imm, Indirect mem, int opcode);
 
-    int getModeFromOffset(int offset) const;
+    int getModeFromOffset(int offset, int reg_idx) const;
 
 public:
     Assembler(uint8_t* start, int size) : start_addr(start), end_addr(start + size), addr(start_addr), failed(false) {}
 
 #ifndef NDEBUG
-    inline void comment(const llvm::Twine& msg) {
-        if (ASSEMBLY_LOGGING) {
-            logger.log_comment(msg, addr - start_addr);
-        }
-    }
-    inline std::string dump() {
-        if (ASSEMBLY_LOGGING) {
-            return logger.finalize_log(start_addr, addr);
-        } else {
-            return "";
-        }
+    inline void comment(const llvm::Twine& msg) { logger.log_comment(msg, addr - start_addr); }
+    inline std::string dump() { return logger.finalize_log(start_addr, addr); }
+    // Dumps the assembly but with the start address overridden, so
+    // that we can dump the assembly (with comments) after the code has
+    // been relocated.
+    inline std::string dump(uint8_t* from_addr) {
+        return logger.finalize_log(from_addr, from_addr + (addr - start_addr));
     }
 #else
     inline void comment(const llvm::Twine& msg) {}
@@ -153,22 +150,28 @@ public:
     void pop(Register reg);
 
     void add(Immediate imm, Register reg);
+    void add(Immediate imm, Indirect mem);
     void sub(Immediate imm, Register reg);
 
     void incl(Indirect mem);
     void decl(Indirect mem);
-
     void incl(Immediate mem);
     void decl(Immediate mem);
+    void incq(Indirect mem);
+    void decq(Indirect mem);
+    void incq(Immediate mem);
+    void decq(Immediate mem);
 
     void call(Immediate imm); // the value is the offset
     void callq(Register reg);
+    void callq(Indirect reg);
     void retq();
     void leave();
 
     void cmp(Register reg1, Register reg2);
-    void cmp(Register reg, Immediate imm);
+    void cmp(Register reg, Immediate imm, MovType type = MovType::Q);
     void cmp(Indirect mem, Immediate imm, MovType type = MovType::Q);
+    void cmpl(Register reg, Immediate imm) { return cmp(reg, imm, MovType::L); }
     void cmpl(Indirect mem, Immediate imm) { return cmp(mem, imm, MovType::L); }
     void cmp(Indirect mem, Register reg);
 
@@ -212,17 +215,20 @@ public:
 // This class helps generating a forward jump with a relative offset.
 // It keeps track of the current assembler offset at construction time and in the destructor patches the
 // generated conditional jump with the correct offset depending on the number of bytes emitted in between.
-class ForwardJump {
+template <int MaxJumpSize = 128> class ForwardJumpBase {
 private:
-    const int max_jump_size = 128;
     Assembler& assembler;
     ConditionCode condition;
     uint8_t* jmp_inst;
+    uint8_t* jmp_end;
 
 public:
-    ForwardJump(Assembler& assembler, ConditionCode condition);
-    ~ForwardJump();
+    ForwardJumpBase(Assembler& assembler, ConditionCode condition);
+    ~ForwardJumpBase();
 };
+
+#define ForwardJump ForwardJumpBase<128>
+#define LargeForwardJump ForwardJumpBase<1048576>
 
 uint8_t* initializePatchpoint2(uint8_t* start_addr, uint8_t* slowpath_start, uint8_t* end_addr, StackInfo stack_info,
                                const std::unordered_set<int>& live_outs);

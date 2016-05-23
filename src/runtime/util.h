@@ -44,7 +44,7 @@ void adjustNegativeIndicesOnObject(Box* obj, i64* start, i64* stop) noexcept;
 // Ensure stop >= start and remain within bounds.
 void boundSliceWithLength(i64* start_out, i64* stop_out, i64 start, i64 stop, i64 size);
 
-Box* noneIfNull(Box* b);
+BORROWED(Box*) noneIfNull(Box* b);
 Box* boxStringOrNone(const char* s);
 Box* boxStringFromCharPtr(const char* s);
 

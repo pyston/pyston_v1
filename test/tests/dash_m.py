@@ -15,9 +15,9 @@ with open('/dev/null')as ignore:
         print p.returncode
 
     # just prints out the usage
-    run(["-m", "pydoc"])
+    run(["-Sm", "pydoc"])
 
-    run(["-m", "doesnt_exist"])
+    run(["-Sm", "doesnt_exist"])
 
     os.environ["PYTHONPATH"] = os.path.dirname(__file__)
-    run(["-m", "import_target"])
+    run(["-Sm", "import_target"])

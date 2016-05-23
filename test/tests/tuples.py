@@ -260,3 +260,6 @@ try:
     print((1, 2) * d)
 except TypeError as e:
     print(e.message)
+
+# this triggers a tuple resize because generators have a unknown len:
+print len(tuple(v*10 for v in range(100)))

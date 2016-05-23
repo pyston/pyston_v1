@@ -60,8 +60,6 @@ struct uw_table_entry {
 
 namespace pyston {
 
-static BoxedClass* unwind_session_cls;
-
 // Parse an .eh_frame section, and construct a "binary search table" such as you would find in a .eh_frame_hdr section.
 // Currently only supports .eh_frame sections with exactly one fde.
 // See http://www.airs.com/blog/archives/460 for some useful info.
@@ -355,19 +353,14 @@ public:
         return getFrameInfo()->stmt;
     }
 
-    Box* getGlobals() {
-        Box* r = getFrameInfo()->globals;
-        ASSERT(gc::isValidGCObject(r), "%p", r);
-        return r;
-    }
-
-    Box* getGlobalsDict() {
-        Box* globals = getGlobals();
+    BORROWED(Box*) getGlobalsDict() {
+        Box* globals = getFrameInfo()->globals;
         if (!globals)
             return NULL;
 
-        if (PyModule_Check(globals))
+        if (PyModule_Check(globals)) {
             return globals->getAttrWrapper();
+        }
         return globals;
     }
 
@@ -436,6 +429,9 @@ static inline unw_word_t get_cursor_ip(unw_cursor_t* cursor) {
 static inline unw_word_t get_cursor_bp(unw_cursor_t* cursor) {
     return get_cursor_reg(cursor, UNW_TDEP_BP);
 }
+static inline unw_word_t get_cursor_sp(unw_cursor_t* cursor) {
+    return get_cursor_reg(cursor, UNW_REG_SP);
+}
 
 // if the given ip/bp correspond to a jitted frame or
 // ASTInterpreter::execute_inner frame, return true and return the
@@ -465,6 +461,9 @@ bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Pyth
             }
         }
     }
+
+    if (info->getFrameInfo()->isDisabledFrame())
+        return false;
 
     return true;
 }
@@ -514,7 +513,17 @@ static FrameInfo* getTopFrameInfo() {
     return (FrameInfo*)cur_thread_state.frame_info;
 }
 
-class PythonUnwindSession : public Box {
+llvm::DenseMap<uint64_t /*ip*/, std::vector<Location>> decref_infos;
+void addDecrefInfoEntry(uint64_t ip, std::vector<Location> location) {
+    assert(!decref_infos.count(ip) && "why is there already an entry??");
+    decref_infos[ip] = std::move(location);
+}
+void removeDecrefInfoEntry(uint64_t ip) {
+    decref_infos.erase(ip);
+}
+
+
+class PythonUnwindSession {
     ExcInfo exc_info;
     PythonStackExtractor pystack_extractor;
     FrameInfo* prev_frame_info;
@@ -522,8 +531,6 @@ class PythonUnwindSession : public Box {
     Timer t;
 
 public:
-    DEFAULT_CLASS_SIMPLE(unwind_session_cls);
-
     PythonUnwindSession() : exc_info(NULL, NULL, NULL), prev_frame_info(NULL), t(/*min_usec=*/10000) {}
 
     ExcInfo* getExcInfoStorage() { return &exc_info; }
@@ -537,15 +544,73 @@ public:
         static StatCounter stat("unwind_sessions");
         stat.log();
     }
+
+    std::tuple<FrameInfo*, ExcInfo, PythonStackExtractor, bool> pause() {
+        static StatCounter stat("us_unwind_session");
+        stat.log(t.end());
+        bool is_reraise = getIsReraiseFlag();
+        getIsReraiseFlag() = false;
+        return std::make_tuple(std::move(prev_frame_info), std::move(exc_info), std::move(pystack_extractor),
+                               is_reraise);
+    }
+
+    void resume(std::tuple<FrameInfo*, ExcInfo, PythonStackExtractor, bool>&& state) {
+        std::tie(prev_frame_info, exc_info, pystack_extractor, getIsReraiseFlag()) = state;
+        t.restart();
+    }
+
     void end() {
         static StatCounter stat("us_unwind_session");
         stat.log(t.end());
     }
 
     void handleCFrame(unw_cursor_t* cursor) {
-        if (prev_frame_info) {
-            deinitFrame(prev_frame_info);
-            prev_frame_info = NULL;
+        // deinit the previous frame and do decrefs if neccessary
+        // but we need to pause unwinding because decrefing objects can cause finalizers to get run (and they can use
+        // exceptions).
+        unw_word_t ip = get_cursor_ip(cursor);
+        auto decref_info_iter = decref_infos.find(ip);
+        bool need_to_pause_unwinding = prev_frame_info || decref_info_iter != decref_infos.end();
+        if (need_to_pause_unwinding) {
+            try {
+                auto unwind_session_state = pause();
+
+                if (prev_frame_info)
+                    deinitFrame(prev_frame_info);
+
+                // check decref info and decref locations when available
+                if (decref_info_iter != decref_infos.end()) {
+                    for (const Location& l : decref_info_iter->second) {
+                        Box* b = NULL;
+                        if (l.type == Location::Stack) {
+                            unw_word_t sp = get_cursor_sp(cursor);
+                            assert(l.stack_offset % 8 == 0);
+                            b = ((Box**)sp)[l.stack_offset / 8];
+                        } else if (l.type == Location::StackIndirect) {
+                            unw_word_t sp = get_cursor_sp(cursor);
+                            assert(l.stack_first_offset % 8 == 0);
+                            Box** b_ptr = ((Box***)sp)[l.stack_first_offset / 8];
+                            assert(l.stack_second_offset % 8 == 0);
+                            b = b_ptr[l.stack_second_offset / 8];
+                        } else if (l.type == Location::Register) {
+                            RELEASE_ASSERT(0, "untested");
+                            // This branch should never get hit since we shouldn't generate Register locations,
+                            // since we don't allow allocating callee-save registers.
+                            // If we did, this code might be right:
+                            // b = (Box*)get_cursor_reg(cursor, l.regnum);
+                        } else {
+                            RELEASE_ASSERT(0, "not implemented");
+                        }
+
+                        Py_XDECREF(b);
+                    }
+                }
+
+                resume(std::move(unwind_session_state));
+                prev_frame_info = NULL;
+            } catch (ExcInfo) {
+                RELEASE_ASSERT(0, "we should never get here");
+            }
         }
 
         PythonFrameIteratorImpl frame_iter;
@@ -558,25 +623,13 @@ public:
             // make sure that our libunwind based python frame handling and the manual one are the same.
             assert(prev_frame_info == getTopFrameInfo());
 
-            if (exceptionAtLineCheck()) {
+            if (!getIsReraiseFlag()) {
                 // TODO: shouldn't fetch this multiple times?
                 frame_iter.getCurrentStatement()->cxx_exception_count++;
                 exceptionAtLine(&exc_info.traceback);
-            }
+            } else
+                getIsReraiseFlag() = false;
         }
-    }
-
-    static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == unwind_session_cls);
-
-        PythonUnwindSession* o = static_cast<PythonUnwindSession*>(_o);
-
-        if (o->exc_info.type)
-            v->visit(&o->exc_info.type);
-        if (o->exc_info.value)
-            v->visit(&o->exc_info.value);
-        if (o->exc_info.traceback)
-            v->visit(&o->exc_info.traceback);
     }
 };
 static __thread PythonUnwindSession* cur_unwind;
@@ -584,7 +637,6 @@ static __thread PythonUnwindSession* cur_unwind;
 static PythonUnwindSession* getUnwindSession() {
     if (!cur_unwind) {
         cur_unwind = new PythonUnwindSession();
-        pyston::gc::registerPermanentRoot(cur_unwind);
     }
     return cur_unwind;
 }
@@ -704,6 +756,9 @@ ExcInfo* getFrameExcInfo() {
 
     FrameInfo* frame_info = getTopFrameInfo();
     while (frame_info) {
+        if (copy_from_exc)
+            to_update.push_back(copy_from_exc);
+
         copy_from_exc = &frame_info->exc;
         if (!cur_exc)
             cur_exc = copy_from_exc;
@@ -711,7 +766,6 @@ ExcInfo* getFrameExcInfo() {
         if (copy_from_exc->type)
             break;
 
-        to_update.push_back(copy_from_exc);
         frame_info = frame_info->back;
     };
 
@@ -719,15 +773,15 @@ ExcInfo* getFrameExcInfo() {
 
     if (!copy_from_exc->type) {
         // No exceptions found:
-        *copy_from_exc = ExcInfo(None, None, NULL);
+        *copy_from_exc = ExcInfo(incref(None), incref(None), NULL);
     }
 
-    assert(gc::isValidGCObject(copy_from_exc->type));
-    assert(gc::isValidGCObject(copy_from_exc->value));
-    assert(!copy_from_exc->traceback || gc::isValidGCObject(copy_from_exc->traceback));
-
     for (auto* ex : to_update) {
+        assert(ex != copy_from_exc);
         *ex = *copy_from_exc;
+        Py_INCREF(ex->type);
+        Py_INCREF(ex->value);
+        Py_XINCREF(ex->traceback);
     }
     assert(cur_exc);
     return cur_exc;
@@ -749,21 +803,21 @@ FunctionMetadata* getTopPythonFunction() {
     return frame_info->md;
 }
 
-Box* getGlobals() {
+BORROWED(Box*) getGlobals() {
     FrameInfo* frame_info = getTopFrameInfo();
     if (!frame_info)
         return NULL;
     return frame_info->globals;
 }
 
-Box* getGlobalsDict() {
+BORROWED(Box*) getGlobalsDict() {
     Box* globals = getGlobals();
     if (globals && PyModule_Check(globals))
         globals = globals->getAttrWrapper();
     return globals;
 }
 
-BoxedModule* getCurrentModule() {
+BORROWED(BoxedModule*) getCurrentModule() {
     FunctionMetadata* md = getTopPythonFunction();
     if (!md)
         return NULL;
@@ -805,7 +859,6 @@ DeoptState getDeoptState() {
     bool found = false;
     unwindPythonStack([&](PythonFrameIteratorImpl* frame_iter) {
         BoxedDict* d;
-        BoxedClosure* closure;
         CompiledFunction* cf;
         if (frame_iter->getId().type == PythonFrameId::COMPILED) {
             d = new BoxedDict();
@@ -852,8 +905,8 @@ DeoptState getDeoptState() {
                 if (!v)
                     continue;
 
-                ASSERT(gc::isValidGCObject(v), "%p", v);
-                d->d[p.first.getBox()] = v;
+                assert(!d->d.count(p.first.getBox()));
+                d->d[incref(p.first.getBox())] = incref(v);
             }
 
             for (const auto& p : cf->location_map->names) {
@@ -874,9 +927,9 @@ DeoptState getDeoptState() {
                         vals.push_back(frame_iter->readLocation(loc));
                     }
 
+                    // this returns an owned reference so we don't incref it
                     Box* v = e->type->deserializeFromFrame(vals);
                     // printf("%s: (pp id %ld) %p\n", p.first().c_str(), e._debug_pp_id, v);
-                    ASSERT(gc::isValidGCObject(v), "%p", v);
                     d->d[boxString(p.first())] = v;
                 }
             }
@@ -895,7 +948,7 @@ DeoptState getDeoptState() {
     return rtn;
 }
 
-Box* fastLocalsToBoxedLocals() {
+BORROWED(Box*) fastLocalsToBoxedLocals() {
     return getPythonFrameInfo(0)->updateBoxedLocals();
 }
 
@@ -905,14 +958,14 @@ static BoxedDict* localsForFrame(Box** vregs, CFG* cfg) {
     for (auto& l : cfg->sym_vreg_map_user_visible) {
         Box* val = vregs[l.second];
         if (val) {
-            assert(gc::isValidGCObject(val));
-            rtn->d[l.first.getBox()] = val;
+            assert(!rtn->d.count(l.first.getBox()));
+            rtn->d[incref(l.first.getBox())] = incref(val);
         }
     }
     return rtn;
 }
 
-Box* FrameInfo::updateBoxedLocals() {
+BORROWED(Box*) FrameInfo::updateBoxedLocals() {
     STAT_TIMER(t0, "us_timer_updateBoxedLocals", 0);
 
     FrameInfo* frame_info = this;
@@ -943,27 +996,26 @@ Box* FrameInfo::updateBoxedLocals() {
         Box* val = closure->elts[derefInfo.offset];
         Box* boxedName = name.getBox();
         if (val != NULL) {
-            d->d[boxedName] = val;
+            PyDict_SetItem(d, boxedName, val);
         } else {
-            d->d.erase(boxedName);
+            PyDict_DelItem(d, boxedName);
+            PyErr_Clear();
         }
     }
 
     if (!frame_info->boxedLocals) {
         frame_info->boxedLocals = d;
-        return d;
+        return frame_info->boxedLocals;
     }
-    assert(gc::isValidGCObject(frame_info->boxedLocals));
+
+    AUTO_DECREF(d);
 
     // Loop through all the values found above.
     // TODO Right now d just has all the python variables that are *initialized*
     // But we also need to loop through all the uninitialized variables that we have
     // access to and delete them from the locals dict
     if (frame_info->boxedLocals->cls == dict_cls) {
-        BoxedDict* boxed_locals = (BoxedDict*)frame_info->boxedLocals;
-        for (auto&& new_elem : d->d) {
-            boxed_locals->d[new_elem.first] = new_elem.second;
-        }
+        PyDict_Update((BoxedDict*)frame_info->boxedLocals, d);
     } else {
         for (const auto& p : *d) {
             Box* varname = p.first;
@@ -987,7 +1039,7 @@ FunctionMetadata* PythonFrameIterator::getMD() {
     return impl->getMD();
 }
 
-Box* PythonFrameIterator::getGlobalsDict() {
+BORROWED(Box*) PythonFrameIterator::getGlobalsDict() {
     return impl->getGlobalsDict();
 }
 
@@ -1028,7 +1080,14 @@ void _printStacktrace() {
     recursive = true;
     Box* file = PySys_GetObject("stderr");
     PyTracebackObject* tb = NULL;
-    PyTraceBack_Here_Tb((struct _frame*)getFrame(0), &tb);
+    int i = 0;
+    while (true) {
+        auto frame = getFrame(i);
+        if (!frame)
+            break;
+        PyTraceBack_Here_Tb((struct _frame*)frame, &tb);
+        i++;
+    }
     PyTraceBack_Print((Box*)tb, file);
     recursive = false;
 }
@@ -1039,7 +1098,7 @@ extern "C" void abort() {
     // In case displaying the traceback recursively calls abort:
     static bool recursive = false;
 
-    if (!recursive) {
+    if (!recursive && !IN_SHUTDOWN) {
         recursive = true;
         Stats::dump();
         fprintf(stderr, "Someone called abort!\n");
@@ -1053,8 +1112,9 @@ extern "C" void abort() {
         alarm(1);
         try {
             _printStacktrace();
-        } catch (ExcInfo) {
+        } catch (ExcInfo e) {
             fprintf(stderr, "error printing stack trace during abort()");
+            e.clear();
         }
 
         // Cancel the alarm.
@@ -1111,8 +1171,5 @@ llvm::JITEventListener* makeTracebacksListener() {
 }
 
 void setupUnwinding() {
-    unwind_session_cls = BoxedClass::create(type_cls, object_cls, PythonUnwindSession::gcHandler, 0, 0,
-                                            sizeof(PythonUnwindSession), false, "unwind_session");
-    unwind_session_cls->freeze();
 }
 }

@@ -3936,7 +3936,7 @@ datetime_strptime(PyObject *cls, PyObject *args)
         return NULL;
 
     if (module == NULL &&
-        (module = PyGC_AddRoot(PyImport_ImportModuleNoBlock("_strptime"))) == NULL)
+        (module = PyImport_ImportModuleNoBlock("_strptime")) == NULL)
         return NULL;
 
     /* _strptime._strptime returns a two-element tuple.  The first
@@ -4899,11 +4899,16 @@ initdatetime(void)
     assert(DI100Y == 25 * DI4Y - 1);
     assert(DI100Y == days_before_year(100+1));
 
-    us_per_us = PyGC_AddRoot(PyInt_FromLong(1));
-    us_per_ms = PyGC_AddRoot(PyInt_FromLong(1000));
-    us_per_second = PyGC_AddRoot(PyInt_FromLong(1000000));
-    us_per_minute = PyGC_AddRoot(PyInt_FromLong(60000000));
-    seconds_per_day = PyGC_AddRoot(PyInt_FromLong(24 * 3600));
+    us_per_us = PyInt_FromLong(1);
+    PyGC_RegisterStaticConstant(us_per_us);
+    us_per_ms = PyInt_FromLong(1000);
+    PyGC_RegisterStaticConstant(us_per_ms);
+    us_per_second = PyInt_FromLong(1000000);
+    PyGC_RegisterStaticConstant(us_per_second);
+    us_per_minute = PyInt_FromLong(60000000);
+    PyGC_RegisterStaticConstant(us_per_minute);
+    seconds_per_day = PyInt_FromLong(24 * 3600);
+    PyGC_RegisterStaticConstant(seconds_per_day);
     if (us_per_us == NULL || us_per_ms == NULL || us_per_second == NULL ||
         us_per_minute == NULL || seconds_per_day == NULL)
         return;
@@ -4911,9 +4916,12 @@ initdatetime(void)
     /* The rest are too big for 32-bit ints, but even
      * us_per_week fits in 40 bits, so doubles should be exact.
      */
-    us_per_hour = PyGC_AddRoot(PyLong_FromDouble(3600000000.0));
-    us_per_day = PyGC_AddRoot(PyLong_FromDouble(86400000000.0));
-    us_per_week = PyGC_AddRoot(PyLong_FromDouble(604800000000.0));
+    us_per_hour = PyLong_FromDouble(3600000000.0);
+    PyGC_RegisterStaticConstant(us_per_hour);
+    us_per_day = PyLong_FromDouble(86400000000.0);
+    PyGC_RegisterStaticConstant(us_per_day);
+    us_per_week = PyLong_FromDouble(604800000000.0);
+    PyGC_RegisterStaticConstant(us_per_week);
     if (us_per_hour == NULL || us_per_day == NULL || us_per_week == NULL)
         return;
 }

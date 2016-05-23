@@ -1,4 +1,3 @@
-
 def func(a, b=1):
     print a, b
 func(0)
@@ -71,3 +70,9 @@ print type(C.__new__), type(C.__dict__['__new__'])
 
 C.__new__.__defaults__ = (1,)
 print type(C())
+
+def f(a=1, b=2, c=3):
+    print a, b, c, type(a), type(b), type(c)
+    f.func_defaults = (a + 3, b + 3, c + 3)
+for i in xrange(1000):
+    f()

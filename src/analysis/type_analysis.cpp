@@ -246,6 +246,7 @@ private:
 
         // TODO this isn't the exact behavior
         BoxedString* name = getInplaceOpName(node->op_type);
+        AUTO_DECREF(name);
         CompilerType* attr_type = left->getattrType(name, true);
 
         if (attr_type == UNDEF)
@@ -493,7 +494,7 @@ private:
     void* visit_subscript(AST_Subscript* node) override {
         CompilerType* val = getType(node->value);
         CompilerType* slice = getType(node->slice);
-        static BoxedString* name = internStringImmortal("__getitem__");
+        static BoxedString* name = getStaticString("__getitem__");
         CompilerType* getitem_type = val->getattrType(name, true);
         std::vector<CompilerType*> args;
         args.push_back(slice);

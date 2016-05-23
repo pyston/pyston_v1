@@ -587,11 +587,11 @@ initsignal(void)
     /* Add some symbolic constants to the module */
     d = PyModule_GetDict(m);
 
-    x = DefaultHandler = PyGC_AddRoot(PyLong_FromVoidPtr((void *)SIG_DFL));
+    x = DefaultHandler = PyLong_FromVoidPtr((void *)SIG_DFL);
     if (!x || PyDict_SetItemString(d, "SIG_DFL", x) < 0)
         goto finally;
 
-    x = IgnoreHandler = PyGC_AddRoot(PyLong_FromVoidPtr((void *)SIG_IGN));
+    x = IgnoreHandler = PyLong_FromVoidPtr((void *)SIG_IGN);
     if (!x || PyDict_SetItemString(d, "SIG_IGN", x) < 0)
         goto finally;
 
@@ -600,7 +600,7 @@ initsignal(void)
         goto finally;
     Py_DECREF(x);
 
-    x = IntHandler = PyGC_AddRoot(PyDict_GetItemString(d, "default_int_handler"));
+    x = IntHandler = PyDict_GetItemString(d, "default_int_handler");
     if (!x)
         goto finally;
     Py_INCREF(IntHandler);
@@ -625,9 +625,6 @@ initsignal(void)
         Handlers[SIGINT].func = IntHandler;
         old_siginthandler = PyOS_setsig(SIGINT, signal_handler);
     }
-
-    // Pyston change: let the GC scan the handlers
-    PyGC_AddPotentialRoot(Handlers, sizeof(Handlers));
 
 #ifdef SIGHUP
     x = PyInt_FromLong(SIGHUP);
@@ -837,8 +834,8 @@ initsignal(void)
 #endif
 
 #if defined (HAVE_SETITIMER) || defined (HAVE_GETITIMER)
-    ItimerError = PyGC_AddRoot(PyErr_NewException("signal.ItimerError",
-     PyExc_IOError, NULL));
+    ItimerError = PyErr_NewException("signal.ItimerError",
+     PyExc_IOError, NULL);
     if (ItimerError != NULL)
     PyDict_SetItemString(d, "ItimerError", ItimerError);
 #endif

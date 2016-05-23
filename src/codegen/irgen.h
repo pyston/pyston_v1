@@ -15,12 +15,14 @@
 #ifndef PYSTON_CODEGEN_IRGEN_H
 #define PYSTON_CODEGEN_IRGEN_H
 
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ExecutionEngine/ObjectCache.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/ValueMap.h"
 
 #include "core/options.h"
 #include "core/types.h"
@@ -29,6 +31,7 @@ namespace pyston {
 
 class AST_expr;
 class AST_stmt;
+class CFGBlock;
 class GCBuilder;
 class IREmitter;
 
@@ -38,9 +41,13 @@ public:
 
     llvm::BasicBlock* exc_dest;
 
+    // Frame handling changes a bit after a deopt happens.
+    bool is_after_deopt;
+
     bool hasHandler() const { return exc_dest != NULL; }
 
-    UnwindInfo(AST_stmt* current_stmt, llvm::BasicBlock* exc_dest) : current_stmt(current_stmt), exc_dest(exc_dest) {}
+    UnwindInfo(AST_stmt* current_stmt, llvm::BasicBlock* exc_dest, bool is_after_deopt = false)
+        : current_stmt(current_stmt), exc_dest(exc_dest), is_after_deopt(is_after_deopt) {}
 
     ExceptionStyle preferredExceptionStyle() const;
 
@@ -84,28 +91,43 @@ public:
 
     virtual llvm::Function* getIntrinsic(llvm::Intrinsic::ID) = 0;
 
-    virtual llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
-                                    const std::vector<llvm::Value*>& args, ExceptionStyle target_exception_style = CXX)
-        = 0;
-    virtual llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
-                                    ExceptionStyle target_exception_style = CXX) = 0;
-    virtual llvm::Value* createCall(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
-                                    ExceptionStyle target_exception_style = CXX) = 0;
-    virtual llvm::Value* createCall2(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
-                                     llvm::Value* arg2, ExceptionStyle target_exception_style = CXX) = 0;
-    virtual llvm::Value* createCall3(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
-                                     llvm::Value* arg2, llvm::Value* arg3, ExceptionStyle target_exception_style = CXX)
-        = 0;
-    virtual llvm::Value* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
-                                  const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX) = 0;
+    // Special value for capi_exc_value that says that the target function always sets a capi exception.
+    static llvm::Value* ALWAYS_THROWS;
 
-    virtual void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val,
-                                                llvm::Value* exc_val, bool double_check = false) = 0;
+    virtual llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
+                                          const std::vector<llvm::Value*>& args,
+                                          ExceptionStyle target_exception_style = CXX,
+                                          llvm::Value* capi_exc_value = NULL) = 0;
+    virtual llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee,
+                                          ExceptionStyle target_exception_style = CXX,
+                                          llvm::Value* capi_exc_value = NULL) = 0;
+    virtual llvm::Instruction* createCall(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                          ExceptionStyle target_exception_style = CXX,
+                                          llvm::Value* capi_exc_value = NULL) = 0;
+    virtual llvm::Instruction* createCall2(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                           llvm::Value* arg2, ExceptionStyle target_exception_style = CXX,
+                                           llvm::Value* capi_exc_value = NULL) = 0;
+    virtual llvm::Instruction* createCall3(const UnwindInfo& unw_info, llvm::Value* callee, llvm::Value* arg1,
+                                           llvm::Value* arg2, llvm::Value* arg3,
+                                           ExceptionStyle target_exception_style = CXX,
+                                           llvm::Value* capi_exc_value = NULL) = 0;
+    virtual llvm::Instruction* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
+                                        const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX,
+                                        llvm::Value* capi_exc_value = NULL) = 0;
+
+    // virtual void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val,
+    // llvm::Value* exc_val, bool double_check = false) = 0;
 
     virtual llvm::Value* createDeopt(AST_stmt* current_stmt, AST_expr* node, llvm::Value* node_value) = 0;
 
-    virtual Box* getIntConstant(int64_t n) = 0;
-    virtual Box* getFloatConstant(double d) = 0;
+    virtual BORROWED(Box*) getIntConstant(int64_t n) = 0;
+    virtual BORROWED(Box*) getFloatConstant(double d) = 0;
+
+    virtual llvm::Value* setType(llvm::Value* v, RefType reftype) = 0;
+    virtual llvm::Value* setNullable(llvm::Value* v, bool nullable) = 0;
+    virtual void refConsumed(llvm::Value* v, llvm::Instruction* inst) = 0;
+    virtual void refUsed(llvm::Value* v, llvm::Instruction* inst) = 0;
+    virtual ConcreteCompilerVariable* getNone() = 0;
 };
 
 extern const std::string CREATED_CLOSURE_NAME;
@@ -184,6 +206,31 @@ public:
 
     void calculateModuleHash(const llvm::Module* M, EffortLevel effort);
     bool haveCacheFileForHash();
+};
+
+class IRGenState;
+
+class RefcountTracker {
+private:
+    struct RefcountState {
+        RefType reftype = RefType::UNKNOWN;
+        bool nullable = false;
+
+        // llvm::SmallVector<llvm::Instruction*, 2> ref_consumers;
+    };
+    llvm::DenseMap<llvm::Instruction*, llvm::SmallVector<llvm::Value*, 4>> refs_consumed;
+    llvm::DenseMap<llvm::Instruction*, llvm::SmallVector<llvm::Value*, 4>> refs_used;
+    llvm::ValueMap<llvm::Value*, RefcountState> vars;
+    llvm::DenseSet<llvm::Instruction*> may_throw;
+
+public:
+    llvm::Value* setType(llvm::Value* v, RefType reftype);
+    llvm::Value* setNullable(llvm::Value* v, bool nullable = true);
+    void refConsumed(llvm::Value* v, llvm::Instruction*);
+    void refUsed(llvm::Value* v, llvm::Instruction*);
+    void setMayThrow(llvm::Instruction*);
+    static void addRefcounts(IRGenState* state);
+    bool isNullable(llvm::Value* v);
 };
 }
 

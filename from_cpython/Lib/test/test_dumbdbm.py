@@ -1,4 +1,3 @@
-# expected: fail
 """Test script for the dumbdbm module
    Original by Roger E. Masse
 """

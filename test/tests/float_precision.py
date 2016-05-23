@@ -5,7 +5,7 @@ def smallest():
         n = n * 0.99
     return n
 
-for i in xrange(1000):
+for i in xrange(100):
     print smallest()
 
 def test(x):

@@ -52,28 +52,17 @@ private:
         }
     };
 
-    llvm::DenseSet<AST_Name*> kills;
-    llvm::DenseMap<InternedString, AST_Name*> last_uses;
-
     llvm::DenseMap<InternedString, Status> statuses;
     LivenessAnalysis* analysis;
 
     void _doLoad(InternedString name, AST_Name* node) {
         Status& status = statuses[name];
         status.addUsage(Status::USED);
-
-        last_uses[name] = node;
     }
 
     void _doStore(InternedString name) {
         Status& status = statuses[name];
         status.addUsage(Status::DEFINED);
-
-        auto it = last_uses.find(name);
-        if (it != last_uses.end()) {
-            kills.insert(it->second);
-            last_uses.erase(it);
-        }
     }
 
     Status::Usage getStatusFirst(InternedString name) const {
@@ -90,22 +79,7 @@ public:
 
     bool firstIsDef(InternedString name) const { return getStatusFirst(name) == Status::DEFINED; }
 
-    bool isKilledAt(AST_Name* node, bool is_live_at_end) const {
-        if (kills.count(node))
-            return true;
-
-        // If it's not live at the end, then the last use is a kill
-        // even though we weren't able to determine that in a single
-        // pass
-        if (!is_live_at_end) {
-            auto it = last_uses.find(node->id);
-            if (it != last_uses.end() && node == it->second)
-                return true;
-        }
-
-        return false;
-    }
-
+    bool isKilledAt(AST_Name* node, bool is_live_at_end) { return node->is_kill; }
 
 
     bool visit_classdef(AST_ClassDef* node) {
@@ -136,8 +110,13 @@ public:
     bool visit_name(AST_Name* node) {
         if (node->ctx_type == AST_TYPE::Load)
             _doLoad(node->id, node);
-        else if (node->ctx_type == AST_TYPE::Store || node->ctx_type == AST_TYPE::Del
-                 || node->ctx_type == AST_TYPE::Param)
+        else if (node->ctx_type == AST_TYPE::Del) {
+            // Hack: we don't have a bytecode for temporary-kills:
+            if (node->id.s()[0] == '#')
+                return true;
+            _doLoad(node->id, node);
+            _doStore(node->id);
+        } else if (node->ctx_type == AST_TYPE::Store || node->ctx_type == AST_TYPE::Param)
             _doStore(node->id);
         else {
             ASSERT(0, "%d", node->ctx_type);
@@ -145,6 +124,7 @@ public:
         }
         return true;
     }
+
     bool visit_alias(AST_alias* node) {
         InternedString name = node->name;
         if (node->asname.s().size())

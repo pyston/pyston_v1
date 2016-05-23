@@ -76,14 +76,15 @@ GenericRegister GenericRegister::fromDwarf(int dwarf_regnum) {
 
 
 
-void Assembler::emitArith(Immediate imm, Register r, int opcode) {
+void Assembler::emitArith(Immediate imm, Register r, int opcode, MovType type) {
     // assert(r != RSP && "This breaks unwinding, please don't use.");
 
     int64_t amount = imm.val;
     RELEASE_ASSERT(fitsInto<int32_t>(amount), "");
     assert(0 <= opcode && opcode < 8);
 
-    int rex = REX_W;
+    assert(type == MovType::Q || type == MovType::L);
+    int rex = type == MovType::Q ? REX_W : 0;
 
     int reg_idx = r.regnum;
     if (reg_idx >= 8) {
@@ -91,7 +92,8 @@ void Assembler::emitArith(Immediate imm, Register r, int opcode) {
         reg_idx -= 8;
     }
 
-    emitRex(rex);
+    if (rex)
+        emitRex(rex);
     if (-0x80 <= amount && amount < 0x80) {
         emitByte(0x83);
         emitModRM(0b11, opcode, reg_idx);
@@ -103,6 +105,44 @@ void Assembler::emitArith(Immediate imm, Register r, int opcode) {
     }
 }
 
+void Assembler::emitArith(Immediate imm, Indirect mem, int opcode) {
+    int64_t amount = imm.val;
+    assert(fitsInto<int32_t>(amount));
+    assert(0 <= opcode && opcode < 8);
+
+    int rex = REX_W;
+
+    int mem_idx = mem.base.regnum;
+    if (mem_idx >= 8) {
+        rex |= REX_B;
+        mem_idx -= 8;
+    }
+
+    emitRex(rex);
+
+    bool needssib = (mem_idx == 0b100);
+    assert(!needssib && "untested");
+    int mode = getModeFromOffset(mem.offset, mem_idx);
+    assert(mode != 0b10 && "not yet supported");
+
+    if (-0x80 <= amount && amount < 0x80) {
+        emitByte(0x83);
+        if (needssib)
+            emitSIB(0b00, 0b100, mem_idx);
+        emitModRM(mode, opcode, mem_idx);
+        if (mode == 0b01)
+            emitByte(mem.offset);
+        emitByte(amount);
+    } else {
+        emitByte(0x81);
+        if (needssib)
+            emitSIB(0b00, 0b100, mem_idx);
+        emitModRM(mode, opcode, mem_idx);
+        if (mode == 0b01)
+            emitByte(mem.offset);
+        emitInt(amount, 4);
+    }
+}
 
 void Assembler::emitByte(uint8_t b) {
     if (addr >= end_addr) {
@@ -156,10 +196,12 @@ void Assembler::emitSIB(uint8_t scalebits, uint8_t index, uint8_t base) {
     emitByte((scalebits << 6) | (index << 3) | base);
 }
 
-int Assembler::getModeFromOffset(int offset) const {
-    if (offset == 0)
+int Assembler::getModeFromOffset(int offset, int reg_idx) const {
+    if (offset == 0) {
+        if (reg_idx == 0b101)
+            return 0b01;
         return 0b00;
-    else if (-0x80 <= offset && offset < 0x80)
+    } else if (-0x80 <= offset && offset < 0x80)
         return 0b01;
     else
         return 0b10;
@@ -198,7 +240,7 @@ void Assembler::movq(Immediate src, Indirect dest) {
     emitByte(0xc7);
 
     bool needssib = (dest_idx == 0b100);
-    int mode = getModeFromOffset(dest.offset);
+    int mode = getModeFromOffset(dest.offset, dest_idx);
     emitModRM(mode, 0, dest_idx);
 
     if (needssib)
@@ -258,7 +300,7 @@ void Assembler::mov(Register src, Indirect dest) {
     emitByte(0x89);
 
     bool needssib = (dest_idx == 0b100);
-    int mode = getModeFromOffset(dest.offset);
+    int mode = getModeFromOffset(dest.offset, dest_idx);
     emitModRM(mode, src_idx, dest_idx);
 
     if (needssib)
@@ -465,7 +507,7 @@ void Assembler::movsd(XMMRegister src, Indirect dest) {
     emitByte(0x11);
 
     bool needssib = (dest_idx == 0b100);
-    int mode = getModeFromOffset(dest.offset);
+    int mode = getModeFromOffset(dest.offset, dest_idx);
     emitModRM(mode, src_idx, dest_idx);
 
     if (needssib)
@@ -631,6 +673,10 @@ void Assembler::sub(Immediate imm, Register reg) {
     emitArith(imm, reg, OPCODE_SUB);
 }
 
+void Assembler::add(Immediate imm, Indirect mem) {
+    emitArith(imm, mem, OPCODE_ADD);
+}
+
 void Assembler::incl(Indirect mem) {
     int src_idx = mem.base.regnum;
 
@@ -699,6 +745,70 @@ void Assembler::decl(Immediate imm) {
     emitInt(imm.val, 4);
 }
 
+void Assembler::incq(Indirect mem) {
+    int src_idx = mem.base.regnum;
+
+    int rex = REX_W;
+    if (src_idx >= 8) {
+        rex |= REX_B;
+        src_idx -= 8;
+    }
+
+    assert(src_idx >= 0 && src_idx < 8);
+
+    if (rex)
+        emitRex(rex);
+    emitByte(0xff);
+
+    assert(-0x80 <= mem.offset && mem.offset < 0x80);
+    if (mem.offset == 0) {
+        emitModRM(0b00, 0, src_idx);
+    } else {
+        emitModRM(0b01, 0, src_idx);
+        emitByte(mem.offset);
+    }
+}
+
+void Assembler::decq(Indirect mem) {
+    int src_idx = mem.base.regnum;
+
+    int rex = REX_W;
+    if (src_idx >= 8) {
+        rex |= REX_B;
+        src_idx -= 8;
+    }
+
+    assert(src_idx >= 0 && src_idx < 8);
+
+    if (rex)
+        emitRex(rex);
+    emitByte(0xff);
+
+    assert(-0x80 <= mem.offset && mem.offset < 0x80);
+    if (mem.offset == 0) {
+        emitModRM(0b00, 1, src_idx);
+    } else {
+        emitModRM(0b01, 1, src_idx);
+        emitByte(mem.offset);
+    }
+}
+
+void Assembler::incq(Immediate imm) {
+    emitByte(0x48);
+    emitByte(0xff);
+    emitByte(0x04);
+    emitByte(0x25);
+    emitInt(imm.val, 4);
+}
+
+void Assembler::decq(Immediate imm) {
+    emitByte(0x48);
+    emitByte(0xff);
+    emitByte(0x0c);
+    emitByte(0x25);
+    emitInt(imm.val, 4);
+}
+
 void Assembler::call(Immediate imm) {
     emitByte(0xe8);
     emitInt(imm.val, 4);
@@ -710,6 +820,31 @@ void Assembler::callq(Register r) {
     emitRex(REX_B);
     emitByte(0xff);
     emitByte(0xd3);
+}
+
+void Assembler::callq(Indirect mem) {
+    int src_idx = mem.base.regnum;
+
+    int rex = 0;
+    if (src_idx >= 8) {
+        assert(0 && "check this");
+        rex |= REX_B;
+        src_idx -= 8;
+    }
+
+    assert(src_idx >= 0 && src_idx < 8);
+
+    if (rex)
+        emitRex(rex);
+    emitByte(0xff);
+
+    assert(-0x80 <= mem.offset && mem.offset < 0x80);
+    if (mem.offset == 0) {
+        emitModRM(0b00, 2, src_idx);
+    } else {
+        emitModRM(0b01, 2, src_idx);
+        emitByte(mem.offset);
+    }
 }
 
 void Assembler::retq() {
@@ -739,8 +874,8 @@ void Assembler::cmp(Register reg1, Register reg2) {
     emitModRM(0b11, reg1_idx, reg2_idx);
 }
 
-void Assembler::cmp(Register reg, Immediate imm) {
-    emitArith(imm, reg, OPCODE_CMP);
+void Assembler::cmp(Register reg, Immediate imm, MovType type) {
+    emitArith(imm, reg, OPCODE_CMP, type);
 }
 
 void Assembler::cmp(Indirect mem, Immediate imm, MovType type) {
@@ -836,7 +971,7 @@ void Assembler::lea(Indirect mem, Register reg) {
     emitByte(0x8D);
 
     bool needssib = (mem_idx == 0b100);
-    int mode = getModeFromOffset(mem.offset);
+    int mode = getModeFromOffset(mem.offset, mem_idx);
     emitModRM(mode, reg_idx, mem_idx);
 
     if (needssib)
@@ -1064,18 +1199,24 @@ void Assembler::skipBytes(int num) {
     addr += num;
 }
 
-ForwardJump::ForwardJump(Assembler& assembler, ConditionCode condition)
+template <int MaxJumpSize>
+ForwardJumpBase<MaxJumpSize>::ForwardJumpBase(Assembler& assembler, ConditionCode condition)
     : assembler(assembler), condition(condition), jmp_inst(assembler.curInstPointer()) {
-    assembler.jmp_cond(JumpDestination::fromStart(assembler.bytesWritten() + max_jump_size), condition);
+    assembler.jmp_cond(JumpDestination::fromStart(assembler.bytesWritten() + MaxJumpSize), condition);
+    jmp_end = assembler.curInstPointer();
 }
 
-ForwardJump::~ForwardJump() {
+template <int MaxJumpSize> ForwardJumpBase<MaxJumpSize>::~ForwardJumpBase() {
     uint8_t* new_pos = assembler.curInstPointer();
     int offset = new_pos - jmp_inst;
-    RELEASE_ASSERT(offset < max_jump_size, "");
+    RELEASE_ASSERT(offset < MaxJumpSize, "");
     assembler.setCurInstPointer(jmp_inst);
     assembler.jmp_cond(JumpDestination::fromStart(assembler.bytesWritten() + offset), condition);
+    while (assembler.curInstPointer() < jmp_end)
+        assembler.nop();
     assembler.setCurInstPointer(new_pos);
 }
+template class ForwardJumpBase<128>;
+template class ForwardJumpBase<1048576>;
 }
 }

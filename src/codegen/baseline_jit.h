@@ -146,6 +146,9 @@ private:
     assembler::Assembler a;
     bool is_currently_writing;
     bool asm_failed;
+    // this contains all the decref infos the bjit generated inside the memory block,
+    // this allows us to deregister them when we release the code
+    std::vector<DecrefInfo> decref_infos;
 
 public:
     JitCodeBlock(llvm::StringRef name);
@@ -153,11 +156,18 @@ public:
     std::unique_ptr<JitFragmentWriter> newFragment(CFGBlock* block, int patch_jump_offset = 0);
     bool shouldCreateNewBlock() const { return asm_failed || a.bytesLeft() < 128; }
     void fragmentAbort(bool not_enough_space);
-    void fragmentFinished(int bytes_witten, int num_bytes_overlapping, void* next_fragment_start);
+    void fragmentFinished(int bytes_witten, int num_bytes_overlapping, void* next_fragment_start, ICInfo& ic_info);
 };
 
 class JitFragmentWriter : public Rewriter {
 private:
+    struct ExitInfo {
+        int num_bytes;    // the number of bytes for the overwriteable jump
+        void* exit_start; // where that jump starts
+
+        ExitInfo() : num_bytes(0), exit_start(NULL) {}
+    };
+
     static constexpr int min_patch_size = 13;
 
     CFGBlock* block;
@@ -169,7 +179,7 @@ private:
     // value which will make the fragment start at the instruction where the last block is exiting to the interpreter to
     // interpret the new block -> we overwrite the exit with the code of the new block.
     // If there is nothing to overwrite this field will be 0.
-    int num_bytes_exit;
+    ExitInfo exit_info;
     int num_bytes_overlapping; // num of bytes this block overlaps with the prev. used to patch unessary jumps
 
     void* entry_code; // JitCodeBlock start address. Must have an offset of 0 into the code block
@@ -192,6 +202,7 @@ private:
         std::unique_ptr<ICSetupInfo> ic;
         StackInfo stack_info;
         AST* node;
+        std::vector<Location> decref_infos;
     };
 
     llvm::SmallVector<PPInfo, 8> pp_infos;
@@ -209,8 +220,9 @@ public:
     RewriterVar* emitCallattr(AST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
                               const llvm::ArrayRef<RewriterVar*> args, std::vector<BoxedString*>* keyword_names);
     RewriterVar* emitCompare(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type);
-    RewriterVar* emitCreateDict(const llvm::ArrayRef<RewriterVar*> keys, const llvm::ArrayRef<RewriterVar*> values);
-    RewriterVar* emitCreateList(const llvm::ArrayRef<RewriterVar*> values);
+    RewriterVar* emitCreateDict();
+    void emitDictSet(RewriterVar* dict, RewriterVar* k, RewriterVar* v);
+    RewriterVar* emitCreateList(const llvm::ArrayRef<STOLEN(RewriterVar*)> values);
     RewriterVar* emitCreateSet(const llvm::ArrayRef<RewriterVar*> values);
     RewriterVar* emitCreateSlice(RewriterVar* start, RewriterVar* stop, RewriterVar* step);
     RewriterVar* emitCreateTuple(const llvm::ArrayRef<RewriterVar*> values);
@@ -218,6 +230,7 @@ public:
     RewriterVar* emitExceptionMatches(RewriterVar* v, RewriterVar* cls);
     RewriterVar* emitGetAttr(RewriterVar* obj, BoxedString* s, AST_expr* node);
     RewriterVar* emitGetBlockLocal(InternedString s, int vreg);
+    void emitKillTemporary(InternedString s, int vreg);
     RewriterVar* emitGetBoxedLocal(BoxedString* s);
     RewriterVar* emitGetBoxedLocals();
     RewriterVar* emitGetClsAttr(RewriterVar* obj, BoxedString* s);
@@ -236,7 +249,7 @@ public:
     RewriterVar* emitRuntimeCall(AST_expr* node, RewriterVar* obj, ArgPassSpec argspec,
                                  const llvm::ArrayRef<RewriterVar*> args, std::vector<BoxedString*>* keyword_names);
     RewriterVar* emitUnaryop(RewriterVar* v, int op_type);
-    RewriterVar* emitUnpackIntoArray(RewriterVar* v, uint64_t num);
+    std::vector<RewriterVar*> emitUnpackIntoArray(RewriterVar* v, uint64_t num);
     RewriterVar* emitYield(RewriterVar* v);
 
     void emitDelAttr(RewriterVar* target, BoxedString* attr);
@@ -251,15 +264,16 @@ public:
     void emitRaise0();
     void emitRaise3(RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2);
     void emitReturn(RewriterVar* v);
-    void emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, RewriterVar* attr);
-    void emitSetBlockLocal(InternedString s, RewriterVar* v);
+    void emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr);
+    void emitSetBlockLocal(InternedString s, STOLEN(RewriterVar*) v);
     void emitSetCurrentInst(AST_stmt* node);
     void emitSetExcInfo(RewriterVar* type, RewriterVar* value, RewriterVar* traceback);
-    void emitSetGlobal(Box* global, BoxedString* s, RewriterVar* v);
+    void emitSetGlobal(Box* global, BoxedString* s, STOLEN(RewriterVar*) v);
     void emitSetItemName(BoxedString* s, RewriterVar* v);
     void emitSetItem(RewriterVar* target, RewriterVar* slice, RewriterVar* value);
-    void emitSetLocal(InternedString s, int vreg, bool set_closure, RewriterVar* v);
-    void emitSideExit(RewriterVar* v, Box* cmp_value, CFGBlock* next_block);
+    void emitSetLocal(InternedString s, int vreg, bool set_closure, STOLEN(RewriterVar*) v);
+    // emitSideExit steals a full ref from v, not just a vref
+    void emitSideExit(STOLEN(RewriterVar*) v, Box* cmp_value, CFGBlock* next_block);
     void emitUncacheExcInfo();
 
     void abortCompilation();
@@ -268,15 +282,22 @@ public:
     bool finishAssembly(int continue_offset) override;
 
 private:
-    RewriterVar* allocArgs(const llvm::ArrayRef<RewriterVar*> args);
+    RewriterVar* allocArgs(const llvm::ArrayRef<RewriterVar*> args, RewriterVar::SetattrType);
 #ifndef NDEBUG
     std::pair<uint64_t, uint64_t> asUInt(InternedString s);
 #else
     uint64_t asUInt(InternedString s);
 #endif
 
-    RewriterVar* emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots, int slot_size,
-                            AST* ast_node = NULL, TypeRecorder* type_recorder = NULL);
+
+    // use this function when one emits a call where one argument is variable created with allocArgs(vars).
+    // it let's one specify the additional uses the call has which are unknown to the rewriter because it is hidden in
+    // the allocArgs call.
+    RewriterVar* emitCallWithAllocatedArgs(void* func_addr, const llvm::ArrayRef<RewriterVar*> args,
+                                           const llvm::ArrayRef<RewriterVar*> additional_uses);
+    std::pair<RewriterVar*, RewriterAction*> emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args,
+                                                        int num_slots, int slot_size, AST* ast_node = NULL,
+                                                        TypeRecorder* type_recorder = NULL);
 
     static void assertNameDefinedHelper(const char* id);
     static Box* callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, TypeRecorder* type_recorder,
@@ -293,13 +314,14 @@ private:
                                   std::vector<BoxedString*>* keyword_names);
 
     void _emitGetLocal(RewriterVar* val_var, const char* name);
-    void _emitJump(CFGBlock* b, RewriterVar* block_next, int& size_of_exit_to_interp);
+    void _emitJump(CFGBlock* b, RewriterVar* block_next, ExitInfo& exit_info);
     void _emitOSRPoint();
     void _emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots,
                      int slot_size, AST* ast_node);
     void _emitRecordType(RewriterVar* type_recorder_var, RewriterVar* obj_cls_var);
     void _emitReturn(RewriterVar* v);
-    void _emitSideExit(RewriterVar* var, RewriterVar* val_constant, CFGBlock* next_block, RewriterVar* false_path);
+    void _emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val_constant, CFGBlock* next_block,
+                       RewriterVar* false_path);
 };
 }
 

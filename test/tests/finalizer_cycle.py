@@ -1,3 +1,5 @@
+# skip-if: True
+# - This test is now meaningless now that we use refcounting, since the behavior isn't desired anymore
 import gc
 
 finalized_at_least_once = False

@@ -230,6 +230,7 @@ static void converters_init(PyObject* dict)
     if (!converters) {
         return;
     }
+    PyGC_RegisterStaticConstant(converters);
 
     PyDict_SetItemString(dict, "converters", converters);
 }

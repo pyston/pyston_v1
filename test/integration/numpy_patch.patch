@@ -1,247 +1,33 @@
-diff --git a/numpy/core/include/numpy/ndarrayobject.h b/numpy/core/include/numpy/ndarrayobject.h
-index fbaaeac..cb4adbb 100644
---- a/numpy/core/include/numpy/ndarrayobject.h
-+++ b/numpy/core/include/numpy/ndarrayobject.h
-@@ -117,7 +117,8 @@ extern "C" CONFUSE_EMACS
- #define PyArray_FILLWBYTE(obj, val) memset(PyArray_DATA(obj), val, \
-                                            PyArray_NBYTES(obj))
- 
--#define PyArray_REFCOUNT(obj) (((PyObject *)(obj))->ob_refcnt)
-+//#define PyArray_REFCOUNT(obj) (((PyObject *)(obj))->ob_refcnt)
-+#define PyArray_REFCOUNT(obj) 0
- #define NPY_REFCOUNT PyArray_REFCOUNT
- #define NPY_MAX_ELSIZE (2 * NPY_SIZEOF_LONGDOUBLE)
- 
-diff --git a/numpy/core/include/numpy/ndarraytypes.h b/numpy/core/include/numpy/ndarraytypes.h
-index 8403ee2..0bc2d4d 100644
---- a/numpy/core/include/numpy/ndarraytypes.h
-+++ b/numpy/core/include/numpy/ndarraytypes.h
-@@ -931,11 +931,18 @@ typedef int (PyArray_FinalizeFunc)(PyArrayObject *, PyObject *);
- #if NPY_ALLOW_THREADS
- #define NPY_BEGIN_ALLOW_THREADS Py_BEGIN_ALLOW_THREADS
- #define NPY_END_ALLOW_THREADS Py_END_ALLOW_THREADS
-+#define NPY_BEGIN_THREADS do {_save = NULL;} while (0);
-+/*
- #define NPY_BEGIN_THREADS do {_save = PyEval_SaveThread();} while (0);
-+*/
- #define NPY_END_THREADS   do { if (_save) \
-                 { PyEval_RestoreThread(_save); _save = NULL;} } while (0);
- #define NPY_BEGIN_THREADS_THRESHOLDED(loop_size) do { if (loop_size > 500) \
-+                { _save = NULL;} } while (0);
-+/*
-+#define NPY_BEGIN_THREADS_THRESHOLDED(loop_size) do { if (loop_size > 500) \
-                 { _save = PyEval_SaveThread();} } while (0);
-+*/
- 
- #define NPY_BEGIN_THREADS_DESCR(dtype) \
-         do {if (!(PyDataType_FLAGCHK(dtype, NPY_NEEDS_PYAPI))) \
-diff --git a/numpy/core/src/multiarray/arraytypes.c.src b/numpy/core/src/multiarray/arraytypes.c.src
-index 5a1e2f4..6f1cd62 100644
---- a/numpy/core/src/multiarray/arraytypes.c.src
-+++ b/numpy/core/src/multiarray/arraytypes.c.src
-@@ -4469,6 +4469,11 @@ set_typeinfo(PyObject *dict)
-     PyArray_Descr *dtype;
-     PyObject *cobj, *key;
- 
-+    /* Pyston change: deal with static nonheap objects */
-+    for (i = 0; i < 24; i++) {
-+        PyGC_AddNonHeapRoot((PyObject*)_builtin_descrs[i], sizeof(PyArray_Descr));
-+    }
-+
-     /*
-      * Add cast functions for the new types
-      */
 diff --git a/numpy/core/src/multiarray/compiled_base.c b/numpy/core/src/multiarray/compiled_base.c
-index 8ffeeda..5d43aab 100644
+index b9db3bb..2d24efc 100644
 --- a/numpy/core/src/multiarray/compiled_base.c
 +++ b/numpy/core/src/multiarray/compiled_base.c
-@@ -1336,13 +1336,13 @@ arr_add_docstring(PyObject *NPY_UNUSED(dummy), PyObject *args)
+@@ -1337,13 +1337,13 @@ arr_add_docstring(PyObject *NPY_UNUSED(dummy), PyObject *args)
          _ADDDOC(Type, new->tp_doc, new->tp_name);
      }
      else if (_TESTDOC2(MemberDescr)) {
 -        _ADDDOC(MemberDescr, new->d_member->doc, new->d_member->name);
-+        //_ADDDOC(MemberDescr, new->d_member->doc, new->d_member->name);
++        /* _ADDDOC(MemberDescr, new->d_member->doc, new->d_member->name); */
      }
      else if (_TESTDOC2(GetSetDescr)) {
 -        _ADDDOC(GetSetDescr, new->d_getset->doc, new->d_getset->name);
-+        //_ADDDOC(GetSetDescr, new->d_getset->doc, new->d_getset->name);
++        /* _ADDDOC(GetSetDescr, new->d_getset->doc, new->d_getset->name); */
      }
      else if (_TESTDOC2(MethodDescr)) {
 -        _ADDDOC(MethodDescr, new->d_method->ml_doc, new->d_method->ml_name);
-+        //_ADDDOC(MethodDescr, new->d_method->ml_doc, new->d_method->ml_name);
++        /* _ADDDOC(MethodDescr, new->d_method->ml_doc, new->d_method->ml_name); */
      }
      else {
          PyObject *doc_attr;
-diff --git a/numpy/core/src/multiarray/descriptor.c b/numpy/core/src/multiarray/descriptor.c
-index d025901..27c8718 100644
---- a/numpy/core/src/multiarray/descriptor.c
-+++ b/numpy/core/src/multiarray/descriptor.c
-@@ -1051,6 +1051,11 @@ _convert_from_dict(PyObject *obj, int align)
-                         "with align=True",
-                         (int)offset, (int)newdescr->alignment);
-                 ret = NPY_FAIL;
-+
-+                // Pyston change: we don't deal well with execution continuing
-+                // after an exception has been set. Subsequent calls to GetItem and
-+                // such happen with the exception set (PyErr_Occurred() == true).
-+                goto fail;
-             }
-             else if (offset + newdescr->elsize > totalsize) {
-                 totalsize = offset + newdescr->elsize;
-@@ -1079,6 +1084,11 @@ _convert_from_dict(PyObject *obj, int align)
-             PyErr_SetString(PyExc_ValueError,
-                     "field names must be strings");
-             ret = NPY_FAIL;
-+
-+            // Pyston change: we don't deal well with execution continuing
-+            // after an exception has been set. Subsequent calls to GetItem and
-+            // such happen with the exception set (PyErr_Occurred() == true).
-+            goto fail;
-         }
- 
-         /* Insert into dictionary */
-@@ -1086,6 +1096,11 @@ _convert_from_dict(PyObject *obj, int align)
-             PyErr_SetString(PyExc_ValueError,
-                     "name already used as a name or title");
-             ret = NPY_FAIL;
-+
-+            // Pyston change: we don't deal well with execution continuing
-+            // after an exception has been set. Subsequent calls to GetItem and
-+            // such happen with the exception set (PyErr_Occurred() == true).
-+            goto fail;
-         }
-         PyDict_SetItem(fields, name, tup);
-         Py_DECREF(name);
-@@ -1099,6 +1114,11 @@ _convert_from_dict(PyObject *obj, int align)
-                     PyErr_SetString(PyExc_ValueError,
-                             "title already used as a name or title.");
-                     ret=NPY_FAIL;
-+
-+                    // Pyston change: we don't deal well with execution continuing
-+                    // after an exception has been set. Subsequent calls to GetItem and
-+                    // such happen with the exception set (PyErr_Occurred() == true).
-+                    goto fail;
-                 }
-                 PyDict_SetItem(fields, title, tup);
-             }
-diff --git a/numpy/core/src/multiarray/scalartypes.c.src b/numpy/core/src/multiarray/scalartypes.c.src
-index b5e0fde..13784b3 100644
---- a/numpy/core/src/multiarray/scalartypes.c.src
-+++ b/numpy/core/src/multiarray/scalartypes.c.src
-@@ -4060,6 +4060,10 @@ static void init_basetypes(void);
- NPY_NO_EXPORT void
- initialize_numeric_types(void)
- {
-+    /* Pyston change: deal with static nonheap objects */
-+    PyGC_AddNonHeapRoot((PyObject*)&_PyArrayScalar_BoolValues[0], sizeof(PyBoolScalarObject));
-+    PyGC_AddNonHeapRoot((PyObject*)&_PyArrayScalar_BoolValues[1], sizeof(PyBoolScalarObject));
-+
-     init_basetypes();
-     PyGenericArrType_Type.tp_dealloc = (destructor)gentype_dealloc;
-     PyGenericArrType_Type.tp_as_number = &gentype_as_number;
-diff --git a/numpy/core/src/umath/test_rational.c.src b/numpy/core/src/umath/test_rational.c.src
-index b0c06e1..191fbed 100644
---- a/numpy/core/src/umath/test_rational.c.src
-+++ b/numpy/core/src/umath/test_rational.c.src
-@@ -1189,6 +1189,10 @@ PyMODINIT_FUNC inittest_rational(void) {
-     npyrational_arrfuncs.fillwithscalar = npyrational_fillwithscalar;
-     /* Left undefined: scanfunc, fromstr, sort, argsort */
-     Py_TYPE(&npyrational_descr) = &PyArrayDescr_Type;
-+
-+    /* Pyston change: deal with static nonheap objects */
-+    PyGC_AddNonHeapRoot((PyObject*)&npyrational_descr, sizeof(PyArray_Descr));
-+
-     npy_rational = PyArray_RegisterDataType(&npyrational_descr);
-     if (npy_rational<0) {
-         goto fail;
-diff --git a/numpy/core/src/umath/ufunc_object.c b/numpy/core/src/umath/ufunc_object.c
-index 7797731..93edc66 100644
---- a/numpy/core/src/umath/ufunc_object.c
-+++ b/numpy/core/src/umath/ufunc_object.c
-@@ -4345,9 +4345,11 @@ ufunc_generic_call(PyUFuncObject *ufunc, PyObject *args, PyObject *kwds)
-     }
- 
- fail:
-+    /* Causes compiler CRASH wtf
-     for (i = ufunc->nin; i < ufunc->nargs; i++) {
-         Py_XDECREF(mps[i]);
-     }
-+    */
-     return NULL;
- }
- 
-diff --git a/numpy/core/tests/test_records.py b/numpy/core/tests/test_records.py
-index 7a18f29..a8d4e4b 100644
---- a/numpy/core/tests/test_records.py
-+++ b/numpy/core/tests/test_records.py
-@@ -12,7 +12,7 @@ from numpy.testing import (
-     assert_array_almost_equal, assert_raises
+diff --git a/setup.py b/setup.py
+index cc8f3c1..d3f89f6 100755
+--- a/setup.py
++++ b/setup.py
+@@ -352,6 +352,7 @@ def setup_package():
+         platforms = ["Windows", "Linux", "Solaris", "Mac OS-X", "Unix"],
+         test_suite='nose.collector',
+         cmdclass={"sdist": sdist_checked},
++        zip_safe=False,
      )
  
--
-+"""
- class TestFromrecords(TestCase):
-     def test_fromrecords(self):
-         r = np.rec.fromrecords([[456, 'dbe', 1.2], [2, 'de', 1.3]],
-@@ -294,6 +294,6 @@ def test_find_duplicate():
- 
-     l3 = [2, 2, 1, 4, 1, 6, 2, 3]
-     assert_(np.rec.find_duplicate(l3) == [2, 1])
--
-+"""
- if __name__ == "__main__":
-     run_module_suite()
-diff --git a/numpy/lib/tests/test_io.py b/numpy/lib/tests/test_io.py
-index f4ce678..56f5cd9 100644
---- a/numpy/lib/tests/test_io.py
-+++ b/numpy/lib/tests/test_io.py
-@@ -885,7 +885,8 @@ class Testfromregex(TestCase):
- 
- #####--------------------------------------------------------------------------
- 
--
-+# Pyston: these don't work, segfault, not sure why
-+"""
- class TestFromTxt(TestCase):
-     #
-     def test_record(self):
-@@ -1822,6 +1823,7 @@ M   33  21.99
-         assert_allclose(test['f0'], 73786976294838206464.)
-         assert_equal(test['f1'], 17179869184)
-         assert_equal(test['f2'], 1024)
-+"""
- 
- def test_gzip_load():
-     a = np.random.random((5, 5))
-diff --git a/numpy/ma/tests/test_core.py b/numpy/ma/tests/test_core.py
-index d3ec704..d68ffb0 100644
---- a/numpy/ma/tests/test_core.py
-+++ b/numpy/ma/tests/test_core.py
-@@ -1433,7 +1433,12 @@ class TestMaskedArrayAttributes(TestCase):
-         def assign():
-             m = np.ma.array(a)
-             m.dtype = np.dtype('f8')
--        assert_raises(ValueError, assign)
-+
-+        # Pyston: Some weirdness here with a jitted frame calling a C function
-+# that raises an exception in C-style, and the exception is still set as we
-+# return from the jitted function, causing an assertion to be triggered. Also,
-+# this happens with a with context catching the exception and stuff. I have no idea.
-+#assert_raises(ValueError, assign)
- 
-         b = a.view(dtype='f4', type=np.ma.MaskedArray)  # raises?
-         assert_equal(b.dtype, np.dtype('f4'))
-diff --git a/numpy/ma/tests/test_regression.py b/numpy/ma/tests/test_regression.py
-index dba74d3..23cfeed 100644
---- a/numpy/ma/tests/test_regression.py
-+++ b/numpy/ma/tests/test_regression.py
-@@ -35,7 +35,8 @@ class TestRegression(TestCase):
-         a[2, 0] = np.ma.masked
-         b = np.zeros((4, 2))
-         a*b
--        b*a
-+        # Pyston: commented out for now, causes assertion to be triggered.
-+        # b*a
- 
-     def test_masked_array_repeat(self, level=rlevel):
-         # Ticket #271
+     if "--force" in sys.argv:

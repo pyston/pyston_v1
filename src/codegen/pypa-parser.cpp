@@ -977,9 +977,12 @@ pypa::String pypaEscapeDecoder(const pypa::String& s, const pypa::String& encodi
             PyObject* str = decode_unicode(s.c_str(), s.size(), raw_prefix, encoding.c_str());
             if (!str)
                 throwCAPIException();
+            AUTO_DECREF(str);
             BoxedString* str_utf8 = (BoxedString*)PyUnicode_AsUTF8String(str);
+            AUTO_DECREF(str_utf8);
             assert(str_utf8->cls == str_cls);
-            checkAndThrowCAPIException();
+            if (!str_utf8)
+                throwCAPIException();
             return str_utf8->s().str();
         }
 
@@ -989,7 +992,9 @@ pypa::String pypaEscapeDecoder(const pypa::String& s, const pypa::String& encodi
                 PyObject* u = PyUnicode_DecodeUTF8(s.c_str(), s.size(), NULL);
                 if (!u)
                     throwCAPIException();
+                AUTO_DECREF(u);
                 BoxedString* str = (BoxedString*)PyUnicode_AsEncodedString(u, encoding.c_str(), NULL);
+                AUTO_DECREF(str);
                 assert(str->cls == str_cls);
                 return str->s().str();
             } else {
@@ -1001,11 +1006,16 @@ pypa::String pypaEscapeDecoder(const pypa::String& s, const pypa::String& encodi
                                                                    need_encoding ? encoding.c_str() : NULL);
         if (!decoded)
             throwCAPIException();
+        AUTO_DECREF(decoded);
         assert(decoded->cls == str_cls);
         return decoded->s().str();
     } catch (ExcInfo e) {
         error = true;
         BoxedString* error_message = str(e.value);
+
+        e.clear();
+        AUTO_DECREF(error_message);
+
         if (error_message && error_message->cls == str_cls)
             return std::string(error_message->s());
         return "Encountered an unknown error inside pypaEscapeDecoder";
@@ -1028,25 +1038,28 @@ public:
 
 private:
     bool is_eof;
+    PyObject* file;
+    PyObject* reader;
     PyObject* readline;
     unsigned line_number;
 };
 
-PystonReader::PystonReader() : is_eof(false), readline(nullptr), line_number(0) {
+PystonReader::PystonReader() : is_eof(false), file(nullptr), reader(nullptr), readline(nullptr), line_number(0) {
 }
 
 PystonReader::~PystonReader() {
-    if (readline)
-        gc::deregisterPermanentRoot(readline);
-    readline = nullptr;
+    Py_CLEAR(readline);
+    Py_CLEAR(reader);
+    Py_CLEAR(file);
 }
 
 bool PystonReader::set_encoding(const std::string& coding) {
-    PyObject* stream = open_python_file();
-    if (stream == NULL)
+    assert(!file && !reader && !readline);
+    file = open_python_file();
+    if (file == NULL)
         return false;
 
-    PyObject* reader = PyCodec_StreamReader(coding.c_str(), stream, NULL);
+    reader = PyCodec_StreamReader(coding.c_str(), file, NULL);
     if (reader == NULL)
         return false;
 
@@ -1054,7 +1067,6 @@ bool PystonReader::set_encoding(const std::string& coding) {
     if (readline == NULL)
         return false;
 
-    gc::registerPermanentRoot(readline);
     return true;
 }
 
@@ -1083,12 +1095,14 @@ std::string PystonReader::get_line() {
 
     BoxedString* line = (BoxedString*)runtimeCall(readline, ArgPassSpec(0), 0, 0, 0, 0, 0);
     if (line->cls == unicode_cls) {
+        AUTO_DECREF(line);
         line = (BoxedString*)PyUnicode_AsUTF8String(line);
         if (line == NULL) {
             is_eof = true;
             return std::string();
         }
     }
+    AUTO_DECREF(line);
     assert(line->cls == str_cls);
     if (!line->size())
         is_eof = true;
@@ -1226,6 +1240,7 @@ PyObject* PystonStringReader::open_python_file() noexcept {
     PyObject* s = PyString_FromString(str + position);
     if (!s)
         return s;
+    AUTO_DECREF(s);
     return PycStringIO->NewInput(s);
 }
 

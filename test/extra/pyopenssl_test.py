@@ -17,5 +17,5 @@ import subprocess
 subprocess.check_call(["sed", "-i", 's/\\(def test_digest.*\\)/\\1\\n        return/',
     os.path.join(PYOPENSSL_DIR, "test", "test_crypto.py")])
 
-expected = [{'ran': 247, 'errors': 1}]
+expected = [{'ran': 438}]
 run_test([NOSETESTS_EXE], cwd=PYOPENSSL_DIR, expected=expected)

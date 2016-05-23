@@ -1,0 +1,19 @@
+handle SIGUSR2 pass nostop noprint
+
+skip file /usr/include/c++/4.8/bits/stl_vector.h
+skip file /usr/include/c++/4.9/bits/stl_vector.h
+skip file /usr/include/c++/5/bits/stl_vector.h
+skip file /usr/include/c++/4.8/bits/unique_ptr.h
+skip file /usr/include/c++/4.9/bits/unique_ptr.h
+skip file /usr/include/c++/5/bits/unique_ptr.h
+skip file /usr/include/c++/4.8/bits/move.h
+skip file /usr/include/c++/4.9/bits/move.h
+skip file /usr/include/c++/5/bits/move.h
+
+skip pyston::ArgPassSpec::ArgPassSpec(int, int, bool, bool)
+skip pyston::InternedString::getBox() const
+skip pyston::BoxedString::s() const
+skip pyston::Value::operator pyston::RewriterVar*()
+
+skip pyston::autoDecref<pyston::Box, false>(pyston::Box*)
+skip pyston::autoDecref<pyston::Box, true>(pyston::Box*)

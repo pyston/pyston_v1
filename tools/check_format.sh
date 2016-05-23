@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eu
 failed=0
-for fn in $(find . -path ./core -prune -o -name '*.cpp' -print -o -name '*.h' -print); do
+for fn in $(find . -path ./core/from_llvm -prune -o -name '*.cpp' -print -o -name '*.h' -print); do
     diff -u $fn <($1 -style=file $fn) || failed=1
 done
 

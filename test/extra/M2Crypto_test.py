@@ -42,7 +42,7 @@ def install_and_test_lxml():
     env["CFLAGS"] = "-DSWIG_PYTHON_SLOW_GETSET_THIS" 
     subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=M2CRYPTO_DIR, env=env)
 
-    expected = [{'ran': 235, 'failures': 1, 'errors': 7, 'skipped': 2}]
+    expected = [{'ran': 235, 'errors': 5, 'skipped': 2}]
     run_test([PYTHON_EXE, "setup.py", "test"], cwd=M2CRYPTO_DIR, expected=expected)
    
 create_virtenv(ENV_NAME, None, force_create = True)

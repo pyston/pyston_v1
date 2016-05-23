@@ -239,7 +239,7 @@ static PyTypeObject localdummytype = {
     /* tp_name           */ "_thread._localdummy",
     /* tp_basicsize      */ sizeof(localdummyobject),
     /* tp_itemsize       */ 0,
-    /* tp_dealloc        */ (destructor)/*localdummy_dealloc*/ NULL,
+    /* tp_dealloc        */ (destructor)localdummy_dealloc,
     /* tp_print          */ 0,
     /* tp_getattr        */ 0,
     /* tp_setattr        */ 0,
@@ -392,10 +392,6 @@ local_traverse(localobject *self, visitproc visit, void *arg)
 static int
 local_clear(localobject *self)
 {
-    // Pyston change:
-    Py_FatalError("unexpected call to local_clear()");
-    abort();
-#if 0
     PyThreadState *tstate;
     Py_CLEAR(self->args);
     Py_CLEAR(self->kw);
@@ -413,7 +409,6 @@ local_clear(localobject *self)
                 PyDict_DelItem(tstate->dict, self->key);
     }
     return 0;
-#endif
 }
 
 static void
@@ -498,7 +493,7 @@ static PyTypeObject localtype = {
     /* tp_name           */ "thread._local",
     /* tp_basicsize      */ sizeof(localobject),
     /* tp_itemsize       */ 0,
-    /* tp_dealloc        */ (destructor)/*local_dealloc*/ NULL,
+    /* tp_dealloc        */ (destructor)local_dealloc,
     /* tp_print          */ 0,
     /* tp_getattr        */ 0,
     /* tp_setattr        */ 0,
@@ -927,7 +922,7 @@ initthread(void)
 #if 0
     /* Add a symbolic constant */
     d = PyModule_GetDict(m);
-    ThreadError = PyGC_AddRoot(PyErr_NewException("thread.error", NULL, NULL));
+    ThreadError = PyErr_NewException("thread.error", NULL, NULL);
     PyDict_SetItemString(d, "error", ThreadError);
     Locktype.tp_doc = lock_doc;
     if (PyType_Ready(&Locktype) < 0)
@@ -942,9 +937,10 @@ initthread(void)
 
     //nb_threads = 0; // pyston change
 
-    str_dict = PyGC_AddRoot(PyString_InternFromString("__dict__"));
+    str_dict = PyString_InternFromString("__dict__");
     if (str_dict == NULL)
         return;
+    PyGC_RegisterStaticConstant(str_dict);
 
     /* Initialize the C thread library */
     //PyThread_init_thread(); // pyston change

@@ -53,12 +53,12 @@ public:
     // contains the address of the entry function
     std::pair<CFGBlock*, Box*>(*entry_code)(void* interpeter, CFGBlock* block, Box** vregs);
 
-    std::vector<AST_stmt*> body;
-    std::vector<CFGBlock*> predecessors, successors;
+    llvm::SmallVector<AST_stmt*, 4> body;
+    llvm::SmallVector<CFGBlock*, 2> predecessors, successors;
     int idx; // index in the CFG
     const char* info;
 
-    typedef std::vector<AST_stmt*>::iterator iterator;
+    typedef llvm::SmallVector<AST_stmt*, 4>::iterator iterator;
 
     CFGBlock(CFG* cfg, int idx) : cfg(cfg), code(NULL), entry_code(NULL), idx(idx), info(NULL) {}
 
@@ -67,9 +67,7 @@ public:
 
     void push_back(AST_stmt* node) { body.push_back(node); }
     void print(llvm::raw_ostream& stream = llvm::outs());
-    void _print() {
-        print();
-    }
+    void _print() { print(); }
 };
 
 // Control Flow Graph
@@ -122,6 +120,7 @@ public:
 
 class SourceInfo;
 CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body);
+void printCFG(CFG* cfg);
 }
 
 #endif

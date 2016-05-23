@@ -49,10 +49,11 @@ struct ASTInterpreterJitInterface {
     static Box* derefHelper(void* interp, InternedString s);
     static Box* landingpadHelper(void* interp);
     static void pendingCallsCheckHelper();
-    static Box* setExcInfoHelper(void* interp, Box* type, Box* value, Box* traceback);
+    static void setExcInfoHelper(void* interp, STOLEN(Box*) type, STOLEN(Box*) value, STOLEN(Box*) traceback);
     static void setLocalClosureHelper(void* interp, long vreg, InternedString id, Box* v);
-    static Box* uncacheExcInfoHelper(void* interp);
+    static void uncacheExcInfoHelper(void* interp);
     static void raise0Helper(void* interp) __attribute__((noreturn));
+    static Box* yieldHelper(void* interp, STOLEN(Box*) value);
 };
 
 class RewriterVar;
@@ -79,7 +80,7 @@ Box* astInterpretFunction(FunctionMetadata* f, Box* closure, Box* generator, Box
 Box* astInterpretFunctionEval(FunctionMetadata* cf, Box* globals, Box* boxedLocals);
 // this function is implemented in the src/codegen/ast_interpreter_exec.S assembler file
 extern "C" Box* astInterpretDeopt(FunctionMetadata* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                                  FrameStackState frame_state);
+                                  STOLEN(FrameStackState) frame_state);
 
 struct FrameInfo;
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr);

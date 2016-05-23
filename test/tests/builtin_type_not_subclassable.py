@@ -21,6 +21,23 @@ class b:
   def d(self):
     print self.c
 
+def test(cls):
+    print cls.__name__, is_subclassable(cls)
+
+def testall(module):
+    for n in sorted(dir((module))):
+        if n in ("reversed", "AttrwrapperType", "BuiltinMethodType", "BufferType", "DictProxyType", "BuiltinCAPIFunctionType"):
+            continue
+
+        cls = getattr(module, n)
+        if not isinstance(cls, type):
+            continue
+        test(cls)
+
+import types
+testall(types)
+testall(__builtins__)
+
 #slice
 assert not is_subclassable(slice)
 #xrange
@@ -56,3 +73,17 @@ assert not is_subclassable(type(ins.d))
 assert not is_subclassable(type(inspect.currentframe()))
 #function
 assert not is_subclassable(type(is_subclassable))
+
+test(type(iter([])))
+test(type(reversed([])))
+test(type(reversed(()))) # not the same as reversed([])
+test(type(iter(set())))
+# test(type(iter("")))
+test(type(iter({})))
+test(type(iter(())))
+test(type({}.iterkeys()))
+test(type(enumerate([])))
+import sys
+test(type(sys.flags))
+test(super)
+test(type(None))

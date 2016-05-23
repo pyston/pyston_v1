@@ -57,11 +57,17 @@ Box* sysExcClear() {
     assert(exc->type);
     assert(exc->value);
 
-    exc->type = None;
-    exc->value = None;
+    Box* old_type = exc->type;
+    Box* old_value = exc->value;
+    Box* old_traceback = exc->traceback;
+    exc->type = incref(None);
+    exc->value = incref(None);
     exc->traceback = NULL;
+    Py_DECREF(old_type);
+    Py_DECREF(old_value);
+    Py_XDECREF(old_traceback);
 
-    return None;
+    Py_RETURN_NONE;
 }
 
 static Box* sysExit(Box* arg) {
@@ -70,7 +76,7 @@ static Box* sysExit(Box* arg) {
     raiseExc(exc);
 }
 
-BoxedDict* getSysModulesDict() {
+BORROWED(BoxedDict*) getSysModulesDict() {
     // PyPy's behavior: fetch from sys.modules each time:
     // Box *_sys_modules = sys_module->getattr("modules");
     // assert(_sys_modules);
@@ -81,9 +87,11 @@ BoxedDict* getSysModulesDict() {
     return sys_modules_dict;
 }
 
-BoxedList* getSysPath() {
+BORROWED(BoxedList*) getSysPath() {
     // Unlike sys.modules, CPython handles sys.path by fetching it each time:
-    Box* _sys_path = sys_module->getattr(internStringMortal("path"));
+    auto path_str = getStaticString("path");
+
+    Box* _sys_path = sys_module->getattr(path_str);
     assert(_sys_path);
 
     if (_sys_path->cls != list_cls) {
@@ -107,7 +115,7 @@ Box* sysGetFrame(Box* val) {
     if (!frame) {
         raiseExcHelper(ValueError, "call stack is not deep enough");
     }
-    return frame;
+    return incref(frame);
 }
 
 Box* sysCurrentFrames() {
@@ -124,7 +132,7 @@ Box* sysGetDefaultEncoding() {
 Box* sysGetFilesystemEncoding() {
     if (Py_FileSystemDefaultEncoding)
         return boxString(Py_FileSystemDefaultEncoding);
-    return None;
+    Py_RETURN_NONE;
 }
 
 Box* sysGetRecursionLimit() {
@@ -134,18 +142,18 @@ Box* sysGetRecursionLimit() {
 extern "C" int PySys_SetObject(const char* name, PyObject* v) noexcept {
     try {
         if (!v) {
-            if (sys_module->getattr(internStringMortal(name)))
-                sys_module->delattr(internStringMortal(name), NULL);
+            if (sys_module->getattr(autoDecref(internStringMortal(name))))
+                sys_module->delattr(autoDecref(internStringMortal(name)), NULL);
         } else
-            sys_module->setattr(internStringMortal(name), v, NULL);
+            sys_module->setattr(autoDecref(internStringMortal(name)), v, NULL);
     } catch (ExcInfo e) {
         abort();
     }
     return 0;
 }
 
-extern "C" PyObject* PySys_GetObject(const char* name) noexcept {
-    return sys_module->getattr(internStringMortal(name));
+extern "C" BORROWED(PyObject*) PySys_GetObject(const char* name) noexcept {
+    return sys_module->getattr(autoDecref(internStringMortal(name)));
 }
 
 extern "C" FILE* PySys_GetFile(char* name, FILE* def) noexcept {
@@ -201,22 +209,24 @@ extern "C" void PySys_WriteStderr(const char* format, ...) noexcept {
 }
 
 void addToSysArgv(const char* str) {
-    Box* sys_argv = sys_module->getattr(internStringMortal("argv"));
+    static BoxedString* argv_str = getStaticString("argv");
+    Box* sys_argv = sys_module->getattr(argv_str);
     assert(sys_argv);
     assert(sys_argv->cls == list_cls);
-    listAppendInternal(sys_argv, boxString(str));
+    listAppendInternalStolen(sys_argv, boxString(str));
 }
 
 void appendToSysPath(llvm::StringRef path) {
     BoxedList* sys_path = getSysPath();
-    listAppendInternal(sys_path, boxString(path));
+    listAppendInternalStolen(sys_path, boxString(path));
 }
 
 void prependToSysPath(llvm::StringRef path) {
     BoxedList* sys_path = getSysPath();
-    static BoxedString* insert_str = internStringImmortal("insert");
+    static BoxedString* insert_str = getStaticString("insert");
     CallattrFlags callattr_flags{.cls_only = false, .null_on_nonexistent = false, .argspec = ArgPassSpec(2) };
-    callattr(sys_path, insert_str, callattr_flags, boxInt(0), boxString(path), NULL, NULL, NULL);
+    autoDecref(callattr(sys_path, insert_str, callattr_flags, autoDecref(boxInt(0)), autoDecref(boxString(path)), NULL,
+                        NULL, NULL));
 }
 
 static BoxedClass* sys_flags_cls;
@@ -227,27 +237,24 @@ public:
     BoxedSysFlags() {
         auto zero = boxInt(0);
         assert(zero);
-        division_warning = zero;
-        bytes_warning = zero;
-        no_user_site = zero;
-        optimize = zero;
+        division_warning = incref(zero);
+        bytes_warning = incref(zero);
+        no_user_site = incref(zero);
+        optimize = incref(zero);
+        Py_DECREF(zero);
     }
 
     DEFAULT_CLASS(sys_flags_cls);
 
-    static void gcHandler(GCVisitor* v, Box* _b) {
-        assert(_b->cls == sys_flags_cls);
-        Box::gcHandler(v, _b);
-
-        BoxedSysFlags* self = static_cast<BoxedSysFlags*>(_b);
-        v->visit(&self->division_warning);
-        v->visit(&self->bytes_warning);
-        v->visit(&self->no_user_site);
-        v->visit(&self->optimize);
-    }
-
     static Box* __new__(Box* cls, Box* args, Box* kwargs) {
         raiseExcHelper(TypeError, "cannot create 'sys.flags' instances");
+    }
+
+    static void dealloc(BoxedSysFlags* self) {
+        Py_DECREF(self->division_warning);
+        Py_DECREF(self->bytes_warning);
+        Py_DECREF(self->no_user_site);
+        Py_DECREF(self->optimize);
     }
 };
 
@@ -397,8 +404,74 @@ extern "C" const char* Py_GetPlatform() noexcept {
 #endif
 }
 
-extern "C" PyObject* PySys_GetModulesDict() noexcept {
+extern "C" BORROWED(PyObject*) PySys_GetModulesDict() noexcept {
     return getSysModulesDict();
+}
+
+size_t _PySys_GetSizeOf(PyObject* o) {
+    static PyObject* str__sizeof__ = NULL;
+    PyObject* res = NULL;
+    Py_ssize_t size;
+
+    /* Make sure the type is initialized. float gets initialized late */
+    if (PyType_Ready(Py_TYPE(o)) < 0)
+        return (size_t)-1;
+
+    /* Instance of old-style class */
+    if (PyInstance_Check(o))
+        size = PyInstance_Type.tp_basicsize;
+    /* all other objects */
+    else {
+        PyObject* method = _PyObject_LookupSpecial(o, "__sizeof__", &str__sizeof__);
+        if (method == NULL) {
+            if (!PyErr_Occurred())
+                PyErr_Format(PyExc_TypeError, "Type %.100s doesn't define __sizeof__", Py_TYPE(o)->tp_name);
+        } else {
+            res = PyObject_CallFunctionObjArgs(method, NULL);
+            Py_DECREF(method);
+        }
+
+        if (res == NULL)
+            return (size_t)-1;
+
+        size = (size_t)PyInt_AsSsize_t(res);
+        Py_DECREF(res);
+        if (size == -1 && PyErr_Occurred())
+            return (size_t)-1;
+    }
+
+    if (size < 0) {
+        PyErr_SetString(PyExc_ValueError, "__sizeof__() should return >= 0");
+        return (size_t)-1;
+    }
+
+    /* add gc_head size */
+    if (PyObject_IS_GC(o))
+        return ((size_t)size) + sizeof(PyGC_Head);
+    return (size_t)size;
+}
+
+static PyObject* sys_getsizeof(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
+    static const char* kwlist[] = { "object", "default", 0 };
+    size_t size;
+    PyObject* o, * dflt = NULL;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|O:getsizeof", const_cast<char**>(kwlist), &o, &dflt))
+        return NULL;
+
+    size = _PySys_GetSizeOf(o);
+
+    if (size == (size_t)-1 && PyErr_Occurred()) {
+        /* Has a default value been given */
+        if (dflt != NULL && PyErr_ExceptionMatches(PyExc_TypeError)) {
+            PyErr_Clear();
+            Py_INCREF(dflt);
+            return dflt;
+        } else
+            return NULL;
+    }
+
+    return PyInt_FromSize_t(size);
 }
 
 static PyObject* sys_excepthook(PyObject* self, PyObject* args) noexcept {
@@ -453,6 +526,30 @@ static PyObject* sys_displayhook(PyObject* self, PyObject* o) noexcept {
     return Py_None;
 }
 
+static PyObject* sys_clear_type_cache(PyObject* self, PyObject* args) {
+    PyType_ClearCache();
+    Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(sys_clear_type_cache__doc__, "_clear_type_cache() -> None\n\
+        Clear the internal type lookup cache.");
+
+static PyObject* sys_getrefcount(PyObject* self, PyObject* arg) {
+    return PyInt_FromSsize_t(arg->ob_refcnt);
+}
+
+#ifdef Py_REF_DEBUG
+static PyObject* sys_gettotalrefcount(PyObject* self) {
+    return PyInt_FromSsize_t(_Py_GetRefTotal());
+}
+#endif /* Py_REF_DEBUG */
+
+PyDoc_STRVAR(getrefcount_doc, "getrefcount(object) -> integer\n\
+        \n\
+        Return the reference count of object.  The count returned is generally\n\
+        one higher than you might expect, because it includes the (temporary)\n\
+        reference as an argument to getrefcount().");
+
 PyDoc_STRVAR(excepthook_doc, "excepthook(exctype, value, traceback) -> None\n"
                              "\n"
                              "Handle an exception by displaying it with a traceback on sys.stderr.\n");
@@ -461,9 +558,16 @@ PyDoc_STRVAR(displayhook_doc, "displayhook(object) -> None\n"
                               "\n"
                               "Print an object to sys.stdout and also save it in __builtin__._\n");
 
+PyDoc_STRVAR(getsizeof_doc, "getsizeof(object, default) -> int\n\
+\n\
+Return the size of object in bytes.");
+
 static PyMethodDef sys_methods[] = {
     { "excepthook", sys_excepthook, METH_VARARGS, excepthook_doc },
     { "displayhook", sys_displayhook, METH_O, displayhook_doc },
+    { "_clear_type_cache", sys_clear_type_cache, METH_NOARGS, sys_clear_type_cache__doc__ },
+    { "getrefcount", (PyCFunction)sys_getrefcount, METH_O, getrefcount_doc },
+    { "getsizeof", (PyCFunction)sys_getsizeof, METH_VARARGS | METH_KEYWORDS, getsizeof_doc },
 };
 
 PyDoc_STRVAR(version_info__doc__, "sys.version_info\n\
@@ -628,17 +732,27 @@ Return the current value of the recursion limit, the maximum depth\n\
 of the Python interpreter stack.  This limit prevents infinite\n\
 recursion from causing an overflow of the C stack and crashing Python.");
 
+static int _check_and_flush(FILE* stream) {
+    int prev_fail = ferror(stream);
+    return fflush(stream) || prev_fail ? EOF : 0;
+}
+
 void setupSys() {
     sys_modules_dict = new BoxedDict();
-    gc::registerPermanentRoot(sys_modules_dict);
+    constants.push_back(sys_modules_dict);
 
     // This is ok to call here because we've already created the sys_modules_dict
-    sys_module = createModule(boxString("sys"));
+    sys_module = createModule(autoDecref(boxString("sys")));
 
-    sys_module->giveAttr("modules", sys_modules_dict);
+    // sys_module is what holds on to all of the other modules:
+    Py_INCREF(sys_module);
+    late_constants.push_back(sys_module);
+
+    sys_module->giveAttrBorrowed("modules", sys_modules_dict);
 
     BoxedList* sys_path = new BoxedList();
-    sys_module->giveAttr("path", sys_path);
+    constants.push_back(sys_path);
+    sys_module->giveAttrBorrowed("path", sys_path);
 
     sys_module->giveAttr("argv", new BoxedList());
 
@@ -653,7 +767,7 @@ void setupSys() {
                                                  "exit", { None }, NULL, exit_doc));
 
     sys_module->giveAttr("warnoptions", new BoxedList());
-    sys_module->giveAttr("py3kwarning", False);
+    sys_module->giveAttrBorrowed("py3kwarning", False);
     sys_module->giveAttr("byteorder", boxString(isLittleEndian() ? "little" : "big"));
 
     sys_module->giveAttr("platform", boxString(Py_GetPlatform()));
@@ -678,7 +792,7 @@ void setupSys() {
                                                   "getrecursionlimit", getrecursionlimit_doc));
 
     // As we don't support compile() etc yet force 'dont_write_bytecode' to true.
-    sys_module->giveAttr("dont_write_bytecode", True);
+    sys_module->giveAttrBorrowed("dont_write_bytecode", True);
 
     sys_module->giveAttr("prefix", boxString(Py_GetPrefix()));
     sys_module->giveAttr("exec_prefix", boxString(Py_GetExecPrefix()));
@@ -692,14 +806,16 @@ void setupSys() {
 
     sys_module->giveAttr("version", boxString(generateVersionString()));
     sys_module->giveAttr("hexversion", boxInt(PY_VERSION_HEX));
-    sys_module->giveAttr("subversion", BoxedTuple::create({ boxString("Pyston"), boxString(""), boxString("") }));
+    sys_module->giveAttr("subversion", BoxedTuple::create({ autoDecref(boxString("Pyston")), autoDecref(boxString("")),
+                                                            autoDecref(boxString("")) }));
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
     sys_module->giveAttr("maxsize", boxInt(PY_SSIZE_T_MAX));
 
-    sys_flags_cls = new (0)
-        BoxedClass(object_cls, BoxedSysFlags::gcHandler, 0, 0, sizeof(BoxedSysFlags), false, "flags");
+    sys_flags_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSysFlags), false, "flags", false, NULL,
+                                       NULL, false);
     sys_flags_cls->giveAttr(
         "__new__", new BoxedFunction(FunctionMetadata::create((void*)BoxedSysFlags::__new__, UNKNOWN, 1, true, true)));
+    sys_flags_cls->tp_dealloc = (destructor)BoxedSysFlags::dealloc;
 #define ADD(name)                                                                                                      \
     sys_flags_cls->giveAttr(STRINGIFY(name),                                                                           \
                             new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSysFlags, name)))
@@ -721,19 +837,19 @@ void setupSys() {
     SET_SYS_FROM_STRING("float_repr_style", PyString_FromString("legacy"));
 #endif
 
-    sys_flags_cls->tp_mro = BoxedTuple::create({ sys_flags_cls, object_cls });
     sys_flags_cls->freeze();
 
+    auto sys_str = getStaticString("sys");
     for (auto& md : sys_methods) {
-        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, NULL, boxString("sys")));
+        sys_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, NULL, sys_str));
     }
 
-    sys_module->giveAttr("__displayhook__", sys_module->getattr(internStringMortal("displayhook")));
+    sys_module->giveAttrBorrowed("__displayhook__", sys_module->getattr(autoDecref(internStringMortal("displayhook"))));
     sys_module->giveAttr("flags", new BoxedSysFlags());
 }
 
 void setupSysEnd() {
-    std::vector<Box*, StlCompatAllocator<Box*>> builtin_module_names;
+    std::vector<Box*> builtin_module_names;
     for (int i = 0; PyImport_Inittab[i].name != NULL; i++)
         builtin_module_names.push_back(boxString(PyImport_Inittab[i].name));
 
@@ -742,6 +858,9 @@ void setupSysEnd() {
 
     sys_module->giveAttr("builtin_module_names",
                          BoxedTuple::create(builtin_module_names.size(), &builtin_module_names[0]));
+
+    for (Box* b : builtin_module_names)
+        Py_DECREF(b);
 
 #ifndef NDEBUG
     for (const auto& p : *sys_modules_dict) {
@@ -757,8 +876,6 @@ void setupSysEnd() {
             assert(0 && "found a module which is inside sys.modules but not listed inside PyImport_Inittab!");
     }
 #endif
-
-    sys_flags_cls->finishInitialization();
 
     /* version_info */
     if (VersionInfoType.tp_name == 0)

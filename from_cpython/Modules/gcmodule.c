@@ -742,6 +742,8 @@ handle_weakrefs(PyGC_Head *unreachable, PyGC_Head *old)
 static void
 debug_instance(char *msg, PyInstanceObject *inst)
 {
+    Py_FatalError("unimplemented");
+#if 0
     char *cname;
     /* simple version of instance_repr */
     PyObject *classname = inst->in_class->cl_name;
@@ -751,6 +753,7 @@ debug_instance(char *msg, PyInstanceObject *inst)
         cname = "?";
     PySys_WriteStderr("gc: %.100s <%.100s instance at %p>\n",
                       msg, cname, inst);
+#endif
 }
 
 static void
@@ -763,6 +766,15 @@ debug_cycle(char *msg, PyObject *op)
         PySys_WriteStderr("gc: %.100s <%.100s %p>\n",
                           msg, Py_TYPE(op)->tp_name, op);
     }
+}
+
+PyObject* _PyGC_GetGarbage() {
+    if (garbage == NULL) {
+        garbage = PyList_New(0);
+        if (garbage == NULL)
+            Py_FatalError("gc couldn't create gc.garbage list");
+    }
+    return garbage;
 }
 
 /* Handle uncollectable garbage (cycles with finalizers, and stuff reachable
@@ -779,11 +791,9 @@ handle_finalizers(PyGC_Head *finalizers, PyGC_Head *old)
 {
     PyGC_Head *gc = finalizers->gc.gc_next;
 
-    if (garbage == NULL) {
-        garbage = PyList_New(0);
-        if (garbage == NULL)
-            Py_FatalError("gc couldn't create gc.garbage list");
-    }
+    if (garbage == NULL)
+        _PyGC_GetGarbage();
+
     for (; gc != finalizers; gc = gc->gc.gc_next) {
         PyObject *op = FROM_GC(gc);
 
@@ -885,6 +895,7 @@ collect(int generation)
         delstr = PyString_InternFromString("__del__");
         if (delstr == NULL)
             Py_FatalError("gc couldn't allocate \"__del__\"");
+        PyGC_RegisterStaticConstant(delstr);
     }
 
     if (debug & DEBUG_STATS) {
@@ -1021,8 +1032,10 @@ collect(int generation)
     }
 
     if (PyErr_Occurred()) {
-        if (gc_str == NULL)
+        if (gc_str == NULL) {
             gc_str = PyString_FromString("garbage collection");
+            PyGC_RegisterStaticConstant(gc_str);
+        }
         PyErr_WriteUnraisable(gc_str);
         Py_FatalError("unexpected exception during garbage collection");
     }
@@ -1399,6 +1412,7 @@ initgc(void)
         garbage = PyList_New(0);
         if (garbage == NULL)
             return;
+        PyGC_RegisterStaticConstant(garbage);
     }
     Py_INCREF(garbage);
     if (PyModule_AddObject(m, "garbage", garbage) < 0)
@@ -1414,6 +1428,8 @@ initgc(void)
         tmod = PyImport_ImportModuleNoBlock("time");
         if (tmod == NULL)
             PyErr_Clear();
+        else
+            PyGC_RegisterStaticConstant(tmod);
     }
 
 #define ADD_INT(NAME) if (PyModule_AddIntConstant(m, #NAME, NAME) < 0) return

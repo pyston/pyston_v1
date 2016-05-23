@@ -36,6 +36,12 @@ public:
     typedef typename map_type::const_iterator const_iterator;
     typedef typename std::vector<TVal>::size_type size_type;
 
+    void clear() {
+        map.clear();
+        vec.clear();
+        free_list.clear();
+    }
+
     iterator find(TKey key) { return map.find(key); }
 
     iterator begin() noexcept { return map.begin(); }

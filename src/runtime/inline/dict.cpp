@@ -20,12 +20,13 @@
 namespace pyston {
 
 BoxedDictIterator::BoxedDictIterator(BoxedDict* d) : d(d), it(d->d.begin()), itEnd(d->d.end()) {
+    Py_INCREF(d);
 }
 
 Box* dict_iter(Box* s) noexcept {
     assert(PyDict_Check(s));
     BoxedDict* self = static_cast<BoxedDict*>(s);
-    return new (&PyDictIterKey_Type) BoxedDictIterator(self);
+    return new (&PyDictIterKey_Type, FAST_GC) BoxedDictIterator(self);
 }
 
 Box* dictIterKeys(Box* s) {
@@ -35,17 +36,17 @@ Box* dictIterKeys(Box* s) {
 Box* dictIterValues(Box* s) {
     assert(PyDict_Check(s));
     BoxedDict* self = static_cast<BoxedDict*>(s);
-    return new (&PyDictIterValue_Type) BoxedDictIterator(self);
+    return new (&PyDictIterValue_Type, FAST_GC) BoxedDictIterator(self);
 }
 
 Box* dictIterItems(Box* s) {
     assert(PyDict_Check(s));
     BoxedDict* self = static_cast<BoxedDict*>(s);
-    return new (&PyDictIterItem_Type) BoxedDictIterator(self);
+    return new (&PyDictIterItem_Type, FAST_GC) BoxedDictIterator(self);
 }
 
 Box* dictIterIter(Box* s) {
-    return s;
+    return incref(s);
 }
 
 llvm_compat_bool dictIterHasnextUnboxed(Box* s) {
@@ -66,9 +67,9 @@ Box* dictiter_next(Box* s) noexcept {
 
     Box* rtn = nullptr;
     if (self->cls == &PyDictIterKey_Type) {
-        rtn = self->it->first.value;
+        rtn = incref(self->it->first.value);
     } else if (self->cls == &PyDictIterValue_Type) {
-        rtn = self->it->second;
+        rtn = incref(self->it->second);
     } else if (self->cls == &PyDictIterItem_Type) {
         rtn = BoxedTuple::create({ self->it->first.value, self->it->second });
     } else {

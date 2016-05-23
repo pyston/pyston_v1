@@ -12,13 +12,13 @@ with open('/dev/null')as ignore:
         print code
         sys.stdout.flush()
 
-    run(["-c", "print 2 + 2"])
-    run(["-c", "import sys; print sys.argv", "hello", "world"])
-    run(["-c", "import sys; print sys.argv", "-c", "this is ignored"])
+    run(["-Sc", "print 2 + 2"])
+    run(["-Sc", "import sys; print sys.argv", "hello", "world"])
+    run(["-Sc", "import sys; print sys.argv", "-c", "this is ignored"])
 
-    run(["-c"])
-    run(["-c", "-c"])
-    run(["-c", "this should not work"])
+    run(["-Sc"])
+    run(["-Sc", "-c"])
+    run(["-Sc", "this should not work"])
 
-    run(["-c", ";"])
-    run(["-cprint 1"])
+    run(["-Sc", ";"])
+    run(["-Scprint 1"])

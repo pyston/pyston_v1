@@ -23,12 +23,14 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallSet.h"
 
 #include "asm_writing/assembler.h"
 #include "asm_writing/icinfo.h"
+#include "asm_writing/types.h"
 #include "core/threading.h"
-#include "gc/gc.h"
+#include "core/types.h"
 
 namespace pyston {
 
@@ -40,82 +42,6 @@ class ICSlotRewrite;
 class ICInvalidator;
 
 class RewriterVar;
-
-struct Location {
-public:
-    enum LocationType : uint8_t {
-        Register,
-        XMMRegister,
-        Stack,
-        Scratch, // stack location, relative to the scratch start
-
-        // For representing constants that fit in 32-bits, that can be encoded as immediates
-        AnyReg,        // special type for use when specifying a location as a destination
-        None,          // special type that represents the lack of a location, ex where a "ret void" gets returned
-        Uninitialized, // special type for an uninitialized (and invalid) location
-    };
-
-public:
-    LocationType type;
-
-    union {
-        // only valid if type==Register; uses X86 numbering, not dwarf numbering.
-        // also valid if type==XMMRegister
-        int32_t regnum;
-        // only valid if type==Stack; this is the offset from bottom of the original frame.
-        // ie argument #6 will have a stack_offset of 0, #7 will have a stack offset of 8, etc
-        int32_t stack_offset;
-        // only valid if type == Scratch; offset from the beginning of the scratch area
-        int32_t scratch_offset;
-
-        int32_t _data;
-    };
-
-    constexpr Location() noexcept : type(Uninitialized), _data(-1) {}
-    constexpr Location(const Location& r) = default;
-    Location& operator=(const Location& r) = default;
-
-    constexpr Location(LocationType type, int32_t data) : type(type), _data(data) {}
-
-    constexpr Location(assembler::Register reg) : type(Register), regnum(reg.regnum) {}
-
-    constexpr Location(assembler::XMMRegister reg) : type(XMMRegister), regnum(reg.regnum) {}
-
-    constexpr Location(assembler::GenericRegister reg)
-        : type(reg.type == assembler::GenericRegister::GP ? Register : reg.type == assembler::GenericRegister::XMM
-                                                                           ? XMMRegister
-                                                                           : None),
-          regnum(reg.type == assembler::GenericRegister::GP ? reg.gp.regnum : reg.xmm.regnum) {}
-
-    assembler::Register asRegister() const;
-    assembler::XMMRegister asXMMRegister() const;
-    bool isClobberedByCall() const;
-
-    static constexpr Location any() { return Location(AnyReg, 0); }
-    static constexpr Location none() { return Location(None, 0); }
-    static Location forArg(int argnum);
-    static Location forXMMArg(int argnum);
-
-    bool operator==(const Location rhs) const { return this->asInt() == rhs.asInt(); }
-
-    bool operator!=(const Location rhs) const { return !(*this == rhs); }
-
-    bool operator<(const Location& rhs) const { return this->asInt() < rhs.asInt(); }
-
-    uint64_t asInt() const { return (int)type + ((uint64_t)_data << 4); }
-
-    void dump() const;
-};
-static_assert(sizeof(Location) <= 8, "");
-}
-
-namespace std {
-template <> struct hash<pyston::Location> {
-    size_t operator()(const pyston::Location p) const { return p.asInt(); }
-};
-}
-
-namespace pyston {
 
 // Replacement for unordered_map<Location, T>
 template <class T> class LocMap {
@@ -204,6 +130,17 @@ class RewriterAction;
 // This might make more sense as an inner class of Rewriter, but
 // you can't forward-declare that :/
 class RewriterVar {
+private:
+    // Fields for automatic refcounting:
+    int num_refs_consumed = 0; // The number of "refConsumed()" calls on this RewriterVar
+    int last_refconsumed_numuses
+        = 0; // The number of uses in the `uses` array when the last refConsumed() call was made.
+    RefType reftype = RefType::UNKNOWN;
+    bool nullable = false;
+    // Helper function: whether there is a ref that got consumed but came from the consumption of the
+    // initial (owned) reference.
+    bool refHandedOff();
+
 public:
     typedef llvm::SmallVector<RewriterVar*, 8> SmallVector;
 
@@ -214,13 +151,64 @@ public:
     // getAttrFloat casts to double (maybe I should make that separate?)
     RewriterVar* getAttrFloat(int offset, Location loc = Location::any());
     RewriterVar* getAttrDouble(int offset, Location loc = Location::any());
-    void setAttr(int offset, RewriterVar* other);
+
+    // SetattrType: a guardrail against the easy-to-make mistake of having a reference
+    // stored in a memory location.  The refcount-tracker can't see this type of usage, so it will
+    // end up decrefing the object after the store, even if the memory location is later used.
+    //
+    // For refcount-tracked objects, you need to specify one of two subsequent calls you will make:
+    // either HANDED_OFF if the ref got handed off and you will call refConsumed(), or REF_USED if the stored ref
+    // is borrowed, in which case you need to call refUsed() after the usage of the memory location.
+    enum class SetattrType {
+        UNKNOWN,
+        HANDED_OFF,
+        REF_USED,
+    };
+    void setAttr(int offset, RewriterVar* other, SetattrType type = SetattrType::UNKNOWN);
+
+    // Replaces an owned ref with another one.  Does the equivalent of:
+    // Box* prev = this[offset];
+    // this[offset] = new_val;
+    // Py_[X]DECREF(prev);
+    //
+    // Calls new_val->refConsumed() for you.
+    void replaceAttr(int offset, RewriterVar* new_val, bool prev_nullable);
+
     RewriterVar* cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location loc = Location::any());
     RewriterVar* toBool(Location loc = Location::any());
+
+    RewriterVar* setType(RefType type);
+    RewriterVar* setNullable(bool nullable) {
+        this->nullable = nullable;
+        return this;
+    }
+
+    // Call this to let the automatic refcount machinery know that a refcount
+    // got "consumed", ie passed off.  Such as to a function that steals a reference,
+    // or when stored into a memory location that is an owned reference, etc.
+    // This should get called *after* the ref got consumed, ie something like
+    //   r_array->setAttr(0, r_val);
+    //   r_val->refConsumed()
+    // if no action is specified it will assume the last action consumed the reference
+    void refConsumed(RewriterAction* action = NULL);
+
+    void refUsed();
+
+    // registerOwnedAttr tells the refcounter that a certain memory location holds a pointer
+    // to an owned reference.  This must be paired with a call to deregisterOwnedAttr
+    // Call these right before emitting the store (for register) or decref (for deregister).
+    void registerOwnedAttr(int byte_offset);
+    void deregisterOwnedAttr(int byte_offset);
+
 
     template <typename Src, typename Dst> inline RewriterVar* getAttrCast(int offset, Location loc = Location::any());
 
     bool isConstant() { return is_constant; }
+
+protected:
+    void incref();
+    void decref();
+    void xdecref();
 
 private:
     Rewriter* rewriter;
@@ -239,10 +227,16 @@ private:
     llvm::SmallVector<int, 32> uses;
     int next_use;
     void bumpUse();
+    // Call this on the result at the end of the action in which it's created
+    // TODO we should have a better way of dealing with variables that have 0 uses
     void releaseIfNoUses();
+    // Helper funciton to release all the resources that this var is using.
+    // Don't call it directly: call bumpUse and releaseIfNoUses instead.
+    void _release();
     bool isDoneUsing() { return next_use == uses.size(); }
     bool hasScratchAllocation() const { return scratch_allocation.second > 0; }
     void resetHasScratchAllocation() { scratch_allocation = std::make_pair(0, 0); }
+    bool needsDecref();
 
     // Indicates if this variable is an arg, and if so, what location the arg is from.
     bool is_arg;
@@ -276,6 +270,15 @@ public:
     RewriterVar(Rewriter* rewriter) : rewriter(rewriter), next_use(0), is_arg(false), is_constant(false) {
         assert(rewriter);
     }
+
+#ifndef NDEBUG
+    // For testing, reset these on deallocation so that we will see the next time they get set.
+    ~RewriterVar() {
+        rewriter = (Rewriter*)-1;
+        reftype = (RefType)-1;
+        num_refs_consumed = -11;
+    }
+#endif
 
     Rewriter* getRewriter() { return rewriter; }
 
@@ -319,6 +322,7 @@ public:
 class RewriterAction {
 public:
     SmallFunction<56> action;
+    std::vector<RewriterVar*> consumed_refs;
 
     template <typename F> RewriterAction(F&& action) : action(std::forward<F>(action)) {}
 
@@ -334,34 +338,18 @@ enum class ActionType { NORMAL, GUARD, MUTATION };
 // non-NULL fake pointer, definitely legit
 #define LOCATION_PLACEHOLDER ((RewriterVar*)1)
 
-class Rewriter : public ICSlotRewrite::CommitHook, public gc::GCVisitable {
+class Rewriter : public ICSlotRewrite::CommitHook {
 private:
-    class RegionAllocator {
-    public:
-        static const int BLOCK_SIZE = 200; // reserve a bit of space for list/malloc overhead
-        std::list<char[BLOCK_SIZE]> blocks;
-
-        int cur_offset = BLOCK_SIZE + 1;
-
-        void* alloc(size_t bytes);
-    };
-    template <typename T> class RegionAllocatorAdaptor : public std::allocator<T> {
-    private:
-        RegionAllocator* allocator;
-
-    public:
-        T* allocate(size_t n) { return (T*)allocator->alloc(n); }
-        void deallocate(T* p, size_t n) {
-            // do nothing
-        }
-    };
-
     // This needs to be the first member:
-    RegionAllocator allocator;
+    llvm::BumpPtrAllocatorImpl<llvm::MallocAllocator, 512> allocator;
+
+    // The rewriter has refcounting logic for handling owned RewriterVars.  If we own memory inside those RewriterVars,
+    // we need to register that via registerOwnedAttr, which ends up here:
+    llvm::DenseSet<std::pair<RewriterVar*, int /* offset */>> owned_attrs;
 
 protected:
     // Allocates `bytes` bytes of data.  The allocation will get freed when the rewriter gets freed.
-    void* regionAlloc(size_t bytes) { return allocator.alloc(bytes); }
+    void* regionAlloc(size_t bytes) { return allocator.Allocate(bytes, 16 /* alignment */); }
 
     // Helps generating the best code for loading a const integer value.
     // By keeping track of the last known value of every register and reusing it.
@@ -398,8 +386,9 @@ protected:
 
     bool failed;   // if we tried to generate an invalid rewrite.
     bool finished; // committed or aborted
-#ifndef NDEBUG
+    const bool needs_invalidation_support;
 
+#ifndef NDEBUG
     bool phase_emitting;
     void initPhaseCollecting() { phase_emitting = false; }
     void initPhaseEmitting() { phase_emitting = true; }
@@ -418,10 +407,14 @@ protected:
     llvm::SmallVector<RewriterVar*, 8> args;
     llvm::SmallVector<RewriterVar*, 8> live_outs;
 
-    Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs);
+    // needs_invalidation_support: whether we do some extra work to make sure that the code that this Rewriter
+    // produces will support invalidation.  Normally we want this, but the baseline jit needs to turn
+    // this off (for the non-IC assembly it generates).
+    Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const LiveOutSet& live_outs,
+             bool needs_invalidation_support = true);
 
-    std::deque<RewriterAction, RegionAllocatorAdaptor<RewriterAction>> actions;
-    template <typename F> void addAction(F&& action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
+    std::deque<RewriterAction> actions;
+    template <typename F> RewriterAction* addAction(F&& action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
         assertPhaseCollecting();
         for (RewriterVar* var : vars) {
             assert(var != NULL);
@@ -432,7 +425,7 @@ protected:
         } else if (type == ActionType::GUARD) {
             if (added_changing_action) {
                 failed = true;
-                return;
+                return NULL;
             }
             for (RewriterVar* arg : args) {
                 arg->uses.push_back(actions.size());
@@ -441,10 +434,17 @@ protected:
             last_guard_action = (int)actions.size();
         }
         actions.emplace_back(std::forward<F>(action));
+        return &actions.back();
     }
+    RewriterAction* getLastAction() {
+        assert(!actions.empty());
+        return &actions.back();
+    }
+
     bool added_changing_action;
     bool marked_inside_ic;
     std::vector<void*> gc_references;
+    std::vector<std::pair<uint64_t, std::vector<Location>>> decref_infos;
 
     bool done_guarding;
     bool isDoneGuarding() {
@@ -491,13 +491,14 @@ protected:
     void _loadConst(RewriterVar* result, int64_t val);
     void _setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> args, llvm::ArrayRef<RewriterVar*> args_xmm,
                     Location preserve = Location::any());
+    // _call does not call bumpUse on its arguments:
     void _call(RewriterVar* result, bool has_side_effects, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
                llvm::ArrayRef<RewriterVar*> args_xmm);
     void _add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest);
     int _allocate(RewriterVar* result, int n);
     void _allocateAndCopy(RewriterVar* result, RewriterVar* array, int n);
     void _allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_elem, RewriterVar* rest, int n_rest);
-    void _checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val);
+    void _checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val, assembler::MovType size);
 
     // The public versions of these are in RewriterVar
     void _addGuard(RewriterVar* var, RewriterVar* val_constant);
@@ -511,6 +512,11 @@ protected:
     void _cmp(RewriterVar* result, RewriterVar* var1, AST_TYPE::AST_TYPE cmp_type, RewriterVar* var2,
               Location loc = Location::any());
     void _toBool(RewriterVar* result, RewriterVar* var, Location loc = Location::any());
+
+    // These do not call bumpUse on their arguments:
+    void _incref(RewriterVar* var, int num_refs = 1);
+    void _decref(RewriterVar* var);
+    void _xdecref(RewriterVar* var);
 
     void assertConsistent() {
 #ifndef NDEBUG
@@ -549,6 +555,7 @@ public:
         if (!finished)
             this->abort();
         assert(finished);
+        assert(gc_references.empty());
     }
 
     Location getReturnDestination();
@@ -561,6 +568,16 @@ public:
     // TODO: come up with an implementation that is performant enough that we can automatically
     // infer these from loadConst calls.
     void addGCReference(void* obj);
+
+#ifndef NDEBUG
+    void comment(const llvm::Twine& msg);
+#else
+    void comment(const llvm::Twine& msg) {}
+#endif
+    // returns a vector of locations of variables which need to get decrefed if the last action throwes
+    std::vector<Location> getDecrefLocations();
+    // calls getDecrefLocations and registers the current assembler address with the retrieved decref info
+    void registerDecrefInfoHere();
 
     void trap();
     RewriterVar* loadConst(int64_t val, Location loc = Location::any());
@@ -588,15 +605,20 @@ public:
     RewriterVar* allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar* rest, int n_rest);
 
     // This emits `if (r == exc_val) throwCAPIException()`
-    void checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val = 0);
+    // type should be either MovType::Q if you want a 64bit comparison or MovType::L for a 32bit comparison.
+    void checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val, assembler::MovType type);
+    void checkAndThrowCAPIException(RewriterVar* r) { checkAndThrowCAPIException(r, 0, assembler::MovType::Q); }
 
     void abort();
+
+    // note: commitReturning decref all of the args variables, whereas commit() does not.
+    // This should probably be made more consistent, but functions that use commitReturning
+    // usually want this behavior but ones that use
     void commit();
     void commitReturning(RewriterVar* rtn);
+    void commitReturningNonPython(RewriterVar* rtn);
 
     void addDependenceOn(ICInvalidator&);
-
-    void gc_visit(gc::GCVisitor* visitor) override;
 
     static Rewriter* createRewriter(void* rtn_addr, int num_args, const char* debug_name);
 

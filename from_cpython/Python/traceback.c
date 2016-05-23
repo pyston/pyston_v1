@@ -53,9 +53,7 @@ PyTypeObject PyTraceBack_Type = {
     "traceback",
     sizeof(PyTracebackObject),
     0,
-    // Pyston change:
-    //(destructor)tb_dealloc, /*tp_dealloc*/
-    (destructor)0,
+    (destructor)tb_dealloc, /*tp_dealloc*/
     0,                  /*tp_print*/
     0,              /*tp_getattr*/
     0,                  /*tp_setattr*/
@@ -126,7 +124,9 @@ PyTraceBack_Here(PyFrameObject *frame)
 int
 PyTraceBack_Here_Tb(PyFrameObject *frame, PyTracebackObject** tb)
 {
-    *tb = newtracebackobject(*tb, frame);
+    PyTracebackObject* oldtb = *tb;
+    *tb = newtracebackobject(oldtb, frame);
+    Py_XDECREF(oldtb);
     if (*tb == NULL)
         return -1;
     return 0;
@@ -270,10 +270,12 @@ tb_printinternal(PyTracebackObject *tb, PyObject *f, long limit)
                 PyString_AsString(tb->tb_frame->f_code->co_name));
             */
             PyCodeObject* code = (PyCodeObject*)PyFrame_GetCode(tb->tb_frame);
+            PyObject* filename = PyCode_GetFilename(code);
+            PyObject* name = PyCode_GetName(code);
             err = tb_displayline(f,
-                PyString_AsString(PyCode_GetFilename(code)),
+                PyString_AsString(filename),
                 tb->tb_lineno,
-                PyString_AsString(PyCode_GetName(code)));
+                PyString_AsString(name));
         }
         depth--;
         tb = tb->tb_next;

@@ -156,9 +156,6 @@ class SSLSocket(socket):
         self.suppress_ragged_eofs = suppress_ragged_eofs
         self._makefile_refs = 0
 
-        # Pyston change: socket close: we have to decrease the socket refcount by calling close (pypy does the same)
-        sock.close()
-
     def read(self, len=1024):
 
         """Read up to LEN bytes and return them.
@@ -374,21 +371,11 @@ class SSLSocket(socket):
         works with the SSL connection.  Just use the code
         from the socket module."""
 
-        # Pyston change: socket close: we increase the refcount inside _fileobject.__init__
-        # self._makefile_refs += 1
-
+        self._makefile_refs += 1
         # close=True so as to decrement the reference count when done with
         # the file-like object.
         return _fileobject(self, mode, bufsize, close=True)
 
-    # Pyston change: socket close: add refcounting similar to pypys approach
-    def _reuse(self):
-        self._makefile_refs += 1
-    def _drop(self):
-        if self._makefile_refs < 1:
-            self.close()
-        else:
-            self._makefile_refs -= 1
 
 
 def wrap_socket(sock, keyfile=None, certfile=None,

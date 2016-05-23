@@ -64,11 +64,11 @@ FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_
       internal_callable(NULL, NULL) {
 }
 
-BoxedCode* FunctionMetadata::getCode() {
+BORROWED(BoxedCode*) FunctionMetadata::getCode() {
     if (!code_obj) {
         code_obj = new BoxedCode(this);
         // FunctionMetadatas don't currently participate in GC.  They actually never get freed currently.
-        gc::registerPermanentRoot(code_obj);
+        constants.push_back(code_obj);
     }
     return code_obj;
 }
@@ -85,6 +85,20 @@ int FunctionMetadata::calculateNumVRegs() {
         cfg->assignVRegs(param_names, scope_info);
     }
     return cfg->sym_vreg_map.size();
+}
+
+int FunctionMetadata::calculateNumUserVisibleVRegs() {
+    SourceInfo* source_info = source.get();
+
+    CFG* cfg = source_info->cfg;
+    assert(cfg && "We don't calculate the CFG inside this function because it can raise an exception and its "
+                  "therefore not safe to call at every point");
+
+    if (!cfg->hasVregsAssigned()) {
+        ScopeInfo* scope_info = source->getScopeInfo();
+        cfg->assignVRegs(param_names, scope_info);
+    }
+    return cfg->sym_vreg_map_user_visible.size();
 }
 
 void FunctionMetadata::addVersion(CompiledFunction* compiled) {
@@ -117,8 +131,11 @@ SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags fut
       cfg(NULL),
       body(std::move(body)) {
     assert(fn);
-    // TODO: we should track this reference correctly rather than making it a root
-    gc::registerPermanentRoot(fn, true);
+
+    // TODO: this is a very bad way of handling this:
+    incref(fn);
+    late_constants.push_back(fn);
+
     this->fn = fn;
 
     switch (ast->type) {

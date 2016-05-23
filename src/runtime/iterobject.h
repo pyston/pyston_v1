@@ -33,11 +33,22 @@ public:
     int64_t idx;
     Box* next;
 
-    BoxedSeqIter(Box* b, int64_t start) : b(b), idx(start), next(NULL) {}
+    BoxedSeqIter(Box* b, int64_t start) : b(b), idx(start), next(NULL) { Py_INCREF(b); }
 
     DEFAULT_CLASS(seqiter_cls);
 
-    static void gcHandler(GCVisitor* v, Box* b);
+    static void dealloc(BoxedSeqIter* o) noexcept {
+        PyObject_GC_UnTrack(o);
+        Py_XDECREF(o->b);
+        Py_XDECREF(o->next);
+        o->cls->tp_free(o);
+    }
+
+    static int traverse(BoxedSeqIter* self, visitproc visit, void* arg) noexcept {
+        Py_VISIT(self->b);
+        Py_VISIT(self->next);
+        return 0;
+    }
 };
 
 extern BoxedClass* iterwrapper_cls;
@@ -48,11 +59,22 @@ public:
     Box* iter;
     Box* next;
 
-    BoxedIterWrapper(Box* iter) : iter(iter), next(NULL) {}
+    BoxedIterWrapper(Box* iter) : iter(iter), next(NULL) { Py_INCREF(iter); }
 
     DEFAULT_CLASS(iterwrapper_cls);
 
-    static void gcHandler(GCVisitor* v, Box* b);
+    static void dealloc(BoxedIterWrapper* o) noexcept {
+        PyObject_GC_UnTrack(o);
+        Py_DECREF(o->iter);
+        Py_XDECREF(o->next);
+        o->cls->tp_free(o);
+    }
+
+    static int traverse(BoxedIterWrapper* self, visitproc visit, void* arg) noexcept {
+        Py_VISIT(self->iter);
+        Py_VISIT(self->next);
+        return 0;
+    }
 };
 
 llvm_compat_bool calliterHasnextUnboxed(Box* b);

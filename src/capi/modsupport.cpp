@@ -372,7 +372,7 @@ static PyObject* va_build_value(const char* fmt, va_list va, int flags) noexcept
         return NULL;
 
     if (n == 0)
-        return None;
+        return incref(None);
 
     va_list lva;
     __va_copy(lva, va);
@@ -434,14 +434,14 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
         }
     }
 
-    BoxedModule* module = createModule(boxString(name), NULL, doc);
+    BoxedModule* module = createModule(autoDecref(boxString(name)), NULL, doc);
 
     // Pass self as is, even if NULL we are not allowed to change it to None
     Box* passthrough = static_cast<Box*>(self);
 
     while (methods && methods->ml_name) {
-        module->setattr(internStringMortal(methods->ml_name),
-                        new BoxedCApiFunction(methods, passthrough, boxString(name)), NULL);
+        auto capi_func = autoDecref(new BoxedCApiFunction(methods, passthrough, autoDecref(boxString(name))));
+        module->setattr(autoDecref(internStringMortal(methods->ml_name)), capi_func, NULL);
 
         methods++;
     }
@@ -449,18 +449,19 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
     return module;
 }
 
-extern "C" PyObject* PyModule_GetDict(PyObject* _m) noexcept {
+extern "C" BORROWED(PyObject*) PyModule_GetDict(PyObject* _m) noexcept {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     assert(PyModule_Check(m));
 
     return m->getAttrWrapper();
 }
 
-extern "C" int PyModule_AddObject(PyObject* _m, const char* name, PyObject* value) noexcept {
+extern "C" int PyModule_AddObject(PyObject* _m, const char* name, STOLEN(PyObject*) value) noexcept {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     assert(m->cls == module_cls);
 
-    m->setattr(internStringMortal(name), value, NULL);
+    m->setattr(autoDecref(internStringMortal(name)), value, NULL);
+    Py_DECREF(value);
     return 0;
 }
 
@@ -481,8 +482,8 @@ extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long valu
 extern "C" PyObject* PyModule_New(const char* name) noexcept {
     BoxedModule* module = new BoxedModule();
     module->giveAttr("__name__", boxString(name));
-    module->giveAttr("__doc__", None);
-    module->giveAttr("__package__", None);
+    module->giveAttr("__doc__", incref(None));
+    module->giveAttr("__package__", incref(None));
     return module;
 }
 

@@ -27,31 +27,6 @@
 
 namespace pyston {
 
-void HiddenClass::gc_visit(GCVisitor* visitor) {
-    // Visit children even for the dict-backed case, since children will just be empty
-    visitor->visitRange(const_cast<HiddenClass**>(&children.vector()[0]),
-                        const_cast<HiddenClass**>(&children.vector()[children.size()]));
-    visitor->visit(&attrwrapper_child);
-
-    if (children.empty()) {
-        for (auto p : attr_offsets)
-            visitor->visit(&p.first);
-    } else {
-#if MOVING_GC
-        // If we have any children, the attr_offsets map will be a subset of the child's map.
-        for (const auto& p : attr_offsets)
-            visitor->visitRedundant(const_cast<BoxedString**>(&p.first));
-#endif
-    }
-
-#if MOVING_GC
-    // The children should have the entries of the keys of the 'children' map in the attr_offsets map.
-    for (const auto& p : children) {
-        visitor->visitRedundant(const_cast<BoxedString**>(&p.first));
-    }
-#endif
-}
-
 void HiddenClass::appendAttribute(BoxedString* attr) {
     assert(attr->interned_state != SSTATE_NOT_INTERNED);
     assert(type == SINGLETON);
@@ -104,6 +79,7 @@ HiddenClass* HiddenClass::getOrMakeChild(BoxedString* attr) {
     static StatCounter num_hclses("num_hidden_classes");
     num_hclses.log();
 
+    // XXX: need to hold a ref to the string (or maybe we don't if we can hook the un-interning)
     HiddenClass* rtn = new HiddenClass(this);
     rtn->attr_offsets[attr] = this->attributeArraySize();
     this->children[attr] = rtn;
@@ -160,6 +136,8 @@ HiddenClass* HiddenClass::delAttrToMakeHC(BoxedString* attr) {
             cur = cur->getOrMakeChild(attr);
         curidx++;
     }
+    if (cur == root_hcls)
+        return NULL;
     return cur;
 }
 

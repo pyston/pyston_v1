@@ -189,7 +189,8 @@ int handleArg(char code) {
     else if (code == 'q')
         GLOBAL_VERBOSITY = 0;
     else if (code == 'v') {
-        Py_VerboseFlag++;
+        if (GLOBAL_VERBOSITY)
+            Py_VerboseFlag++;
         GLOBAL_VERBOSITY++;
     } else if (code == 'd')
         SHOW_DISASM = true;
@@ -201,7 +202,7 @@ int handleArg(char code) {
     } else if (code == 'n') {
         ENABLE_INTERPRETER = false;
     } else if (code == 'a') {
-        ASSEMBLY_LOGGING = true;
+        LOG_IC_ASSEMBLY = true;
     } else if (code == 'p') {
         PROFILE = true;
     } else if (code == 'j') {
@@ -297,7 +298,7 @@ static int RunMainFromImporter(const char* filename) {
     return -1;
 }
 
-static int main(int argc, char** argv) {
+static int main(int argc, char** argv) noexcept {
     argv0 = argv[0];
 
     Timer _t("for jit startup");
@@ -390,13 +391,15 @@ static int main(int argc, char** argv) {
         PyOS_setsig(SIGXFSZ, SIG_IGN);
 #endif
 
-        if (ASSEMBLY_LOGGING) {
+#ifndef NDEBUG
+        if (LOG_IC_ASSEMBLY || LOG_BJIT_ASSEMBLY) {
             assembler::disassemblyInitialize();
         }
+#endif
 
         {
-            Timer _t("for initCodegen");
-            initCodegen();
+            Timer _t("for Py_Initialize");
+            Py_Initialize();
         }
 
         // Arguments left over after option parsing are of the form:
@@ -440,8 +443,10 @@ static int main(int argc, char** argv) {
                 Box* module = PyImport_ImportModule("site");
                 if (!module)
                     throwCAPIException();
+                Py_DECREF(module);
             } catch (ExcInfo e) {
                 e.printExcAndTraceback();
+                e.clear();
                 return 1;
             }
         }
@@ -459,21 +464,22 @@ static int main(int argc, char** argv) {
         // if the user invoked `pyston -c command`
         if (command != NULL) {
             try {
-                main_module = createModule(boxString("__main__"), "<string>");
+                main_module = createModule(autoDecref(boxString("__main__")), "<string>");
                 AST_Module* m = parse_string(command, /* future_flags = */ 0);
                 compileAndRunModule(m, main_module);
                 rtncode = 0;
             } catch (ExcInfo e) {
                 setCAPIException(e);
                 PyErr_Print();
+                PyErr_Clear();
                 rtncode = 1;
             }
         } else if (module != NULL) {
             // TODO: CPython uses the same main module for all code paths
-            main_module = createModule(boxString("__main__"), "<string>");
+            main_module = createModule(autoDecref(boxString("__main__")), "<string>");
             rtncode = (RunModule(module, 1) != 0);
         } else {
-            main_module = createModule(boxString("__main__"), fn ? fn : "<stdin>");
+            main_module = createModule(autoDecref(boxString("__main__")), fn ? fn : "<stdin>");
             rtncode = 0;
             if (fn != NULL) {
                 rtncode = RunMainFromImporter(fn);
@@ -503,12 +509,13 @@ static int main(int argc, char** argv) {
                 free(real_path);
 
                 try {
-                    AST_Module* ast = caching_parse_file(fn, /* future_flags = */ 0);
+                    AST_Module* ast = parse_file(fn, /* future_flags = */ 0);
                     compileAndRunModule(ast, main_module);
                     rtncode = 0;
                 } catch (ExcInfo e) {
                     setCAPIException(e);
                     PyErr_Print();
+                    PyErr_Clear();
                     rtncode = 1;
                 }
             }
@@ -519,6 +526,8 @@ static int main(int argc, char** argv) {
             PyObject* v = PyImport_ImportModule("readline");
             if (!v)
                 PyErr_Clear();
+            else
+                Py_CLEAR(v);
 
             printf("Pyston v%d.%d.%d (rev " STRINGIFY(GITREV) ")", PYSTON_VERSION_MAJOR, PYSTON_VERSION_MINOR,
                    PYSTON_VERSION_MICRO);
@@ -538,9 +547,9 @@ static int main(int argc, char** argv) {
         // Note: we will purposefully not release the GIL on exiting.
         threading::promoteGL();
 
-        _t.split("joinRuntime");
+        _t.split("Py_Finalize");
 
-        joinRuntime();
+        Py_Finalize();
         _t.split("finishing up");
 
 #if STAT_TIMERS

@@ -45,7 +45,7 @@ static std::deque<uint64_t> available_addrs;
 #define STACK_REDZONE_SIZE PAGE_SIZE
 #define MAX_STACK_SIZE (4 * 1024 * 1024)
 
-static std::unordered_map<void*, BoxedGenerator*> s_generator_map;
+static llvm::DenseMap<void*, BoxedGenerator*> s_generator_map;
 static_assert(THREADING_USE_GIL, "have to make the generator map thread safe!");
 
 class RegisterHelper {
@@ -89,6 +89,9 @@ void generatorEntry(BoxedGenerator* g) {
         assert(g->cls == generator_cls);
         assert(g->function->cls == function_cls);
 
+        assert(g->returnValue == None);
+        Py_CLEAR(g->returnValue);
+
         threading::pushGenerator(g, g->stack_begin, g->returnContext);
         try {
             RegisterHelper context_registerer(g, __builtin_frame_address(0));
@@ -97,11 +100,14 @@ void generatorEntry(BoxedGenerator* g) {
 
             // call body of the generator
             BoxedFunctionBase* func = g->function;
+            // unnecessary because the generator owns g->function
+            // KEEP_ALIVE(func);
 
             Box** args = g->args ? &g->args->elts[0] : nullptr;
-            callCLFunc<ExceptionStyle::CXX, NOT_REWRITABLE>(func->md, nullptr, func->md->numReceivedArgs(),
-                                                            func->closure, g, func->globals, g->arg1, g->arg2, g->arg3,
-                                                            args);
+            auto r = callCLFunc<ExceptionStyle::CXX, NOT_REWRITABLE>(func->md, nullptr, func->md->numReceivedArgs(),
+                                                                     func->closure, g, func->globals, g->arg1, g->arg2,
+                                                                     g->arg3, args);
+            Py_DECREF(r);
         } catch (ExcInfo e) {
             // unhandled exception: propagate the exception to the caller
             g->exception = e;
@@ -116,7 +122,7 @@ void generatorEntry(BoxedGenerator* g) {
 }
 
 Box* generatorIter(Box* s) {
-    return s;
+    return incref(s);
 }
 
 // called from both generatorHasNext and generatorSend/generatorNext (but only if generatorHasNext hasn't been called)
@@ -149,7 +155,8 @@ template <ExceptionStyle S> static bool generatorSendInternal(BoxedGenerator* se
             raiseExcHelper(StopIteration, (const char*)nullptr);
     }
 
-    self->returnValue = v;
+    assert(!self->returnValue);
+    self->returnValue = incref(v);
     self->running = true;
 
 #if STAT_TIMERS
@@ -181,9 +188,13 @@ template <ExceptionStyle S> static bool generatorSendInternal(BoxedGenerator* se
         if (!self->exception.matches(StopIteration)) {
             if (S == CAPI) {
                 setCAPIException(self->exception);
+                self->exception = ExcInfo(NULL, NULL, NULL);
                 return true;
-            } else
-                throw self->exception;
+            } else {
+                auto exc = self->exception;
+                self->exception = ExcInfo(NULL, NULL, NULL);
+                throw exc;
+            }
         }
         return false;
     }
@@ -193,6 +204,7 @@ template <ExceptionStyle S> static bool generatorSendInternal(BoxedGenerator* se
         // Reset the current exception.
         // We could directly create the StopIteration exception but we delay creating it because often the caller is not
         // interested in the exception (=generatorHasnext). If we really need it we will create it inside generatorSend.
+        assert(!self->exception.type && "need to decref existing exception");
         self->exception = ExcInfo(NULL, NULL, NULL);
         return false;
     }
@@ -238,7 +250,10 @@ template <ExceptionStyle S> static Box* generatorSend(Box* s, Box* v) noexcept(S
         }
     }
 
-    return self->returnValue;
+    Box* rtn = self->returnValue;
+    assert(rtn);
+    self->returnValue = NULL;
+    return rtn;
 }
 
 Box* generatorThrow(Box* s, BoxedClass* exc_cls, Box* exc_val = nullptr, Box** args = nullptr) {
@@ -256,7 +271,7 @@ Box* generatorThrow(Box* s, BoxedClass* exc_cls, Box* exc_val = nullptr, Box** a
     if (!exc_tb)
         exc_tb = None;
 
-    ExcInfo exc_info = excInfoForRaise(exc_cls, exc_val, exc_tb);
+    ExcInfo exc_info = excInfoForRaise(incref(exc_cls), incref(exc_val), incref(exc_tb));
     if (self->entryExited)
         throw exc_info;
 
@@ -270,14 +285,16 @@ Box* generatorClose(Box* s) {
 
     // check if the generator already exited
     if (self->entryExited)
-        return None;
+        return incref(None);
 
     try {
-        generatorThrow(self, GeneratorExit, nullptr, nullptr);
+        autoDecref(generatorThrow(self, GeneratorExit, nullptr, nullptr));
         raiseExcHelper(RuntimeError, "generator ignored GeneratorExit");
     } catch (ExcInfo e) {
-        if (e.matches(StopIteration) || e.matches(GeneratorExit))
-            return None;
+        if (e.matches(StopIteration) || e.matches(GeneratorExit)) {
+            e.clear();
+            return incref(None);
+        }
         throw e;
     }
     assert(0); // unreachable
@@ -289,7 +306,10 @@ template <ExceptionStyle S> static Box* generatorNext(Box* s) noexcept(S == CAPI
 
     if (self->iterated_from__hasnext__) {
         self->iterated_from__hasnext__ = false;
-        return self->returnValue;
+        Box* rtn = self->returnValue;
+        assert(rtn);
+        self->returnValue = NULL;
+        return rtn;
     }
 
     return generatorSend<S>(s, None);
@@ -311,12 +331,30 @@ Box* generatorHasnext(Box* s) {
     return boxBool(generatorHasnextUnboxed(s));
 }
 
+extern "C" Box* yield_capi(BoxedGenerator* obj, STOLEN(Box*) value, int num_live_values, ...) noexcept {
+    try {
+        llvm::SmallVector<Box*, 8> live_values;
+        live_values.reserve(num_live_values);
+        va_list ap;
+        va_start(ap, num_live_values);
+        for (int i = 0; i < num_live_values; ++i) {
+            live_values.push_back(va_arg(ap, Box*));
+        }
+        va_end(ap);
 
-extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
+        return yield(obj, value, live_values);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+extern "C" Box* yield(BoxedGenerator* obj, STOLEN(Box*) value, llvm::ArrayRef<Box*> live_values) {
     STAT_TIMER(t0, "us_timer_generator_switching", 0);
 
     assert(obj->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(obj);
+    assert(!self->returnValue);
     self->returnValue = value;
 
     threading::popGenerator();
@@ -328,8 +366,12 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
 
     // reset current frame to the caller tops frame --> removes the frame the generator added
     cur_thread_state.frame_info = self->top_caller_frame_info;
+    obj->paused_frame_info = generator_frame_info;
+    obj->live_values = live_values;
     swapContext(&self->context, self->returnContext, 0);
     FrameInfo* top_new_caller_frame_info = (FrameInfo*)cur_thread_state.frame_info;
+    obj->paused_frame_info = NULL;
+    obj->live_values = llvm::ArrayRef<Box*>();
 
     // the caller of the generator can change between yield statements that means we can't just restore the top of the
     // frame to the point before the yield instead we have to update it.
@@ -348,11 +390,14 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
     if (self->exception.type) {
         ExcInfo e = self->exception;
         self->exception = ExcInfo(NULL, NULL, NULL);
+        Py_CLEAR(self->returnValue);
         throw e;
     }
-    return self->returnValue;
-}
 
+    Box* r = self->returnValue;
+    self->returnValue = NULL;
+    return r;
+}
 
 extern "C" BoxedGenerator* createGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args) {
     assert(function);
@@ -375,19 +420,30 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
       exception(nullptr, nullptr, nullptr),
       context(nullptr),
       returnContext(nullptr),
-      top_caller_frame_info(nullptr)
+      top_caller_frame_info(nullptr),
+      paused_frame_info(nullptr)
 #if STAT_TIMERS
       ,
       prev_stack(NULL),
       my_timer(generator_timer_counter, 0, true)
 #endif
 {
+    Py_INCREF(function);
 
     int numArgs = function->md->numReceivedArgs();
+    if (numArgs > 0)
+        Py_XINCREF(arg1);
+    if (numArgs > 1)
+        Py_XINCREF(arg2);
+    if (numArgs > 2)
+        Py_XINCREF(arg3);
     if (numArgs > 3) {
         numArgs -= 3;
         this->args = new (numArgs) GCdArray();
         memcpy(&this->args->elts[0], args, numArgs * sizeof(Box*));
+        for (int i = 0; i < numArgs; i++) {
+            Py_INCREF(args[i]);
+        }
     }
 
     static StatCounter generator_stack_reused("generator_stack_reused");
@@ -426,13 +482,6 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
 #else
 #error "implement me"
 #endif
-
-        // we're registering memory that isn't in the gc heap here,
-        // which may sound wrong.  Generators, however, can represent
-        // a larger tax on system resources than just their GC
-        // allocation, so we try to encode that here as additional gc
-        // heap pressure.
-        gc::registerGCManagedBytes(INITIAL_STACK_SIZE);
     } else {
         generator_stack_reused.log();
 
@@ -451,67 +500,203 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
     context = makeContext(stack_begin, (void (*)(intptr_t))generatorEntry);
 }
 
-void BoxedGenerator::gcHandler(GCVisitor* v, Box* b) {
-    Box::gcHandler(v, b);
-
-    BoxedGenerator* g = (BoxedGenerator*)b;
-
-    v->visit(&g->function);
-    int num_args = g->function->md->numReceivedArgs();
-    if (num_args >= 1)
-        v->visit(&g->arg1);
-    if (num_args >= 2)
-        v->visit(&g->arg2);
-    if (num_args >= 3)
-        v->visit(&g->arg3);
-    if (g->args) {
-        v->visit(&g->args);
-        if (num_args > 3)
-            v->visitPotentialRange(reinterpret_cast<void**>(&g->args->elts[0]),
-                                   reinterpret_cast<void**>(&g->args->elts[num_args - 3]));
-    }
-    if (g->returnValue)
-        v->visit(&g->returnValue);
-    if (g->exception.type)
-        v->visit(&g->exception.type);
-    if (g->exception.value)
-        v->visit(&g->exception.value);
-    if (g->exception.traceback)
-        v->visit(&g->exception.traceback);
-
-    if (g->running) {
-        v->visitPotentialRange((void**)g->returnContext,
-                               ((void**)g->returnContext) + sizeof(*g->returnContext) / sizeof(void*));
-    } else {
-        // g->context is always set for a running generator, but we can trigger a GC while constructing
-        // a generator in which case we can see a NULL context
-        if (g->context) {
-#if STACK_GROWS_DOWN
-            v->visitPotentialRange((void**)g->context, (void**)g->stack_begin);
-#endif
-        }
-    }
-}
-
 Box* generatorName(Box* _self, void* context) {
     assert(isSubclass(_self->cls, generator_cls));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(_self);
 
-    return self->function->md->source->getName();
+    return incref(self->function->md->source->getName());
 }
 
-void generatorDestructor(Box* b) {
-    assert(isSubclass(b->cls, generator_cls));
-    BoxedGenerator* self = static_cast<BoxedGenerator*>(b);
+extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {
+    auto self = (BoxedGenerator*)gen;
+
+    // CPython has some optimizations for not needing to finalize generators that haven't exited, but
+    // which are guaranteed to not need any special cleanups.
+    // For now just say anything still in-progress needs finalizing.
+    if (!(bool)self->paused_frame_info)
+        return false;
+
+    return true;
+// TODO: is this safe? probably not...
+// return self->paused_frame_info->stmt->type == AST_TYPE::Invoke;
+#if 0
+    int i;
+    PyFrameObject* f = gen->gi_frame;
+
+    if (f == NULL || f->f_stacktop == NULL || f->f_iblock <= 0)
+        return 0; /* no frame or empty blockstack == no finalization */
+
+    /* Any block type besides a loop requires cleanup. */
+    i = f->f_iblock;
+    while (--i >= 0) {
+        if (f->f_blockstack[i].b_type != SETUP_LOOP)
+            return 1;
+    }
+
+    /* No blocks except loops, it's safe to skip finalization. */
+    return 0;
+#endif
+}
+
+static PyObject* generator_close(PyGenObject* gen, PyObject* args) noexcept {
+    try {
+        return generatorClose((Box*)gen);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+static void generator_del(PyObject* self) noexcept {
+    PyObject* res;
+    PyObject* error_type, *error_value, *error_traceback;
+    BoxedGenerator* gen = (BoxedGenerator*)self;
+
+    // Pyston change:
+    // if (gen->gi_frame == NULL || gen->gi_frame->f_stacktop == NULL)
+    if (!gen->paused_frame_info)
+        /* Generator isn't paused, so no need to close */
+        return;
+
+    /* Temporarily resurrect the object. */
+    assert(self->ob_refcnt == 0);
+    self->ob_refcnt = 1;
+
+    /* Save the current exception, if any. */
+    PyErr_Fetch(&error_type, &error_value, &error_traceback);
+
+    // Pyston change:
+    // res = gen_close(gen, NULL);
+    res = generator_close((PyGenObject*)gen, NULL);
+
+    if (res == NULL)
+        PyErr_WriteUnraisable(self);
+    else
+        Py_DECREF(res);
+
+    /* Restore the saved exception. */
+    PyErr_Restore(error_type, error_value, error_traceback);
+
+    /* Undo the temporary resurrection; can't use DECREF here, it would
+     * cause a recursive call.
+     */
+    assert(self->ob_refcnt > 0);
+    if (--self->ob_refcnt == 0)
+        return; /* this is the normal path out */
+
+    /* close() resurrected it!  Make it look like the original Py_DECREF
+     * never happened.
+     */
+    {
+        Py_ssize_t refcnt = self->ob_refcnt;
+        _Py_NewReference(self);
+        self->ob_refcnt = refcnt;
+    }
+    assert(PyType_IS_GC(self->cls) && _Py_AS_GC(self)->gc.gc_refs != _PyGC_REFS_UNTRACKED);
+
+    /* If Py_REF_DEBUG, _Py_NewReference bumped _Py_RefTotal, so
+     * we need to undo that. */
+    _Py_DEC_REFTOTAL;
+/* If Py_TRACE_REFS, _Py_NewReference re-added self to the object
+ * chain, so no more to do there.
+ * If COUNT_ALLOCS, the original decref bumped tp_frees, and
+ * _Py_NewReference bumped tp_allocs:  both of those need to be
+ * undone.
+ */
+#ifdef COUNT_ALLOCS
+    --self->ob_type->tp_frees;
+    --self->ob_type->tp_allocs;
+#endif
+}
+
+static void generator_dealloc(BoxedGenerator* self) noexcept {
+    assert(isSubclass(self->cls, generator_cls));
+
+    // Hopefully this never happens:
+    assert(!self->running);
+
+    _PyObject_GC_UNTRACK(self);
+
+    if (self->weakreflist != NULL)
+        PyObject_ClearWeakRefs(self);
+
+    _PyObject_GC_TRACK(self);
+
+    if (self->paused_frame_info) {
+        Py_TYPE(self)->tp_del(self);
+        if (self->ob_refcnt > 0)
+            return; /* resurrected.  :( */
+    }
+
+    _PyObject_GC_UNTRACK(self);
+
     freeGeneratorStack(self);
+
+    int numArgs = self->function->md->numReceivedArgs();
+    if (numArgs > 3) {
+        for (int i = 0; i < numArgs - 3; i++) {
+            Py_CLEAR(self->args->elts[i]);
+        }
+    }
+    if (numArgs > 2)
+        Py_CLEAR(self->arg3);
+    if (numArgs > 1)
+        Py_CLEAR(self->arg2);
+    if (numArgs > 0)
+        Py_CLEAR(self->arg1);
+
+    Py_CLEAR(self->function);
+
+    Py_CLEAR(self->returnValue);
+
+    Py_CLEAR(self->exception.type);
+    Py_CLEAR(self->exception.value);
+    Py_CLEAR(self->exception.traceback);
+
+    self->cls->tp_free(self);
+}
+
+static int generator_traverse(BoxedGenerator* self, visitproc visit, void* arg) noexcept {
+    assert(isSubclass(self->cls, generator_cls));
+
+    if (self->paused_frame_info) {
+        int r = frameinfo_traverse(self->paused_frame_info, visit, arg);
+        if (r)
+            return r;
+    }
+
+    for (auto v : self->live_values) {
+        Py_VISIT(v);
+    }
+
+    int numArgs = self->function->md->numReceivedArgs();
+    if (numArgs > 3) {
+        for (int i = 0; i < numArgs - 3; i++) {
+            Py_VISIT(self->args->elts[i]);
+        }
+    }
+    if (numArgs > 2)
+        Py_VISIT(self->arg3);
+    if (numArgs > 1)
+        Py_VISIT(self->arg2);
+    if (numArgs > 0)
+        Py_VISIT(self->arg1);
+
+    Py_VISIT(self->function);
+
+    Py_VISIT(self->returnValue);
+
+    Py_VISIT(self->exception.type);
+    Py_VISIT(self->exception.value);
+    Py_VISIT(self->exception.traceback);
+
+    return 0;
 }
 
 void setupGenerator() {
-    generator_cls
-        = BoxedClass::create(type_cls, object_cls, &BoxedGenerator::gcHandler, 0, offsetof(BoxedGenerator, weakreflist),
-                             sizeof(BoxedGenerator), false, "generator", false);
-    generator_cls->tp_dealloc = generatorDestructor;
-    generator_cls->has_safe_tp_dealloc = true;
+    generator_cls = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedGenerator, weakreflist),
+                                       sizeof(BoxedGenerator), false, "generator", false, (destructor)generator_dealloc,
+                                       NULL, true, (traverseproc)generator_traverse, NOCLEAR);
     generator_cls->giveAttr(
         "__iter__", new BoxedFunction(FunctionMetadata::create((void*)generatorIter, typeFromClass(generator_cls), 1)));
 
@@ -534,5 +719,6 @@ void setupGenerator() {
 
     generator_cls->freeze();
     generator_cls->tp_iter = PyObject_SelfIter;
+    generator_cls->tp_del = generator_del; // don't do giveAttr("__del__") because it should not be visible from python
 }
 }

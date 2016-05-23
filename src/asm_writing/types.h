@@ -15,6 +15,8 @@
 #ifndef PYSTON_ASMWRITING_TYPES_H
 #define PYSTON_ASMWRITING_TYPES_H
 
+#include <climits>
+
 #include "core/common.h"
 
 namespace pyston {
@@ -176,6 +178,95 @@ struct JumpDestination {
     static JumpDestination fromStart(int offset) { return JumpDestination(FROM_START, offset); }
 };
 }
+
+struct Location {
+public:
+    enum LocationType : uint8_t {
+        Register,
+        XMMRegister,
+        Stack,
+        Scratch, // stack location, relative to the scratch start
+
+        StackIndirect, // A location like $rsp[offset1][offset2]
+
+        // For representing constants that fit in 32-bits, that can be encoded as immediates
+        AnyReg,        // special type for use when specifying a location as a destination
+        None,          // special type that represents the lack of a location, ex where a "ret void" gets returned
+        Uninitialized, // special type for an uninitialized (and invalid) location
+    };
+
+public:
+    LocationType type;
+
+    union {
+        // only valid if type==Register; uses X86 numbering, not dwarf numbering.
+        // also valid if type==XMMRegister
+        int32_t regnum;
+        // only valid if type==Stack; this is the offset from bottom of the original frame.
+        // ie argument #6 will have a stack_offset of 0, #7 will have a stack offset of 8, etc.
+        // Measured in bytes
+        int32_t stack_offset;
+        // only valid if type == Scratch; offset from the beginning of the scratch area.
+        // Measured in bytes
+        int32_t scratch_offset;
+
+        // Only valid if type == StackIndirect:
+        struct {
+            int16_t stack_first_offset;
+            int16_t stack_second_offset;
+        };
+
+        int32_t _data;
+    };
+
+    constexpr Location() noexcept : type(Uninitialized), _data(-1) {}
+    constexpr Location(const Location& r) = default;
+    Location& operator=(const Location& r) = default;
+
+    constexpr Location(LocationType type, int32_t data) : type(type), _data(data) {}
+    Location(LocationType type, int64_t offset1, int64_t offset2)
+        : type(type), stack_first_offset(offset1), stack_second_offset(offset2) {
+        assert(type == StackIndirect);
+        assert(SHRT_MIN <= offset1 && offset1 <= SHRT_MAX);
+        assert(SHRT_MIN <= offset2 && offset2 <= SHRT_MAX);
+    }
+
+    constexpr Location(assembler::Register reg) : type(Register), regnum(reg.regnum) {}
+
+    constexpr Location(assembler::XMMRegister reg) : type(XMMRegister), regnum(reg.regnum) {}
+
+    constexpr Location(assembler::GenericRegister reg)
+        : type(reg.type == assembler::GenericRegister::GP ? Register : reg.type == assembler::GenericRegister::XMM
+                                                                           ? XMMRegister
+                                                                           : None),
+          regnum(reg.type == assembler::GenericRegister::GP ? reg.gp.regnum : reg.xmm.regnum) {}
+
+    assembler::Register asRegister() const;
+    assembler::XMMRegister asXMMRegister() const;
+    bool isClobberedByCall() const;
+
+    static constexpr Location any() { return Location(AnyReg, 0); }
+    static constexpr Location none() { return Location(None, 0); }
+    static Location forArg(int argnum);
+    static Location forXMMArg(int argnum);
+
+    bool operator==(const Location rhs) const { return this->asInt() == rhs.asInt(); }
+
+    bool operator!=(const Location rhs) const { return !(*this == rhs); }
+
+    bool operator<(const Location& rhs) const { return this->asInt() < rhs.asInt(); }
+
+    uint64_t asInt() const { return (int)type + ((uint64_t)_data << 4); }
+
+    void dump() const;
+};
+static_assert(sizeof(Location) <= 8, "");
+}
+
+namespace std {
+template <> struct hash<pyston::Location> {
+    size_t operator()(const pyston::Location p) const { return p.asInt(); }
+};
 }
 
 #endif

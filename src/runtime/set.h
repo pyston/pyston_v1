@@ -22,7 +22,6 @@
 namespace pyston {
 
 void setupSet();
-void teardownSet();
 
 extern "C" Box* createSet();
 
@@ -38,9 +37,12 @@ public:
 
     DEFAULT_CLASS(set_cls);
 
-    static void gcHandler(GCVisitor* v, Box* b);
     static void dealloc(Box* b) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
+    static int clear(Box* self) noexcept;
 };
+
+void _setAddStolen(BoxedSet* self, STOLEN(Box*) val);
 }
 
 #endif

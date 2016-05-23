@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 // Pyston change: changed most of these to const char*
-PyAPI_FUNC(PyObject *) PySys_GetObject(const char *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PySys_GetObject(const char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PySys_SetObject(const char *, PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(FILE *) PySys_GetFile(char *, FILE *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PySys_SetArgv(int, char **) PYSTON_NOEXCEPT;
@@ -26,7 +26,7 @@ PyAPI_FUNC(void) PySys_AddWarnOption(char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PySys_HasWarnOptions(void) PYSTON_NOEXCEPT;
 
 // Pyston change: add this API to get sys modules dict
-PyAPI_FUNC(PyObject *) PySys_GetModulesDict(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PySys_GetModulesDict(void) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

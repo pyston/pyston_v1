@@ -107,17 +107,22 @@ InternedStringPool& SourceInfo::getInternedStrings() {
     return scoping->getInternedStrings();
 }
 
-BoxedString* SourceInfo::getName() {
+BORROWED(BoxedString*) SourceInfo::getFn() {
+    assert(fn->ob_refcnt >= 1);
+    return fn;
+}
+
+BORROWED(BoxedString*) SourceInfo::getName() {
     assert(ast);
 
-    static BoxedString* lambda_name = internStringImmortal("<lambda>");
-    static BoxedString* module_name = internStringImmortal("<module>");
+    static BoxedString* lambda_name = getStaticString("<lambda>");
+    static BoxedString* module_name = getStaticString("<module>");
 
     switch (ast->type) {
         case AST_TYPE::ClassDef:
-            return ast_cast<AST_ClassDef>(ast)->name;
+            return ast_cast<AST_ClassDef>(ast)->name.getBox();
         case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->name;
+            return ast_cast<AST_FunctionDef>(ast)->name.getBox();
         case AST_TYPE::Lambda:
             return lambda_name;
         case AST_TYPE::Module:
@@ -137,7 +142,7 @@ Box* SourceInfo::getDocString() {
         return boxString(static_cast<AST_Str*>(static_cast<AST_Expr*>(body[0])->value)->str_data);
     }
 
-    return None;
+    return incref(None);
 }
 
 ScopeInfo* SourceInfo::getScopeInfo() {
@@ -323,14 +328,16 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         FutureFlags future_flags = getFutureFlags(m->body, fn);
         ScopingAnalysis* scoping = new ScopingAnalysis(m, true);
 
-        std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, m->body, boxString(fn)));
+        auto fn_str = boxString(fn);
+        AUTO_DECREF(fn_str);
+        std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, m->body, fn_str));
 
-        static BoxedString* doc_str = internStringImmortal("__doc__");
-        bm->setattr(doc_str, si->getDocString(), NULL);
+        static BoxedString* doc_str = getStaticString("__doc__");
+        bm->setattr(doc_str, autoDecref(si->getDocString()), NULL);
 
-        static BoxedString* builtins_str = internStringImmortal("__builtins__");
+        static BoxedString* builtins_str = getStaticString("__builtins__");
         if (!bm->hasattr(builtins_str))
-            bm->giveAttr(builtins_str, PyModule_GetDict(builtins_module));
+            bm->setattr(builtins_str, PyModule_GetDict(builtins_module), NULL);
 
         md = new FunctionMetadata(0, false, false, std::move(si));
     }
@@ -338,6 +345,12 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_interpreted_module_toplevel");
     Box* r = astInterpretFunction(md, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     assert(r == None);
+    Py_DECREF(r);
+
+    // XXX for bjit testing
+    // r = astInterpretFunction(md, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    // assert(r == None);
+    // Py_DECREF(r);
 }
 
 Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
@@ -347,8 +360,10 @@ Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
 
     Box* doc_string = md->source->getDocString();
     if (doc_string != None) {
-        static BoxedString* doc_box = internStringImmortal("__doc__");
+        static BoxedString* doc_box = getStaticString("__doc__");
         setGlobal(boxedLocals, doc_box, doc_string);
+    } else {
+        Py_DECREF(doc_string);
     }
 
     return astInterpretFunctionEval(md, globals, boxedLocals);
@@ -406,13 +421,13 @@ extern "C" PyCodeObject* PyAST_Compile(struct _mod* _mod, const char* filename, 
                 if (parsed->type != AST_TYPE::Module) {
                     raiseExcHelper(TypeError, "expected Module node, got %s", AST_TYPE::stringify(parsed->type));
                 }
-                md = compileExec(static_cast<AST_Module*>(parsed), boxString(filename), flags);
+                md = compileExec(static_cast<AST_Module*>(parsed), autoDecref(boxString(filename)), flags);
                 break;
             case Expression_kind:
                 if (parsed->type != AST_TYPE::Expression) {
                     raiseExcHelper(TypeError, "expected Expression node, got %s", AST_TYPE::stringify(parsed->type));
                 }
-                md = compileEval(static_cast<AST_Expression*>(parsed), boxString(filename), flags);
+                md = compileEval(static_cast<AST_Expression*>(parsed), autoDecref(boxString(filename)), flags);
                 break;
             case Suite_kind:
                 PyErr_SetString(PyExc_SystemError, "suite should not be possible");
@@ -422,7 +437,7 @@ extern "C" PyCodeObject* PyAST_Compile(struct _mod* _mod, const char* filename, 
                 return NULL;
         }
 
-        return (PyCodeObject*)md->getCode();
+        return (PyCodeObject*)incref(md->getCode());
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -490,9 +505,11 @@ static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
 
     if (globals) {
         // From CPython (they set it to be f->f_builtins):
-        Box* globals_dict = globals;
+        Box* globals_dict;
         if (globals->cls == module_cls)
             globals_dict = globals->getAttrWrapper();
+        else
+            globals_dict = globals;
 
         auto requested_builtins = PyDict_GetItemString(globals_dict, "__builtins__");
         if (requested_builtins == NULL)
@@ -514,7 +531,7 @@ extern "C" PyObject* PyEval_EvalCode(PyCodeObject* co, PyObject* globals, PyObje
     }
 }
 
-Box* exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_flags) {
+void exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_flags) {
     if (!globals)
         globals = None;
     if (!locals)
@@ -597,7 +614,7 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_f
         }
 #endif
         if (PyString_AsStringAndSize(prog, &str, NULL))
-            return 0;
+            throwCAPIException();
         cf.cf_flags |= caller_future_flags & PyCF_MASK;
         if (cf.cf_flags)
             v = PyRun_StringFlags(str, Py_file_input, globals, locals, &cf);
@@ -608,7 +625,9 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_f
 
     if (!v)
         throwCAPIException();
-    return v;
+
+    assert(v == None); // not really necessary but I think this should be true
+    Py_DECREF(v);
 }
 
 // If a function version keeps failing its speculations, kill it (remove it
@@ -686,14 +705,6 @@ CompiledFunction::~CompiledFunction() {
     all_compiled_functions.erase(this);
 }
 #endif
-
-void CompiledFunction::visitAllCompiledFunctions(GCVisitor* visitor) {
-    for (CompiledFunction* cf : all_compiled_functions) {
-        for (const void* ptr : cf->pointers_in_code) {
-            visitor->visitNonRelocatable(const_cast<void*>(ptr));
-        }
-    }
-}
 
 ConcreteCompilerType* CompiledFunction::getReturnType() {
     assert(((bool)spec) ^ ((bool)entry_descriptor));

@@ -27,33 +27,6 @@ typedef int (*update_callback)(PyTypeObject*, void*);
 
 PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept;
 
-extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) noexcept {
-    v->visitPotentialRange((void**)b, (void**)((char*)b + b->cls->tp_basicsize));
-}
-
-extern "C" void conservativeAndBasesGCHandler(GCVisitor* v, Box* b) noexcept {
-    // TODO: this function is expensive.  We should try to make sure it doesn't get used
-    // that often, or to come up with a better approach.
-
-    // Call all the custom gc handlers defined anywhere in the hierarchy:
-    assert(PyTuple_CheckExact(b->cls->tp_mro));
-    for (auto c : *static_cast<BoxedTuple*>(b->cls->tp_mro)) {
-        if (!PyType_Check(c))
-            continue;
-
-        auto gc_visit = static_cast<BoxedClass*>(c)->gc_visit;
-
-        // Skip conservativeGCHandler since it's slow, and skip conservativeAndBasesGCHandler since
-        // it would cause an infinite loop:
-        if (gc_visit == conservativeGCHandler || gc_visit == conservativeAndBasesGCHandler)
-            continue;
-
-        gc_visit(v, b);
-    }
-
-    conservativeGCHandler(v, b);
-}
-
 /* Helper to check for object.__setattr__ or __delattr__ applied to a type.
    This is called the Carlo Verre hack after its discoverer. */
 static int hackcheck(PyObject* self, setattrofunc func, const char* what) noexcept {
@@ -479,7 +452,7 @@ static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** at
     PyObject* res;
 
     if (*attrobj == NULL) {
-        *attrobj = PyString_InternFromString(attrstr);
+        *attrobj = getStaticString(attrstr);
         if (*attrobj == NULL)
             return NULL;
     }
@@ -493,7 +466,7 @@ static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** at
             return NULL;
         }
     }
-    return obj;
+    return NULL;
 }
 
 extern "C" PyObject* _PyObject_LookupSpecial(PyObject* self, const char* attrstr, PyObject** attrobj) noexcept {
@@ -809,6 +782,7 @@ static llvm_compat_bool slotTppHasnext(PyObject* self) {
 
     Box* r = self->hasnextOrNullIC();
     assert(r);
+    AUTO_DECREF(r);
     return r->nonzeroIC();
 }
 
@@ -818,7 +792,7 @@ static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type
     PyTypeObject* tp = Py_TYPE(self);
     PyObject* get;
 
-    static BoxedString* get_str = internStringImmortal("__get__");
+    static BoxedString* get_str = getStaticString("__get__");
     get = typeLookup(tp, get_str);
     if (get == NULL) {
         /* Avoid further slowdowns */
@@ -913,7 +887,7 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
          __getattr__, even when the attribute is present. So we use
          _PyType_Lookup and create the method only when needed, with
          call_attribute. */
-    static BoxedString* _getattr_str = internStringImmortal("__getattr__");
+    static BoxedString* _getattr_str = getStaticString("__getattr__");
 
     // Don't need to do this in the rewritten version; if a __getattr__ later gets removed:
     // - if we ever get to the "call __getattr__" portion of the rewrite, the guards will
@@ -943,7 +917,7 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
          __getattr__, even when self has the default __getattribute__
          method. So we use _PyType_Lookup and create the method only when
          needed, with call_attribute. */
-    static BoxedString* _getattribute_str = internStringImmortal("__getattribute__");
+    static BoxedString* _getattribute_str = getStaticString("__getattribute__");
 
     RewriterVar* r_getattribute = NULL;
     if (rewrite_args) {
@@ -992,6 +966,8 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
                     } else
                         throw e;
                 }
+
+                e.clear();
 
                 if (grewrite_args.isSuccessful()) {
                     grewrite_args.getReturn(); // to make the asserts happy
@@ -1043,6 +1019,7 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
                     } else
                         throw e;
                 }
+                e.clear();
                 res = NULL;
             }
         }
@@ -1130,10 +1107,11 @@ template Box* slotTpGetattrHookInternal<CXX, NOT_REWRITABLE>(Box* self, BoxedStr
 
     try {
         // TODO: runtime ICs?
-        static BoxedString* _new_str = internStringImmortal("__new__");
+        static BoxedString* _new_str = getStaticString("__new__");
         Box* new_attr = typeLookup(self, _new_str);
         assert(new_attr);
         new_attr = processDescriptor(new_attr, None, self);
+        AUTO_DECREF(new_attr);
 
         return runtimeCall(new_attr, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
     } catch (ExcInfo e) {
@@ -1142,24 +1120,61 @@ template Box* slotTpGetattrHookInternal<CXX, NOT_REWRITABLE>(Box* self, BoxedStr
     }
 }
 
-static PyObject* slot_tp_del(PyObject* self) noexcept {
-    static BoxedString* del_str = internStringImmortal("__del__");
-    try {
-        // TODO: runtime ICs?
-        Box* del_attr = typeLookup(self->cls, del_str);
-        assert(del_attr);
+static void slot_tp_del(PyObject* self) noexcept {
+    static PyObject* del_str = NULL;
+    PyObject* del, *res;
+    PyObject* error_type, *error_value, *error_traceback;
 
-        CallattrFlags flags{.cls_only = false,
-                            .null_on_nonexistent = true,
-                            .argspec = ArgPassSpec(0, 0, false, false) };
-        return callattr(self, del_str, flags, NULL, NULL, NULL, NULL, NULL);
-    } catch (ExcInfo e) {
-        // Python does not support exceptions thrown inside finalizers. Instead, it just
-        // prints a warning that an exception was throw to stderr but ignores it.
-        setCAPIException(e);
-        PyErr_WriteUnraisable(self);
-        return NULL;
+    /* Temporarily resurrect the object. */
+    assert(self->ob_refcnt == 0);
+    self->ob_refcnt = 1;
+
+    /* Save the current exception, if any. */
+    PyErr_Fetch(&error_type, &error_value, &error_traceback);
+
+    /* Execute __del__ method, if any. */
+    del = lookup_maybe(self, "__del__", &del_str);
+    if (del != NULL) {
+        res = PyEval_CallObject(del, NULL);
+        if (res == NULL)
+            PyErr_WriteUnraisable(del);
+        else
+            Py_DECREF(res);
+        Py_DECREF(del);
     }
+
+    /* Restore the saved exception. */
+    PyErr_Restore(error_type, error_value, error_traceback);
+
+    /* Undo the temporary resurrection; can't use DECREF here, it would
+     * cause a recursive call.
+     */
+    assert(self->ob_refcnt > 0);
+    if (--self->ob_refcnt == 0)
+        return; /* this is the normal path out */
+
+    /* __del__ resurrected it!  Make it look like the original Py_DECREF
+     * never happened.
+     */
+    {
+        Py_ssize_t refcnt = self->ob_refcnt;
+        _Py_NewReference(self);
+        self->ob_refcnt = refcnt;
+    }
+    assert(!PyType_IS_GC(Py_TYPE(self)) || _Py_AS_GC(self)->gc.gc_refs != _PyGC_REFS_UNTRACKED);
+    /* If Py_REF_DEBUG, _Py_NewReference bumped _Py_RefTotal, so
+     * we need to undo that. */
+    _Py_DEC_REFTOTAL;
+/* If Py_TRACE_REFS, _Py_NewReference re-added self to the object
+ * chain, so no more to do there.
+ * If COUNT_ALLOCS, the original decref bumped tp_frees, and
+ * _Py_NewReference bumped tp_allocs:  both of those need to be
+ * undone.
+ */
+#ifdef COUNT_ALLOCS
+    --Py_TYPE(self)->tp_frees;
+    --Py_TYPE(self)->tp_allocs;
+#endif
 }
 
 /* Pyston change: static */ int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
@@ -1186,7 +1201,7 @@ static PyObject* slot_tp_del(PyObject* self) noexcept {
 
 PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
     STAT_TIMER(t0, "us_timer_slot_sqitem", SLOT_AVOIDABILITY(self));
-    return getitemInternal<CAPI>(self, boxInt(i));
+    return getitemInternal<CAPI>(self, autoDecref(boxInt(i)));
 }
 
 /* Pyston change: static */ Py_ssize_t slot_sq_length(PyObject* self) noexcept {
@@ -1772,7 +1787,7 @@ static void init_slotdefs() noexcept {
         return;
 
     for (int i = 0; i < sizeof(slotdefs) / sizeof(slotdefs[0]); i++) {
-        slotdefs[i].name_strobj = internStringImmortal(slotdefs[i].name.data());
+        slotdefs[i].name_strobj = getStaticString(slotdefs[i].name.data());
 
         if (i > 0) {
             if (!slotdefs[i].name.size())
@@ -1863,13 +1878,13 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
             // there was only one:
             assert((p + 1)->offset > p->offset);
 
-            static BoxedString* class_str = internStringImmortal("__class__");
+            static BoxedString* class_str = getStaticString("__class__");
             if (p->name_strobj == class_str) {
                 if (descr == object_cls->getattr(class_str))
                     descr = NULL;
             }
 
-            static BoxedString* getattribute_str = internStringImmortal("__getattribute__");
+            static BoxedString* getattribute_str = getStaticString("__getattribute__");
             if (p->name_strobj == getattribute_str) {
                 if (descr && descr->cls == wrapperdescr_cls
                     && ((BoxedWrapperDescriptor*)descr)->wrapped == PyObject_GenericGetAttr)
@@ -1987,7 +2002,7 @@ bool update_slot(BoxedClass* type, llvm::StringRef attr) noexcept {
     }
     if (ptrs[0] == NULL)
         return false; /* Not an attribute that affects any slots */
-    int r = update_subclasses(type, boxString(attr), update_slots_callback, (void*)ptrs);
+    int r = update_subclasses(type, autoDecref(boxString(attr)), update_slots_callback, (void*)ptrs);
 
     // TODO this is supposed to be a CAPI function!
     if (r)
@@ -2053,21 +2068,49 @@ static int recurse_down_subclasses(PyTypeObject* type, PyObject* name, update_ca
 }
 
 /* Pyston change: static */ PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept {
-    RELEASE_ASSERT(PyType_Check(self), "");
+    PyTypeObject* type, *subtype, *staticbase;
+    PyObject* arg0, *res;
 
-    // ASSERT(self->tp_new != Py_CallPythonNew, "going to get in an infinite loop");
+    if (self == NULL || !PyType_Check(self))
+        Py_FatalError("__new__() called with non-type 'self'");
+    type = (PyTypeObject*)self;
+    if (!PyTuple_Check(args) || PyTuple_GET_SIZE(args) < 1) {
+        PyErr_Format(PyExc_TypeError, "%s.__new__(): not enough arguments", type->tp_name);
+        return NULL;
+    }
+    arg0 = PyTuple_GET_ITEM(args, 0);
+    if (!PyType_Check(arg0)) {
+        PyErr_Format(PyExc_TypeError, "%s.__new__(X): X is not a type object (%s)", type->tp_name,
+                     Py_TYPE(arg0)->tp_name);
+        return NULL;
+    }
+    subtype = (PyTypeObject*)arg0;
+    if (!PyType_IsSubtype(subtype, type)) {
+        PyErr_Format(PyExc_TypeError, "%s.__new__(%s): %s is not a subtype of %s", type->tp_name, subtype->tp_name,
+                     subtype->tp_name, type->tp_name);
+        return NULL;
+    }
 
-    RELEASE_ASSERT(args->cls == tuple_cls, "");
-    RELEASE_ASSERT(!kwds || kwds->cls == dict_cls, "");
-    RELEASE_ASSERT(args->size() >= 1, "");
+    /* Check that the use doesn't do something silly and unsafe like
+       object.__new__(dict).  To do this, we check that the
+       most derived base that's not a heap type is this type. */
+    staticbase = subtype;
+    while (staticbase && (staticbase->tp_flags & Py_TPFLAGS_HEAPTYPE))
+        staticbase = staticbase->tp_base;
+    /* If staticbase is NULL now, it is a really weird type.
+       In the spirit of backwards compatibility (?), just shut up. */
+    if (staticbase && staticbase->tp_new != type->tp_new) {
+        PyErr_Format(PyExc_TypeError, "%s.__new__(%s) is not safe, use %s.__new__()", type->tp_name, subtype->tp_name,
+                     staticbase == NULL ? "?" : staticbase->tp_name);
+        return NULL;
+    }
 
-    BoxedClass* subtype = static_cast<BoxedClass*>(args->elts[0]);
-    RELEASE_ASSERT(PyType_Check(subtype), "");
-    RELEASE_ASSERT(isSubclass(subtype, self), "");
-
-    BoxedTuple* new_args = BoxedTuple::create(args->size() - 1, &args->elts[1]);
-
-    return self->tp_new(subtype, new_args, kwds);
+    args = (BoxedTuple*)PyTuple_GetSlice(args, 1, PyTuple_GET_SIZE(args));
+    if (args == NULL)
+        return NULL;
+    res = type->tp_new(subtype, args, kwds);
+    Py_DECREF(args);
+    return res;
 }
 
 static struct PyMethodDef tp_new_methoddef[] = { { "__new__", (PyCFunction)tp_new_wrapper, METH_VARARGS | METH_KEYWORDS,
@@ -2076,11 +2119,11 @@ static struct PyMethodDef tp_new_methoddef[] = { { "__new__", (PyCFunction)tp_ne
                                                  { 0, 0, 0, 0 } };
 
 static void add_tp_new_wrapper(BoxedClass* type) noexcept {
-    static BoxedString* new_str = internStringImmortal("__new__");
+    static BoxedString* new_str = getStaticString("__new__");
     if (type->getattr(new_str))
         return;
 
-    type->giveAttr(new_str, new BoxedCApiFunction(tp_new_methoddef, type, NULL /* module name */));
+    type->giveAttr(incref(new_str), new BoxedCApiFunction(tp_new_methoddef, type, NULL /* module name */));
 }
 
 void add_operators(BoxedClass* cls) noexcept {
@@ -2098,9 +2141,11 @@ void add_operators(BoxedClass* cls) noexcept {
             continue;
 
         if (*ptr == PyObject_HashNotImplemented) {
-            cls->giveAttr(p.name_strobj, None);
+            cls->setattr(p.name_strobj, None, NULL);
         } else {
-            cls->giveAttr(p.name_strobj, new BoxedWrapperDescriptor(&p, cls, *ptr));
+            auto descr = new BoxedWrapperDescriptor(&p, cls, *ptr);
+            cls->setattr(p.name_strobj, descr, NULL);
+            Py_DECREF(descr);
         }
     }
 
@@ -2676,6 +2721,7 @@ static int add_methods(PyTypeObject* type, PyMethodDef* meth) noexcept {
             return -1;
         type->setattr(name, descr, NULL);
         Py_DECREF(descr);
+        Py_DECREF(name);
     }
     return 0;
 }
@@ -2691,6 +2737,7 @@ static int add_members(PyTypeObject* type, PyMemberDef* memb) noexcept {
             return -1;
         type->setattr(name, descr, NULL);
         Py_DECREF(descr);
+        Py_DECREF(name);
     }
     return 0;
 }
@@ -2707,6 +2754,7 @@ static int add_getset(PyTypeObject* type, PyGetSetDef* gsp) noexcept {
             return -1;
         type->setattr(name, descr, NULL);
         Py_DECREF(descr);
+        Py_DECREF(name);
     }
     return 0;
 }
@@ -3000,8 +3048,7 @@ static void inherit_slots(PyTypeObject* type, PyTypeObject* base) noexcept {
              * didn't define tp_free, and the base uses the
              * default non-gc tp_free.
              */
-            // Pyston change: don't do this:
-            // type->tp_free = PyObject_GC_Del;
+            type->tp_free = PyObject_GC_Del;
         }
         /* else they didn't agree about gc, and there isn't something
          * obvious to be done -- the type is on its own.
@@ -3103,7 +3150,7 @@ static int same_slots_added(PyTypeObject* a, PyTypeObject* b) noexcept {
     return size == a->tp_basicsize && size == b->tp_basicsize;
 }
 
-static int compatible_for_assignment(PyTypeObject* oldto, PyTypeObject* newto, const char* attr) noexcept {
+int compatible_for_assignment(PyTypeObject* oldto, PyTypeObject* newto, const char* attr) noexcept {
     PyTypeObject* newbase, *oldbase;
 
     if (newto->tp_dealloc != oldto->tp_dealloc || newto->tp_free != oldto->tp_free) {
@@ -3313,8 +3360,10 @@ void commonClassSetup(BoxedClass* cls) {
     }
 
     /* Calculate method resolution order */
-    if (mro_internal(cls) < 0)
-        throwCAPIException();
+    if (!cls->tp_mro) {
+        if (mro_internal(cls) < 0)
+            throwCAPIException();
+    }
 
     if (cls->tp_base)
         inherit_special(cls, cls->tp_base);
@@ -3362,45 +3411,40 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
         paramspec.takes_kwargs = false;
     }
 
-    bool rewrite_success = false;
-    Box** oargs = NULL;
-    try {
-        rearrangeArguments(paramspec, NULL, "", NULL, rewrite_args, rewrite_success, argspec, arg1, arg2, arg3, args,
-                           oargs, keyword_names);
-    } catch (ExcInfo e) {
-        if (S == CAPI) {
-            setCAPIException(e);
-            return NULL;
-        } else
-            throw e;
-    }
-
-    if (!rewrite_success)
-        rewrite_args = NULL;
-
-    if (rewrite_args) {
+    auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
         if (!paramspec.takes_kwargs)
-            rewrite_args->arg2 = rewrite_args->rewriter->loadConst(0, Location::forArg(2));
+            arg2 = NULL;
 
-        // Currently, guard that the value of tp_call didn't change, and then
-        // emit a call to the current function address.
-        // It might be better to just load the current value of tp_call and call it
-        // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
-        // support calling a RewriterVar (can only call fixed function addresses).
-        RewriterVar* r_cls = rewrite_args->obj->getAttr(offsetof(Box, cls));
-        r_cls->addAttrGuard(offsetof(BoxedClass, tp_call), (intptr_t)self->cls->tp_call);
+        if (rewrite_args) {
+            if (!paramspec.takes_kwargs)
+                rewrite_args->arg2 = rewrite_args->rewriter->loadConst(0, Location::forArg(2));
 
-        rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->cls->tp_call, rewrite_args->obj,
-                                                             rewrite_args->arg1, rewrite_args->arg2);
-        if (S == CXX)
-            rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
-        rewrite_args->out_success = true;
-    }
+            // Currently, guard that the value of tp_call didn't change, and then
+            // emit a call to the current function address.
+            // It might be better to just load the current value of tp_call and call it
+            // (after guarding it's not null), or maybe not.  But the rewriter doesn't currently
+            // support calling a RewriterVar (can only call fixed function addresses).
+            RewriterVar* r_cls = rewrite_args->obj->getAttr(offsetof(Box, cls));
+            r_cls->addAttrGuard(offsetof(BoxedClass, tp_call), (intptr_t)self->cls->tp_call);
 
-    Box* r = self->cls->tp_call(self, arg1, arg2);
-    if (!r && S == CXX)
-        throwCAPIException();
-    return r;
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)self->cls->tp_call, rewrite_args->obj,
+                                                                 rewrite_args->arg1, rewrite_args->arg2);
+            rewrite_args->out_rtn->setType(RefType::OWNED);
+            if (S == CXX)
+                rewrite_args->rewriter->checkAndThrowCAPIException(rewrite_args->out_rtn);
+            rewrite_args->out_success = true;
+        }
+
+        Box* r = self->cls->tp_call(self, arg1, arg2);
+        if (S == CXX && !r)
+            throwCAPIException();
+        return r;
+    };
+
+    return callCXXFromStyle<S>([&]() {
+        return rearrangeArgumentsAndCall(paramspec, NULL, "", NULL, rewrite_args, argspec, arg1, arg2, arg3, args,
+                                         keyword_names, continuation);
+    });
 }
 
 extern "C" void PyType_RequestHcAttrs(PyTypeObject* cls, int offset) noexcept {
@@ -3410,9 +3454,10 @@ extern "C" void PyType_RequestHcAttrs(PyTypeObject* cls, int offset) noexcept {
 }
 
 extern "C" void PyType_GiveHcAttrsDictDescr(PyTypeObject* cls) noexcept {
-    static BoxedString* dict_str = internStringImmortal("__dict__");
+    static BoxedString* dict_str = getStaticString("__dict__");
     assert(!cls->hasattr(dict_str));
-    cls->giveAttr(dict_str, dict_descr);
+    assert(cls->instancesHaveHCAttrs() && !cls->instancesHaveDictAttrs());
+    cls->giveAttr(incref(dict_str), incref(dict_descr));
 }
 
 extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
@@ -3422,9 +3467,19 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         return 0;
     }
 
+#ifdef Py_TRACE_REFS
+    /* PyType_Ready is the closest thing we have to a choke point
+     * for type objects, so is the best place I can think of to try
+     * to get type objects into the doubly-linked list of all objects.
+     * Still, not all type objects go thru PyType_Ready.
+     */
+    _Py_AddToAllObjects((PyObject*)cls, 0);
+#endif
+
     ASSERT(!cls->is_pyston_class, "should not call this on Pyston classes");
 
-    gc::registerNonheapRootObject(cls, sizeof(PyTypeObject));
+    _Py_INC_REFTOTAL;
+    classes.push_back(cls);
 
     // unhandled fields:
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES
@@ -3439,7 +3494,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     RELEASE_ASSERT(cls->tp_cache == NULL, "");
     RELEASE_ASSERT(cls->tp_subclasses == NULL, "");
     RELEASE_ASSERT(cls->tp_weaklist == NULL, "");
-    RELEASE_ASSERT(cls->tp_del == NULL, "");
     RELEASE_ASSERT(cls->tp_version_tag == 0, "");
 
     // I think it is safe to ignore these for for now:
@@ -3458,12 +3512,17 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     BoxedClass* base = cls->tp_base;
     if (base == NULL)
         base = cls->tp_base = object_cls;
+
+    // CPython only increfs the base if it picked one, not if it one was passed in.
+    // Not sure why.
+    Py_INCREF(base);
+
     if (!cls->cls)
         cls->cls = cls->tp_base->cls;
-    cls->giveAttr("__base__", base);
+    cls->giveAttrBorrowed("__base__", base);
 
     assert(cls->tp_dict == NULL);
-    cls->tp_dict = cls->getAttrWrapper();
+    cls->tp_dict = incref(cls->getAttrWrapper());
 
     assert(cls->tp_name);
 
@@ -3498,12 +3557,12 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         return -1;
     }
 
-    static BoxedString* doc_str = internStringImmortal("__doc__");
+    static BoxedString* doc_str = getStaticString("__doc__");
     if (!cls->hasattr(doc_str)) {
         if (cls->tp_doc) {
-            cls->giveAttr(doc_str, boxString(cls->tp_doc));
+            cls->giveAttr(incref(doc_str), boxString(cls->tp_doc));
         } else {
-            cls->giveAttr(doc_str, None);
+            cls->giveAttr(incref(doc_str), incref(None));
         }
     }
 
@@ -3520,19 +3579,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
             cls->tp_as_buffer = base->tp_as_buffer;
     }
 
-    if (cls->tp_alloc == &PystonType_GenericAlloc)
-        cls->tp_alloc = &PyType_GenericAlloc;
-
-    // If an extension class visits from a Pyston class that does custom visiting,
-    // the base class needs to call the parent's visit function in case it visits
-    // non-inline data.  There's not an easy way to put in a function pointer here
-    // that defers to a specific class's gc_visit, even if it's a base class, since
-    // the gc_visit could get inherited by subclasses.  For now just use an expensive
-    // function, conservativeAndBasesGCHandler
-    if (base->gc_visit != object_cls->gc_visit && base->gc_visit != &conservativeGCHandler)
-        cls->gc_visit = &conservativeAndBasesGCHandler;
-    else
-        cls->gc_visit = &conservativeGCHandler;
 
 
     if (!cls->instancesHaveHCAttrs() && cls->tp_base) {

@@ -38,6 +38,9 @@ def print_progress_header(text):
 ENV_NAME = "numpy_test_env_" + os.path.basename(sys.executable)
 DEPENDENCIES = ["nose==1.3.7"]
 
+import platform
+USE_CUSTOM_PATCHES = (platform.python_implementation() == "Pyston")
+
 if not os.path.exists(ENV_NAME) or os.stat(sys.executable).st_mtime > os.stat(ENV_NAME + "/bin/python").st_mtime:
     print "Creating virtualenv to install testing dependencies..."
     VIRTUALENV_SCRIPT = os.path.dirname(__file__) + "/../lib/virtualenv/virtualenv.py"
@@ -60,7 +63,7 @@ if not os.path.exists(ENV_NAME) or os.stat(sys.executable).st_mtime > os.stat(EN
 SRC_DIR = ENV_NAME
 PYTHON_EXE = os.path.abspath(ENV_NAME + "/bin/python")
 CYTHON_DIR = os.path.abspath(os.path.join(SRC_DIR, "Cython-0.22"))
-NUMPY_DIR = os.path.dirname(__file__) + "/../lib/numpy"
+NUMPY_DIR = os.path.abspath(os.path.join(SRC_DIR, "numpy"))
 
 print_progress_header("Setting up Cython...")
 if not os.path.exists(CYTHON_DIR):
@@ -69,9 +72,10 @@ if not os.path.exists(CYTHON_DIR):
     subprocess.check_call(["wget", url], cwd=SRC_DIR)
     subprocess.check_call(["tar", "-zxf", "Cython-0.22.tar.gz"], cwd=SRC_DIR)
 
-    PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "Cython-0.22.patch"))
-    subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=CYTHON_DIR)
-    print ">>> Applied Cython patch"
+    if USE_CUSTOM_PATCHES:
+        PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "Cython-0.22.patch"))
+        subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=CYTHON_DIR)
+        print ">>> Applied Cython patch"
 
 
     try:
@@ -82,21 +86,42 @@ if not os.path.exists(CYTHON_DIR):
 else:
     print ">>> Cython already installed."
 
-print_progress_header("Patching NumPy...")
 NUMPY_PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "numpy_patch.patch"))
+
+print_progress_header("Cloning up NumPy...")
+if not os.path.exists(NUMPY_DIR):
+    url = "https://github.com/numpy/numpy"
+    subprocess.check_call(["git", "clone", "--branch", "v1.11.0", url], cwd=SRC_DIR)
+else:
+    print ">>> NumPy already installed."
+
+PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "numpy_patch.patch"))
+
+if USE_CUSTOM_PATCHES:
+    print_progress_header("Patching NumPy...")
+    subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=NUMPY_DIR)
+
 try:
-    cmd = ["patch", "-p1", "--forward", "-i", NUMPY_PATCH_FILE, "-d", NUMPY_DIR]
-    subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-except subprocess.CalledProcessError as e:
-    print e.output
-    if "Reversed (or previously applied) patch detected!  Skipping patch" not in e.output:
-        raise e
+    env = os.environ
+    CYTHON_BIN_DIR = os.path.abspath(os.path.join(ENV_NAME + "/bin"))
+    env["PATH"] = CYTHON_BIN_DIR + ":" + env["PATH"]
 
-print_progress_header("Setting up NumPy...")
-subprocess.check_call([PYTHON_EXE, "setup.py", "build"], cwd=NUMPY_DIR)
+    print_progress_header("Setting up NumPy...")
+    subprocess.check_call([PYTHON_EXE, "setup.py", "build"], cwd=NUMPY_DIR, env=env)
 
-print_progress_header("Installing NumPy...")
-subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=NUMPY_DIR)
+    print_progress_header("Installing NumPy...")
+    subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=NUMPY_DIR, env=env)
+except:
+    if USE_CUSTOM_PATCHES:
+        print_progress_header("Unpatching NumPy...")
+        cmd = ["patch", "-p1", "--forward", "-i", NUMPY_PATCH_FILE, "-R", "-d", NUMPY_DIR]
+        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+
+    # TODO: I'm not sure we need to do this:
+    subprocess.check_call(["rm", "-rf", NUMPY_DIR + "/build"])
+    subprocess.check_call(["rm", "-rf", NUMPY_DIR + "/dist"])
+
+    raise
 
 # From Wikipedia
 script = """
@@ -165,9 +190,10 @@ print_progress_header("Running NumPy test suite...")
 # when all the crashes are fixed.
 # subprocess.check_call([PYTHON_EXE, "-c", numpy_test], cwd=CYTHON_DIR)
 
-print_progress_header("Unpatching NumPy...")
-cmd = ["patch", "-p1", "--forward", "-i", NUMPY_PATCH_FILE, "-R", "-d", NUMPY_DIR]
-subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+if USE_CUSTOM_PATCHES:
+    print_progress_header("Unpatching NumPy...")
+    cmd = ["patch", "-p1", "--forward", "-i", NUMPY_PATCH_FILE, "-R", "-d", NUMPY_DIR]
+    subprocess.check_output(cmd, stderr=subprocess.STDOUT)
 
 print
 print "PASSED"

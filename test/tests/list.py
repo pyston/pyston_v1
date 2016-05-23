@@ -235,3 +235,12 @@ try:
     print([1, 2] * d)
 except TypeError as e:
     print(type(e))
+
+try:
+    print range(5).index(10, 100L, 200L)
+except Exception as e:
+    print e
+try:
+    print range(5).index(10, 100, 200)
+except Exception as e:
+    print e

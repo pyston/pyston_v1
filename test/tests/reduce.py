@@ -22,3 +22,8 @@ try:
     print reduce(f, [])
 except TypeError, e:
     print e
+
+try:
+    print reduce(lambda x, y: x / y, range(-10, 10))
+except Exception as e:
+    print e

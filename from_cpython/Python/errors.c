@@ -189,6 +189,7 @@ PyErr_NormalizeException(PyObject** exc, PyObject** val, PyObject** tb)
 
             if (res == NULL)
                 goto finally;
+            Py_DECREF(value);
             value = res;
         }
         /* if the class of the instance doesn't exactly match the
@@ -592,6 +593,9 @@ PyErr_NewException(const char *name, PyObject *base, PyObject *dict)
     /* Create a real new-style class. */
     result = PyObject_CallFunction((PyObject *)&PyType_Type, "sOO",
                                    dot+1, bases, dict);
+    // Pyston change:
+    // This should probably be the responsibility of the caller, but just do it here for now:
+    PyGC_RegisterStaticConstant(result);
   failure:
     Py_XDECREF(bases);
     Py_XDECREF(mydict);

@@ -28,7 +28,16 @@ public:
 
     BoxedDictIterator(BoxedDict* d);
 
-    static void gcHandler(GCVisitor* v, Box* self);
+    static void dealloc(BoxedDictIterator* o) noexcept {
+        PyObject_GC_UnTrack(o);
+        Py_DECREF(o->d);
+        o->cls->tp_free(o);
+    }
+
+    static int traverse(BoxedDictIterator* self, visitproc visit, void* arg) noexcept {
+        Py_VISIT(self->d);
+        return 0;
+    }
 };
 
 Box* dictGetitem(BoxedDict* self, Box* k);

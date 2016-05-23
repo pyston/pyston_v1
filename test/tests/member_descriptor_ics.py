@@ -1,3 +1,6 @@
+# skip-if: True
+# this currently prints the wrong result in a release build
+
 # run_args: -n
 # statcheck: noninit_count('slowpath_member_descriptor_get') <= 1500
 

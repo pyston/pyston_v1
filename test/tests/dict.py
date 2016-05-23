@@ -1,4 +1,4 @@
-d = {2:2}
+d = {2:"should get overwritten", 2L:2}
 d[1] = 1
 print d
 print d[1], d[1L], d[1.0], d[True]
@@ -235,3 +235,8 @@ print sorted(l)
 d = dict()
 d['two'] = d
 print d
+
+
+# Remove an item using a different key:
+d = {1:1}
+d.pop(1L)

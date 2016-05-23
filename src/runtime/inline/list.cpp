@@ -23,16 +23,17 @@
 namespace pyston {
 
 BoxedListIterator::BoxedListIterator(BoxedList* l, int start) : l(l), pos(start) {
+    Py_INCREF(l);
 }
 
 Box* listIterIter(Box* s) {
-    return s;
+    return incref(s);
 }
 
 Box* listIter(Box* s) noexcept {
     assert(PyList_Check(s));
     BoxedList* self = static_cast<BoxedList*>(s);
-    return new BoxedListIterator(self, 0);
+    return new (list_iterator_cls, FAST_GC) BoxedListIterator(self, 0);
 }
 
 Box* listiterHasnext(Box* s) {
@@ -40,11 +41,12 @@ Box* listiterHasnext(Box* s) {
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
     if (!self->l) {
-        return False;
+        Py_RETURN_FALSE;
     }
 
     bool ans = (self->pos < self->l->size);
     if (!ans) {
+        Py_DECREF(self->l);
         self->l = NULL;
     }
     return boxBool(ans);
@@ -60,6 +62,7 @@ llvm_compat_bool listiterHasnextUnboxed(Box* s) {
 
     bool ans = (self->pos < self->l->size);
     if (!ans) {
+        Py_DECREF(self->l);
         self->l = NULL;
     }
     return ans;
@@ -73,19 +76,20 @@ Box* listiter_next(Box* s) noexcept {
         return NULL;
 
     if (!(self->pos >= 0 && self->pos < self->l->size)) {
+        Py_DECREF(self->l);
         self->l = NULL;
         return NULL;
     }
 
     Box* rtn = self->l->elts->elts[self->pos];
     self->pos++;
-    return rtn;
+    return incref(rtn);
 }
 
 Box* listReversed(Box* s) {
     assert(PyList_Check(s));
     BoxedList* self = static_cast<BoxedList*>(s);
-    return new (list_reverse_iterator_cls) BoxedListIterator(self, self->size - 1);
+    return new (list_reverse_iterator_cls, FAST_GC) BoxedListIterator(self, self->size - 1);
 }
 
 Box* listreviterHasnext(Box* s) {
@@ -112,7 +116,7 @@ Box* listreviter_next(Box* s) noexcept {
 
     Box* rtn = self->l->elts->elts[self->pos];
     self->pos--;
-    return rtn;
+    return incref(rtn);
 }
 
 Box* listreviterNext(Box* s) {
@@ -130,10 +134,11 @@ void BoxedList::shrink() {
     if (capacity > size * 3) {
         int new_capacity = std::max(static_cast<int64_t>(INITIAL_CAPACITY), capacity / 2);
         if (size > 0) {
-            elts = GCdArray::realloc(elts, new_capacity);
+            elts = GCdArray::grow(elts, new_capacity);
             capacity = new_capacity;
         } else if (size == 0) {
             delete elts;
+            elts = NULL;
             capacity = 0;
         }
     }
@@ -146,6 +151,10 @@ extern "C" void listAppendArrayInternal(Box* s, Box** v, int nelts) {
 
     assert(self->size <= self->capacity);
     self->ensure(nelts);
+
+    for (int i = 0; i < nelts; i++) {
+        Py_INCREF(v[i]);
+    }
 
     assert(self->size <= self->capacity);
     memcpy(&self->elts->elts[self->size], &v[0], nelts * sizeof(Box*));
@@ -160,6 +169,6 @@ extern "C" Box* listAppend(Box* s, Box* v) {
 
     listAppendInternal(self, v);
 
-    return None;
+    Py_RETURN_NONE;
 }
 }

@@ -48,18 +48,14 @@ public:
 
     Box** weakreflist;
 
-    BoxedClassobj(BoxedString* name, BoxedTuple* bases) : bases(bases), name(name) {}
-
-    static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == classobj_cls);
-        BoxedClassobj* o = static_cast<BoxedClassobj*>(_o);
-
-        Box::gcHandler(v, o);
-        if (o->bases)
-            v->visit(&o->bases);
-        if (o->name)
-            v->visit(&o->name);
+    BoxedClassobj(BoxedString* name, BoxedTuple* bases) : bases(bases), name(name) {
+        Py_INCREF(name);
+        Py_INCREF(bases);
     }
+
+    static void dealloc(Box* b) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
+    static int clear(Box* self) noexcept;
 };
 
 class BoxedInstance : public Box {
@@ -70,18 +66,13 @@ public:
 
     Box** weakreflist;
 
-    BoxedInstance(BoxedClassobj* inst_cls) : inst_cls(inst_cls) {}
+    BoxedInstance(BoxedClassobj* inst_cls) : inst_cls(inst_cls) { Py_INCREF(inst_cls); }
 
     DEFAULT_CLASS(instance_cls);
 
-    static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == instance_cls);
-        BoxedInstance* o = static_cast<BoxedInstance*>(_o);
-
-        Box::gcHandler(v, o);
-        if (o->inst_cls)
-            v->visit(&o->inst_cls);
-    }
+    static void dealloc(Box* b) noexcept;
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
+    static int clear(Box* self) noexcept;
 };
 
 Box* instance_getattro(Box* cls, Box* attr) noexcept;
@@ -89,7 +80,7 @@ int instance_setattro(Box* cls, Box* attr, Box* value) noexcept;
 class GetattrRewriteArgs;
 template <ExceptionStyle S>
 Box* instanceGetattroInternal(Box* self, Box* attr, GetattrRewriteArgs* rewrite_args) noexcept(S == CAPI);
-Box* instanceSetattroInternal(Box* self, Box* attr, Box* val, SetattrRewriteArgs* rewrite_args);
+void instanceSetattroInternal(Box* self, STOLEN(Box*) attr, Box* val, SetattrRewriteArgs* rewrite_args);
 }
 
 #endif

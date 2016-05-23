@@ -37,18 +37,18 @@ static Box* toComplex(Box* self) noexcept {
     }
 
     if (PyComplex_Check(self)) {
-        r = (BoxedComplex*)self;
+        r = (BoxedComplex*)incref(self);
     } else if (PyInt_Check(self)) {
         r = new BoxedComplex(static_cast<BoxedInt*>(self)->n, 0.0);
     } else if (PyFloat_Check(self)) {
-        r = new BoxedComplex((static_cast<BoxedFloat*>(PyNumber_Float(self)))->d, 0.0);
+        r = new BoxedComplex((static_cast<BoxedFloat*>(autoDecref(PyNumber_Float(self))))->d, 0.0);
     } else if (PyLong_Check(self)) {
         double real = PyLong_AsDouble(self);
         if (real == -1 && PyErr_Occurred())
             throwCAPIException();
         r = new BoxedComplex(real, 0.0);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     return r;
 }
@@ -89,7 +89,8 @@ extern "C" Box* complexAdd(BoxedComplex* lhs, Box* _rhs) {
     Box* rhs = toComplex(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
     return complexAddComplex(lhs, rhs_complex);
@@ -123,7 +124,8 @@ extern "C" Box* complexSub(BoxedComplex* lhs, Box* _rhs) {
     Box* rhs = toComplex(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
 
@@ -138,7 +140,8 @@ extern "C" Box* complexRSub(BoxedComplex* lhs, Box* _rhs) {
     Box* rhs = toComplex(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
 
@@ -173,7 +176,8 @@ extern "C" Box* complexMul(BoxedComplex* lhs, Box* _rhs) {
     Box* rhs = toComplex(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
 
@@ -242,7 +246,8 @@ extern "C" Box* complexDiv(BoxedComplex* lhs, Box* _rhs) {
     Box* rhs = toComplex(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
 
@@ -257,7 +262,8 @@ extern "C" Box* complexRDiv(BoxedComplex* lhs, Box* _rhs) {
     Box* rhs = toComplex(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
 
@@ -279,9 +285,9 @@ Box* complexTruediv(BoxedComplex* lhs, Box* rhs) {
         double res = PyLong_AsDouble(rhs);
         if (res == -1 && PyErr_Occurred())
             throwCAPIException();
-        return complexDivFloat(lhs, (BoxedFloat*)boxFloat(res));
+        return complexDivFloat(lhs, (BoxedFloat*)autoDecref(boxFloat(res)));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -290,12 +296,13 @@ Box* complexRTruediv(BoxedComplex* lhs, Box* _rhs) {
         raiseExcHelper(TypeError, "descriptor '__rtruediv__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
     if (_rhs == None)
-        return NotImplemented;
+        return incref(NotImplemented);
 
     Box* rhs = toComplex(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
 
@@ -338,7 +345,8 @@ Box* complexRPow(BoxedComplex* lhs, Box* _rhs) {
     Box* rhs = toComplex(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
 
@@ -388,7 +396,7 @@ Box* complexCoerce(Box* lhs, Box* rhs) {
         cval.real = PyFloat_AsDouble(rhs);
         rhs = PyComplex_FromCComplex(cval);
     } else if (!PyComplex_Check(rhs)) {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
     return BoxedTuple::create({ lhs, rhs });
 }
@@ -419,7 +427,7 @@ Box* complexGetnewargs(BoxedComplex* self) {
     if (!PyComplex_Check(self))
         raiseExcHelper(TypeError, "descriptor '__getnewargs__' requires a 'complex' object but received a '%s'",
                        getTypeName(self));
-    return BoxedTuple::create({ boxFloat(self->real), boxFloat(self->imag) });
+    return BoxedTuple::create({ autoDecref(boxFloat(self->real)), autoDecref(boxFloat(self->imag)) });
 }
 
 Box* complexNonzero(BoxedComplex* self) {
@@ -478,7 +486,6 @@ Box* complexRepr(BoxedComplex* self) {
     return r;
 }
 
-
 template <ExceptionStyle S> Box* complexNew(BoxedClass* cls, Box* real, Box* imag) noexcept(S == CAPI) {
     if (real == NULL) {
         real = Py_False;
@@ -497,7 +504,8 @@ Box* complexDivmodComplex(BoxedComplex* lhs, Box* _rhs) {
     Box* rhs = toComplex(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
 
@@ -506,9 +514,12 @@ Box* complexDivmodComplex(BoxedComplex* lhs, Box* _rhs) {
     }
 
     BoxedComplex* div = (BoxedComplex*)complexDiv(lhs, rhs_complex); /* The raw divisor value. */
-    div->real = floor(div->real);                                    /* Use the floor of the real part. */
+    AUTO_DECREF(div);
+    div->real = floor(div->real); /* Use the floor of the real part. */
     div->imag = 0.0;
-    BoxedComplex* mod = (BoxedComplex*)complexSubComplex(lhs, (BoxedComplex*)complexMulComplex(rhs_complex, div));
+    BoxedComplex* mod
+        = (BoxedComplex*)complexSubComplex(lhs, (BoxedComplex*)autoDecref(complexMulComplex(rhs_complex, div)));
+    AUTO_DECREF(mod);
     Box* res = BoxedTuple::create({ div, mod });
     return res;
 }
@@ -519,7 +530,7 @@ Box* complexDivmod(BoxedComplex* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (rhs == None)
-        return NotImplemented;
+        return incref(NotImplemented);
 
     return complexDivmodComplex(lhs, rhs);
 }
@@ -530,12 +541,13 @@ Box* complexRDivmod(BoxedComplex* lhs, Box* _rhs) {
                        getTypeName(lhs));
 
     if (_rhs == None)
-        return NotImplemented;
+        return incref(NotImplemented);
 
     Box* rhs = toComplex(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
 
@@ -549,8 +561,9 @@ Box* complexModComplex(BoxedComplex* lhs, Box* _rhs) {
     Box* res = toComplex(_rhs);
 
     if (res == NotImplemented) {
-        return NotImplemented;
+        return res;
     }
+    AUTO_DECREF(res);
 
     BoxedComplex* rhs = (BoxedComplex*)res;
 
@@ -559,9 +572,10 @@ Box* complexModComplex(BoxedComplex* lhs, Box* _rhs) {
     }
 
     BoxedComplex* div = (BoxedComplex*)complexDiv(lhs, rhs); /* The raw divisor value. */
-    div->real = floor(div->real);                            /* Use the floor of the real part. */
+    AUTO_DECREF(div);
+    div->real = floor(div->real); /* Use the floor of the real part. */
     div->imag = 0.0;
-    BoxedComplex* mod = (BoxedComplex*)complexSubComplex(lhs, (BoxedComplex*)complexMulComplex(rhs, div));
+    BoxedComplex* mod = (BoxedComplex*)complexSubComplex(lhs, (BoxedComplex*)autoDecref(complexMulComplex(rhs, div)));
     return mod;
 }
 
@@ -571,7 +585,7 @@ Box* complexMod(BoxedComplex* lhs, Box* rhs) {
                        getTypeName(lhs));
 
     if (rhs == None)
-        return NotImplemented;
+        return incref(NotImplemented);
 
     return complexModComplex(lhs, rhs);
 }
@@ -582,12 +596,13 @@ Box* complexRMod(BoxedComplex* lhs, Box* _rhs) {
                        getTypeName(lhs));
 
     if (_rhs == None)
-        return NotImplemented;
+        return incref(NotImplemented);
 
     Box* rhs = toComplex(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
 
@@ -600,18 +615,20 @@ extern "C" Box* complexFloordiv(BoxedComplex* lhs, Box* _rhs) {
                        getTypeName(lhs));
 
     if (_rhs == None)
-        return NotImplemented;
+        return incref(NotImplemented);
 
     Box* rhs = toComplex(_rhs);
 
     if (rhs == NotImplemented) {
-        return NotImplemented;
+        return rhs;
     }
+    AUTO_DECREF(rhs);
 
     BoxedComplex* rhs_complex = (BoxedComplex*)rhs;
 
     BoxedTuple* t = (BoxedTuple*)complexDivmod(lhs, rhs_complex);
-    return t->elts[0];
+    AUTO_DECREF(t);
+    return incref(t->elts[0]);
 }
 
 Box* complexRFloordiv(BoxedComplex* lhs, Box* _rhs) {
@@ -620,17 +637,19 @@ Box* complexRFloordiv(BoxedComplex* lhs, Box* _rhs) {
                        getTypeName(lhs));
 
     if (_rhs == None)
-        return NotImplemented;
+        return incref(NotImplemented);
 
     Box* rhs = toComplex(_rhs);
 
     if (rhs == NotImplemented) {
-        return NotImplemented;
+        return rhs;
     }
+    AUTO_DECREF(rhs);
     BoxedComplex* rhs_complex = (BoxedComplex*)rhs;
 
     BoxedTuple* t = (BoxedTuple*)complexDivmod(rhs_complex, lhs);
-    return t->elts[0];
+    AUTO_DECREF(t);
+    return incref(t->elts[0]);
 }
 
 extern "C" Box* complexEq(BoxedComplex* lhs, Box* rhs) {
@@ -810,8 +829,5 @@ void setupComplex() {
     complex_cls->freeze();
     complex_cls->tp_as_number->nb_negative = (unaryfunc)complex_neg;
     complex_cls->tp_richcompare = complex_richcompare;
-}
-
-void teardownComplex() {
 }
 }

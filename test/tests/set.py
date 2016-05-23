@@ -1,4 +1,4 @@
-s1 = {1}
+s1 = {1, 1}
 
 def sorted(s):
     l = list(s)
@@ -250,3 +250,19 @@ a = set()
 a.add(foo)
 print(a.remove(foo))
 print(foo in set())
+
+
+# Remove an item using a different key:
+s = set()
+s.add(1)
+s.remove(1L)
+
+s = set([1, 2, 3, 4])
+s2 = set([3L, 4L, 5L, 6L])
+s.symmetric_difference_update(s2)
+
+# make sure we are inserting the tuple elements in reverse:
+print {1, 1L}, {1L, 1}, set([1, 1L]), set([1L, 1])
+s = {1}
+s.add(1L)
+print s

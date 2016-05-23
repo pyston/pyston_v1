@@ -198,7 +198,9 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createSet);
     GET(initFrame);
     GET(deinitFrame);
+    GET(deinitFrameMaybe);
     GET(makePendingCalls);
+    GET(setFrameExcInfo);
 
     GET(getattr);
     GET(getattr_capi);
@@ -223,7 +225,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(importStar);
     GET(repr);
     GET(exceptionMatches);
-    GET(yield);
+    GET(yield_capi);
     GET(getiterHelper);
     GET(hasnext);
     GET(apply_slice);
@@ -314,12 +316,15 @@ void initGlobalFuncs(GlobalState& g) {
     GET(raise0_capi);
     GET(raise3);
     GET(raise3_capi);
+    GET(rawReraise);
     GET(PyErr_Fetch);
     GET(PyErr_NormalizeException);
     GET(PyErr_Restore);
     GET(caughtCapiException);
     GET(reraiseCapiExcAsCxx);
     GET(deopt);
+    GET(checkRefs);
+    GET(xdecrefAndRethrow);
 
     GET(div_float_float);
     GET(floordiv_float_float);
@@ -327,5 +332,9 @@ void initGlobalFuncs(GlobalState& g) {
     GET(pow_float_float);
 
     GET(dump);
+
+#ifdef Py_TRACE_REFS
+    GET(_Py_Dealloc);
+#endif
 }
 }

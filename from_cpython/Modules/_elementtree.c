@@ -1791,9 +1791,8 @@ treebuilder_handle_data(TreeBuilderObject* self, PyObject* data)
         Py_INCREF(data); self->data = data;
     } else {
         /* more than one item; use a list to collect items */
-        // Pyston change: Py_REFCNT(self->data) -> 2
-        if (PyString_CheckExact(self->data) && /*Py_REFCNT(self->data)*/2 == 1 &&
-              PyString_CheckExact(data) && PyString_GET_SIZE(data) == 1) {
+        if (PyString_CheckExact(self->data) && Py_REFCNT(self->data) == 1 &&
+            PyString_CheckExact(data) && PyString_GET_SIZE(data) == 1) {
             /* expat often generates single character data sections; handle
                the most common case by resizing the existing string... */
             Py_ssize_t size = PyString_GET_SIZE(self->data);
@@ -3070,8 +3069,10 @@ init_elementtree(void)
 
        );
 
-    if (!PyRun_String(bootstrap, Py_file_input, g, NULL))
+    PyObject* bootstrap_ret;
+    if (!(bootstrap_ret = PyRun_String(bootstrap, Py_file_input, g, NULL)))
         return;
+    Py_DECREF(bootstrap_ret);
 
     elementpath_obj = PyDict_GetItemString(g, "ElementPath");
 
@@ -3090,6 +3091,8 @@ init_elementtree(void)
     elementtree_deepcopy_obj = PyDict_GetItemString(g, "deepcopy");
     elementtree_iter_obj = PyDict_GetItemString(g, "iter");
     elementtree_itertext_obj = PyDict_GetItemString(g, "itertext");
+
+    Py_DECREF(g);
 
 #if defined(USE_PYEXPAT_CAPI)
     /* link against pyexpat, if possible */

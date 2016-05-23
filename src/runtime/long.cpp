@@ -63,14 +63,6 @@ int _PyLong_DigitValue[256] = {
 #define IS_LITTLE_ENDIAN (int)*(unsigned char*)&one
 #define PY_ABS_LLONG_MIN (0 - (unsigned PY_LONG_LONG)PY_LLONG_MIN)
 
-void BoxedLong::gchandler(GCVisitor* v, Box* b) {
-    Box::gcHandler(v, b);
-
-    BoxedLong* l = (BoxedLong*)b;
-
-    v->visitPotentialRange((void**)&l->n, (void**)((&l->n) + 1));
-}
-
 extern "C" int _PyLong_Sign(PyObject* l) noexcept {
     return mpz_sgn(static_cast<BoxedLong*>(l)->n);
 }
@@ -231,6 +223,7 @@ extern "C" PyObject* PyLong_FromString(const char* str, char** pend, int base) n
         *pend = const_cast<char*>(str) + str_ref.size();
     }
     if (r != 0) {
+        Py_DECREF(rtn);
         PyErr_Format(PyExc_ValueError, "invalid literal for long() with base %d: '%s'", base, str);
         return NULL;
     }
@@ -719,11 +712,11 @@ template <ExceptionStyle S> Box* _longNew(Box* val, Box* _base) noexcept(S == CA
             Box* srepr = PyObject_Repr(val);
             if (S == CAPI) {
                 PyErr_Format(PyExc_ValueError, "invalid literal for long() with base %d: '%s'", base,
-                             PyString_AS_STRING(srepr));
+                             PyString_AS_STRING(autoDecref(srepr)));
                 return NULL;
             } else {
                 raiseExcHelper(ValueError, "invalid literal for long() with base %d: '%s'", base,
-                               PyString_AS_STRING(srepr));
+                               PyString_AS_STRING(autoDecref(srepr)));
             }
         }
         Box* r = PyLong_FromString(s->data(), NULL, base);
@@ -771,6 +764,7 @@ template <ExceptionStyle S> Box* longNew(Box* _cls, Box* val, Box* base) noexcep
 
     if (cls == long_cls)
         return l;
+    AUTO_DECREF(l);
 
     BoxedLong* rtn = new (cls) BoxedLong();
 
@@ -795,7 +789,7 @@ Box* longInt(Box* v) {
 
 Box* longToLong(Box* self) {
     if (self->cls == long_cls) {
-        return self;
+        return incref(self);
     } else {
         assert(PyLong_Check(self));
         BoxedLong* l = new BoxedLong();
@@ -907,7 +901,7 @@ Box* longPos(BoxedLong* v) {
         raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'long' object but received a '%s'", getTypeName(v));
 
     if (v->cls == long_cls) {
-        return v;
+        return incref(v);
     } else {
         BoxedLong* r = new BoxedLong();
         mpz_init_set(r->n, v->n);
@@ -945,7 +939,7 @@ Box* longAdd(BoxedLong* v1, Box* _v2) {
             mpz_sub_ui(r->n, v1->n, -v2->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -973,7 +967,7 @@ extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
         mpz_and(r->n, v1->n, v2_long);
         return r;
     }
-    return NotImplemented;
+    return incref(NotImplemented);
 }
 
 extern "C" Box* longOr(BoxedLong* v1, Box* _v2) {
@@ -999,7 +993,7 @@ extern "C" Box* longOr(BoxedLong* v1, Box* _v2) {
         mpz_ior(r->n, v1->n, v2_long);
         return r;
     }
-    return NotImplemented;
+    return incref(NotImplemented);
 }
 
 extern "C" Box* longXor(BoxedLong* v1, Box* _v2) {
@@ -1025,7 +1019,7 @@ extern "C" Box* longXor(BoxedLong* v1, Box* _v2) {
         mpz_xor(r->n, v1->n, v2_long);
         return r;
     }
-    return NotImplemented;
+    return incref(NotImplemented);
 }
 
 static PyObject* long_richcompare(Box* _v1, Box* _v2, int op) noexcept {
@@ -1041,20 +1035,20 @@ static PyObject* long_richcompare(Box* _v1, Box* _v2, int op) noexcept {
 
         return convert_3way_to_object(op, mpz_cmp_si(v1->n, v2->n));
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
 Box* convertToLong(Box* val) {
     if (PyLong_Check(val)) {
-        return val;
+        return incref(val);
     } else if (PyInt_Check(val)) {
         BoxedInt* val_int = static_cast<BoxedInt*>(val);
         BoxedLong* r = new BoxedLong();
         mpz_init_set_si(r->n, val_int->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1062,7 +1056,8 @@ Box* longLShiftLong(BoxedLong* lhs, Box* _rhs) {
     Box* rhs = convertToLong(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
 
@@ -1095,7 +1090,8 @@ Box* longRLShift(BoxedLong* lhs, Box* _rhs) {
     Box* rhs = convertToLong(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
 
@@ -1106,7 +1102,8 @@ Box* longRShiftLong(BoxedLong* lhs, Box* _rhs) {
     Box* rhs = convertToLong(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
 
@@ -1136,7 +1133,8 @@ Box* longRRShift(BoxedLong* lhs, Box* _rhs) {
     Box* rhs = convertToLong(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
 
@@ -1149,9 +1147,10 @@ Box* longCoerce(BoxedLong* lhs, Box* _rhs) {
                        getTypeName(lhs));
 
     Box* rhs = convertToLong(_rhs);
+    AUTO_DECREF(rhs);
 
     if (!PyLong_Check(rhs))
-        return NotImplemented;
+        return incref(NotImplemented);
 
     BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
     return BoxedTuple::create({ lhs, rhs_long });
@@ -1179,7 +1178,7 @@ Box* longSub(BoxedLong* v1, Box* _v2) {
             mpz_add_ui(r->n, v1->n, -v2->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1188,7 +1187,7 @@ Box* longRsub(BoxedLong* v1, Box* _v2) {
         raiseExcHelper(TypeError, "descriptor '__rsub__' requires a 'long' object but received a '%s'",
                        getTypeName(v1));
 
-    return longAdd(static_cast<BoxedLong*>(longNeg(v1)), _v2);
+    return longAdd(static_cast<BoxedLong*>(autoDecref(longNeg(v1))), _v2);
 }
 
 Box* longMul(BoxedLong* v1, Box* _v2) {
@@ -1210,7 +1209,7 @@ Box* longMul(BoxedLong* v1, Box* _v2) {
         mpz_mul_si(r->n, v1->n, v2->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1239,7 +1238,7 @@ Box* longDiv(BoxedLong* v1, Box* _v2) {
         mpz_fdiv_q(r->n, v1->n, r->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1275,7 +1274,7 @@ Box* longMod(BoxedLong* v1, Box* _v2) {
         mpz_mmod(r->n, v1->n, r->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1289,9 +1288,9 @@ Box* longRMod(BoxedLong* v1, Box* _v2) {
     if (PyLong_Check(lhs)) {
         return longMod((BoxedLong*)lhs, rhs);
     } else if (PyInt_Check(lhs)) {
-        return longMod(boxLong(((BoxedInt*)lhs)->n), rhs);
+        return longMod(autoDecref(boxLong(((BoxedInt*)lhs)->n)), rhs);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1303,7 +1302,8 @@ Box* longDivmodLong(BoxedLong* lhs, Box* _rhs) {
     Box* rhs = convertToLong(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
 
@@ -1312,6 +1312,8 @@ Box* longDivmodLong(BoxedLong* lhs, Box* _rhs) {
 
     BoxedLong* q = new BoxedLong();
     BoxedLong* r = new BoxedLong();
+    AUTO_DECREF(q);
+    AUTO_DECREF(r);
     mpz_init(q->n);
     mpz_init(r->n);
     mpz_fdiv_qr(q->n, r->n, lhs->n, rhs_long->n);
@@ -1334,7 +1336,8 @@ Box* longRDivmod(BoxedLong* lhs, Box* _rhs) {
     Box* rhs = convertToLong(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
 
@@ -1364,7 +1367,7 @@ Box* longRdiv(BoxedLong* v1, Box* _v2) {
         mpz_fdiv_q(r->n, r->n, v1->n);
         return r;
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
 }
 
@@ -1388,8 +1391,10 @@ Box* longTrueDiv(BoxedLong* v1, Box* _v2) {
             throwCAPIException();
         }
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
+
+    AUTO_DECREF(v2);
 
     if (mpz_sgn(v2->n) == 0) {
         raiseExcHelper(ZeroDivisionError, "division by zero");
@@ -1418,8 +1423,10 @@ Box* longRTrueDiv(BoxedLong* v1, Box* _v2) {
     if (PyInt_Check(_v2) || PyLong_Check(_v2)) {
         v2 = (BoxedLong*)PyNumber_Long(_v2);
     } else {
-        return NotImplemented;
+        return incref(NotImplemented);
     }
+    AUTO_DECREF(v2);
+
     if (mpz_sgn(v1->n) == 0) {
         raiseExcHelper(ZeroDivisionError, "division by zero");
     }
@@ -1460,16 +1467,18 @@ Box* longPowLong(BoxedLong* lhs, Box* _rhs, Box* _mod) {
         Box* mod = convertToLong(_mod);
 
         if (mod == NotImplemented)
-            return NotImplemented;
+            return mod;
 
         mod_long = static_cast<BoxedLong*>(mod);
     }
+    AUTO_XDECREF(mod_long);
 
     BoxedLong* rhs_long = nullptr;
     Box* rhs = convertToLong(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     rhs_long = static_cast<BoxedLong*>(rhs);
 
@@ -1481,21 +1490,23 @@ Box* longPowLong(BoxedLong* lhs, Box* _rhs, Box* _mod) {
             raiseExcHelper(ValueError, "pow() 3rd argument cannot be 0");
     }
 
-    BoxedLong* r = new BoxedLong();
-    mpz_init(r->n);
-
     if (mpz_sgn(rhs_long->n) == -1) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(longToFloat(rhs_long));
+        AUTO_DECREF(rhs_float);
         BoxedFloat* lhs_float = static_cast<BoxedFloat*>(longToFloat(lhs));
+        AUTO_DECREF(lhs_float);
         return boxFloat(pow_float_float(lhs_float->d, rhs_float->d));
     }
+
+    BoxedLong* r = new BoxedLong();
+    mpz_init(r->n);
 
     if (_mod != None) {
         mpz_powm(r->n, lhs->n, rhs_long->n, mod_long->n);
         if (mpz_sgn(r->n) == 0)
             return r;
         if (mpz_sgn(mod_long->n) < 0)
-            return longAdd(r, mod_long);
+            return longAdd(autoDecref(r), mod_long);
     } else {
         if (mpz_fits_ulong_p(rhs_long->n)) {
             uint64_t n2 = mpz_get_ui(rhs_long->n);
@@ -1531,7 +1542,8 @@ Box* longRPow(BoxedLong* lhs, Box* _rhs, Box* mod) {
     Box* rhs = convertToLong(_rhs);
 
     if (rhs == NotImplemented)
-        return NotImplemented;
+        return rhs;
+    AUTO_DECREF(rhs);
 
     BoxedLong* rhs_long = static_cast<BoxedLong*>(rhs);
     return longPowLong(rhs_long, lhs, mod);
@@ -1554,8 +1566,8 @@ Box* longNonzero(BoxedLong* self) {
                        getTypeName(self));
 
     if (mpz_sgn(self->n) == 0)
-        return False;
-    return True;
+        Py_RETURN_FALSE;
+    Py_RETURN_TRUE;
 }
 
 bool longNonzeroUnboxed(BoxedLong* self) {
@@ -1564,7 +1576,7 @@ bool longNonzeroUnboxed(BoxedLong* self) {
 
 Box* longHash(BoxedLong* self) {
     if (!PyLong_Check(self))
-        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
+        raiseExcHelper(TypeError, "descriptor '__hash__' requires a 'long' object but received a '%s'",
                        getTypeName(self));
 
     // If the long fits into an int we have to return the same hash in order that we can find the value in a dict.
@@ -1590,7 +1602,7 @@ Box* longHash(BoxedLong* self) {
 
 long long_hash(PyObject* self) noexcept {
     try {
-        return unboxInt(longHash((BoxedLong*)self));
+        return unboxInt(autoDecref(longHash((BoxedLong*)self)));
     } catch (ExcInfo e) {
         RELEASE_ASSERT(0, "");
     }
@@ -1601,24 +1613,12 @@ extern "C" Box* longTrunc(BoxedLong* self) {
         raiseExcHelper(TypeError, "descriptor '__trunc__' requires a 'long' object but received a '%s'",
                        getTypeName(self));
 
-    return self;
-}
-
-void* customised_allocation(size_t alloc_size) {
-    return gc::gc_alloc(alloc_size, gc::GCKind::CONSERVATIVE);
-}
-
-void* customised_realloc(void* ptr, size_t old_size, size_t new_size) {
-    return gc::gc_realloc(ptr, new_size);
-}
-
-void customised_free(void* ptr, size_t size) {
-    gc::gc_free(ptr);
+    return incref(self);
 }
 
 extern "C" Box* longIndex(BoxedLong* v) noexcept {
     if (PyLong_CheckExact(v))
-        return v;
+        return incref(v);
     BoxedLong* rtn = new BoxedLong();
     mpz_init_set(rtn->n, v->n);
     return rtn;
@@ -1669,6 +1669,8 @@ static PyObject* long_pow(PyObject* v, PyObject* w, PyObject* x) noexcept {
     try {
         PyLongObject* a, *b;
         CONVERT_BINOP(v, w, &a, &b);
+        AUTO_DECREF((Box*)a);
+        AUTO_DECREF((Box*)b);
         return longPow((BoxedLong*)a, (BoxedLong*)b, x);
     } catch (ExcInfo e) {
         setCAPIException(e);
@@ -1696,8 +1698,6 @@ void setupLong() {
     static PyNumberMethods long_as_number;
     long_cls->tp_as_number = &long_as_number;
 
-    mp_set_memory_functions(customised_allocation, customised_realloc, customised_free);
-
     _addFuncPow("__pow__", UNKNOWN, (void*)longPowFloat, (void*)longPow);
     long_cls->giveAttr(
         "__rpow__", new BoxedFunction(FunctionMetadata::create((void*)longRPow, UNKNOWN, 3, false, false), { None }));
@@ -1707,7 +1707,7 @@ void setupLong() {
     long_cls->giveAttr("__new__", new BoxedFunction(long_new, { NULL, NULL }));
 
     long_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)longMul, UNKNOWN, 2)));
-    long_cls->giveAttr("__rmul__", long_cls->getattr(internStringMortal("__mul__")));
+    long_cls->giveAttr("__rmul__", incref(long_cls->getattr(autoDecref(internStringMortal("__mul__")))));
 
     long_cls->giveAttr("__div__", new BoxedFunction(FunctionMetadata::create((void*)longDiv, UNKNOWN, 2)));
     long_cls->giveAttr("__rdiv__", new BoxedFunction(FunctionMetadata::create((void*)longRdiv, UNKNOWN, 2)));
@@ -1725,13 +1725,13 @@ void setupLong() {
     long_cls->giveAttr("__rsub__", new BoxedFunction(FunctionMetadata::create((void*)longRsub, UNKNOWN, 2)));
 
     long_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)longAdd, UNKNOWN, 2)));
-    long_cls->giveAttr("__radd__", long_cls->getattr(internStringMortal("__add__")));
+    long_cls->giveAttr("__radd__", incref(long_cls->getattr(autoDecref(internStringMortal("__add__")))));
     long_cls->giveAttr("__and__", new BoxedFunction(FunctionMetadata::create((void*)longAnd, UNKNOWN, 2)));
-    long_cls->giveAttr("__rand__", long_cls->getattr(internStringMortal("__and__")));
+    long_cls->giveAttr("__rand__", incref(long_cls->getattr(autoDecref(internStringMortal("__and__")))));
     long_cls->giveAttr("__or__", new BoxedFunction(FunctionMetadata::create((void*)longOr, UNKNOWN, 2)));
-    long_cls->giveAttr("__ror__", long_cls->getattr(internStringMortal("__or__")));
+    long_cls->giveAttr("__ror__", incref(long_cls->getattr(autoDecref(internStringMortal("__or__")))));
     long_cls->giveAttr("__xor__", new BoxedFunction(FunctionMetadata::create((void*)longXor, UNKNOWN, 2)));
-    long_cls->giveAttr("__rxor__", long_cls->getattr(internStringMortal("__xor__")));
+    long_cls->giveAttr("__rxor__", incref(long_cls->getattr(autoDecref(internStringMortal("__xor__")))));
 
     // Note: CPython implements long comparisons using tp_compare
     long_cls->tp_richcompare = long_richcompare;

@@ -33,9 +33,7 @@ public:
 
     BoxedLong() __attribute__((visibility("default"))) {}
 
-    static void gchandler(GCVisitor* v, Box* b);
-
-    DEFAULT_CLASS(long_cls);
+    DEFAULT_CLASS_SIMPLE(long_cls, false);
 };
 
 extern "C" Box* createLong(llvm::StringRef s);

@@ -289,6 +289,7 @@ try_complex_special_method(PyObject *op) {
         complexstr = PyString_InternFromString("__complex__");
         if (complexstr == NULL)
             return NULL;
+        PyGC_RegisterStaticConstant(complexstr);
     }
     if (PyInstance_Check(op)) {
         f = PyObject_GetAttr(op, complexstr);

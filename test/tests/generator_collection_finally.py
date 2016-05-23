@@ -1,4 +1,3 @@
-# expected: fail
 # We currently don't call finalizers when destroying a generator.
 def G():
     try:

@@ -5,6 +5,8 @@ set(LLVM_LIBRARY_OUTPUT_INTDIR llvm/lib${LLVM_LIBDIR_SUFFIX})
 # Pyston addition:
 include_directories("${DEPS_DIR}/llvm-trunk/tools/clang/include")
 include_directories("${CMAKE_BINARY_DIR}/llvm/tools/clang/include")
+include_directories(${CMAKE_SOURCE_DIR}/src)
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 
 # From llvm-trunk/tools/clang/tools/clang-check/CMakeLists.txt
 set(LLVM_LINK_COMPONENTS

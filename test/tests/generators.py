@@ -7,7 +7,7 @@ g1 = G1()
 for i in range(5):
     print g1.next()
 print g1.__name__
-
+print hasattr(g1, "__del__")
 
 
 def G2():

@@ -255,16 +255,16 @@ init_multiprocessing(void)
     temp = PyImport_ImportModule(PICKLE_MODULE);
     if (!temp)
         return;
-    pickle_dumps = PyObject_GetAttrString(temp, "dumps");
-    pickle_loads = PyObject_GetAttrString(temp, "loads");
-    pickle_protocol = PyObject_GetAttrString(temp, "HIGHEST_PROTOCOL");
+    pickle_dumps = PyGC_RegisterStaticConstant(PyObject_GetAttrString(temp, "dumps"));
+    pickle_loads = PyGC_RegisterStaticConstant(PyObject_GetAttrString(temp, "loads"));
+    pickle_protocol = PyGC_RegisterStaticConstant(PyObject_GetAttrString(temp, "HIGHEST_PROTOCOL"));
     Py_XDECREF(temp);
 
     /* Get copy of BufferTooShort */
     temp = PyImport_ImportModule("multiprocessing");
     if (!temp)
         return;
-    BufferTooShort = PyObject_GetAttrString(temp, "BufferTooShort");
+    BufferTooShort = PyGC_RegisterStaticConstant(PyObject_GetAttrString(temp, "BufferTooShort"));
     Py_XDECREF(temp);
 
     /* Add connection type to module */
@@ -291,6 +291,7 @@ init_multiprocessing(void)
             return;
         PyDict_SetItemString(SemLockType.tp_dict, "SEM_VALUE_MAX",
                              py_sem_value_max);
+        Py_DECREF(py_sem_value_max);
     }
     PyModule_AddObject(module, "SemLock", (PyObject*)&SemLockType);
 #endif

@@ -70,6 +70,8 @@ private:
 
 public:
     BoxedXrangeIterator(BoxedXrange* xrange, bool reversed) : xrange(xrange) {
+        Py_INCREF(xrange);
+
         int64_t start = xrange->start;
 
         step = xrange->step;
@@ -131,11 +133,17 @@ public:
         return boxInt(xrangeIteratorNextUnboxed(s));
     }
 
-    static void gcHandler(GCVisitor* v, Box* b) {
-        Box::gcHandler(v, b);
+    static void dealloc(Box* b) noexcept {
+        BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(b);
+        _PyObject_GC_UNTRACK(self);
+        Py_DECREF(self->xrange);
 
-        BoxedXrangeIterator* it = (BoxedXrangeIterator*)b;
-        v->visit(const_cast<BoxedXrange**>(&it->xrange));
+        self->cls->tp_free(self);
+    }
+    static int traverse(Box* s, visitproc visit, void* arg) noexcept {
+        BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
+        Py_VISIT(self->xrange);
+        return 0;
     }
 };
 
@@ -146,13 +154,16 @@ Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
 
     if (stop == NULL) {
         i64 istop = PyLong_AsLong(start);
-        checkAndThrowCAPIException();
+        if ((istop == -1) && PyErr_Occurred())
+            throwCAPIException();
         return new BoxedXrange(0, istop, 1);
     } else if (step == NULL) {
         i64 istart = PyLong_AsLong(start);
-        checkAndThrowCAPIException();
+        if ((istart == -1) && PyErr_Occurred())
+            throwCAPIException();
         i64 istop = PyLong_AsLong(stop);
-        checkAndThrowCAPIException();
+        if ((istop == -1) && PyErr_Occurred())
+            throwCAPIException();
         i64 n = BoxedXrange::get_len_of_range(istart, istop, 1);
         if (n > (unsigned long)LONG_MAX || (long)n > PY_SSIZE_T_MAX) {
             raiseExcHelper(OverflowError, "xrange() result has too many items");
@@ -160,11 +171,14 @@ Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
         return new BoxedXrange(istart, istop, 1);
     } else {
         i64 istart = PyLong_AsLong(start);
-        checkAndThrowCAPIException();
+        if ((istart == -1) && PyErr_Occurred())
+            throwCAPIException();
         i64 istop = PyLong_AsLong(stop);
-        checkAndThrowCAPIException();
+        if ((istop == -1) && PyErr_Occurred())
+            throwCAPIException();
         i64 istep = PyLong_AsLong(step);
-        checkAndThrowCAPIException();
+        if ((istep == -1) && PyErr_Occurred())
+            throwCAPIException();
         if (istep == 0)
             raiseExcHelper(ValueError, "xrange() arg 3 must not be zero");
         unsigned long n = BoxedXrange::get_len_of_range(istart, istop, istep);
@@ -177,7 +191,7 @@ Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
 
 Box* xrangeIterIter(Box* self) {
     assert(self->cls == xrange_iterator_cls);
-    return self;
+    return incref(self);
 }
 
 Box* xrangeIter(Box* self) noexcept {
@@ -234,18 +248,21 @@ Box* xrangeRepr(BoxedXrange* self) {
 
 Box* xrangeReduce(Box* self) {
     if (!self) {
-        return None;
+        return incref(None);
     }
     BoxedXrange* r = static_cast<BoxedXrange*>(self);
-    BoxedTuple* range = BoxedTuple::create({ boxInt(r->start), boxInt(r->stop), boxInt(r->step) });
+    BoxedTuple* range = BoxedTuple::create(
+        { autoDecref(boxInt(r->start)), autoDecref(boxInt(r->stop)), autoDecref(boxInt(r->step)) });
 
-    return BoxedTuple::create({ r->cls, range });
+    return BoxedTuple::create({ r->cls, autoDecref(range) });
 }
 
 void setupXrange() {
-    xrange_cls = BoxedClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedXrange), false, "xrange", false);
-    xrange_iterator_cls = BoxedClass::create(type_cls, object_cls, &BoxedXrangeIterator::gcHandler, 0, 0,
-                                             sizeof(BoxedXrangeIterator), false, "rangeiterator", false);
+    xrange_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedXrange), false, "xrange", false, NULL, NULL,
+                                    false);
+    xrange_iterator_cls
+        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedXrangeIterator), false, "rangeiterator", false,
+                             BoxedXrangeIterator::dealloc, NULL, true, BoxedXrangeIterator::traverse, NOCLEAR);
 
     static PySequenceMethods xrange_as_sequence;
     xrange_cls->tp_as_sequence = &xrange_as_sequence;
@@ -279,7 +296,7 @@ void setupXrange() {
     xrange_iterator_cls->giveAttr("next", new BoxedFunction(next));
 
     // TODO this is pretty hacky, but stuff the iterator cls into xrange to make sure it gets decref'd at the end
-    xrange_cls->giveAttr("__iterator_cls__", xrange_iterator_cls);
+    xrange_cls->giveAttrBorrowed("__iterator_cls__", xrange_iterator_cls);
 
     xrange_cls->freeze();
     xrange_cls->tp_iter = xrangeIter;

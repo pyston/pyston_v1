@@ -27,10 +27,10 @@ PyAPI_FUNC(void) PyEval_SetTrace(Py_tracefunc, PyObject *) PYSTON_NOEXCEPT;
 
 struct _frame; /* Avoid including frameobject.h */
 
-PyAPI_FUNC(PyObject *) PyEval_GetBuiltins(void) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject *) PyEval_GetGlobals(void) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject *) PyEval_GetLocals(void) PYSTON_NOEXCEPT;
-PyAPI_FUNC(struct _frame *) PyEval_GetFrame(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PyEval_GetBuiltins(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PyEval_GetGlobals(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PyEval_GetLocals(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(struct _frame *)) PyEval_GetFrame(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyEval_GetRestricted(void) PYSTON_NOEXCEPT;
 
 /* Look at the current frame's (if any) code's co_flags, and turn on

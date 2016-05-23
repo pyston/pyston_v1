@@ -18,6 +18,7 @@
 #include "core/cfg.h"
 #include "core/options.h"
 #include "core/types.h"
+#include "runtime/hiddenclass.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
 
@@ -77,13 +78,13 @@ void boundSliceWithLength(i64* start_out, i64* stop_out, i64 start, i64 stop, i6
 
 Box* boxStringOrNone(const char* s) {
     if (s == NULL) {
-        return None;
+        return incref(None);
     } else {
         return boxString(s);
     }
 }
 
-Box* noneIfNull(Box* b) {
+BORROWED(Box*) noneIfNull(Box* b) {
     if (b == NULL) {
         return None;
     } else {
@@ -93,7 +94,7 @@ Box* noneIfNull(Box* b) {
 
 template <ExceptionStyle S> Box* coerceUnicodeToStr(Box* unicode) noexcept(S == CAPI) {
     if (!isSubclass(unicode->cls, unicode_cls))
-        return unicode;
+        return incref(unicode);
 
     Box* r = PyUnicode_AsASCIIString(unicode);
     if (!r) {
@@ -117,6 +118,10 @@ Box* boxStringFromCharPtr(const char* s) {
     return boxString(s);
 }
 
+extern "C" void _PyObject_Dump(Box* b) noexcept {
+    dump(b);
+}
+
 extern "C" void dump(void* p) {
     dumpEx(p, 0);
 }
@@ -125,52 +130,42 @@ extern "C" void dumpEx(void* p, int levels) {
     printf("\n");
     printf("Raw address: %p\n", p);
 
-    bool is_gc = gc::isValidGCMemory(p);
-    if (!is_gc) {
-        printf("non-gc memory\n");
-        return;
-    }
+    if ((intptr_t)p < 0x1000) {
+        if (p != NULL)
+            printf("Not a real pointer?\n");
+    } else if ((((intptr_t)p) & 0x7) == 0) {
+        uint8_t lowbyte = *reinterpret_cast<uint8_t*>(p);
+        if (lowbyte == 0xcb) {
+            printf("Uninitialized memory\n");
+            return;
+        }
+        if (lowbyte == 0xdb) {
+            printf("Freed memory\n");
+            return;
+        }
+        if (lowbyte == 0xfb) {
+            printf("Forbidden (redzone) memory\n");
+            return;
+        }
 
-    if (gc::isNonheapRoot(p)) {
-        printf("Non-heap GC object\n");
-
-        printf("Assuming it's a class object...\n");
-        PyTypeObject* type = (PyTypeObject*)(p);
-        printf("tp_name: %s\n", type->tp_name);
-        return;
-    }
-
-    gc::GCAllocation* al = gc::GCAllocation::fromUserData(p);
-    if (al->kind_id == gc::GCKind::UNTRACKED) {
-        printf("gc-untracked object\n");
-        return;
-    }
-
-    if (al->kind_id == gc::GCKind::PRECISE) {
-        printf("pyston precise object\n");
-        return;
-    }
-
-    if (al->kind_id == gc::GCKind::RUNTIME) {
-        printf("pyston runtime object\n");
-        return;
-    }
-
-    if (al->kind_id == gc::GCKind::CONSERVATIVE) {
-        printf("conservatively-scanned object object\n");
-        return;
-    }
-
-    if (al->kind_id == gc::GCKind::PYTHON) {
-        printf("Python object\n");
+        printf("Guessing that it's a Python object\n");
         Box* b = (Box*)p;
 
-        printf("Class: %s", getFullTypeName(b).c_str());
+        if (b->cls->instancesHaveHCAttrs()) {
+            printf("Object has hcattrs:\n");
+            HCAttrs* attrs = b->getHCAttrsPtr();
+            if (attrs->hcls)
+                attrs->hcls->dump();
+            // attrs->dump();
+        }
+
+        printf("Class: %s", b->cls->tp_name);
         if (b->cls->cls != type_cls) {
             printf(" (metaclass: %s)\n", getFullTypeName(b->cls).c_str());
         } else {
             printf("\n");
         }
+        printf("Refcount: %ld\n", b->ob_refcnt);
 
         if (b->cls == bool_cls) {
             printf("The %s object\n", b == True ? "True" : "False");
@@ -233,6 +228,7 @@ extern "C" void dumpEx(void* p, int levels) {
 
         if (PyLong_Check(b)) {
             PyObject* str = longRepr(static_cast<BoxedLong*>(b));
+            AUTO_DECREF(str);
             printf("Long value: %s\n", static_cast<BoxedString*>(str)->c_str());
         }
 
@@ -295,7 +291,5 @@ extern "C" void dumpEx(void* p, int levels) {
 
         return;
     }
-
-    RELEASE_ASSERT(0, "%d", (int)al->kind_id);
 }
 }

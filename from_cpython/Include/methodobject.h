@@ -29,7 +29,7 @@ typedef PyObject *(*PyCFunctionWithKeywords)(PyObject *, PyObject *,
 typedef PyObject *(*PyNoArgsFunction)(PyObject *);
 
 PyAPI_FUNC(PyCFunction) PyCFunction_GetFunction(PyObject *) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject *) PyCFunction_GetSelf(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(BORROWED(PyObject *)) PyCFunction_GetSelf(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyCFunction_GetFlags(PyObject *) PYSTON_NOEXCEPT;
 
 // Pyston change: changed to function calls

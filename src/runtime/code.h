@@ -30,20 +30,26 @@ public:
 
     BoxedCode(FunctionMetadata* f) : f(f), _filename(NULL), _name(NULL), _firstline(-1) {}
     BoxedCode(Box* filename, Box* name, int firstline)
-        : f(NULL), _filename(filename), _name(name), _firstline(firstline) {}
+        : f(NULL), _filename(filename), _name(name), _firstline(firstline) {
+        Py_XINCREF(filename);
+        Py_XINCREF(name);
+    }
 
     DEFAULT_CLASS(code_cls);
 
-    static void gcHandler(GCVisitor* v, Box* b);
-
     // These need to be static functions rather than methods because function
     // pointers could point to them.
-    static Box* name(Box* b, void*);
-    static Box* filename(Box* b, void*);
+    static BORROWED(Box*) name(Box* b, void*);
+    static BORROWED(Box*) filename(Box* b, void*);
+    static Box* co_name(Box* b, void*);
+    static Box* co_filename(Box* b, void*);
     static Box* firstlineno(Box* b, void*);
     static Box* argcount(Box* b, void*);
     static Box* varnames(Box* b, void*);
     static Box* flags(Box* b, void*);
+
+    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
+    static void dealloc(Box* b) noexcept;
 };
 }
 
