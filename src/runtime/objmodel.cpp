@@ -4212,12 +4212,19 @@ Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNa
     }
 
     // Clear any increfs we did for when we throw an exception:
+    int positional_to_positional = std::min(argspec.num_args, paramspec.num_args);
     auto clear_refs = [&]() {
-        Py_XDECREF(oarg1);
-        Py_XDECREF(oarg2);
-        Py_XDECREF(oarg3);
-        for (int i = 0; i < num_output_args - 3; i++) {
-            Py_XDECREF(oargs[i]);
+        switch (positional_to_positional) {
+            case 0:
+                Py_XDECREF(oarg1);
+            case 1:
+                Py_XDECREF(oarg2);
+            case 2:
+                Py_XDECREF(oarg3);
+            default:
+                for (int i = std::max(positional_to_positional - 3, 0); i < num_output_args - 3; i++) {
+                    Py_XDECREF(oargs[i]);
+                }
         }
     };
     ExceptionCleanup<decltype(clear_refs)> cleanup(
@@ -4272,9 +4279,8 @@ Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNa
 
     ////
     // First, match up positional parameters to positional/varargs:
-    int positional_to_positional = std::min(argspec.num_args, paramspec.num_args);
     for (int i = 0; i < positional_to_positional; i++) {
-        getArg(i, oarg1, oarg2, oarg3, oargs) = incref(getArg(i, arg1, arg2, arg3, args));
+        getArg(i, oarg1, oarg2, oarg3, oargs) = getArg(i, arg1, arg2, arg3, args);
     }
 
     int varargs_to_positional = std::min((int)varargs_size, paramspec.num_args - positional_to_positional);
