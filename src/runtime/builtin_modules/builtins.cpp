@@ -99,43 +99,42 @@ extern "C" Box* abs_(Box* x) {
     return rtn;
 }
 
-extern "C" Box* binFunc(Box* x) {
-    static BoxedString* bin_str = getStaticString("__bin__");
-    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
-    Box* r = callattr(x, bin_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
-    if (!r)
-        raiseExcHelper(TypeError, "bin() argument can't be converted to bin");
-
-    if (!PyString_Check(r))
-        raiseExcHelper(TypeError, "__bin__() returned non-string (type %.200s)", r->cls->tp_name);
-
-    return r;
+static PyObject* builtin_bin(PyObject* self, PyObject* v) noexcept {
+    return PyNumber_ToBase(v, 2);
 }
 
-extern "C" Box* hexFunc(Box* x) {
-    static BoxedString* hex_str = getStaticString("__hex__");
-    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
-    Box* r = callattr(x, hex_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
-    if (!r)
-        raiseExcHelper(TypeError, "hex() argument can't be converted to hex");
+static PyObject* builtin_hex(PyObject* self, PyObject* v) noexcept {
+    PyNumberMethods* nb;
+    PyObject* res;
 
-    if (!PyString_Check(r))
-        raiseExcHelper(TypeError, "__hex__() returned non-string (type %.200s)", r->cls->tp_name);
-
-    return r;
+    if ((nb = v->cls->tp_as_number) == NULL || nb->nb_hex == NULL) {
+        PyErr_SetString(PyExc_TypeError, "hex() argument can't be converted to hex");
+        return NULL;
+    }
+    res = (*nb->nb_hex)(v);
+    if (res && !PyString_Check(res)) {
+        PyErr_Format(PyExc_TypeError, "__hex__ returned non-string (type %.200s)", res->cls->tp_name);
+        Py_DECREF(res);
+        return NULL;
+    }
+    return res;
 }
 
-extern "C" Box* octFunc(Box* x) {
-    static BoxedString* oct_str = getStaticString("__oct__");
-    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
-    Box* r = callattr(x, oct_str, callattr_flags, NULL, NULL, NULL, NULL, NULL);
-    if (!r)
-        raiseExcHelper(TypeError, "oct() argument can't be converted to oct");
+static PyObject* builtin_oct(PyObject* self, PyObject* v) noexcept {
+    PyNumberMethods* nb;
+    PyObject* res;
 
-    if (!PyString_Check(r))
-        raiseExcHelper(TypeError, "__oct__() returned non-string (type %.200s)", r->cls->tp_name);
-
-    return r;
+    if (v == NULL || (nb = v->cls->tp_as_number) == NULL || nb->nb_oct == NULL) {
+        PyErr_SetString(PyExc_TypeError, "oct() argument can't be converted to oct");
+        return NULL;
+    }
+    res = (*nb->nb_oct)(v);
+    if (res && !PyString_Check(res)) {
+        PyErr_Format(PyExc_TypeError, "__oct__ returned non-string (type %.200s)", res->cls->tp_name);
+        Py_DECREF(res);
+        return NULL;
+    }
+    return res;
 }
 
 extern "C" Box* all(Box* container) {
@@ -2390,12 +2389,6 @@ void setupBuiltins() {
     builtins_module->giveAttr("hash", hash_obj);
     abs_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)abs_, UNKNOWN, 1), "abs", abs_doc);
     builtins_module->giveAttr("abs", abs_obj);
-    builtins_module->giveAttr(
-        "bin", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)binFunc, UNKNOWN, 1), "bin", bin_doc));
-    builtins_module->giveAttr(
-        "hex", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)hexFunc, UNKNOWN, 1), "hex", hex_doc));
-    builtins_module->giveAttr(
-        "oct", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)octFunc, UNKNOWN, 1), "oct", oct_doc));
 
     min_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)min, UNKNOWN, 1, true, true), "min",
                                                { None }, NULL, min_doc);
@@ -2604,9 +2597,12 @@ void setupBuiltins() {
 
 
     static PyMethodDef builtin_methods[] = {
+        { "bin", builtin_bin, METH_O, bin_doc },
         { "compile", (PyCFunction)builtin_compile, METH_VARARGS | METH_KEYWORDS, compile_doc },
         { "eval", builtin_eval, METH_VARARGS, eval_doc },
         { "execfile", builtin_execfile, METH_VARARGS, execfile_doc },
+        { "hex", builtin_hex, METH_O, hex_doc },
+        { "oct", builtin_oct, METH_O, oct_doc },
         { "print", (PyCFunction)builtin_print, METH_VARARGS | METH_KEYWORDS, print_doc },
         { "reload", builtin_reload, METH_O, reload_doc },
     };
