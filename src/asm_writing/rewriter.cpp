@@ -1248,7 +1248,7 @@ std::vector<Location> Rewriter::getDecrefLocations() {
         ASSERT(var->locations.size() == 1, "this code only looks at one location");
         Location l = *var->locations.begin();
 
-        assert(l.type == Location::Scratch);
+        assert(l.type == Location::Scratch || l.type == Location::Stack);
 
         int offset1 = indirectFor(l).offset;
         int offset2 = p.second;
