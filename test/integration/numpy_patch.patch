@@ -19,15 +19,3 @@ index b9db3bb..2d24efc 100644
      }
      else {
          PyObject *doc_attr;
-diff --git a/setup.py b/setup.py
-index cc8f3c1..d3f89f6 100755
---- a/setup.py
-+++ b/setup.py
-@@ -352,6 +352,7 @@ def setup_package():
-         platforms = ["Windows", "Linux", "Solaris", "Mac OS-X", "Unix"],
-         test_suite='nose.collector',
-         cmdclass={"sdist": sdist_checked},
-+        zip_safe=False,
-     )
- 
-     if "--force" in sys.argv:
