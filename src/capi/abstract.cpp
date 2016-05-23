@@ -1846,77 +1846,73 @@ extern "C" int PyNumber_Check(PyObject* obj) noexcept {
     return obj->cls->tp_as_number && (obj->cls->tp_as_number->nb_int || obj->cls->tp_as_number->nb_float);
 }
 
-extern "C" PyObject* PyNumber_Add(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::Add);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return nullptr;
+extern "C" PyObject* PyNumber_Add(PyObject* v, PyObject* w) noexcept {
+    PyObject* result = binary_op1(v, w, NB_SLOT(nb_add));
+    if (result == Py_NotImplemented) {
+        PySequenceMethods* m = v->cls->tp_as_sequence;
+        Py_DECREF(result);
+        if (m && m->sq_concat) {
+            return (*m->sq_concat)(v, w);
+        }
+        result = binop_type_error(v, w, "+");
     }
+    return result;
 }
 
-extern "C" PyObject* PyNumber_Subtract(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::Sub);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return nullptr;
+#define BINARY_FUNC(func, op, op_name)                                                                                 \
+    extern "C" PyObject* func(PyObject* v, PyObject* w) noexcept { return binary_op(v, w, NB_SLOT(op), op_name); }
+
+BINARY_FUNC(PyNumber_Or, nb_or, "|")
+BINARY_FUNC(PyNumber_Xor, nb_xor, "^")
+BINARY_FUNC(PyNumber_And, nb_and, "&")
+BINARY_FUNC(PyNumber_Lshift, nb_lshift, "<<")
+BINARY_FUNC(PyNumber_Rshift, nb_rshift, ">>")
+BINARY_FUNC(PyNumber_Subtract, nb_subtract, "-")
+BINARY_FUNC(PyNumber_Divide, nb_divide, "/")
+BINARY_FUNC(PyNumber_Divmod, nb_divmod, "divmod()")
+
+static PyObject* sequence_repeat(ssizeargfunc repeatfunc, PyObject* seq, PyObject* n) noexcept {
+    Py_ssize_t count;
+    if (PyIndex_Check(n)) {
+        count = PyNumber_AsSsize_t(n, PyExc_OverflowError);
+        if (count == -1 && PyErr_Occurred())
+            return NULL;
+    } else {
+        return type_error("can't multiply sequence by "
+                          "non-int of type '%.200s'",
+                          n);
     }
+    return (*repeatfunc)(seq, count);
 }
 
-extern "C" PyObject* PyNumber_Multiply(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::Mult);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return nullptr;
+extern "C" PyObject* PyNumber_Multiply(PyObject* v, PyObject* w) noexcept {
+    PyObject* result = binary_op1(v, w, NB_SLOT(nb_multiply));
+    if (result == Py_NotImplemented) {
+        PySequenceMethods* mv = v->cls->tp_as_sequence;
+        PySequenceMethods* mw = w->cls->tp_as_sequence;
+        Py_DECREF(result);
+        if (mv && mv->sq_repeat) {
+            return sequence_repeat(mv->sq_repeat, v, w);
+        } else if (mw && mw->sq_repeat) {
+            return sequence_repeat(mw->sq_repeat, w, v);
+        }
+        result = binop_type_error(v, w, "*");
     }
+    return result;
 }
 
-extern "C" PyObject* PyNumber_Divide(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::Div);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return nullptr;
-    }
+extern "C" PyObject* PyNumber_FloorDivide(PyObject* v, PyObject* w) noexcept {
+    /* XXX tp_flags test */
+    return binary_op(v, w, NB_SLOT(nb_floor_divide), "//");
 }
 
-extern "C" PyObject* PyNumber_FloorDivide(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::FloorDiv);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return nullptr;
-    }
+extern "C" PyObject* PyNumber_TrueDivide(PyObject* v, PyObject* w) noexcept {
+    /* XXX tp_flags test */
+    return binary_op(v, w, NB_SLOT(nb_true_divide), "/");
 }
 
-extern "C" PyObject* PyNumber_TrueDivide(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::TrueDiv);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return nullptr;
-    }
-}
-
-extern "C" PyObject* PyNumber_Remainder(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::Mod);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return nullptr;
-    }
-}
-
-extern "C" PyObject* PyNumber_Divmod(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::DivMod);
-    } catch (ExcInfo e) {
-        e.clear();
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
-        return nullptr;
-    }
+extern "C" PyObject* PyNumber_Remainder(PyObject* v, PyObject* w) noexcept {
+    return binary_op(v, w, NB_SLOT(nb_remainder), "%");
 }
 
 extern "C" PyObject* PyNumber_Power(PyObject* v, PyObject* w, PyObject* z) noexcept {
@@ -1960,57 +1956,15 @@ extern "C" PyObject* PyNumber_Absolute(PyObject* o) noexcept {
 }
 
 extern "C" PyObject* PyNumber_Invert(PyObject* o) noexcept {
-    try {
-        return unaryop(o, AST_TYPE::Invert);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return nullptr;
-    }
-}
+    PyNumberMethods* m;
 
-extern "C" PyObject* PyNumber_Lshift(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::LShift);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return nullptr;
-    }
-}
+    if (o == NULL)
+        return null_error();
+    m = o->cls->tp_as_number;
+    if (m && m->nb_invert)
+        return (*m->nb_invert)(o);
 
-extern "C" PyObject* PyNumber_Rshift(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::RShift);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return nullptr;
-    }
-}
-
-extern "C" PyObject* PyNumber_And(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::BitAnd);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return nullptr;
-    }
-}
-
-extern "C" PyObject* PyNumber_Xor(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::BitXor);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return nullptr;
-    }
-}
-
-extern "C" PyObject* PyNumber_Or(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::BitOr);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return nullptr;
-    }
+    return type_error("bad operand type for unary ~: '%.200s'", o);
 }
 
 extern "C" PyObject* PyNumber_InPlaceAdd(PyObject* v, PyObject* w) noexcept {
@@ -2034,20 +1988,6 @@ extern "C" PyObject* PyNumber_InPlaceAdd(PyObject* v, PyObject* w) noexcept {
 
 extern "C" PyObject* PyNumber_InPlaceSubtract(PyObject* v, PyObject* w) noexcept {
     return binary_iop(v, w, NB_SLOT(nb_inplace_subtract), NB_SLOT(nb_subtract), "-=");
-}
-
-static PyObject* sequence_repeat(ssizeargfunc repeatfunc, PyObject* seq, PyObject* n) {
-    Py_ssize_t count;
-    if (PyIndex_Check(n)) {
-        count = PyNumber_AsSsize_t(n, PyExc_OverflowError);
-        if (count == -1 && PyErr_Occurred())
-            return NULL;
-    } else {
-        return type_error("can't multiply sequence by "
-                          "non-int of type '%.200s'",
-                          n);
-    }
-    return (*repeatfunc)(seq, count);
 }
 
 extern "C" PyObject* PyNumber_InPlaceMultiply(PyObject* v, PyObject* w) noexcept {
