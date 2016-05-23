@@ -8,9 +8,9 @@ def create_virtenv(name, package_list = None, force_create = False):
     if force_create or not os.path.exists(name) or os.stat(sys.executable).st_mtime > os.stat(name + "/bin/python").st_mtime:
         if os.path.exists(name):
             subprocess.check_call(["rm", "-rf", name])
-        
+
         print "Creating virtualenv to install testing dependencies..."
-        
+
         VIRTUALENV_SCRIPT = os.path.dirname(__file__) + "/../lib/virtualenv/virtualenv.py"
 
         try:
@@ -58,11 +58,12 @@ def parse_output(output):
     return result
 
 def run_test(cmd, cwd, expected, env = None):
+    print "Running", cmd
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=cwd, env=env)
     output, unused_err = process.communicate()
     errcode = process.poll()
     result = parse_output(output)
-    
+
     print
     print "Return code:", errcode
     if expected == result:

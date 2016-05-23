@@ -43,6 +43,7 @@
 #include "runtime/generator.h"
 #include "runtime/hiddenclass.h"
 #include "runtime/ics.h"
+#include "runtime/import.h"
 #include "runtime/iterobject.h"
 #include "runtime/long.h"
 #include "runtime/rewrite_args.h"
@@ -1807,7 +1808,7 @@ bool isNondataDescriptorInstanceSpecialCase(Box* descr) {
 
 template <Rewritable rewritable>
 Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box* obj, Box* descr, RewriterVar* r_descr,
-                                           bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
+                                           bool for_call, BORROWED(Box**) bind_obj_out, RewriterVar** r_bind_obj_out) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -1888,7 +1889,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
             }
             return boxInstanceMethod(im_self, im_func, im_class);
         } else {
-            *bind_obj_out = incref(im_self);
+            *bind_obj_out = im_self;
             if (rewrite_args) {
                 rewrite_args->setReturn(r_im_func, ReturnConvention::HAS_RETURN);
                 *r_bind_obj_out = r_im_self;
@@ -1915,7 +1916,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
                 rewrite_args->setReturn(r_descr, ReturnConvention::HAS_RETURN);
                 *r_bind_obj_out = rewrite_args->obj;
             }
-            *bind_obj_out = incref(obj);
+            *bind_obj_out = obj;
             return incref(descr);
         } else {
             BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(descr);
@@ -1944,7 +1945,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
 // r_descr must represent a valid object.
 template <Rewritable rewritable>
 Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls, Box* descr, RewriterVar* r_descr,
-                               bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
+                               bool for_call, BORROWED(Box**) bind_obj_out, RewriterVar** r_bind_obj_out) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -1999,7 +2000,7 @@ Box* boxChar(char c) {
 // r_descr needs to represent a valid object
 template <Rewritable rewritable>
 Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedString* attr_name, Box* obj, Box* descr,
-                                        RewriterVar* r_descr, bool for_call, Box** bind_obj_out,
+                                        RewriterVar* r_descr, bool for_call, BORROWED(Box**) bind_obj_out,
                                         RewriterVar** r_bind_obj_out) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
@@ -2214,7 +2215,7 @@ static void ensureValidCapiReturn(Box* r) {
 
 template <ExceptionStyle S, Rewritable rewritable>
 Box* getattrInternalEx(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
-                       Box** bind_obj_out, RewriterVar** r_bind_obj_out) noexcept(S == CAPI) {
+                       BORROWED(Box**) bind_obj_out, RewriterVar** r_bind_obj_out) noexcept(S == CAPI) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -2431,7 +2432,7 @@ Box* processDescriptor(Box* obj, Box* inst, Box* owner) {
 
 template <bool IsType, Rewritable rewritable>
 Box* getattrInternalGeneric(Box* obj, BoxedString* attr, GetattrRewriteArgs* rewrite_args, bool cls_only, bool for_call,
-                            Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
+                            BORROWED(Box**) bind_obj_out, RewriterVar** r_bind_obj_out) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -3745,8 +3746,6 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
         return val;
     }
 
-    AUTO_XDECREF(bind_obj);
-
     if (bind_obj != NULL) {
         Box** new_args = NULL;
         if (npassed_args >= 3) {
@@ -4214,12 +4213,19 @@ Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNa
     }
 
     // Clear any increfs we did for when we throw an exception:
+    int positional_to_positional = std::min(argspec.num_args, paramspec.num_args);
     auto clear_refs = [&]() {
-        Py_XDECREF(oarg1);
-        Py_XDECREF(oarg2);
-        Py_XDECREF(oarg3);
-        for (int i = 0; i < num_output_args - 3; i++) {
-            Py_XDECREF(oargs[i]);
+        switch (positional_to_positional) {
+            case 0:
+                Py_XDECREF(oarg1);
+            case 1:
+                Py_XDECREF(oarg2);
+            case 2:
+                Py_XDECREF(oarg3);
+            default:
+                for (int i = std::max(positional_to_positional - 3, 0); i < num_output_args - 3; i++) {
+                    Py_XDECREF(oargs[i]);
+                }
         }
     };
     ExceptionCleanup<decltype(clear_refs)> cleanup(
@@ -4274,9 +4280,8 @@ Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNa
 
     ////
     // First, match up positional parameters to positional/varargs:
-    int positional_to_positional = std::min(argspec.num_args, paramspec.num_args);
     for (int i = 0; i < positional_to_positional; i++) {
-        getArg(i, oarg1, oarg2, oarg3, oargs) = incref(getArg(i, arg1, arg2, arg3, args));
+        getArg(i, oarg1, oarg2, oarg3, oargs) = getArg(i, arg1, arg2, arg3, args);
     }
 
     int varargs_to_positional = std::min((int)varargs_size, paramspec.num_args - positional_to_positional);
@@ -4960,7 +4965,7 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
 
     // We check for this assertion later too - by checking it twice, we know
     // if the error state was set before calling the chosen CF or after.
-    ASSERT(!PyErr_Occurred(), "");
+    ASSERT(imported_foreign_cextension || !PyErr_Occurred(), "");
 
     Box* r;
     // we duplicate the call to callChosenCf here so we can
@@ -4985,7 +4990,7 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
         ASSERT(chosen_cf->spec->rtn_type->isFitBy(r->cls), "%s (%p) was supposed to return %s, but gave a %s",
                g.func_addr_registry.getFuncNameAtAddress(chosen_cf->code, true, NULL).c_str(), chosen_cf->code,
                chosen_cf->spec->rtn_type->debugName().c_str(), r->cls->tp_name);
-        ASSERT(!PyErr_Occurred(), "%p", chosen_cf->code);
+        ASSERT(imported_foreign_cextension || !PyErr_Occurred(), "%p", chosen_cf->code);
     }
 
     return r;

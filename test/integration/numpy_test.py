@@ -91,7 +91,7 @@ NUMPY_PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "nump
 print_progress_header("Cloning up NumPy...")
 if not os.path.exists(NUMPY_DIR):
     url = "https://github.com/numpy/numpy"
-    subprocess.check_call(["git", "clone", "--branch", "v1.11.0", url], cwd=SRC_DIR)
+    subprocess.check_call(["git", "clone", "--depth", "1", "--branch", "v1.11.0", url], cwd=SRC_DIR)
 else:
     print ">>> NumPy already installed."
 

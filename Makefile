@@ -722,6 +722,7 @@ PROFILE_TARGET := ./pyston $(SRC_DIR)/minibenchmarks/combined.py
 $(CMAKE_DIR_RELEASE_GCC_PGO)/.trained: pyston_release_gcc_pgo_instrumented
 	@echo "Training pgo"
 	mkdir -p $(CMAKE_DIR_RELEASE_GCC_PGO)
+	rm -rf $(CMAKE_DIR_RELEASE_GCC_PGO)/from_cpython/{Lib,Modules,Objects,Python,Parser} $(CMAKE_DIR_RELEASE_GCC_PGO)/src
 	(cd $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED) && $(PROFILE_TARGET) && $(PROFILE_TARGET) ) && touch $(CMAKE_DIR_RELEASE_GCC_PGO)/.trained
 
 pyston_pgo: pyston_release_gcc_pgo
