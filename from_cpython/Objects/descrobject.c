@@ -314,6 +314,11 @@ classmethoddescr_call(PyMethodDescrObject *descr, PyObject *args,
 static PyObject *
 wrapperdescr_call(PyWrapperDescrObject *descr, PyObject *args, PyObject *kwds)
 {
+    // Pyston overrides this with an optimized version
+    assert(0 && "This shouldn't be getting hit any more");
+    abort();
+
+#if 0
     Py_ssize_t argc;
     PyObject *self, *func, *result;
 
@@ -353,6 +358,7 @@ wrapperdescr_call(PyWrapperDescrObject *descr, PyObject *args, PyObject *kwds)
     Py_DECREF(args);
     Py_DECREF(func);
     return result;
+#endif
 }
 
 #if 0
@@ -1040,6 +1046,11 @@ static PyGetSetDef wrapper_getsets[] = {
 static PyObject *
 wrapper_call(wrapperobject *wp, PyObject *args, PyObject *kwds)
 {
+    // Pyston overrides this with an optimized version
+    assert(0 && "This shouldn't be getting hit any more");
+    abort();
+
+#if 0
     wrapperfunc wrapper = wp->descr->d_base->wrapper;
     PyObject *self = wp->self;
 
@@ -1071,6 +1082,7 @@ wrapper_call(wrapperobject *wp, PyObject *args, PyObject *kwds)
     assert(!wp->descr->d_base->flags);
 
     return (*wrapper)(self, args, wp->descr->d_wrapped);
+#endif
 }
 
 static int

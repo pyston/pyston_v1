@@ -711,10 +711,6 @@ void setupDescr() {
     PyType_Ready(&PyGetSetDescr_Type);
     PyType_Ready(&PyMemberDescr_Type);
 
-    PyType_Ready(&wrappertype);
-    PyType_Ready(&PyWrapperDescr_Type);
-
-#if 0
     wrappertype.tpp_call.capi_val = wrapperObjectTppCall<CAPI>;
     wrappertype.tpp_call.cxx_val = wrapperObjectTppCall<CXX>;
     wrappertype.tp_call = proxyToTppCall;
@@ -724,6 +720,5 @@ void setupDescr() {
     PyWrapperDescr_Type.tpp_call.cxx_val = wrapperDescrTppCall<CXX>;
     PyWrapperDescr_Type.tp_call = proxyToTppCall;
     PyType_Ready(&PyWrapperDescr_Type);
-#endif
 }
 }
