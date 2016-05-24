@@ -1817,8 +1817,11 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
     // Special case: non-data descriptor: function, instancemethod or classmethod
     // Returns a bound instancemethod
     if (descr->cls == function_cls || descr->cls == instancemethod_cls || descr->cls == classmethod_cls
-        || (descr->cls == method_cls
-            && (static_cast<BoxedMethodDescriptor*>(descr)->method->ml_flags & (METH_CLASS | METH_STATIC)) == 0)) {
+        || descr->cls == &PyMethodDescr_Type) {
+
+        if (descr->cls == &PyMethodDescr_Type)
+            assert((reinterpret_cast<PyMethodDescrObject*>(descr)->d_method->ml_flags & (METH_CLASS | METH_STATIC))
+                   == 0);
         Box* im_self = NULL, * im_func = NULL, * im_class = obj->cls;
         RewriterVar* r_im_self = NULL, * r_im_func = NULL, * r_im_class = NULL;
 
@@ -1833,7 +1836,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
                 r_im_self = rewrite_args->obj;
                 r_im_func = r_descr;
             }
-        } else if (descr->cls == method_cls) {
+        } else if (descr->cls == &PyMethodDescr_Type) {
             im_self = obj;
             im_func = descr;
             if (rewrite_args) {
@@ -3369,8 +3372,8 @@ extern "C" bool nonzero(Box* obj) {
                        || obj->cls == type_cls || isSubclass(obj->cls, Exception) || obj->cls == &PyFile_Type
                        || obj->cls == &PyTraceBack_Type || obj->cls == instancemethod_cls || obj->cls == module_cls
                        || obj->cls == capifunc_cls || obj->cls == builtin_function_or_method_cls
-                       || obj->cls == method_cls || obj->cls == &PyMethod_Type || obj->cls == frame_cls
-                       || obj->cls == generator_cls || obj->cls == code_cls,
+                       || obj->cls == &PyMethod_Type || obj->cls == frame_cls || obj->cls == generator_cls
+                       || obj->cls == code_cls,
                    "%s.__nonzero__", getTypeName(obj)); // TODO
 
             if (rewriter.get()) {

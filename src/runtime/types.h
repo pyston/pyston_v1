@@ -77,9 +77,9 @@ extern "C" BoxedString* EmptyString;
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *enumerate_cls,
-    *xrange_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *property_cls,
-    *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *builtin_function_or_method_cls, *set_cls, *frozenset_cls,
-    *code_cls, *frame_cls, *capifunc_cls;
+    *xrange_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *property_cls, *staticmethod_cls,
+    *classmethod_cls, *attrwrapper_cls, *builtin_function_or_method_cls, *set_cls, *frozenset_cls, *code_cls,
+    *frame_cls, *capifunc_cls;
 }
 #define unicode_cls (&PyUnicode_Type)
 #define memoryview_cls (&PyMemoryView_Type)
@@ -1272,25 +1272,6 @@ public:
     BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
     DEFAULT_CLASS(generator_cls);
-};
-
-class BoxedMethodDescriptor : public Box {
-public:
-    PyMethodDef* method;
-    BoxedClass* type;
-
-    BoxedMethodDescriptor(PyMethodDef* method, BoxedClass* type) : method(method), type(type) { Py_INCREF(type); }
-
-    DEFAULT_CLASS(method_cls);
-
-    static Box* descr_get(BoxedMethodDescriptor* self, Box* inst, Box* owner) noexcept;
-    static Box* __call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args);
-    template <ExceptionStyle S>
-    static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
-                        Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
-
-    static void dealloc(Box* self) noexcept;
-    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
 };
 
 Box* objectSetattr(Box* obj, Box* attr, Box* value);

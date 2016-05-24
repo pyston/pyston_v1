@@ -226,13 +226,7 @@ static Box* classmethodGet(Box* self, Box* obj, Box* type) {
     return new BoxedInstanceMethod(type, cm->cm_callable, type);
 }
 
-// TODO this should be auto-generated as a slot wrapper:
-Box* BoxedMethodDescriptor::__call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args) {
-    BoxedDict* kwargs = static_cast<BoxedDict*>(_args[0]);
-    return BoxedMethodDescriptor::tppCall<CXX>(self, NULL, ArgPassSpec(1, 0, true, true), obj, varargs, kwargs, NULL,
-                                               NULL);
-}
-
+#if 0
 template <ExceptionStyle S>
 Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                                     Box* arg2, Box* arg3, Box** args,
@@ -393,62 +387,7 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     return rearrangeArgumentsAndCall(paramspec, NULL, self->method->ml_name, defaults, rewrite_args, argspec, arg1,
                                      arg2, arg3, args, keyword_names, continuation);
 }
-
-static Box* methodGetName(Box* b, void*) {
-    assert(b->cls == method_cls);
-    const char* s = static_cast<BoxedMethodDescriptor*>(b)->method->ml_name;
-    if (s)
-        return boxString(s);
-    return incref(None);
-}
-static Box* methodGetDoc(Box* b, void*) {
-    assert(b->cls == method_cls);
-    const char* s = static_cast<BoxedMethodDescriptor*>(b)->method->ml_doc;
-    if (s)
-        return boxString(s);
-    return incref(None);
-}
-
-static Box* methodRepr(Box* _o) {
-    assert(_o->cls == method_cls);
-    BoxedMethodDescriptor* md = static_cast<BoxedMethodDescriptor*>(_o);
-    const char* name = md->method->ml_name;
-    if (!name)
-        name = "?";
-    return PyString_FromFormat("<method '%s' of '%s' objects>", name, getNameOfClass(md->type));
-}
-
-Box* BoxedMethodDescriptor::descr_get(BoxedMethodDescriptor* self, Box* inst, Box* owner) noexcept {
-    RELEASE_ASSERT(self->cls == method_cls, "");
-
-    // CPython handles this differently: they create the equivalent of different BoxedMethodDescriptor
-    // objects but with different class objects, which define different __get__ and __call__ methods.
-    if (self->method->ml_flags & METH_CLASS)
-        return boxInstanceMethod(owner, self, self->type);
-
-    if (self->method->ml_flags & METH_STATIC)
-        Py_FatalError("unimplemented");
-
-    if (inst == NULL)
-        return incref(self);
-    else
-        return boxInstanceMethod(inst, self, self->type);
-}
-
-void BoxedMethodDescriptor::dealloc(Box* _self) noexcept {
-    BoxedMethodDescriptor* self = static_cast<BoxedMethodDescriptor*>(_self);
-
-    PyObject_GC_UnTrack(self);
-    Py_XDECREF(self->type);
-    self->cls->tp_free(self);
-}
-
-int BoxedMethodDescriptor::traverse(Box* _self, visitproc visit, void* arg) noexcept {
-    BoxedMethodDescriptor* self = static_cast<BoxedMethodDescriptor*>(_self);
-
-    Py_VISIT(self->type);
-    return 0;
-}
+#endif
 
 void BoxedProperty::dealloc(Box* _self) noexcept {
     BoxedProperty* self = static_cast<BoxedProperty*>(_self);
@@ -652,20 +591,6 @@ extern "C" PyObject* PyStaticMethod_New(PyObject* callable) noexcept {
     return new BoxedStaticmethod(callable);
 }
 
-extern "C" PyObject* PyDescr_NewClassMethod(PyTypeObject* type, PyMethodDef* method) noexcept {
-    // Pyston change: we don't have a separate capi classmethod descriptor type, we just use the normal
-    // one but with the METH_CLASS flag set.
-    if (!(method->ml_flags & METH_CLASS)) {
-        method = new PyMethodDef(*method);
-        method->ml_flags |= METH_CLASS;
-    }
-    return new pyston::BoxedMethodDescriptor(method, type);
-}
-
-extern "C" PyObject* PyDescr_NewMethod(PyTypeObject* type, PyMethodDef* method) noexcept {
-    return new BoxedMethodDescriptor(method, type);
-}
-
 void setupDescr() {
     property_cls->instances_are_nonzero = true;
 
@@ -702,18 +627,6 @@ void setupDescr() {
         new BoxedFunction(FunctionMetadata::create((void*)classmethodGet, UNKNOWN, 3, false, false), { None }));
     classmethod_cls->freeze();
 
-    method_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)BoxedMethodDescriptor::descr_get,
-                                                                               UNKNOWN, 3, ParamNames::empty(), CAPI)));
-    FunctionMetadata* method_call_cl
-        = FunctionMetadata::create((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2, true, true);
-    method_cls->giveAttr("__call__", new BoxedFunction(method_call_cl));
-    method_cls->tpp_call.capi_val = BoxedMethodDescriptor::tppCall<CAPI>;
-    method_cls->tpp_call.cxx_val = BoxedMethodDescriptor::tppCall<CXX>;
-    method_cls->giveAttrDescriptor("__doc__", methodGetDoc, NULL);
-    method_cls->giveAttrDescriptor("__name__", methodGetName, NULL);
-    method_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)methodRepr, UNKNOWN, 1)));
-    method_cls->freeze();
-
     PyType_Ready(&PyGetSetDescr_Type);
     PyType_Ready(&PyMemberDescr_Type);
 
@@ -726,5 +639,8 @@ void setupDescr() {
     PyWrapperDescr_Type.tpp_call.cxx_val = wrapperDescrTppCall<CXX>;
     PyWrapperDescr_Type.tp_call = proxyToTppCall;
     PyType_Ready(&PyWrapperDescr_Type);
+
+    PyType_Ready(&PyMethodDescr_Type);
+    PyType_Ready(&PyClassMethodDescr_Type);
 }
 }

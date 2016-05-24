@@ -30,14 +30,12 @@ descr_repr(PyDescrObject *descr, char *format)
                                descr->d_type->tp_name);
 }
 
-#if 0
 static PyObject *
 method_repr(PyMethodDescrObject *descr)
 {
     return descr_repr((PyDescrObject *)descr,
                       "<method '%s' of '%s' objects>");
 }
-#endif
 
 static PyObject *
 member_repr(PyMemberDescrObject *descr)
@@ -81,8 +79,6 @@ descr_check(PyDescrObject *descr, PyObject *obj, PyObject **pres)
     return 0;
 }
 
-// Pyston change: not using this for now
-#if 0
 static PyObject *
 classmethod_get(PyMethodDescrObject *descr, PyObject *obj, PyObject *type)
 {
@@ -130,7 +126,6 @@ method_get(PyMethodDescrObject *descr, PyObject *obj, PyObject *type)
         return res;
     return PyCFunction_New(descr->d_method, obj);
 }
-#endif
 
 static PyObject *
 member_get(PyMemberDescrObject *descr, PyObject *obj, PyObject *type)
@@ -213,7 +208,6 @@ getset_set(PyGetSetDescrObject *descr, PyObject *obj, PyObject *value)
     return -1;
 }
 
-#if 0
 static PyObject *
 methoddescr_call(PyMethodDescrObject *descr, PyObject *args, PyObject *kwds)
 {
@@ -309,7 +303,6 @@ classmethoddescr_call(PyMethodDescrObject *descr, PyObject *args,
     Py_DECREF(args);
     return result;
 }
-#endif
 
 static PyObject *
 wrapperdescr_call(PyWrapperDescrObject *descr, PyObject *args, PyObject *kwds)
@@ -361,7 +354,6 @@ wrapperdescr_call(PyWrapperDescrObject *descr, PyObject *args, PyObject *kwds)
 #endif
 }
 
-#if 0
 static PyObject *
 method_get_doc(PyMethodDescrObject *descr, void *closure)
 {
@@ -371,7 +363,6 @@ method_get_doc(PyMethodDescrObject *descr, void *closure)
     }
     return PyString_FromString(descr->d_method->ml_doc);
 }
-#endif
 
 static PyMemberDef descr_members[] = {
     {"__objclass__", T_OBJECT, offsetof(PyDescrObject, d_type), READONLY},
@@ -379,12 +370,10 @@ static PyMemberDef descr_members[] = {
     {0}
 };
 
-#if 0
 static PyGetSetDef method_getset[] = {
     {"__doc__", (getter)method_get_doc},
     {0}
 };
-#endif
 
 static PyObject *
 member_get_doc(PyMemberDescrObject *descr, void *closure)
@@ -439,8 +428,7 @@ descr_traverse(PyObject *self, visitproc visit, void *arg)
     return 0;
 }
 
-#if 0
-static PyTypeObject PyMethodDescr_Type = {
+/* static */ PyTypeObject PyMethodDescr_Type = {
     PyVarObject_HEAD_INIT(/* Pyston change */NULL, 0)
     "method_descriptor",
     sizeof(PyMethodDescrObject),
@@ -478,7 +466,7 @@ static PyTypeObject PyMethodDescr_Type = {
 };
 
 /* This is for METH_CLASS in C, not for "f = classmethod(f)" in Python! */
-static PyTypeObject PyClassMethodDescr_Type = {
+/* static */ PyTypeObject PyClassMethodDescr_Type = {
     PyVarObject_HEAD_INIT(/* Pyston change */NULL, 0)
     "classmethod_descriptor",
     sizeof(PyMethodDescrObject),
@@ -514,7 +502,6 @@ static PyTypeObject PyClassMethodDescr_Type = {
     (descrgetfunc)classmethod_get,              /* tp_descr_get */
     0,                                          /* tp_descr_set */
 };
-#endif
 
 PyTypeObject PyMemberDescr_Type = {
     PyVarObject_HEAD_INIT(/* Pyston change */NULL, 0)
@@ -645,7 +632,6 @@ descr_new(PyTypeObject *descrtype, PyTypeObject *type, const char *name)
     return descr;
 }
 
-#if 0
 PyObject *
 PyDescr_NewMethod(PyTypeObject *type, PyMethodDef *method)
 {
@@ -669,7 +655,6 @@ PyDescr_NewClassMethod(PyTypeObject *type, PyMethodDef *method)
         descr->d_method = method;
     return (PyObject *)descr;
 }
-#endif
 
 PyObject *
 PyDescr_NewMember(PyTypeObject *type, PyMemberDef *member)

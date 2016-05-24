@@ -3375,6 +3375,7 @@ static PyMethodDef object_methods[] = {
     { "__reduce_ex__", object_reduce_ex, METH_VARARGS, NULL }, //
     { "__reduce__", object_reduce, METH_VARARGS, NULL },       //
     { "__format__", object_format, METH_VARARGS, PyDoc_STR("default object formatter") },
+    { NULL, NULL, 0, NULL },
 };
 
 static Box* type_name(Box* b, void*) noexcept {
@@ -4123,9 +4124,6 @@ void setupRuntime() {
     capifunc_cls = new (0)
         BoxedClass(object_cls, 0, 0, sizeof(BoxedCApiFunction), false, "capifunc", true, BoxedCApiFunction::dealloc,
                    NULL, true, BoxedCApiFunction::traverse, BoxedCApiFunction::clear);
-    method_cls = new (0)
-        BoxedClass(object_cls, 0, 0, sizeof(BoxedMethodDescriptor), false, "method_descriptor", false,
-                   BoxedMethodDescriptor::dealloc, NULL, true, BoxedMethodDescriptor::traverse, NOCLEAR);
 
     EmptyString = new (0) BoxedString("");
     constants.push_back(EmptyString);
@@ -4157,7 +4155,6 @@ void setupRuntime() {
     builtin_function_or_method_cls->tp_mro = BoxedTuple::create({ builtin_function_or_method_cls, object_cls });
     capifunc_cls->tp_mro = BoxedTuple::create({ capifunc_cls, object_cls });
     module_cls->tp_mro = BoxedTuple::create({ module_cls, object_cls });
-    method_cls->tp_mro = BoxedTuple::create({ method_cls, object_cls });
 
     object_cls->tp_hash = (hashfunc)_Py_HashPointer;
 
@@ -4212,7 +4209,6 @@ void setupRuntime() {
     builtin_function_or_method_cls->finishInitialization();
     module_cls->finishInitialization();
     capifunc_cls->finishInitialization();
-    method_cls->finishInitialization();
 
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
@@ -4311,9 +4307,7 @@ void setupRuntime() {
     setupCAPI();
 
     // Can't set up object methods until we set up CAPI support:
-    for (auto& md : object_methods) {
-        object_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, object_cls));
-    }
+    add_methods(object_cls, object_methods);
     object_cls->giveAttrDescriptor("__class__", object_get_class, object_set_class);
 
     object_cls->tp_str = object_str;

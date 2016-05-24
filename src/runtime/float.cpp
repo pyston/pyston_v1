@@ -1672,7 +1672,8 @@ static PyMethodDef float_methods[]
         { "as_integer_ratio", (PyCFunction)float_as_integer_ratio, METH_NOARGS, NULL },
         { "__setformat__", (PyCFunction)float_setformat, METH_VARARGS | METH_CLASS, float_setformat_doc },
         { "is_integer", (PyCFunction)float_is_integer, METH_NOARGS, NULL },
-        { "__format__", (PyCFunction)float__format__, METH_VARARGS, NULL } };
+        { "__format__", (PyCFunction)float__format__, METH_VARARGS, NULL },
+        { NULL, NULL, 0, NULL } };
 
 void setupFloat() {
     static PyNumberMethods float_as_number;
@@ -1746,9 +1747,7 @@ void setupFloat() {
                         new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)floatGetFormat, STR, 1),
                                                          "__getformat__", floatGetFormatDoc));
 
-    for (auto& md : float_methods) {
-        float_cls->giveAttr(md.ml_name, PyDescr_NewMethod(float_cls, &md));
-    }
+    add_methods(float_cls, float_methods);
 
     add_operators(float_cls);
     float_cls->freeze();

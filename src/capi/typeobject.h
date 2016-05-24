@@ -62,6 +62,8 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* attr, GetattrRewriteArgs*
 
 // Set a class's tp_call to this to have calls to tp_call (and __call__) proxy to tpp_call
 Box* proxyToTppCall(Box* self, Box* args, Box* kw) noexcept;
+
+int add_methods(PyTypeObject* type, PyMethodDef* meth) noexcept;
 }
 
 #endif

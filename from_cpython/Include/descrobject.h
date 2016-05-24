@@ -56,12 +56,10 @@ typedef struct {
     PyDescr_COMMON;
 } PyDescrObject;
 
-#if 0
 typedef struct {
     PyDescr_COMMON;
     PyMethodDef *d_method;
 } PyMethodDescrObject;
-#endif
 
 typedef struct {
     PyDescr_COMMON;
@@ -107,6 +105,8 @@ typedef struct {
     PyObject *self;
 } wrapperobject;
 PyAPI_DATA(PyTypeObject) wrappertype;
+PyAPI_DATA(PyTypeObject) PyMethodDescr_Type;
+PyAPI_DATA(PyTypeObject) PyClassMethodDescr_Type;
 
 #ifdef __cplusplus
 }

@@ -2734,7 +2734,7 @@ extern "C" int PyType_IsSubtype(PyTypeObject* a, PyTypeObject* b) noexcept {
 
 /* Initialize the __dict__ in a type object */
 
-static int add_methods(PyTypeObject* type, PyMethodDef* meth) noexcept {
+/* static */ int add_methods(PyTypeObject* type, PyMethodDef* meth) noexcept {
     for (; meth->ml_name != NULL; meth++) {
         auto name = internStringMortal(meth->ml_name);
         PyObject* descr;
@@ -2746,10 +2746,7 @@ static int add_methods(PyTypeObject* type, PyMethodDef* meth) noexcept {
                 PyErr_SetString(PyExc_ValueError, "method cannot be both class and static");
                 return -1;
             }
-            // Pyston change: create these classmethods as normal methods, which will
-            // later just notice the METH_CLASS flag.
-            // descr = PyDescr_NewClassMethod(type, meth);
-            descr = PyDescr_NewMethod(type, meth);
+            descr = PyDescr_NewClassMethod(type, meth);
         } else if (meth->ml_flags & METH_STATIC) {
             PyObject* cfunc = PyCFunction_New(meth, NULL);
             if (cfunc == NULL)
