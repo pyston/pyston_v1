@@ -527,6 +527,12 @@ Box* wrapperDescrTppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec 
         }
     }
 
+    if (rewrite_args) {
+        // We are going to embed references to _self->d_base->wrapper and _self->d_wrapped
+        rewrite_args->obj->addGuard((intptr_t)_self);
+        rewrite_args->rewriter->addGCReference(_self);
+    }
+
     STAT_TIMER(t0, "us_timer_boxedwrapperdecsriptor_call", (_self->cls->is_user_defined ? 10 : 20));
 
     assert(_self->cls == &PyWrapperDescr_Type);

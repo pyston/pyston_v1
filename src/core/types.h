@@ -289,10 +289,14 @@ private:
 
 public:
     ICInvalidator() : cur_version(0) {}
+    ~ICInvalidator();
 
     void addDependent(ICSlotInfo* icentry);
     int64_t version();
     void invalidateAll();
+
+    friend class ICInfo;
+    friend class ICSlotInfo;
 };
 
 // Codegen types:

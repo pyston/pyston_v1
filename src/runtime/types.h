@@ -183,7 +183,7 @@ public:
 
     HCAttrs attrs;
 
-    // TODO: these don't actually get deallocated right now
+    // Any new ics here need to get reflected in BoxedClass::dealloc
     std::unique_ptr<CallattrCapiIC> next_ic;
     std::unique_ptr<CallattrIC> hasnext_ic, repr_ic, iter_ic;
     std::unique_ptr<NonzeroIC> nonzero_ic;

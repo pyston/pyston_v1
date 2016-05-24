@@ -3761,6 +3761,12 @@ void BoxedClass::dealloc(Box* b) noexcept {
     if (PyObject_IS_GC(type))
         _PyObject_GC_UNTRACK(type);
 
+    type->next_ic.reset();
+    type->hasnext_ic.reset();
+    type->repr_ic.reset();
+    type->iter_ic.reset();
+    type->nonzero_ic.reset();
+
     // We can for the most part avoid this, but I think it's best not to:
     PyObject_ClearWeakRefs((PyObject*)type);
 
@@ -4616,6 +4622,9 @@ extern "C" void Py_Finalize() noexcept {
         Py_DECREF(b);
     }
     constants.clear();
+
+    clearAllICs();
+
     for (auto b : late_constants) {
         Py_DECREF(b);
     }
@@ -4628,6 +4637,9 @@ extern "C" void Py_Finalize() noexcept {
         }
         Py_DECREF(b);
     }
+
+    clearAllICs();
+
     // May need to run multiple collections to collect everything:
     while (PyGC_Collect())
         ;
