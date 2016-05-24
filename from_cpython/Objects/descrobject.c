@@ -211,6 +211,11 @@ getset_set(PyGetSetDescrObject *descr, PyObject *obj, PyObject *value)
 static PyObject *
 methoddescr_call(PyMethodDescrObject *descr, PyObject *args, PyObject *kwds)
 {
+    // Pyston overrides this with an optimized version
+    assert(0 && "This shouldn't be getting hit any more");
+    abort();
+
+#if 0
     Py_ssize_t argc;
     PyObject *self, *func, *result;
 
@@ -250,6 +255,7 @@ methoddescr_call(PyMethodDescrObject *descr, PyObject *args, PyObject *kwds)
     Py_DECREF(args);
     Py_DECREF(func);
     return result;
+#endif
 }
 
 static PyObject *

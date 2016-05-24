@@ -226,14 +226,12 @@ static Box* classmethodGet(Box* self, Box* obj, Box* type) {
     return new BoxedInstanceMethod(type, cm->cm_callable, type);
 }
 
-#if 0
 template <ExceptionStyle S>
-Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
-                                    Box* arg2, Box* arg3, Box** args,
-                                    const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+Box* methodDescrTppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
+                        Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
     if (S == CAPI) {
         try {
-            return tppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+            return methodDescrTppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
         } catch (ExcInfo e) {
             setCAPIException(e);
             return NULL;
@@ -242,14 +240,16 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
 
     STAT_TIMER(t0, "us_timer_boxedmethoddescriptor__call__", 10);
 
-    assert(_self->cls == method_cls);
-    BoxedMethodDescriptor* self = static_cast<BoxedMethodDescriptor*>(_self);
+    assert(_self->cls == &PyMethodDescr_Type || _self->cls == &PyClassMethodDescr_Type);
+    PyMethodDescrObject* self = reinterpret_cast<PyMethodDescrObject*>(_self);
 
-    int ml_flags = self->method->ml_flags;
+    bool is_classmethod = (_self->cls == &PyClassMethodDescr_Type);
+
+    int ml_flags = self->d_method->ml_flags;
     int call_flags = ml_flags & ~(METH_CLASS | METH_COEXIST | METH_STATIC);
 
     if (rewrite_args && !rewrite_args->func_guarded) {
-        rewrite_args->obj->addAttrGuard(offsetof(BoxedMethodDescriptor, method), (intptr_t)self->method);
+        rewrite_args->obj->addAttrGuard(offsetof(PyMethodDescrObject, d_method), (intptr_t)self->d_method);
     }
 
     ParamReceiveSpec paramspec(0, 0, false, false);
@@ -293,16 +293,15 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
     }
 
     auto continuation = [=](CallRewriteArgs* rewrite_args, Box* arg1, Box* arg2, Box* arg3, Box** args) {
-        if (ml_flags & METH_CLASS) {
+        if (is_classmethod) {
             rewrite_args = NULL;
             if (!PyType_Check(arg1))
-                raiseExcHelper(TypeError, "descriptor '%s' requires a type but received a '%s'", self->method->ml_name,
-                               getFullTypeName(arg1).c_str());
+                raiseExcHelper(TypeError, "descriptor '%s' requires a type but received a '%s'",
+                               self->d_method->ml_name, getFullTypeName(arg1).c_str());
         } else {
-            if (!isSubclass(arg1->cls, self->type))
+            if (!isSubclass(arg1->cls, self->d_type))
                 raiseExcHelper(TypeError, "descriptor '%s' requires a '%s' arg1 but received a '%s'",
-                               self->method->ml_name, getFullNameOfClass(self->type).c_str(),
-                               getFullTypeName(arg1).c_str());
+                               self->d_method->ml_name, self->d_type->tp_name, getFullTypeName(arg1).c_str());
         }
 
         if (rewrite_args && !arg1_class_guarded) {
@@ -313,57 +312,57 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         if (call_flags == METH_NOARGS) {
             {
                 UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-                rtn = (Box*)self->method->ml_meth(arg1, NULL);
+                rtn = (Box*)self->d_method->ml_meth(arg1, NULL);
             }
             if (rewrite_args)
                 rewrite_args->out_rtn
-                    = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                    = rewrite_args->rewriter->call(true, (void*)self->d_method->ml_meth, rewrite_args->arg1,
                                                    rewrite_args->rewriter->loadConst(0, Location::forArg(1)))
                           ->setType(RefType::OWNED);
         } else if (call_flags == METH_VARARGS) {
             {
                 UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-                rtn = (Box*)self->method->ml_meth(arg1, arg2);
+                rtn = (Box*)self->d_method->ml_meth(arg1, arg2);
             }
             if (rewrite_args)
                 rewrite_args->out_rtn
-                    = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                    = rewrite_args->rewriter->call(true, (void*)self->d_method->ml_meth, rewrite_args->arg1,
                                                    rewrite_args->arg2)->setType(RefType::OWNED);
         } else if (call_flags == (METH_VARARGS | METH_KEYWORDS)) {
             {
                 UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-                rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(arg1, arg2, arg3);
+                rtn = (Box*)((PyCFunctionWithKeywords)self->d_method->ml_meth)(arg1, arg2, arg3);
             }
             if (rewrite_args)
                 rewrite_args->out_rtn
-                    = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                    = rewrite_args->rewriter->call(true, (void*)self->d_method->ml_meth, rewrite_args->arg1,
                                                    rewrite_args->arg2, rewrite_args->arg3)->setType(RefType::OWNED);
         } else if (call_flags == METH_O) {
             {
                 UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-                rtn = (Box*)self->method->ml_meth(arg1, arg2);
+                rtn = (Box*)self->d_method->ml_meth(arg1, arg2);
             }
             if (rewrite_args)
                 rewrite_args->out_rtn
-                    = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                    = rewrite_args->rewriter->call(true, (void*)self->d_method->ml_meth, rewrite_args->arg1,
                                                    rewrite_args->arg2)->setType(RefType::OWNED);
         } else if ((call_flags & ~(METH_O3 | METH_D3)) == 0) {
             {
                 UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_builtins");
-                rtn = ((Box * (*)(Box*, Box*, Box*, Box**))self->method->ml_meth)(arg1, arg2, arg3, args);
+                rtn = ((Box * (*)(Box*, Box*, Box*, Box**))self->d_method->ml_meth)(arg1, arg2, arg3, args);
             }
             if (rewrite_args) {
                 if (paramspec.totalReceived() == 2)
                     rewrite_args->out_rtn
-                        = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                        = rewrite_args->rewriter->call(true, (void*)self->d_method->ml_meth, rewrite_args->arg1,
                                                        rewrite_args->arg2)->setType(RefType::OWNED);
                 else if (paramspec.totalReceived() == 3)
                     rewrite_args->out_rtn
-                        = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                        = rewrite_args->rewriter->call(true, (void*)self->d_method->ml_meth, rewrite_args->arg1,
                                                        rewrite_args->arg2, rewrite_args->arg3)->setType(RefType::OWNED);
                 else if (paramspec.totalReceived() > 3)
                     rewrite_args->out_rtn
-                        = rewrite_args->rewriter->call(true, (void*)self->method->ml_meth, rewrite_args->arg1,
+                        = rewrite_args->rewriter->call(true, (void*)self->d_method->ml_meth, rewrite_args->arg1,
                                                        rewrite_args->arg2, rewrite_args->arg3,
                                                        rewrite_args->args)->setType(RefType::OWNED);
                 else
@@ -384,10 +383,9 @@ Box* BoxedMethodDescriptor::tppCall(Box* _self, CallRewriteArgs* rewrite_args, A
         return rtn;
     };
 
-    return rearrangeArgumentsAndCall(paramspec, NULL, self->method->ml_name, defaults, rewrite_args, argspec, arg1,
+    return rearrangeArgumentsAndCall(paramspec, NULL, self->d_method->ml_name, defaults, rewrite_args, argspec, arg1,
                                      arg2, arg3, args, keyword_names, continuation);
 }
-#endif
 
 void BoxedProperty::dealloc(Box* _self) noexcept {
     BoxedProperty* self = static_cast<BoxedProperty*>(_self);
@@ -640,7 +638,14 @@ void setupDescr() {
     PyWrapperDescr_Type.tp_call = proxyToTppCall;
     PyType_Ready(&PyWrapperDescr_Type);
 
+    PyMethodDescr_Type.tpp_call.capi_val = methodDescrTppCall<CAPI>;
+    PyMethodDescr_Type.tpp_call.cxx_val = methodDescrTppCall<CXX>;
+    PyMethodDescr_Type.tp_call = proxyToTppCall;
     PyType_Ready(&PyMethodDescr_Type);
+
+    PyClassMethodDescr_Type.tpp_call.capi_val = methodDescrTppCall<CAPI>;
+    PyClassMethodDescr_Type.tpp_call.cxx_val = methodDescrTppCall<CXX>;
+    PyClassMethodDescr_Type.tp_call = proxyToTppCall;
     PyType_Ready(&PyClassMethodDescr_Type);
 }
 }
