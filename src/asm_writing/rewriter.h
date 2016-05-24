@@ -227,6 +227,24 @@ private:
     llvm::SmallVector<int, 32> uses;
     int next_use;
     void bumpUse();
+
+    // Helper functions for a common optimization.
+    // We want to be able to call bumpUse() as soon as the register is able to be used.
+    // But if we have an owned ref in that variable, we need to hold on to it until
+    // the end of the operation, even though its register is theoretically available to use.
+    // So before we would just call bumpUse() early.  Now we can do
+    // bumpUseEarlyIfPossible();
+    // /* some code */
+    // bumpUseLateIfNecessary();
+    void bumpUseEarlyIfPossible() {
+        if (reftype != RefType::OWNED)
+            bumpUse();
+    }
+    void bumpUseLateIfNecessary() {
+        if (reftype == RefType::OWNED)
+            bumpUse();
+    }
+
     // Call this on the result at the end of the action in which it's created
     // TODO we should have a better way of dealing with variables that have 0 uses
     void releaseIfNoUses();

@@ -432,14 +432,15 @@ void Rewriter::_getAttr(RewriterVar* result, RewriterVar* ptr, int offset, Locat
     //   mov ($0x133), %rdi
     assembler::Register ptr_reg = ptr->getInReg(Location::any(), /* allow_constant_in_reg */ true);
 
-    // It's okay to bump the use now, since it's fine to allocate the result
-    // in the same register as ptr
-    ptr->bumpUse();
+    ptr->bumpUseEarlyIfPossible();
 
     assembler::Register newvar_reg = result->initializeInReg(dest);
     assembler->mov_generic(assembler::Indirect(ptr_reg, offset), newvar_reg, type);
 
     result->releaseIfNoUses();
+
+    ptr->bumpUseLateIfNecessary();
+
     assertConsistent();
 }
 
@@ -457,11 +458,12 @@ void Rewriter::_getAttrDouble(RewriterVar* result, RewriterVar* ptr, int offset,
 
     assembler::Register ptr_reg = ptr->getInReg();
 
-    ptr->bumpUse();
+    ptr->bumpUseEarlyIfPossible();
 
     assembler::XMMRegister newvar_reg = result->initializeInXMMReg(dest);
     assembler->movsd(assembler::Indirect(ptr_reg, offset), newvar_reg);
 
+    ptr->bumpUseLateIfNecessary();
     result->releaseIfNoUses();
     assertConsistent();
 }
@@ -480,7 +482,7 @@ void Rewriter::_getAttrFloat(RewriterVar* result, RewriterVar* ptr, int offset, 
 
     assembler::Register ptr_reg = ptr->getInReg();
 
-    ptr->bumpUse();
+    ptr->bumpUseEarlyIfPossible();
 
     assembler::XMMRegister newvar_reg = result->initializeInXMMReg(dest);
     assembler->movss(assembler::Indirect(ptr_reg, offset), newvar_reg);
@@ -488,6 +490,7 @@ void Rewriter::_getAttrFloat(RewriterVar* result, RewriterVar* ptr, int offset, 
     // cast to double
     assembler->cvtss2sd(newvar_reg, newvar_reg);
 
+    ptr->bumpUseLateIfNecessary();
     result->releaseIfNoUses();
     assertConsistent();
 }
@@ -633,8 +636,8 @@ void Rewriter::_cmp(RewriterVar* result, RewriterVar* v1, AST_TYPE::AST_TYPE cmp
     assembler::Register v2_reg = v2->getInReg();
     assert(v1_reg != v2_reg); // TODO how do we ensure this?
 
-    v1->bumpUse();
-    v2->bumpUse();
+    v1->bumpUseEarlyIfPossible();
+    v2->bumpUseEarlyIfPossible();
 
     assembler::Register newvar_reg = allocReg(dest);
     result->initializeInReg(newvar_reg);
@@ -649,6 +652,9 @@ void Rewriter::_cmp(RewriterVar* result, RewriterVar* v1, AST_TYPE::AST_TYPE cmp
         default:
             RELEASE_ASSERT(0, "%d", cmp_type);
     }
+
+    v1->bumpUseLateIfNecessary();
+    v2->bumpUseLateIfNecessary();
 
     result->releaseIfNoUses();
     assertConsistent();
@@ -668,7 +674,7 @@ void Rewriter::_toBool(RewriterVar* result, RewriterVar* var, Location dest) {
 
     assembler::Register this_reg = var->getInReg();
 
-    var->bumpUse();
+    var->bumpUseEarlyIfPossible();
 
     assembler::Register result_reg = allocReg(dest);
     result->initializeInReg(result_reg);
@@ -676,6 +682,7 @@ void Rewriter::_toBool(RewriterVar* result, RewriterVar* var, Location dest) {
     assembler->test(this_reg, this_reg);
     assembler->setnz(result_reg);
 
+    var->bumpUseLateIfNecessary();
     result->releaseIfNoUses();
     assertConsistent();
 }
