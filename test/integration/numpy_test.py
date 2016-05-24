@@ -86,20 +86,12 @@ if not os.path.exists(CYTHON_DIR):
 else:
     print ">>> Cython already installed."
 
-NUMPY_PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "numpy_patch.patch"))
-
 print_progress_header("Cloning up NumPy...")
 if not os.path.exists(NUMPY_DIR):
     url = "https://github.com/numpy/numpy"
     subprocess.check_call(["git", "clone", "--depth", "1", "--branch", "v1.11.0", url], cwd=SRC_DIR)
 else:
     print ">>> NumPy already installed."
-
-PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "numpy_patch.patch"))
-
-if USE_CUSTOM_PATCHES:
-    print_progress_header("Patching NumPy...")
-    subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=NUMPY_DIR)
 
 try:
     env = os.environ
@@ -112,12 +104,6 @@ try:
     print_progress_header("Installing NumPy...")
     subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=NUMPY_DIR, env=env)
 except:
-    if USE_CUSTOM_PATCHES:
-        print_progress_header("Unpatching NumPy...")
-        cmd = ["patch", "-p1", "--forward", "-i", NUMPY_PATCH_FILE, "-R", "-d", NUMPY_DIR]
-        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-
-    # TODO: I'm not sure we need to do this:
     subprocess.check_call(["rm", "-rf", NUMPY_DIR + "/build"])
     subprocess.check_call(["rm", "-rf", NUMPY_DIR + "/dist"])
 
@@ -189,11 +175,6 @@ print_progress_header("Running NumPy test suite...")
 # Currently we crash running the test suite. Uncomment for testing or
 # when all the crashes are fixed.
 # subprocess.check_call([PYTHON_EXE, "-c", numpy_test], cwd=CYTHON_DIR)
-
-if USE_CUSTOM_PATCHES:
-    print_progress_header("Unpatching NumPy...")
-    cmd = ["patch", "-p1", "--forward", "-i", NUMPY_PATCH_FILE, "-R", "-d", NUMPY_DIR]
-    subprocess.check_output(cmd, stderr=subprocess.STDOUT)
 
 print
 print "PASSED"
