@@ -2,6 +2,8 @@
 
 #include "Python.h"
 
+#include <stddef.h>
+
 #include "stringlib/stringdefs.h"
 #include "stringlib/fastsearch.h"
 
@@ -13,6 +15,8 @@
 #include "stringlib/localeutil.h"
 
 #include "stringlib/string_format.h"
+
+#define PyStringObject_SIZE (offsetof(PyStringObject, ob_sval) + 1)
 
 // do_string_format needs to be declared as a static function, since it's used by both stringobject.c
 // and unicodeobject.c.  We want to access it from str.cpp, though, so just use this little forwarding
@@ -957,4 +961,56 @@ PyObject* string_replace(PyStringObject *self, PyObject *from, PyObject* to, PyO
     return (PyObject *)replace((PyStringObject *) self,
                                from_s, from_len,
                                to_s, to_len, count);
+}
+
+PyObject* string_repeat(register PyStringObject *a, register Py_ssize_t n)
+{
+    register Py_ssize_t i;
+    register Py_ssize_t j;
+    register Py_ssize_t size;
+    register PyStringObject *op;
+    size_t nbytes;
+    if (n < 0)
+        n = 0;
+    /* watch out for overflows:  the size can overflow int,
+     * and the # of bytes needed can overflow size_t
+     */
+    size = Py_SIZE(a) * n;
+    if (n && size / n != Py_SIZE(a)) {
+        PyErr_SetString(PyExc_OverflowError,
+            "repeated string is too long");
+        return NULL;
+    }
+    if (size == Py_SIZE(a) && PyString_CheckExact(a)) {
+        Py_INCREF(a);
+        return (PyObject *)a;
+    }
+    nbytes = (size_t)size;
+    if (nbytes + PyStringObject_SIZE <= nbytes) {
+        PyErr_SetString(PyExc_OverflowError,
+            "repeated string is too long");
+        return NULL;
+    }
+    op = (PyStringObject *)PyObject_MALLOC(PyStringObject_SIZE + nbytes);
+    if (op == NULL)
+        return PyErr_NoMemory();
+    PyObject_INIT_VAR(op, &PyString_Type, size);
+    op->ob_shash = -1;
+    op->ob_sstate = SSTATE_NOT_INTERNED;
+    op->ob_sval[size] = '\0';
+    if (Py_SIZE(a) == 1 && n > 0) {
+        memset(op->ob_sval, a->ob_sval[0] , n);
+        return (PyObject *) op;
+    }
+    i = 0;
+    if (i < size) {
+        Py_MEMCPY(op->ob_sval, a->ob_sval, Py_SIZE(a));
+        i = Py_SIZE(a);
+    }
+    while (i < size) {
+        j = (i <= size-i)  ?  i  :  size-i;
+        Py_MEMCPY(op->ob_sval+i, op->ob_sval, j);
+        i += j;
+    }
+    return (PyObject *) op;
 }

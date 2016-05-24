@@ -42,6 +42,7 @@ extern "C" PyObject* string_find(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_index(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rindex(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_repeat(PyStringObject* a, Py_ssize_t n) noexcept;
 extern "C" PyObject* string_replace(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string__format__(PyObject* self, PyObject* args) noexcept;
@@ -336,12 +337,12 @@ extern "C" PyObject* PyString_FromFormat(const char* format, ...) noexcept {
     return ret;
 }
 
-extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
+template <ExceptionStyle S> Box* strAdd(BoxedString* lhs, Box* _rhs) noexcept(S == CAPI) {
     assert(PyString_Check(lhs));
 
-    if (isSubclass(_rhs->cls, unicode_cls)) {
+    if (PyUnicode_Check(_rhs)) {
         Box* rtn = PyUnicode_Concat(lhs, _rhs);
-        if (!rtn)
+        if (!rtn && S == CXX)
             throwCAPIException();
         return rtn;
     }
@@ -349,14 +350,16 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
     if (!PyString_Check(_rhs)) {
         if (PyByteArray_Check(_rhs)) {
             Box* rtn = PyByteArray_Concat(lhs, _rhs);
-            if (!rtn)
+            if (!rtn && S == CXX)
                 throwCAPIException();
             return rtn;
         } else {
-            // This is a compatibility break with CPython, which has their sq_concat method
-            // directly throw a TypeError.  Since we're not implementing this as a sq_concat,
-            // Give NotImplemented for now.
-            return incref(NotImplemented);
+            if (S == CXX)
+                raiseExcHelper(TypeError, "cannot concatenate 'str' and '%.200s' objects", _rhs->cls->tp_name);
+            else {
+                PyErr_Format(PyExc_TypeError, "cannot concatenate 'str' and '%.200s' objects", _rhs->cls->tp_name);
+                return NULL;
+            }
         }
     }
 
@@ -1171,6 +1174,14 @@ Box* strRMod(BoxedString* lhs, Box* rhs) {
     return rtn;
 }
 
+static PyObject* str_mod(PyObject* v, PyObject* w) noexcept {
+    if (!PyString_Check(v)) {
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+    return PyString_Format(v, w);
+}
+
 extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
     assert(PyString_Check(lhs));
 
@@ -1194,13 +1205,10 @@ extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
     if (n <= 0)
         return incref(EmptyString);
 
-    // TODO: use createUninitializedString and getWriteableStringContents
-    int sz = lhs->size();
-    std::string buf(sz * n, '\0');
-    for (int i = 0; i < n; i++) {
-        memcpy(&buf[sz * i], lhs->data(), sz);
-    }
-    return boxString(buf);
+    Box* rtn = string_repeat((PyStringObject*)lhs, n);
+    if (!rtn)
+        throwCAPIException();
+    return rtn;
 }
 
 Box* str_richcompare(Box* lhs, Box* rhs, int op) {
@@ -2574,22 +2582,17 @@ extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
 }
 
 extern "C" void PyString_Concat(register PyObject** pv, register PyObject* w) noexcept {
-    try {
-        if (*pv == NULL)
-            return;
+    if (*pv == NULL)
+        return;
 
-        AUTO_DECREF(*pv);
+    AUTO_DECREF(*pv);
 
-        if (w == NULL || !PyString_Check(*pv)) {
-            *pv = NULL;
-            return;
-        }
-
-        *pv = strAdd((BoxedString*)*pv, w);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
+    if (w == NULL || !PyString_Check(*pv)) {
         *pv = NULL;
+        return;
     }
+
+    *pv = strAdd<CAPI>((BoxedString*)*pv, w);
 }
 
 extern "C" void PyString_ConcatAndDel(register PyObject** pv, register PyObject* w) noexcept {
@@ -2931,7 +2934,7 @@ void setupStr() {
 
     str_cls->giveAttr("format", new BoxedFunction(FunctionMetadata::create((void*)strFormat, UNKNOWN, 1, true, true)));
 
-    str_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)strAdd, UNKNOWN, 2)));
+    str_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)strAdd<CXX>, UNKNOWN, 2)));
     str_cls->giveAttr("__mod__", new BoxedFunction(FunctionMetadata::create((void*)strMod, UNKNOWN, 2)));
     str_cls->giveAttr("__rmod__", new BoxedFunction(FunctionMetadata::create((void*)strRMod, UNKNOWN, 2)));
     str_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)strMul, UNKNOWN, 2)));
@@ -2970,15 +2973,27 @@ void setupStr() {
     add_operators(str_cls);
     str_cls->freeze();
 
+    // string is special in that it is a c++ type which has tp_as_number and tp_as_sequence.
+    // This causes problems because when we fixup the slot dispatcher we will set the tp_as_number fields but not the
+    // tp_as_sequence because setting both can cause problems.
+    // Some extensions (e.g. numpy) require that we use the sq_* functions instead of nb_*.
+    // Therefore clear the tp_as_number fields (except nb_remainder which cpython has set too because it is not part of
+    // tp_as_sequence).
+    memset(&str_as_number, 0, sizeof(str_as_number));
+    str_cls->tp_as_number->nb_remainder = str_mod;
+
     str_cls->tp_repr = str_repr;
     str_cls->tp_str = str_str;
     str_cls->tp_print = string_print;
     str_cls->tp_iter = (decltype(str_cls->tp_iter))strIter;
     str_cls->tp_hash = (hashfunc)str_hash;
-    str_cls->tp_as_sequence->sq_length = str_length;
-    str_cls->tp_as_sequence->sq_item = (ssizeargfunc)string_item;
-    str_cls->tp_as_sequence->sq_slice = str_slice;
+    str_cls->tp_as_sequence->sq_concat = (binaryfunc)strAdd<CAPI>;
     str_cls->tp_as_sequence->sq_contains = (objobjproc)string_contains;
+    str_cls->tp_as_sequence->sq_item = (ssizeargfunc)string_item;
+    str_cls->tp_as_sequence->sq_length = str_length;
+    str_cls->tp_as_sequence->sq_repeat = (ssizeargfunc)string_repeat;
+    str_cls->tp_as_sequence->sq_slice = str_slice;
+
     str_cls->tp_new = (newfunc)strNewPacked;
 
     basestring_cls->giveAttr("__doc__",
