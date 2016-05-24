@@ -260,12 +260,9 @@ void setupSuper() {
         "__init__", new BoxedFunction(FunctionMetadata::create((void*)superInit, UNKNOWN, 3, false, false), { NULL }));
     super_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)superGet<CXX>, UNKNOWN, 3)));
 
-    super_cls->giveAttr("__thisclass__",
-                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSuper, type)));
-    super_cls->giveAttr("__self__",
-                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSuper, obj)));
-    super_cls->giveAttr("__self_class__",
-                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSuper, obj_type)));
+    super_cls->giveAttrMember("__thisclass__", T_OBJECT, offsetof(BoxedSuper, type));
+    super_cls->giveAttrMember("__self__", T_OBJECT, offsetof(BoxedSuper, obj));
+    super_cls->giveAttrMember("__self_class__", T_OBJECT, offsetof(BoxedSuper, obj_type));
 
     super_cls->freeze();
     super_cls->tp_getattro = super_getattro;

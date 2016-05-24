@@ -816,9 +816,7 @@ void setupSys() {
     sys_flags_cls->giveAttr(
         "__new__", new BoxedFunction(FunctionMetadata::create((void*)BoxedSysFlags::__new__, UNKNOWN, 1, true, true)));
     sys_flags_cls->tp_dealloc = (destructor)BoxedSysFlags::dealloc;
-#define ADD(name)                                                                                                      \
-    sys_flags_cls->giveAttr(STRINGIFY(name),                                                                           \
-                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSysFlags, name)))
+#define ADD(name) sys_flags_cls->giveAttrMember(STRINGIFY(name), T_OBJECT, offsetof(BoxedSysFlags, name));
     ADD(division_warning);
     ADD(bytes_warning);
     ADD(no_user_site);

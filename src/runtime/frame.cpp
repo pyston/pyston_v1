@@ -79,7 +79,7 @@ public:
     // * = unsupported in Pyston
     // ** = getter supported, but setter unsupported
 
-    static BORROWED(Box*) code(Box* obj, void*) {
+    static BORROWED(Box*) code(Box* obj, void*) noexcept {
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (!f->_code)
@@ -88,9 +88,9 @@ public:
         return f->_code;
     }
 
-    static Box* f_code(Box* obj, void* arg) { return incref(code(obj, arg)); }
+    static Box* f_code(Box* obj, void* arg) noexcept { return incref(code(obj, arg)); }
 
-    static BORROWED(Box*) locals(Box* obj, void*) {
+    static BORROWED(Box*) locals(Box* obj, void*) noexcept {
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (f->hasExited())
@@ -99,9 +99,9 @@ public:
         return f->frame_info->updateBoxedLocals();
     }
 
-    static Box* f_locals(Box* obj, void* arg) { return incref(locals(obj, arg)); }
+    static Box* f_locals(Box* obj, void* arg) noexcept { return incref(locals(obj, arg)); }
 
-    static BORROWED(Box*) globals(Box* obj, void*) {
+    static BORROWED(Box*) globals(Box* obj, void*) noexcept {
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (!f->_globals) {
@@ -116,9 +116,9 @@ public:
         return f->_globals;
     }
 
-    static Box* f_globals(Box* obj, void* arg) { return incref(globals(obj, arg)); }
+    static Box* f_globals(Box* obj, void* arg) noexcept { return incref(globals(obj, arg)); }
 
-    static BORROWED(Box*) back(Box* obj, void*) {
+    static BORROWED(Box*) back(Box* obj, void*) noexcept {
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (!f->_back) {
@@ -131,9 +131,9 @@ public:
         return f->_back;
     }
 
-    static Box* f_back(Box* obj, void* arg) { return incref(back(obj, arg)); }
+    static Box* f_back(Box* obj, void* arg) noexcept { return incref(back(obj, arg)); }
 
-    static Box* lineno(Box* obj, void*) {
+    static Box* lineno(Box* obj, void*) noexcept {
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (f->hasExited())

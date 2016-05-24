@@ -1117,10 +1117,11 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     float_cls->giveAttr(name, new BoxedFunction(md, { None }));
 }
 
-static Box* floatConjugate(Box* b, void*) {
-    if (!PyFloat_Check(b))
-        raiseExcHelper(TypeError, "descriptor 'conjugate' requires a 'float' object but received a '%s'",
-                       getTypeName(b));
+static Box* float_conjugate(Box* b, void*) noexcept {
+    if (!PyFloat_Check(b)) {
+        PyErr_Format(TypeError, "descriptor 'conjugate' requires a 'float' object but received a '%s'", getTypeName(b));
+        return NULL;
+    }
     if (b->cls == float_cls) {
         return incref(b);
     } else {
@@ -1129,7 +1130,7 @@ static Box* floatConjugate(Box* b, void*) {
     }
 }
 
-static Box* float0(Box*, void*) {
+static Box* float0(Box*, void*) noexcept {
     return boxFloat(0.0);
 }
 
@@ -1733,10 +1734,10 @@ void setupFloat() {
     float_cls->giveAttr("__long__", new BoxedFunction(FunctionMetadata::create((void*)floatLong, UNKNOWN, 1)));
     float_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)floatHash, BOXED_INT, 1)));
 
-    float_cls->giveAttrDescriptor("real", floatConjugate, NULL);
+    float_cls->giveAttrDescriptor("real", float_conjugate, NULL);
     float_cls->giveAttrDescriptor("imag", float0, NULL);
-    float_cls->giveAttr("conjugate",
-                        new BoxedFunction(FunctionMetadata::create((void*)floatConjugate, BOXED_FLOAT, 1)));
+    float_cls->giveAttr("conjugate", new BoxedFunction(FunctionMetadata::create((void*)float_conjugate, BOXED_FLOAT, 1,
+                                                                                ParamNames::empty(), CAPI)));
 
     float_cls->giveAttr("__doc__", boxString("float(x) -> floating point number\n"
                                              "\n"
@@ -1746,7 +1747,7 @@ void setupFloat() {
                                                          "__getformat__", floatGetFormatDoc));
 
     for (auto& md : float_methods) {
-        float_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, float_cls));
+        float_cls->giveAttr(md.ml_name, PyDescr_NewMethod(float_cls, &md));
     }
 
     add_operators(float_cls);

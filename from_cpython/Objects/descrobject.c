@@ -1,3 +1,5 @@
+// This file is originally from CPython 2.7, with modifications for Pyston
+
 /* Descriptors -- a new, flexible way to describe attributes */
 
 #include "Python.h"
@@ -28,12 +30,14 @@ descr_repr(PyDescrObject *descr, char *format)
                                descr->d_type->tp_name);
 }
 
+#if 0
 static PyObject *
 method_repr(PyMethodDescrObject *descr)
 {
     return descr_repr((PyDescrObject *)descr,
                       "<method '%s' of '%s' objects>");
 }
+#endif
 
 static PyObject *
 member_repr(PyMemberDescrObject *descr)
@@ -77,6 +81,8 @@ descr_check(PyDescrObject *descr, PyObject *obj, PyObject **pres)
     return 0;
 }
 
+// Pyston change: not using this for now
+#if 0
 static PyObject *
 classmethod_get(PyMethodDescrObject *descr, PyObject *obj, PyObject *type)
 {
@@ -124,6 +130,7 @@ method_get(PyMethodDescrObject *descr, PyObject *obj, PyObject *type)
         return res;
     return PyCFunction_New(descr->d_method, obj);
 }
+#endif
 
 static PyObject *
 member_get(PyMemberDescrObject *descr, PyObject *obj, PyObject *type)
@@ -206,6 +213,7 @@ getset_set(PyGetSetDescrObject *descr, PyObject *obj, PyObject *value)
     return -1;
 }
 
+#if 0
 static PyObject *
 methoddescr_call(PyMethodDescrObject *descr, PyObject *args, PyObject *kwds)
 {
@@ -301,6 +309,7 @@ classmethoddescr_call(PyMethodDescrObject *descr, PyObject *args,
     Py_DECREF(args);
     return result;
 }
+#endif
 
 static PyObject *
 wrapperdescr_call(PyWrapperDescrObject *descr, PyObject *args, PyObject *kwds)
@@ -346,6 +355,7 @@ wrapperdescr_call(PyWrapperDescrObject *descr, PyObject *args, PyObject *kwds)
     return result;
 }
 
+#if 0
 static PyObject *
 method_get_doc(PyMethodDescrObject *descr, void *closure)
 {
@@ -355,6 +365,7 @@ method_get_doc(PyMethodDescrObject *descr, void *closure)
     }
     return PyString_FromString(descr->d_method->ml_doc);
 }
+#endif
 
 static PyMemberDef descr_members[] = {
     {"__objclass__", T_OBJECT, offsetof(PyDescrObject, d_type), READONLY},
@@ -362,10 +373,12 @@ static PyMemberDef descr_members[] = {
     {0}
 };
 
+#if 0
 static PyGetSetDef method_getset[] = {
     {"__doc__", (getter)method_get_doc},
     {0}
 };
+#endif
 
 static PyObject *
 member_get_doc(PyMemberDescrObject *descr, void *closure)
@@ -420,8 +433,9 @@ descr_traverse(PyObject *self, visitproc visit, void *arg)
     return 0;
 }
 
+#if 0
 static PyTypeObject PyMethodDescr_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(/* Pyston change */NULL, 0)
     "method_descriptor",
     sizeof(PyMethodDescrObject),
     0,
@@ -459,7 +473,7 @@ static PyTypeObject PyMethodDescr_Type = {
 
 /* This is for METH_CLASS in C, not for "f = classmethod(f)" in Python! */
 static PyTypeObject PyClassMethodDescr_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(/* Pyston change */NULL, 0)
     "classmethod_descriptor",
     sizeof(PyMethodDescrObject),
     0,
@@ -494,9 +508,10 @@ static PyTypeObject PyClassMethodDescr_Type = {
     (descrgetfunc)classmethod_get,              /* tp_descr_get */
     0,                                          /* tp_descr_set */
 };
+#endif
 
 PyTypeObject PyMemberDescr_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(/* Pyston change */NULL, 0)
     "member_descriptor",
     sizeof(PyMemberDescrObject),
     0,
@@ -533,7 +548,7 @@ PyTypeObject PyMemberDescr_Type = {
 };
 
 PyTypeObject PyGetSetDescr_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(/* Pyston change */NULL, 0)
     "getset_descriptor",
     sizeof(PyGetSetDescrObject),
     0,
@@ -570,7 +585,7 @@ PyTypeObject PyGetSetDescr_Type = {
 };
 
 PyTypeObject PyWrapperDescr_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(/* Pyston change */NULL, 0)
     "wrapper_descriptor",
     sizeof(PyWrapperDescrObject),
     0,
@@ -624,6 +639,7 @@ descr_new(PyTypeObject *descrtype, PyTypeObject *type, const char *name)
     return descr;
 }
 
+#if 0
 PyObject *
 PyDescr_NewMethod(PyTypeObject *type, PyMethodDef *method)
 {
@@ -647,6 +663,7 @@ PyDescr_NewClassMethod(PyTypeObject *type, PyMethodDef *method)
         descr->d_method = method;
     return (PyObject *)descr;
 }
+#endif
 
 PyObject *
 PyDescr_NewMember(PyTypeObject *type, PyMemberDef *member)
@@ -873,7 +890,7 @@ proxy_richcompare(proxyobject *v, PyObject *w, int op)
 }
 
 PyTypeObject PyDictProxy_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(/* Pyston change */NULL, 0)
     "dictproxy",                                /* tp_name */
     sizeof(proxyobject),                        /* tp_basicsize */
     0,                                          /* tp_itemsize */
@@ -929,12 +946,6 @@ PyDictProxy_New(PyObject *dict)
 
 /* This has no reason to be in this file except that adding new files is a
    bit of a pain */
-
-typedef struct {
-    PyObject_HEAD
-    PyWrapperDescrObject *descr;
-    PyObject *self;
-} wrapperobject;
 
 static void
 wrapper_dealloc(wrapperobject *wp)
@@ -998,7 +1009,7 @@ wrapper_objclass(wrapperobject *wp)
 static PyObject *
 wrapper_name(wrapperobject *wp)
 {
-    char *s = wp->descr->d_base->name;
+    /* Pyston change: made const */ const char *s = wp->descr->d_base->name;
 
     return PyString_FromString(s);
 }
@@ -1006,7 +1017,7 @@ wrapper_name(wrapperobject *wp)
 static PyObject *
 wrapper_doc(wrapperobject *wp)
 {
-    char *s = wp->descr->d_base->doc;
+    /* Pyston change: made const */ const char *s = wp->descr->d_base->doc;
 
     if (s == NULL) {
         Py_INCREF(Py_None);
@@ -1024,6 +1035,8 @@ static PyGetSetDef wrapper_getsets[] = {
     {0}
 };
 
+// Pyston note -- this function will usually not get hit, since we override tpp_call (which takes
+// precedence over tp_call)
 static PyObject *
 wrapper_call(wrapperobject *wp, PyObject *args, PyObject *kwds)
 {
@@ -1041,6 +1054,22 @@ wrapper_call(wrapperobject *wp, PyObject *args, PyObject *kwds)
                      wp->descr->d_base->name);
         return NULL;
     }
+
+    // Pyston addition:
+    if (wp->descr->d_base->flags & PyWrapperFlag_1ARG) {
+        assert(PyTuple_GET_SIZE(args) == 0);
+        return (*(wrapperfunc_1arg)wrapper)(self, wp->descr->d_wrapped);
+    }
+
+    if (wp->descr->d_base->flags & PyWrapperFlag_2ARG) {
+        if (PyTuple_GET_SIZE(args) != 1) {
+            PyErr_Format(PyExc_TypeError, "Expected 1 argument, got %ld", PyTuple_GET_SIZE(args));
+            return NULL;
+        }
+        return (*(wrapperfunc_2arg)wrapper)(self, PyTuple_GET_ITEM(args, 0), wp->descr->d_wrapped);
+    }
+    assert(!wp->descr->d_base->flags);
+
     return (*wrapper)(self, args, wp->descr->d_wrapped);
 }
 
@@ -1053,8 +1082,8 @@ wrapper_traverse(PyObject *self, visitproc visit, void *arg)
     return 0;
 }
 
-static PyTypeObject wrappertype = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+/* static */ PyTypeObject wrappertype = {
+    PyVarObject_HEAD_INIT(/* Pyston change */NULL, 0)
     "method-wrapper",                           /* tp_name */
     sizeof(wrapperobject),                      /* tp_basicsize */
     0,                                          /* tp_itemsize */
@@ -1114,6 +1143,8 @@ PyWrapper_New(PyObject *d, PyObject *self)
 }
 
 
+// Pyston change: not using this for now
+#if 0
 /* A built-in 'property' type */
 
 /*
@@ -1396,7 +1427,7 @@ property_traverse(PyObject *self, visitproc visit, void *arg)
 }
 
 PyTypeObject PyProperty_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(/* Pyston change */NULL, 0)
     "property",                                 /* tp_name */
     sizeof(propertyobject),                     /* tp_basicsize */
     0,                                          /* tp_itemsize */
@@ -1438,3 +1469,4 @@ PyTypeObject PyProperty_Type = {
     PyType_GenericNew,                          /* tp_new */
     PyObject_GC_Del,                            /* tp_free */
 };
+#endif // end pyston change

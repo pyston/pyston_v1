@@ -37,7 +37,7 @@ struct memberlist {
 
 typedef struct PyMemberDef {
     /* Current version, use this */
-    char *name;
+    const char *name;
     int type;
     Py_ssize_t offset;
     int flags;

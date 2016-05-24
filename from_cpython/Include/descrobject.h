@@ -24,14 +24,16 @@ typedef PyObject *(*wrapperfunc)(PyObject *self, PyObject *args,
 typedef PyObject *(*wrapperfunc_kwds)(PyObject *self, PyObject *args,
                                       void *wrapped, PyObject *kwds);
 
+// Pyston addition: faster CC
 typedef PyObject *(*wrapperfunc_1arg)(PyObject *self, void *wrapped);
+typedef PyObject *(*wrapperfunc_2arg)(PyObject *self, PyObject* arg, void *wrapped);
 
 struct wrapperbase {
-    char *name;
+    const char *name;
     int offset;
     void *function;
     wrapperfunc wrapper;
-    char *doc;
+    const char *doc;
     int flags;
     PyObject *name_strobj;
 };
@@ -45,8 +47,6 @@ struct wrapperbase {
 
 /* Various kinds of descriptor objects */
 
-// Pyston change: these are not our object layouts
-#if 0
 #define PyDescr_COMMON \
     PyObject_HEAD \
     PyTypeObject *d_type; \
@@ -56,10 +56,12 @@ typedef struct {
     PyDescr_COMMON;
 } PyDescrObject;
 
+#if 0
 typedef struct {
     PyDescr_COMMON;
     PyMethodDef *d_method;
 } PyMethodDescrObject;
+#endif
 
 typedef struct {
     PyDescr_COMMON;
@@ -76,21 +78,11 @@ typedef struct {
     struct wrapperbase *d_base;
     void *d_wrapped; /* This can be any function pointer */
 } PyWrapperDescrObject;
-#endif
-// (Pyston TODO: add opaque definitions of those names)
 
-// Pyston change: these are not static objects any more
-#if 0
 PyAPI_DATA(PyTypeObject) PyWrapperDescr_Type;
 PyAPI_DATA(PyTypeObject) PyDictProxy_Type;
 PyAPI_DATA(PyTypeObject) PyGetSetDescr_Type;
 PyAPI_DATA(PyTypeObject) PyMemberDescr_Type;
-#else
-PyAPI_DATA(PyTypeObject) PyDictProxy_Type;
-#endif
-// (Pyston TODO: add #defines to our names)
-PyAPI_DATA(PyTypeObject*) wrapperdescr_cls;
-#define PyWrapperDescr_Type (*wrapperdescr_cls)
 
 PyAPI_FUNC(PyObject *) PyDescr_NewMethod(PyTypeObject *, PyMethodDef *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyDescr_NewClassMethod(PyTypeObject *, PyMethodDef *) PYSTON_NOEXCEPT;
@@ -106,8 +98,15 @@ PyAPI_FUNC(PyObject *) PyDictProxy_New(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyWrapper_New(PyObject *, PyObject *) PYSTON_NOEXCEPT;
 
 
-// Pyston change: this is no longer a static object
-//PyAPI_DATA(PyTypeObject) PyProperty_Type;
+PyAPI_DATA(PyTypeObject) PyProperty_Type;
+
+// Pyston change: exposed these
+typedef struct {
+    PyObject_HEAD
+    PyWrapperDescrObject *descr;
+    PyObject *self;
+} wrapperobject;
+PyAPI_DATA(PyTypeObject) wrappertype;
 
 #ifdef __cplusplus
 }

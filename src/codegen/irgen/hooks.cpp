@@ -112,7 +112,7 @@ BORROWED(BoxedString*) SourceInfo::getFn() {
     return fn;
 }
 
-BORROWED(BoxedString*) SourceInfo::getName() {
+BORROWED(BoxedString*) SourceInfo::getName() noexcept {
     assert(ast);
 
     static BoxedString* lambda_name = getStaticString("<lambda>");

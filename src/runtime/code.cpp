@@ -26,7 +26,7 @@ extern "C" {
 BoxedClass* code_cls;
 }
 
-BORROWED(Box*) BoxedCode::name(Box* b, void*) {
+BORROWED(Box*) BoxedCode::name(Box* b, void*) noexcept {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
     if (code->_name)
@@ -34,11 +34,11 @@ BORROWED(Box*) BoxedCode::name(Box* b, void*) {
     return code->f->source->getName();
 }
 
-Box* BoxedCode::co_name(Box* b, void* arg) {
+Box* BoxedCode::co_name(Box* b, void* arg) noexcept {
     return incref(name(b, arg));
 }
 
-BORROWED(Box*) BoxedCode::filename(Box* b, void*) {
+BORROWED(Box*) BoxedCode::filename(Box* b, void*) noexcept {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
     if (code->_filename)
@@ -46,11 +46,11 @@ BORROWED(Box*) BoxedCode::filename(Box* b, void*) {
     return code->f->source->getFn();
 }
 
-Box* BoxedCode::co_filename(Box* b, void* arg) {
+Box* BoxedCode::co_filename(Box* b, void* arg) noexcept {
     return incref(filename(b, arg));
 }
 
-Box* BoxedCode::firstlineno(Box* b, void*) {
+Box* BoxedCode::firstlineno(Box* b, void*) noexcept {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
     FunctionMetadata* md = code->f;
@@ -64,12 +64,12 @@ Box* BoxedCode::firstlineno(Box* b, void*) {
     return boxInt(md->source->ast->lineno);
 }
 
-Box* BoxedCode::argcount(Box* b, void*) {
+Box* BoxedCode::argcount(Box* b, void*) noexcept {
     RELEASE_ASSERT(b->cls == code_cls, "");
     return boxInt(static_cast<BoxedCode*>(b)->f->num_args);
 }
 
-Box* BoxedCode::varnames(Box* b, void*) {
+Box* BoxedCode::varnames(Box* b, void*) noexcept {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
 
@@ -90,7 +90,7 @@ Box* BoxedCode::varnames(Box* b, void*) {
     return rtn;
 }
 
-Box* BoxedCode::flags(Box* b, void*) {
+Box* BoxedCode::flags(Box* b, void*) noexcept {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
 

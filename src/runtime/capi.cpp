@@ -1915,8 +1915,7 @@ void setupCAPI() {
     capifunc_cls->tpp_call.cxx_val = BoxedCApiFunction::tppCall<CXX>;
     capifunc_cls->giveAttrDescriptor("__name__", BoxedCApiFunction::getname, NULL);
     capifunc_cls->giveAttrDescriptor("__doc__", BoxedCApiFunction::doc, NULL);
-    capifunc_cls->giveAttr(
-        "__module__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedCApiFunction, module)));
+    capifunc_cls->giveAttrMember("__module__", T_OBJECT, offsetof(BoxedCApiFunction, module));
 
     capifunc_cls->freeze();
 }

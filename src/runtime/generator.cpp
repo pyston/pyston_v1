@@ -500,7 +500,7 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
     context = makeContext(stack_begin, (void (*)(intptr_t))generatorEntry);
 }
 
-Box* generatorName(Box* _self, void* context) {
+Box* generator_name(Box* _self, void* context) noexcept {
     assert(isSubclass(_self->cls, generator_cls));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(_self);
 
@@ -715,7 +715,7 @@ void setupGenerator() {
         = new BoxedFunction(FunctionMetadata::create((void*)generatorThrow, UNKNOWN, 4, false, false), { NULL, NULL });
     generator_cls->giveAttr("throw", gthrow);
 
-    generator_cls->giveAttrDescriptor("__name__", generatorName, NULL);
+    generator_cls->giveAttrDescriptor("__name__", generator_name, NULL);
 
     generator_cls->freeze();
     generator_cls->tp_iter = PyObject_SelfIter;
