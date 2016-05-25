@@ -21,8 +21,6 @@ test_aepack             No module named aetypes
 test_aifc               Unsupported subclassing from file?
 test_al                 No module named al
 test_applesingle        Not really a failure, but it tries to skip itself and we don't support that
-test_argparse           [unknown]
-test_ascii_formatd      segfault in ctypes (but only on CI)
 test_audioop            [unknown]
 test_bigmem             [unknown]
 test_bisect             somehow sys.modules['_bisect'] is getting set to 0
@@ -30,11 +28,11 @@ test_bsddb185           [unknown]
 test_bsddb3             [unknown]
 test_bsddb              [unknown]
 test_builtin            execfile scoping issue
-test_bz2                [unknown]
+test_bz2                leaks
 test_capi               [unknown]
 test_cd                 [unknown]
 test_cfgparser          works when run from inside the from_cpython dir
-test_cgi                [unknown]
+test_cgi                leaks
 test_class              needs ellipsis
 test_cl                 [unknown]
 test_cmd_line_script    [unknown]
@@ -61,13 +59,11 @@ test_compile            [unknown]
 test_copy               Please debug this test in VM.
 test_cprofile           [unknown]
 test_crypt              [unknown]
-test_csv                [unknown]
 test_ctypes             [unknown]
 test_curses             [unknown]
 test_datetime           needs _PyObject_GetDictPtr
 test_dbm                [unknown]
 test_decorators         decorator bug -- we evaluate decorator obj and its args in wrong order
-test_deque              couple unknown issues
 test_descrtut           `exec in DefaultDict()`
 test_descr              wontfix: crashes at "self.__dict__ = self"
 test_dict               misc failures related to things like gc, abc, comparisons, detecting mutations during iterations
@@ -84,11 +80,9 @@ test_email              [unknown]
 test_enumerate          assert instead of exception in BoxedEnumerate
 test_exceptions         we are missing recursion-depth checking
 test_extcall            f(**kw) crashes if kw isn't a dict
-test_fileio             [unknown]
 test_fork1              [unknown]
 test_frozen             [unknown]
 test_funcattrs          we don't allow changing numing of function defaults
-test_functools          unknown errors
 test_future5            [unknown]
 test_future             [unknown]
 test_gc                 [unknown]
@@ -102,7 +96,6 @@ test_gl                 [unknown]
 test_grammar            bug in our tokenizer
 test_heapq              [unknown]
 test_hotshot            [unknown]
-test_httpservers        [unknown]
 test_idle               [unknown]
 test_imageop            [unknown]
 test_imaplib            [unknown]
@@ -122,7 +115,6 @@ test_long_future        [unknown]
 test_macos              Not really a failure, but it tries to skip itself and we don't support that
 test_macostools         Not really a failure, but it tries to skip itself and we don't support that
 test_marshal            [unknown]
-test_memoryview         [unknown]
 test_modulefinder       [unknown]
 test_module             unicode docstrings
 test_msilib             [unknown]
@@ -146,17 +138,14 @@ test_py_compile         [unknown]
 test_pydoc              [unknown]
 test_random             long("invalid number")
 test_repr               complex.__hash__; some unknown issues
-test_resource           [unknown]
+test_resource           fails on travis-ci: setrlimit RLIMIT_CPU not allowed to raise maximum limit
 test_richcmp            PyObject_Not
-test_rlcompleter        [unknown]
 test_runpy              [unknown]
 test_scope              eval of code object from existing function (not currently supported)
 test_scriptpackages     [unknown]
-test_shelve             [unknown]
 test_site               [unknown]
 test_socket             [unknown]
 test_sort               argument specification issue in listSort?
-test_sqlite             [unknown]
 test_startfile          [unknown]
 test_str                memory leak?
 test_structmembers      [unknown]
@@ -174,10 +163,8 @@ test_sys                [unknown]
 test_tarfile            [unknown]
 test_tcl                [unknown]
 test_tempfile           [unknown]
-test_threaded_import    [unknown]
 test_threading_local    [unknown]
 test_threading          [unknown]
-test_threadsignals      [unknown]
 test_thread             [unknown]
 test_tk                 [unknown]
 test_tokenize           [unknown]
@@ -190,24 +177,20 @@ test_ttk_textonly       [unknown]
 test_types              PyErr_WarnEx
 test_undocumented_details   function.func_closure
 test_unicode            argument passing issue?
-test_unittest           serialize_ast assert
-test_univnewlines       [unknown]
+test_unittest           leaks
 test_userdict           segfault: repr of recursive dict?
 test_userlist           slice(1L, 1L)
 test_userstring         float(1L); hangs in test_replace
-test_uuid               segfault in ctypes (but only on CI)
 test_wait3              [unknown]
 test_wait4              [unknown]
 test_warnings           [unknown]
 test_weakref            weird function-picking bug (something around float.__add__), plase also fix the weakref issue in test_abc
-test_weakset            unknown issues
 test_winreg             [unknown]
 test_winsound           [unknown]
 test_xml_etree_c        [unknown]
 test_xml_etree          [unknown]
 test_xmlrpc             [unknown]
 test_xpickle            [unknown]
-test_xrange             unknown type analysis issue
 test_zipfile64          [unknown]
 test_zipfile            [unknown]
 test_zipimport_support  [unknown]
