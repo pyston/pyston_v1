@@ -35,18 +35,39 @@ using namespace pyston::assembler;
 
 #define MAX_RETRY_BACKOFF 1024
 
-// TODO not right place for this...
 int64_t ICInvalidator::version() {
     return cur_version;
 }
 
+ICInvalidator::~ICInvalidator() {
+    for (ICSlotInfo* slot : dependents) {
+        slot->invalidators.erase(std::find(slot->invalidators.begin(), slot->invalidators.end(), this));
+    }
+}
+
 void ICInvalidator::addDependent(ICSlotInfo* entry_info) {
-    dependents.insert(entry_info);
+    auto p = dependents.insert(entry_info);
+    bool was_inserted = p.second;
+    if (was_inserted)
+        entry_info->invalidators.push_back(this);
 }
 
 void ICInvalidator::invalidateAll() {
     cur_version++;
     for (ICSlotInfo* slot : dependents) {
+        bool found_self = false;
+        for (auto invalidator : slot->invalidators) {
+            if (invalidator == this) {
+                assert(!found_self);
+                found_self = true;
+            } else {
+                assert(invalidator->dependents.count(slot));
+                invalidator->dependents.erase(slot);
+            }
+        }
+        assert(found_self);
+
+        slot->invalidators.clear();
         slot->clear();
     }
     dependents.clear();
@@ -98,6 +119,8 @@ void ICSlotRewrite::commit(CommitHook* hook, std::vector<void*> gc_references,
     if (!still_valid) {
         if (VERBOSITY() >= 3)
             printf("not committing %s icentry since a dependency got updated before commit\n", debug_name);
+        for (auto p : gc_references)
+            Py_DECREF(p);
         return;
     }
 
@@ -106,8 +129,11 @@ void ICSlotRewrite::commit(CommitHook* hook, std::vector<void*> gc_references,
 
     bool do_commit = hook->finishAssembly(continue_point - slot_start);
 
-    if (!do_commit)
+    if (!do_commit) {
+        for (auto p : gc_references)
+            Py_DECREF(p);
         return;
+    }
 
     assert(!assembler.hasFailed());
 
@@ -204,24 +230,7 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(const char* debug_name) {
     return NULL;
 }
 
-// Keep track of all ICInfo(s) that we create because they contain pointers to Pyston heap objects
-// that we have written into the generated code and we may need to scan those.
-static llvm::DenseSet<ICInfo*> ics_list;
 static llvm::DenseMap<void*, ICInfo*> ics_by_return_addr;
-
-void registerGCTrackedICInfo(ICInfo* ic) {
-#if MOVING_GC
-    assert(ics_list.count(ic) == 0);
-    ics_list.insert(ic);
-#endif
-}
-
-void deregisterGCTrackedICInfo(ICInfo* ic) {
-#if MOVING_GC
-    assert(ics_list.count(ic) == 1);
-    ics_list.erase(ic);
-#endif
-}
 
 ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int num_slots,
                int slot_size, llvm::CallingConv::ID calling_conv, LiveOutSet _live_outs,
@@ -248,16 +257,15 @@ ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, S
     }
     if (slowpath_rtn_addr && !this->ic_global_decref_locations.empty())
         slowpath_decref_info = DecrefInfo((uint64_t)slowpath_rtn_addr, this->ic_global_decref_locations);
-
-#if MOVING_GC
-    assert(ics_list.count(this) == 0);
-#endif
 }
 
 ICInfo::~ICInfo() {
-#if MOVING_GC
-    assert(ics_list.count(this) == 0);
-#endif
+    for (auto& slot : slots) {
+        for (auto invalidator : slot.invalidators) {
+            assert(invalidator->dependents.count(&slot));
+            invalidator->dependents.erase(&slot);
+        }
+    }
 }
 
 DecrefInfo::DecrefInfo(uint64_t ip, std::vector<Location> locations) : ip(ip) {
@@ -323,7 +331,9 @@ std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t*
 }
 
 void deregisterCompiledPatchpoint(ICInfo* ic) {
-    assert(ics_by_return_addr.count(ic->slowpath_rtn_addr));
+    ic->clearAll();
+
+    assert(ics_by_return_addr[ic->slowpath_rtn_addr] == ic);
     ics_by_return_addr.erase(ic->slowpath_rtn_addr);
 
     deregisterGCTrackedICInfo(ic);
@@ -403,7 +413,7 @@ void ICInfo::appendDecrefInfosTo(std::vector<DecrefInfo>& dest_decref_infos) {
 }
 
 void clearAllICs() {
-    for (auto&& p : ics_by_ast_node) {
+    for (auto&& p : ics_by_return_addr) {
         p.second->clearAll();
     }
 }

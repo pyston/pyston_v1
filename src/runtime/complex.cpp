@@ -741,7 +741,8 @@ PyObject* complex_neg(PyComplexObject* v) {
 }
 
 static PyMethodDef complex_methods[] = {
-    { "__format__", (PyCFunction)complex__format__, METH_VARARGS, NULL },
+    { "__format__", (PyCFunction)complex__format__, METH_VARARGS, NULL }, //
+    { NULL, NULL, 0, NULL },
 };
 
 void setupComplex() {
@@ -810,19 +811,15 @@ void setupComplex() {
     complex_cls->giveAttr("__float__", new BoxedFunction(FunctionMetadata::create((void*)complexFloat, UNKNOWN, 1)));
     complex_cls->giveAttr("__long__", new BoxedFunction(FunctionMetadata::create((void*)complexLong, UNKNOWN, 1)));
     complex_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)complexRepr, STR, 1)));
-    complex_cls->giveAttr("real",
-                          new BoxedMemberDescriptor(BoxedMemberDescriptor::DOUBLE, offsetof(BoxedComplex, real)));
-    complex_cls->giveAttr("imag",
-                          new BoxedMemberDescriptor(BoxedMemberDescriptor::DOUBLE, offsetof(BoxedComplex, imag)));
+    complex_cls->giveAttrMember("real", T_DOUBLE, offsetof(BoxedComplex, real), true);
+    complex_cls->giveAttrMember("imag", T_DOUBLE, offsetof(BoxedComplex, imag), true);
 
     complex_cls->giveAttr("__doc__",
                           boxString("complex(real[, imag]) -> complex number\n"
                                     "\n"
                                     "Create a complex number from a real part and an optional imaginary part.\n"
                                     "This is equivalent to (real + imag*1j) where imag defaults to 0."));
-    for (auto& md : complex_methods) {
-        complex_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, complex_cls));
-    }
+    add_methods(complex_cls, complex_methods);
 
     add_operators(complex_cls);
 

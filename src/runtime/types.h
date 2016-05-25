@@ -77,10 +77,9 @@ extern "C" BoxedString* EmptyString;
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *enumerate_cls,
-    *xrange_cls, *member_descriptor_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls,
-    *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
-    *builtin_function_or_method_cls, *set_cls, *frozenset_cls, *code_cls, *frame_cls, *capifunc_cls, *wrapperdescr_cls,
-    *wrapperobject_cls;
+    *xrange_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *property_cls, *staticmethod_cls,
+    *classmethod_cls, *attrwrapper_cls, *builtin_function_or_method_cls, *set_cls, *frozenset_cls, *code_cls,
+    *frame_cls, *capifunc_cls;
 }
 #define unicode_cls (&PyUnicode_Type)
 #define memoryview_cls (&PyMemoryView_Type)
@@ -184,7 +183,7 @@ public:
 
     HCAttrs attrs;
 
-    // TODO: these don't actually get deallocated right now
+    // Any new ics here need to get reflected in BoxedClass::dealloc
     std::unique_ptr<CallattrCapiIC> next_ic;
     std::unique_ptr<CallattrIC> hasnext_ic, repr_ic, iter_ic;
     std::unique_ptr<NonzeroIC> nonzero_ic;
@@ -1169,69 +1168,6 @@ static_assert(offsetof(BoxedSlice, start) == offsetof(PySliceObject, start), "")
 static_assert(offsetof(BoxedSlice, stop) == offsetof(PySliceObject, stop), "");
 static_assert(offsetof(BoxedSlice, step) == offsetof(PySliceObject, step), "");
 
-class BoxedMemberDescriptor : public Box {
-public:
-    enum MemberType {
-        BOOL = T_BOOL,
-        BYTE = T_BYTE,
-        INT = T_INT,
-        OBJECT = T_OBJECT,
-        OBJECT_EX = T_OBJECT_EX,
-        FLOAT = T_FLOAT,
-        SHORT = T_SHORT,
-        LONG = T_LONG,
-        DOUBLE = T_DOUBLE,
-        STRING = T_STRING,
-        STRING_INPLACE = T_STRING_INPLACE,
-        CHAR = T_CHAR,
-        UBYTE = T_UBYTE,
-        USHORT = T_USHORT,
-        UINT = T_UINT,
-        ULONG = T_ULONG,
-        LONGLONG = T_LONGLONG,
-        ULONGLONG = T_ULONGLONG,
-        PYSSIZET = T_PYSSIZET
-    } type;
-
-    int offset;
-    bool readonly;
-
-    BoxedMemberDescriptor(MemberType type, int offset, bool readonly = true)
-        : type(type), offset(offset), readonly(readonly) {}
-    BoxedMemberDescriptor(PyMemberDef* member)
-        : type((MemberType)member->type), offset(member->offset), readonly(member->flags & READONLY) {}
-
-    DEFAULT_CLASS_SIMPLE(member_descriptor_cls, false);
-};
-
-class BoxedGetsetDescriptor : public Box {
-public:
-    Box* (*get)(Box*, void*);
-    union {
-        void* set;
-        void (*set_pyston)(Box*, Box*, void*);
-        int (*set_capi)(Box*, Box*, void*);
-    };
-    void* closure;
-    BoxedString* name;
-
-    BoxedGetsetDescriptor(BoxedString* name, Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*), void* closure)
-        : get(get), set_pyston(set), closure(closure), name(name) {
-        assert(this->cls == pyston_getset_cls);
-        Py_INCREF(name);
-    }
-
-    BoxedGetsetDescriptor(BoxedString* name, Box* (*get)(Box*, void*), int (*set)(Box*, Box*, void*), void* closure)
-        : get(get), set_capi(set), closure(closure), name(name) {
-        assert(this->cls == capi_getset_cls);
-        Py_INCREF(name);
-    }
-
-    static void dealloc(Box* b) noexcept;
-
-    // No DEFAULT_CLASS annotation here -- force callers to explicitly specifiy pyston_getset_cls or capi_getset_cls
-};
-
 class BoxedProperty : public Box {
 public:
     Box* prop_get;
@@ -1336,78 +1272,6 @@ public:
     BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
     DEFAULT_CLASS(generator_cls);
-};
-
-struct wrapper_def {
-    const llvm::StringRef name;
-    int offset;
-    void* function;      // "generic" handler that gets put in the tp_* slot which proxies to the python version
-    wrapperfunc wrapper; // "wrapper" that ends up getting called by the Python-visible WrapperDescr
-    const llvm::StringRef doc;
-    int flags;
-    BoxedString* name_strobj;
-};
-
-class BoxedWrapperDescriptor : public Box {
-public:
-    const wrapper_def* wrapper;
-    BoxedClass* type;
-    void* wrapped;
-    BoxedWrapperDescriptor(const wrapper_def* wrapper, BoxedClass* type, void* wrapped)
-        : wrapper(wrapper), type(type), wrapped(wrapped) {
-        Py_INCREF(type);
-    }
-
-    static void dealloc(Box* b) noexcept;
-    static int traverse(Box* _self, visitproc visit, void* arg) noexcept;
-
-    DEFAULT_CLASS(wrapperdescr_cls);
-
-    static Box* descr_get(Box* self, Box* inst, Box* owner) noexcept;
-    static Box* __call__(BoxedWrapperDescriptor* descr, PyObject* self, BoxedTuple* args, Box** _args);
-    template <ExceptionStyle S>
-    static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
-                        Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
-};
-
-class BoxedWrapperObject : public Box {
-public:
-    BoxedWrapperDescriptor* descr;
-    Box* obj;
-
-    BoxedWrapperObject(BoxedWrapperDescriptor* descr, Box* obj) : descr(descr), obj(obj) {
-        Py_INCREF(descr);
-        Py_INCREF(obj);
-    }
-
-    DEFAULT_CLASS(wrapperobject_cls);
-
-    static Box* __call__(BoxedWrapperObject* self, Box* args, Box* kwds);
-    template <ExceptionStyle S>
-    static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
-                        Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
-
-    static void dealloc(Box* self) noexcept;
-    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
-};
-
-class BoxedMethodDescriptor : public Box {
-public:
-    PyMethodDef* method;
-    BoxedClass* type;
-
-    BoxedMethodDescriptor(PyMethodDef* method, BoxedClass* type) : method(method), type(type) { Py_INCREF(type); }
-
-    DEFAULT_CLASS(method_cls);
-
-    static Box* descr_get(BoxedMethodDescriptor* self, Box* inst, Box* owner) noexcept;
-    static Box* __call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args);
-    template <ExceptionStyle S>
-    static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
-                        Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
-
-    static void dealloc(Box* self) noexcept;
-    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
 };
 
 Box* objectSetattr(Box* obj, Box* attr, Box* value);

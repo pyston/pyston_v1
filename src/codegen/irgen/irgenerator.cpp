@@ -923,9 +923,16 @@ private:
                     // trigger an exception, but the irgenerator will know that definitely-defined
                     // local symbols will not throw.
                     emitter.getBuilder()->CreateUnreachable();
+
+                    // Hacky: create a new BB for any more code that we might generate
+                    llvm::BasicBlock* continue_bb
+                        = llvm::BasicBlock::Create(g.context, "cant_reach", irstate->getLLVMFunction());
+                    emitter.setCurrentBasicBlock(continue_bb);
+
                     exc_type = exc_value = exc_tb = undefVariable();
-                    // TODO: should we not emit the rest of the block? I (kmod) think I tried that and
-                    // ran into some sort of issue, but I don't remember what it was.
+                    // TODO: we should just call endBlock instead.  It looks like the implementation
+                    // of that has some issues though, and it might end up generating code as well.  ANd
+                    // then I'm not sure that the higher-level irgen.cpp would handle that well.
                     // endBlock(DEAD);
                 }
 

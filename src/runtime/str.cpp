@@ -2851,6 +2851,7 @@ static PyMethodDef string_methods[] = {
     { "__format__", (PyCFunction)string__format__, METH_VARARGS, NULL },
     { "_formatter_parser", (PyCFunction)_formatter_parser, METH_NOARGS, NULL },
     { "_formatter_field_name_split", (PyCFunction)_formatter_field_name_split, METH_NOARGS, NULL },
+    { NULL, NULL, 0, NULL },
 };
 
 void setupStr() {
@@ -2961,9 +2962,7 @@ void setupStr() {
     str_cls->giveAttr("__iter__",
                       new BoxedFunction(FunctionMetadata::create((void*)strIter, typeFromClass(str_iterator_cls), 1)));
 
-    for (auto& md : string_methods) {
-        str_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, str_cls));
-    }
+    add_methods(str_cls, string_methods);
 
     auto str_new = FunctionMetadata::create((void*)strNew<CXX>, UNKNOWN, 2, false, false,
                                             ParamNames({ "", "object" }, "", ""), CXX);

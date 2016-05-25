@@ -63,6 +63,7 @@ public:
 
     std::vector<void*> gc_references;
     std::vector<DecrefInfo> decref_infos;
+    std::vector<ICInvalidator*> invalidators; // ICInvalidators that reference this slotinfo
 
     void clear();
 };
@@ -183,8 +184,10 @@ public:
     void appendDecrefInfosTo(std::vector<DecrefInfo>& dest_decref_infos);
 };
 
-void registerGCTrackedICInfo(ICInfo* ic);
-void deregisterGCTrackedICInfo(ICInfo* ic);
+inline void registerGCTrackedICInfo(ICInfo* ic) {
+}
+inline void deregisterGCTrackedICInfo(ICInfo* ic) {
+}
 
 class ICSetupInfo;
 struct CompiledFunction;

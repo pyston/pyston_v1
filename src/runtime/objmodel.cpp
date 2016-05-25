@@ -1803,7 +1803,7 @@ template Box* typeLookup<NOT_REWRITABLE>(BoxedClass*, BoxedString*, GetattrRewri
 
 bool isNondataDescriptorInstanceSpecialCase(Box* descr) {
     return descr->cls == function_cls || descr->cls == instancemethod_cls || descr->cls == staticmethod_cls
-           || descr->cls == classmethod_cls || descr->cls == wrapperdescr_cls;
+           || descr->cls == classmethod_cls || descr->cls == &PyWrapperDescr_Type;
 }
 
 template <Rewritable rewritable>
@@ -1817,8 +1817,11 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
     // Special case: non-data descriptor: function, instancemethod or classmethod
     // Returns a bound instancemethod
     if (descr->cls == function_cls || descr->cls == instancemethod_cls || descr->cls == classmethod_cls
-        || (descr->cls == method_cls
-            && (static_cast<BoxedMethodDescriptor*>(descr)->method->ml_flags & (METH_CLASS | METH_STATIC)) == 0)) {
+        || descr->cls == &PyMethodDescr_Type) {
+
+        if (descr->cls == &PyMethodDescr_Type)
+            assert((reinterpret_cast<PyMethodDescrObject*>(descr)->d_method->ml_flags & (METH_CLASS | METH_STATIC))
+                   == 0);
         Box* im_self = NULL, * im_func = NULL, * im_class = obj->cls;
         RewriterVar* r_im_self = NULL, * r_im_func = NULL, * r_im_class = NULL;
 
@@ -1833,7 +1836,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
                 r_im_self = rewrite_args->obj;
                 r_im_func = r_descr;
             }
-        } else if (descr->cls == method_cls) {
+        } else if (descr->cls == &PyMethodDescr_Type) {
             im_self = obj;
             im_func = descr;
             if (rewrite_args) {
@@ -1910,7 +1913,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
         }
 
         return incref(sm->sm_callable);
-    } else if (descr->cls == wrapperdescr_cls) {
+    } else if (descr->cls == &PyWrapperDescr_Type) {
         if (for_call) {
             if (rewrite_args) {
                 rewrite_args->setReturn(r_descr, ReturnConvention::HAS_RETURN);
@@ -1919,17 +1922,16 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
             *bind_obj_out = obj;
             return incref(descr);
         } else {
-            BoxedWrapperDescriptor* self = static_cast<BoxedWrapperDescriptor*>(descr);
             Box* inst = obj;
             Box* owner = obj->cls;
-            Box* r = BoxedWrapperDescriptor::descr_get(self, inst, owner);
+            Box* r = PyWrapperDescr_Type.tp_descr_get(descr, inst, owner);
 
             if (rewrite_args) {
                 // TODO: inline this?
                 RewriterVar* r_rtn
                     = rewrite_args->rewriter->call(
                                                   /* has_side_effects= */ false,
-                                                  (void*)&BoxedWrapperDescriptor::descr_get, r_descr, rewrite_args->obj,
+                                                  (void*)PyWrapperDescr_Type.tp_descr_get, r_descr, rewrite_args->obj,
                                                   r_descr->getAttr(offsetof(Box, cls), Location::forArg(2)))
                           ->setType(RefType::OWNED);
 
@@ -1977,7 +1979,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
 
     // These classes are descriptors, but only have special behavior when involved
     // in instance lookups
-    if (descr->cls == member_descriptor_cls || descr->cls == wrapperdescr_cls) {
+    if (descr->cls == &PyMemberDescr_Type || descr->cls == &PyWrapperDescr_Type) {
         if (rewrite_args)
             r_descr->addAttrGuard(offsetof(Box, cls), (uint64_t)descr->cls);
 
@@ -2008,59 +2010,63 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
     }
 
     // Special case: data descriptor: member descriptor
-    if (descr->cls == member_descriptor_cls) {
+    if (descr->cls == &PyMemberDescr_Type) {
         static StatCounter slowpath("slowpath_member_descriptor_get");
         slowpath.log();
 
-        BoxedMemberDescriptor* member_desc = static_cast<BoxedMemberDescriptor*>(descr);
+        PyMemberDescrObject* member_desc = reinterpret_cast<PyMemberDescrObject*>(descr);
         // TODO should also have logic to raise a type error if type of obj is wrong
 
         if (rewrite_args) {
             // TODO we could use offset as the index in the assembly lookup rather than hardcoding
             // the value in the assembly and guarding on it be the same.
 
-            // This could be optimized if addAttrGuard supported things < 64 bits
-            static_assert(sizeof(member_desc->offset) == 4, "assumed by assembly instruction below");
-            r_descr->getAttr(offsetof(BoxedMemberDescriptor, offset), Location::any(), assembler::MovType::ZLQ)
-                ->addGuard(member_desc->offset);
+            auto r_memberdef = r_descr->getAttr(offsetof(PyMemberDescrObject, d_member));
 
-            static_assert(sizeof(member_desc->type) == 4, "assumed by assembly instruction below");
-            r_descr->getAttr(offsetof(BoxedMemberDescriptor, type), Location::any(), assembler::MovType::ZLQ)
-                ->addGuard(member_desc->type);
+            static_assert(sizeof(member_desc->d_member->offset) == 8, "assumed by assembly instruction below");
+            r_memberdef->addAttrGuard(offsetof(PyMemberDef, offset), member_desc->d_member->offset);
+
+            // This could be optimized if addAttrGuard supported things < 64 bits
+            static_assert(sizeof(member_desc->d_member->type) == 4, "assumed by assembly instruction below");
+            r_memberdef->getAttr(offsetof(PyMemberDef, type), Location::any(), assembler::MovType::ZLQ)
+                ->addGuard(member_desc->d_member->type);
         }
 
-        switch (member_desc->type) {
-            case BoxedMemberDescriptor::OBJECT_EX: {
+        switch (member_desc->d_member->type) {
+            case T_OBJECT_EX: {
                 if (rewrite_args) {
-                    RewriterVar* r_rtn = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination)
-                                             ->setType(RefType::BORROWED);
+                    RewriterVar* r_rtn
+                        = rewrite_args->obj->getAttr(member_desc->d_member->offset, rewrite_args->destination)
+                              ->setType(RefType::BORROWED);
                     r_rtn->addGuardNotEq(0);
                     rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
-                Box* rtn = *reinterpret_cast<Box**>((char*)obj + member_desc->offset);
+                Box* rtn = *reinterpret_cast<Box**>((char*)obj + member_desc->d_member->offset);
                 if (rtn == NULL) {
                     assert(attr_name->data()[attr_name->size()] == '\0');
                     raiseExcHelper(AttributeError, "%s", attr_name->data());
                 }
                 return incref(rtn);
             }
-            case BoxedMemberDescriptor::OBJECT: {
+            case T_OBJECT: {
                 if (rewrite_args) {
-                    RewriterVar* r_interm = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
+                    RewriterVar* r_interm
+                        = rewrite_args->obj->getAttr(member_desc->d_member->offset, rewrite_args->destination);
                     // TODO would be faster to not use a call
                     RewriterVar* r_rtn
                         = rewrite_args->rewriter->call(false, (void*)noneIfNull, r_interm)->setType(RefType::BORROWED);
                     rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
-                Box* rtn = *reinterpret_cast<Box**>((char*)obj + member_desc->offset);
+                Box* rtn = *reinterpret_cast<Box**>((char*)obj + member_desc->d_member->offset);
                 return incref(noneIfNull(rtn));
             }
 
-            case BoxedMemberDescriptor::DOUBLE: {
+            case T_DOUBLE: {
                 if (rewrite_args) {
-                    RewriterVar* r_unboxed_val = rewrite_args->obj->getAttrDouble(member_desc->offset, assembler::XMM0);
+                    RewriterVar* r_unboxed_val
+                        = rewrite_args->obj->getAttrDouble(member_desc->d_member->offset, assembler::XMM0);
                     RewriterVar::SmallVector normal_args;
                     RewriterVar::SmallVector float_args;
                     float_args.push_back(r_unboxed_val);
@@ -2069,12 +2075,13 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                     rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
-                double rtn = *reinterpret_cast<double*>((char*)obj + member_desc->offset);
+                double rtn = *reinterpret_cast<double*>((char*)obj + member_desc->d_member->offset);
                 return boxFloat(rtn);
             }
-            case BoxedMemberDescriptor::FLOAT: {
+            case T_FLOAT: {
                 if (rewrite_args) {
-                    RewriterVar* r_unboxed_val = rewrite_args->obj->getAttrFloat(member_desc->offset, assembler::XMM0);
+                    RewriterVar* r_unboxed_val
+                        = rewrite_args->obj->getAttrFloat(member_desc->d_member->offset, assembler::XMM0);
                     RewriterVar::SmallVector normal_args;
                     RewriterVar::SmallVector float_args;
                     float_args.push_back(r_unboxed_val);
@@ -2083,20 +2090,20 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                     rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
-                float rtn = *reinterpret_cast<float*>((char*)obj + member_desc->offset);
+                float rtn = *reinterpret_cast<float*>((char*)obj + member_desc->d_member->offset);
                 return boxFloat((double)rtn);
             }
 
 #define CASE_INTEGER_TYPE(TYPE, type, boxFn, cast)                                                                     \
-    case BoxedMemberDescriptor::TYPE: {                                                                                \
+    case T_##TYPE: {                                                                                                   \
         if (rewrite_args) {                                                                                            \
-            RewriterVar* r_unboxed_val = rewrite_args->obj->getAttrCast<type, cast>(member_desc->offset);              \
+            RewriterVar* r_unboxed_val = rewrite_args->obj->getAttrCast<type, cast>(member_desc->d_member->offset);    \
             RewriterVar* r_rtn                                                                                         \
                 = rewrite_args->rewriter->call(true, (void*)boxFn, r_unboxed_val)->setType(RefType::OWNED);            \
             /* XXX assuming that none of these throw a capi error! */                                                  \
             rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);                                              \
         }                                                                                                              \
-        type rtn = *reinterpret_cast<type*>((char*)obj + member_desc->offset);                                         \
+        type rtn = *reinterpret_cast<type*>((char*)obj + member_desc->d_member->offset);                               \
         return boxFn((cast)rtn);                                                                                       \
     }
                 // Note that (a bit confusingly) boxInt takes int64_t, not an int
@@ -2113,35 +2120,36 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
                 CASE_INTEGER_TYPE(LONGLONG, long long, PyLong_FromLongLong, long long)
                 CASE_INTEGER_TYPE(ULONGLONG, unsigned long long, PyLong_FromUnsignedLongLong, unsigned long long)
                 CASE_INTEGER_TYPE(PYSSIZET, Py_ssize_t, boxInt, Py_ssize_t)
-            case BoxedMemberDescriptor::STRING: {
+            case T_STRING: {
                 if (rewrite_args) {
-                    RewriterVar* r_interm = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
+                    RewriterVar* r_interm
+                        = rewrite_args->obj->getAttr(member_desc->d_member->offset, rewrite_args->destination);
                     RewriterVar* r_rtn
                         = rewrite_args->rewriter->call(true, (void*)boxStringOrNone, r_interm)->setType(RefType::OWNED);
                     rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
-                char* rtn = *reinterpret_cast<char**>((char*)obj + member_desc->offset);
+                char* rtn = *reinterpret_cast<char**>((char*)obj + member_desc->d_member->offset);
                 return boxStringOrNone(rtn);
             }
-            case BoxedMemberDescriptor::STRING_INPLACE: {
+            case T_STRING_INPLACE: {
                 if (rewrite_args) {
                     RewriterVar* r_rtn
                         = rewrite_args->rewriter->call(true, (void*)boxStringFromCharPtr,
                                                        rewrite_args->rewriter->add(
-                                                           rewrite_args->obj, member_desc->offset,
+                                                           rewrite_args->obj, member_desc->d_member->offset,
                                                            rewrite_args->destination))->setType(RefType::OWNED);
                     rewrite_args->setReturn(r_rtn, ReturnConvention::HAS_RETURN);
                 }
 
                 rewrite_args = NULL;
                 REWRITE_ABORTED("");
-                char* rtn = reinterpret_cast<char*>((char*)obj + member_desc->offset);
+                char* rtn = reinterpret_cast<char*>((char*)obj + member_desc->d_member->offset);
                 return boxStringFromCharPtr(rtn);
             }
 
             default:
-                RELEASE_ASSERT(0, "%d", member_desc->type);
+                RELEASE_ASSERT(0, "%d", member_desc->d_member->type);
         }
     }
 
@@ -2171,33 +2179,34 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
     }
 
     // Special case: data descriptor: getset descriptor
-    else if (descr->cls == pyston_getset_cls || descr->cls == capi_getset_cls) {
-        BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(descr);
+    else if (descr->cls == &PyGetSetDescr_Type) {
+        PyGetSetDescrObject* getset_descr = reinterpret_cast<PyGetSetDescrObject*>(descr);
 
         // TODO some more checks should go here
         // getset descriptors (and some other types of builtin descriptors I think) should have
         // a field which gives the type that the descriptor should apply to. We need to check that obj
         // is of that type.
 
-        if (getset_descr->get == NULL) {
+        if (getset_descr->d_getset->get == NULL) {
             assert(attr_name->data()[attr_name->size()] == '\0');
             raiseExcHelper(AttributeError, "attribute '%s' of '%s' object is not readable", attr_name->data(),
-                           getTypeName(getset_descr));
+                           getTypeName((Box*)getset_descr));
         }
 
-        Box* rtn = getset_descr->get(obj, getset_descr->closure);
+        Box* rtn = getset_descr->d_getset->get(obj, getset_descr->d_getset->closure);
 
         if (rewrite_args) {
             // hmm, maybe we should write assembly which can look up the function address and call any function
-            r_descr->addAttrGuard(offsetof(BoxedGetsetDescriptor, get), (intptr_t)getset_descr->get);
+            auto r_getsetdef = r_descr->getAttr(offsetof(PyGetSetDescrObject, d_getset));
+            r_getsetdef->addAttrGuard(offsetof(PyGetSetDef, get), (intptr_t)getset_descr->d_getset->get);
 
-            RewriterVar* r_closure = r_descr->getAttr(offsetof(BoxedGetsetDescriptor, closure));
-            RewriterVar* r_rtn = rewrite_args->rewriter->call(
-                                                             /* has_side_effects */ true, (void*)getset_descr->get,
-                                                             rewrite_args->obj, r_closure)->setType(RefType::OWNED);
+            RewriterVar* r_closure = r_getsetdef->getAttr(offsetof(PyGetSetDef, closure));
+            RewriterVar* r_rtn
+                = rewrite_args->rewriter->call(
+                                              /* has_side_effects */ true, (void*)getset_descr->d_getset->get,
+                                              rewrite_args->obj, r_closure)->setType(RefType::OWNED);
 
-            rewrite_args->setReturn(r_rtn, descr->cls == capi_getset_cls ? ReturnConvention::CAPI_RETURN
-                                                                         : ReturnConvention::MAYBE_EXC);
+            rewrite_args->setReturn(r_rtn, ReturnConvention::CAPI_RETURN);
         }
         return rtn;
     }
@@ -2929,11 +2938,11 @@ bool dataDescriptorSetSpecialCases(Box* obj, STOLEN(Box*) val, Box* descr, Setat
                                    RewriterVar* r_descr, BoxedString* attr_name) {
 
     // Special case: getset descriptor
-    if (descr->cls == pyston_getset_cls || descr->cls == capi_getset_cls) {
-        BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(descr);
+    if (descr->cls == &PyGetSetDescr_Type) {
+        PyGetSetDescrObject* getset_descr = reinterpret_cast<PyGetSetDescrObject*>(descr);
 
         // TODO type checking goes here
-        if (getset_descr->set == NULL) {
+        if (getset_descr->d_getset->set == NULL) {
             assert(attr_name->data()[attr_name->size()] == '\0');
             Py_DECREF(val);
             raiseExcHelper(AttributeError, "attribute '%s' of '%s' objects is not writable", attr_name->data(),
@@ -2944,40 +2953,30 @@ bool dataDescriptorSetSpecialCases(Box* obj, STOLEN(Box*) val, Box* descr, Setat
             RewriterVar* r_obj = rewrite_args->obj;
             RewriterVar* r_val = rewrite_args->attrval;
 
-            r_descr->addAttrGuard(offsetof(BoxedGetsetDescriptor, set), (intptr_t)getset_descr->set);
-            RewriterVar* r_closure = r_descr->getAttr(offsetof(BoxedGetsetDescriptor, closure));
+            auto r_getset = r_descr->getAttr(offsetof(PyGetSetDescrObject, d_getset));
+            r_getset->addAttrGuard(offsetof(PyGetSetDef, set), (intptr_t)getset_descr->d_getset->set);
+            RewriterVar* r_closure = r_getset->getAttr(offsetof(PyGetSetDef, closure));
             RewriterVar::SmallVector args;
             args.push_back(r_obj);
             args.push_back(r_val);
             args.push_back(r_closure);
             RewriterVar* r_rtn = rewrite_args->rewriter->call(
-                /* has_side_effects */ true, (void*)getset_descr->set, args);
+                /* has_side_effects */ true, (void*)getset_descr->d_getset->set, args);
 
-            if (descr->cls == capi_getset_cls)
-                rewrite_args->rewriter->checkAndThrowCAPIException(r_rtn, -1, assembler::MovType::L);
+            rewrite_args->rewriter->checkAndThrowCAPIException(r_rtn, -1, assembler::MovType::L);
 
             rewrite_args->out_success = true;
         }
 
         AUTO_DECREF(val);
-        if (descr->cls == pyston_getset_cls) {
-            getset_descr->set_pyston(obj, val, getset_descr->closure);
-        } else {
-            int r = getset_descr->set_capi(obj, val, getset_descr->closure);
-            if (r)
-                throwCAPIException();
-        }
+        int r = getset_descr->d_getset->set(obj, val, getset_descr->d_getset->closure);
+        if (r)
+            throwCAPIException();
 
         return true;
-    } else if (descr->cls == member_descriptor_cls) {
-        BoxedMemberDescriptor* member_desc = static_cast<BoxedMemberDescriptor*>(descr);
-        PyMemberDef member_def;
-        memset(&member_def, 0, sizeof(member_def));
-        member_def.offset = member_desc->offset;
-        member_def.type = member_desc->type;
-        if (member_desc->readonly)
-            member_def.flags |= READONLY;
-        int ret = PyMember_SetOne((char*)obj, &member_def, val);
+    } else if (descr->cls == &PyMemberDescr_Type) {
+        PyMemberDescrObject* member_desc = reinterpret_cast<PyMemberDescrObject*>(descr);
+        int ret = PyMember_SetOne((char*)obj, member_desc->d_member, val);
         Py_DECREF(val);
         if (ret < 0)
             throwCAPIException();
@@ -3373,9 +3372,8 @@ extern "C" bool nonzero(Box* obj) {
                        || obj->cls == type_cls || isSubclass(obj->cls, Exception) || obj->cls == &PyFile_Type
                        || obj->cls == &PyTraceBack_Type || obj->cls == instancemethod_cls || obj->cls == module_cls
                        || obj->cls == capifunc_cls || obj->cls == builtin_function_or_method_cls
-                       || obj->cls == method_cls || obj->cls == frame_cls || obj->cls == generator_cls
-                       || obj->cls == capi_getset_cls || obj->cls == pyston_getset_cls || obj->cls == wrapperdescr_cls
-                       || obj->cls == wrapperobject_cls || obj->cls == code_cls,
+                       || obj->cls == &PyMethod_Type || obj->cls == frame_cls || obj->cls == generator_cls
+                       || obj->cls == code_cls,
                    "%s.__nonzero__", getTypeName(obj)); // TODO
 
             if (rewriter.get()) {
@@ -5988,7 +5986,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 #ifndef NDEBUG
     if ((lhs->cls == int_cls || lhs->cls == float_cls || lhs->cls == long_cls)
         && (rhs->cls == int_cls || rhs->cls == float_cls || rhs->cls == long_cls)) {
-        printf("\n%s %s %s\n", lhs->cls->tp_name, op_name->c_str(), rhs->cls->tp_name);
+        fprintf(stderr, "\n%s %s %s\n", lhs->cls->tp_name, op_name->c_str(), rhs->cls->tp_name);
         Py_FatalError("missing comparison between these classes");
     }
 #endif
@@ -7019,12 +7017,11 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
         // Add the member descriptors
         size_t offset = base->tp_basicsize;
         for (size_t i = 0; i < final_slot_names.size(); i++) {
-            made->giveAttr(static_cast<BoxedString*>(slotsTuple->elts[i])->data(),
-                           new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT_EX, offset, false /* read only */));
-
             mp[i].name = static_cast<BoxedString*>(slotsTuple->elts[i])->data();
             mp[i].type = T_OBJECT_EX;
             mp[i].offset = offset;
+
+            made->giveAttr(static_cast<BoxedString*>(slotsTuple->elts[i])->data(), PyDescr_NewMember(made, &mp[i]));
 
             offset += sizeof(Box*);
         }

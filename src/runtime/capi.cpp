@@ -47,8 +47,6 @@
 
 namespace pyston {
 
-BoxedClass* method_cls;
-
 extern "C" int _PyIndex_Check(PyObject* obj) noexcept {
     return (Py_TYPE(obj)->tp_as_number != NULL && PyType_HasFeature(Py_TYPE(obj), Py_TPFLAGS_HAVE_INDEX)
             && Py_TYPE(obj)->tp_as_number->nb_index != NULL);
@@ -1565,8 +1563,6 @@ extern "C" PyObject* Py_FindMethod(PyMethodDef* methods, PyObject* self, const c
 }
 
 extern "C" PyObject* PyCFunction_NewEx(PyMethodDef* ml, PyObject* self, PyObject* module) noexcept {
-    assert((ml->ml_flags & (~(METH_VARARGS | METH_KEYWORDS | METH_NOARGS | METH_O))) == 0);
-
     return new BoxedCApiFunction(ml, self, module);
 }
 
@@ -1725,6 +1721,8 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
     int flags = self->method_def->ml_flags;
     auto func = self->method_def->ml_meth;
 
+    flags &= ~(METH_CLASS | METH_STATIC | METH_COEXIST);
+
     ParamReceiveSpec paramspec(0, 0, true, false);
     Box** defaults = NULL;
     if (flags == METH_VARARGS) {
@@ -1820,7 +1818,7 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
                                                                      rewrite_args->arg1)->setType(RefType::OWNED);
         } else if ((flags & ~(METH_O3 | METH_D3)) == 0) {
             assert(paramspec.totalReceived() <= 3); // would need to pass through oargs
-            rtn = ((Box * (*)(Box*, Box*, Box*, Box*))func)(self->passthrough, arg1, arg2, arg3);
+            rtn = ((Box * (*)(Box*, Box*, Box*, Box**))func)(self->passthrough, arg1, arg2, &arg3);
             if (rewrite_args) {
                 if (paramspec.totalReceived() == 1)
                     rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)func, r_passthrough,
@@ -1829,11 +1827,13 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
                     rewrite_args->out_rtn
                         = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1,
                                                        rewrite_args->arg2)->setType(RefType::OWNED);
-                else if (paramspec.totalReceived() == 3)
+                else if (paramspec.totalReceived() == 3) {
+                    auto args = rewrite_args->rewriter->allocate(1);
+                    args->setAttr(0, rewrite_args->arg3);
                     rewrite_args->out_rtn
                         = rewrite_args->rewriter->call(true, (void*)func, r_passthrough, rewrite_args->arg1,
-                                                       rewrite_args->arg2, rewrite_args->arg3)->setType(RefType::OWNED);
-                else
+                                                       rewrite_args->arg2, args)->setType(RefType::OWNED);
+                } else
                     abort();
             }
         } else if (flags == METH_OLDARGS) {
@@ -1915,8 +1915,7 @@ void setupCAPI() {
     capifunc_cls->tpp_call.cxx_val = BoxedCApiFunction::tppCall<CXX>;
     capifunc_cls->giveAttrDescriptor("__name__", BoxedCApiFunction::getname, NULL);
     capifunc_cls->giveAttrDescriptor("__doc__", BoxedCApiFunction::doc, NULL);
-    capifunc_cls->giveAttr(
-        "__module__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedCApiFunction, module)));
+    capifunc_cls->giveAttrMember("__module__", T_OBJECT, offsetof(BoxedCApiFunction, module));
 
     capifunc_cls->freeze();
 }

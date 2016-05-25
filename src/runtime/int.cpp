@@ -1395,7 +1395,7 @@ static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type,
     int_cls->giveAttr(name, new BoxedFunction(md));
 }
 
-static Box* intIntGetset(Box* b, void*) {
+static Box* int_int_getset(Box* b, void*) noexcept {
     if (b->cls == int_cls) {
         return incref(b);
     } else {
@@ -1404,11 +1404,11 @@ static Box* intIntGetset(Box* b, void*) {
     }
 }
 
-static Box* int0(Box*, void*) {
+static Box* int0(Box*, void*) noexcept {
     return boxInt(0);
 }
 
-static Box* int1(Box*, void*) {
+static Box* int1(Box*, void*) noexcept {
     return boxInt(1);
 }
 
@@ -1608,10 +1608,11 @@ void setupInt() {
 
     int_cls->giveAttr("bit_length", new BoxedFunction(FunctionMetadata::create((void*)intBitLength, BOXED_INT, 1)));
 
-    int_cls->giveAttrDescriptor("real", intIntGetset, NULL);
+    // int_int_getset doesn't throw at all, so we can cheat and use it as both a CAPI and CXX style function.
+    int_cls->giveAttrDescriptor("real", int_int_getset, NULL);
     int_cls->giveAttrDescriptor("imag", int0, NULL);
-    int_cls->giveAttr("conjugate", new BoxedFunction(FunctionMetadata::create((void*)intIntGetset, BOXED_INT, 1)));
-    int_cls->giveAttrDescriptor("numerator", intIntGetset, NULL);
+    int_cls->giveAttr("conjugate", new BoxedFunction(FunctionMetadata::create((void*)int_int_getset, BOXED_INT, 1)));
+    int_cls->giveAttrDescriptor("numerator", int_int_getset, NULL);
     int_cls->giveAttrDescriptor("denominator", int1, NULL);
 
     add_operators(int_cls);

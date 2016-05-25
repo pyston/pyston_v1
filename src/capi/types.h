@@ -54,7 +54,7 @@ public:
     static Box* tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
 
-    static Box* getname(Box* b, void*) {
+    static Box* getname(Box* b, void*) noexcept {
         RELEASE_ASSERT(b->cls == capifunc_cls, "");
         const char* s = static_cast<BoxedCApiFunction*>(b)->method_def->ml_name;
         if (s)
@@ -62,7 +62,7 @@ public:
         return incref(None);
     }
 
-    static Box* doc(Box* b, void*) {
+    static Box* doc(Box* b, void*) noexcept {
         RELEASE_ASSERT(b->cls == capifunc_cls, "");
         const char* s = static_cast<BoxedCApiFunction*>(b)->method_def->ml_doc;
         if (s)

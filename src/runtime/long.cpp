@@ -787,7 +787,7 @@ Box* longInt(Box* v) {
         return boxInt(n);
 }
 
-Box* longToLong(Box* self) {
+Box* longToLong(Box* self) noexcept {
     if (self->cls == long_cls) {
         return incref(self);
     } else {
@@ -1678,15 +1678,15 @@ static PyObject* long_pow(PyObject* v, PyObject* w, PyObject* x) noexcept {
     }
 }
 
-static Box* longDesc(Box* b, void*) {
+static Box* long_desc(Box* b, void*) noexcept {
     return longToLong(b);
 }
 
-static Box* long0(Box* b, void*) {
+static Box* long0(Box* b, void*) noexcept {
     return boxLong(0);
 }
 
-static Box* long1(Box* b, void*) {
+static Box* long1(Box* b, void*) noexcept {
     return boxLong(1);
 }
 
@@ -1763,10 +1763,11 @@ void setupLong() {
     long_cls->giveAttr("__index__", new BoxedFunction(FunctionMetadata::create((void*)longIndex, LONG, 1)));
 
     long_cls->giveAttr("bit_length", new BoxedFunction(FunctionMetadata::create((void*)longBitLength, LONG, 1)));
-    long_cls->giveAttrDescriptor("real", longDesc, NULL);
+    long_cls->giveAttrDescriptor("real", long_desc, NULL);
     long_cls->giveAttrDescriptor("imag", long0, NULL);
-    long_cls->giveAttr("conjugate", new BoxedFunction(FunctionMetadata::create((void*)longDesc, UNKNOWN, 1)));
-    long_cls->giveAttrDescriptor("numerator", longDesc, NULL);
+    // long_desc is both CAPI and CXX style since it doesn't throw
+    long_cls->giveAttr("conjugate", new BoxedFunction(FunctionMetadata::create((void*)long_desc, UNKNOWN, 1)));
+    long_cls->giveAttrDescriptor("numerator", long_desc, NULL);
     long_cls->giveAttrDescriptor("denominator", long1, NULL);
 
     long_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)long_getnewargs, UNKNOWN, 1,

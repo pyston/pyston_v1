@@ -14,6 +14,7 @@
 
 #include "runtime/set.h"
 
+#include "capi/typeobject.h"
 #include "runtime/objmodel.h"
 
 namespace pyston {
@@ -919,12 +920,10 @@ int BoxedSet::clear(Box* _o) noexcept {
     return 0;
 }
 
-static PyMethodDef set_methods[] = {
-    { "__reduce__", (PyCFunction)set_reduce, METH_NOARGS, NULL },
-};
-static PyMethodDef frozenset_methods[] = {
-    { "__reduce__", (PyCFunction)set_reduce, METH_NOARGS, NULL },
-};
+static PyMethodDef set_methods[]
+    = { { "__reduce__", (PyCFunction)set_reduce, METH_NOARGS, NULL }, { NULL, NULL, 0, NULL } };
+static PyMethodDef frozenset_methods[]
+    = { { "__reduce__", (PyCFunction)set_reduce, METH_NOARGS, NULL }, { NULL, NULL, 0, NULL } };
 
 void setupSet() {
     static PySequenceMethods set_as_sequence;
@@ -1070,13 +1069,8 @@ void setupSet() {
     frozenset_cls->giveAttr("copy", new BoxedFunction(FunctionMetadata::create((void*)frozensetCopy, UNKNOWN, 1)));
     set_cls->giveAttr("pop", new BoxedFunction(FunctionMetadata::create((void*)setPop, UNKNOWN, 1)));
 
-    for (auto& md : set_methods) {
-        set_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, set_cls));
-    }
-
-    for (auto& md : frozenset_methods) {
-        frozenset_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, frozenset_cls));
-    }
+    add_methods(set_cls, set_methods);
+    add_methods(frozenset_cls, frozenset_methods);
 
     set_cls->freeze();
     frozenset_cls->freeze();

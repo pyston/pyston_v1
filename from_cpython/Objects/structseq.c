@@ -262,7 +262,7 @@ structseq_repr(PyStructSequence *obj)
 
     for (i=0; i < VISIBLE_SIZE(obj); i++) {
         PyObject *val, *repr;
-        char *cname, *crepr;
+        /* Pyston change: made const */ const char *cname, *crepr;
 
         cname = typ->tp_members[i].name;
 
@@ -399,7 +399,7 @@ structseq_reduce(PyStructSequence* self)
     }
 
     for (; i < n_fields; i++) {
-        char *n = Py_TYPE(self)->tp_members[i-n_unnamed_fields].name;
+        /* Pyston change: made const */ const char *n = Py_TYPE(self)->tp_members[i-n_unnamed_fields].name;
         PyDict_SetItemString(dict, n,
                              self->ob_item[i]);
     }

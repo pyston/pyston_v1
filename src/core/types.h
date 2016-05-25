@@ -289,10 +289,14 @@ private:
 
 public:
     ICInvalidator() : cur_version(0) {}
+    ~ICInvalidator();
 
     void addDependent(ICSlotInfo* icentry);
     int64_t version();
     void invalidateAll();
+
+    friend class ICInfo;
+    friend class ICSlotInfo;
 };
 
 // Codegen types:
@@ -416,7 +420,8 @@ public:
     // body and we have to create one.  Ideally, we'd be able to avoid the space duplication for non-lambdas.
     const std::vector<AST_stmt*> body;
 
-    BORROWED(BoxedString*) getName();
+    // does not throw CXX or CAPI exceptions:
+    BORROWED(BoxedString*) getName() noexcept;
     BORROWED(BoxedString*) getFn();
 
     InternedString mangleName(InternedString id);
@@ -867,8 +872,8 @@ public:
 
     void clearAttrsForDealloc();
 
-    void giveAttrDescriptor(const char* attr, Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*));
-    void giveCapiAttrDescriptor(const char* attr, Box* (*get)(Box*, void*), int (*set)(Box*, Box*, void*));
+    void giveAttrDescriptor(const char* attr, Box* (*get)(Box*, void*), int (*set)(Box*, Box*, void*));
+    void giveAttrMember(const char* attr, int type, ssize_t offset, bool readonly = true);
 
     // getattr() does the equivalent of PyDict_GetItem(obj->dict, attr): it looks up the attribute's value on the
     // object's attribute storage. it doesn't look at other objects or do any descriptor logic.
