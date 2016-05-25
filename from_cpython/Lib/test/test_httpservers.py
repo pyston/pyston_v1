@@ -1,4 +1,3 @@
-# expected: fail
 """Unittests for the various HTTPServer modules.
 
 Written by Cody A.W. Somerville <cody-somerville@ubuntu.com>,

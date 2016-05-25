@@ -1,4 +1,3 @@
-# expected: fail
 """PyUnit testing that threads honor our signal semantics"""
 
 import unittest

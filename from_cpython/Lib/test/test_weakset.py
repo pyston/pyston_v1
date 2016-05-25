@@ -1,4 +1,3 @@
-# expected: fail
 import unittest
 from test import test_support
 from weakref import proxy, ref, WeakSet

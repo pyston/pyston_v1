@@ -1,4 +1,3 @@
-# expected: fail
 # Author: Steven J. Bethard <steven.bethard@gmail.com>.
 
 import codecs
