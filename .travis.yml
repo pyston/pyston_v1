@@ -37,6 +37,9 @@ addons:
     - cmake
     - g++-4.8
     - gdb
+    - gfortran
+    - libatlas-dev
+    - libatlas-base-dev
     - libbz2-dev
     - libgeoip-dev
     - libgmp3-dev

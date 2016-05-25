@@ -130,6 +130,12 @@ extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* type, Py_ssize_t nitems) 
 }
 
 extern "C" PyObject* _PyObject_New(PyTypeObject* tp) noexcept {
+    // Pyston change: register the type if the type is not yet registered
+    if (unlikely(tp->tp_dict == NULL)) {
+        int ret = PyType_Ready(tp);
+        assert(ret == 0);
+    }
+
     PyObject* op;
     op = (PyObject*)PyObject_MALLOC(_PyObject_SIZE(tp));
     if (op == NULL)

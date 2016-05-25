@@ -89,7 +89,7 @@ except:
 
 try:
     test_helper.run_test(['sh', '-c', '. %s/bin/activate && python %s/numpy/tools/test-installed-numpy.py' % (ENV_DIR, ENV_DIR)],
-            ENV_NAME, [dict(ran=5781, errors=1, failures=1)])
+            ENV_NAME, [dict(ran=6139, errors=1, failures=1)])
 finally:
     if USE_CUSTOM_PATCHES:
         print_progress_header("Unpatching NumPy...")
