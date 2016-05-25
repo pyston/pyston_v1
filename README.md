@@ -10,12 +10,30 @@ Pyston should be considered in alpha: it "works" in that it can successfully run
 
 Currently, Pyston targets Python 2.7, only runs on x86_64 platforms, and only has been tested on Ubuntu.  Support for more platforms -- along with Python 3 compatibility -- is desired but deferred until we feel successful on our initial platform.  Pyston does not currently work on Mac OSX, and it is not clear when it will.
 
+### Getting Pyston
+
+We have some experimental docker images available; try running
+
+```
+docker run --it pyston/pyston
+```
+
+to be dropped in to a container that runs a pre-activated pyston virtualenv.  This means that the "pip" and "python" commands correspond to Pyston, so you can directly start doing `pip install numpy; python my_numpy_script.py` to get started.  As mentioned though, the docker images are experimental, so please give us feedback [on gitter](https.://gitter.im/dropbox/pyston).
+
+You can also download the latest release [from GitHub](https://github.com/dropbox/pyston/releases).  It should for the most part just extract and run.  One thing to note is that current virtualenv versions do not support Pyston, so you will need to use our version that we ship in the releases, such as by `pyston-0.5.0-linux64/pyston pyston-0.5.0-linux/pyston/virtualenv/virtualenv.py my_new_env`.
+
+You can also build Pyston directly from source.  We have some build instructions at [INSTALLING.md](https://github.com/dropbox/pyston/blob/master/docs/INSTALLING.md).  If you have any issues, please feel free to file an issue in the issue tracker, or mention it via email or gitter.
+
+
 ##### Contributing
 
 Pyston welcomes any kind of contribution; please see [CONTRIBUTING.md](https://github.com/dropbox/pyston/blob/master/CONTRIBUTING.md) for details.
 > tl;dr: You will need to sign the [Dropbox CLA](https://opensource.dropbox.com/cla/) and run the tests.
 
 We have some documentation for those interested in contributing: see our [Development Guide](https://github.com/dropbox/pyston/wiki/Development-Guide) and [development tips](docs/TIPS.md).
+
+All pull requests are built and tested by travis-ci.org running Ubuntu 12.04.
+See [travis-ci.org/dropbox/pyston/builds](https://travis-ci.org/dropbox/pyston/builds).
 
 ### Roadmap
 
@@ -56,20 +74,6 @@ We have some documentation for those interested in contributing: see our [Develo
 ##### v0.1: [released 4/2/2014](https://tech.dropbox.com/2014/04/introducing-pyston-an-upcoming-jit-based-python-implementation/)
 - Focus was on building and validating the core Python-to-LLVM JIT infrastructure.
 - Many core parts of the language were missing.
-
-### Trying it out
-
-We have some build instructions at [INSTALLING.md](https://github.com/dropbox/pyston/blob/master/docs/INSTALLING.md).  If you have any issues, please feel free to file an issue in the issue tracker, or mention it via email or gitter.
-
-Once you've followed those instructions, you should be able to do
-```
-$ make check
-```
-
-And see that hopefully all of the tests pass.  (If they don't, please let us know.)
-
-All pull requests are built and tested by travis-ci.org running Ubuntu 12.04.
-See [travis-ci.org/dropbox/pyston/builds](https://travis-ci.org/dropbox/pyston/builds).
 
 ### Running Pyston
 
