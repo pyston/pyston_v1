@@ -15,17 +15,24 @@ Currently, Pyston targets Python 2.7, only runs on x86_64 platforms, and only ha
 We have some experimental docker images available; try running
 
 ```
-docker run --it pyston/pyston
+docker run -it pyston/pyston
 ```
 
-to be dropped in to a container that runs a pre-activated pyston virtualenv.  This means that the "pip" and "python" commands correspond to Pyston, so you can directly start doing `pip install numpy; python my_numpy_script.py` to get started.  As mentioned though, the docker images are experimental, so please give us feedback [on gitter](https.://gitter.im/dropbox/pyston).
+to be dropped in to a container that runs a pre-activated pyston virtualenv.  This means that the "pip" and "python" commands correspond to Pyston, so you can directly start doing `pip install mypackage` to get started.  As mentioned though, the docker images are experimental, so please give us feedback [on gitter](https.://gitter.im/dropbox/pyston).
 
-You can also download the latest release [from GitHub](https://github.com/dropbox/pyston/releases).  It should for the most part just extract and run.  One thing to note is that current virtualenv versions do not support Pyston, so you will need to use our version that we ship in the releases, such as by `pyston-0.5.0-linux64/pyston pyston-0.5.0-linux/pyston/virtualenv/virtualenv.py my_new_env`.
+You can also download the latest release [from GitHub](https://github.com/dropbox/pyston/releases).  It should for the most part just extract and run.  One thing to note is that current virtualenv versions do not support Pyston, so you will need to use our version that we ship in the releases.  See our [Dockerfile](https://github.com/dropbox/pyston/blob/master/docker/Dockerfile) for how to do this.
 
 You can also build Pyston directly from source.  We have some build instructions at [INSTALLING.md](https://github.com/dropbox/pyston/blob/master/docs/INSTALLING.md).  If you have any issues, please feel free to file an issue in the issue tracker, or mention it via email or gitter.
 
+##### NumPy
 
-##### Contributing
+To use NumPy, one needs a modified Cython, and then to pip install directly from NumPy's github to force re-running Cython.  If you are running in our docker distribution, you can do:
+
+```
+pip install git+git://github.com/numpy/numpy@v1.11.0
+```
+
+### Contributing
 
 Pyston welcomes any kind of contribution; please see [CONTRIBUTING.md](https://github.com/dropbox/pyston/blob/master/CONTRIBUTING.md) for details.
 > tl;dr: You will need to sign the [Dropbox CLA](https://opensource.dropbox.com/cla/) and run the tests.
@@ -38,9 +45,7 @@ See [travis-ci.org/dropbox/pyston/builds](https://travis-ci.org/dropbox/pyston/b
 ### Roadmap
 
 ##### v0.5: Coming soon
-- Focus is on being ready to run Dropbox's production services.  Initial plan:
- - Support for a final few esoteric Python features
- - Better stability and performance (but particularly for the Dropbox servers)
+- Focus is on being ready to run Dropbox's production services.  Blog post coming soon.
 
 ##### v0.4: [released 11/3/2015](http://blog.pyston.org/2015/11/03/102/)
 - Many new features and better language support

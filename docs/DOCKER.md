@@ -2,7 +2,8 @@ To produce a new docker build:
 ```
 cd ~/pyston/docker
 BUILD_NAME=0.5.0
-docker build -t pyston/pyston:latest -t pyston/pyston:${BUILD_NAME} .
+docker build -t pyston/pyston:latest .
+docker build -t pyston/pyston:${BUILD_NAME} .
 docker push pyston/pyston:latest
 docker push pyston/pyston:${BUILD_NAME}
 ```

@@ -6,13 +6,12 @@ FROM buildpack-deps:jessie
 # > At the moment, setting "LANG=C" on a Linux system *fundamentally breaks Python 3*, and that's not OK.
 ENV LANG C.UTF-8
 
-ENV PYSTON_TAG v0.4
-ENV PYSTON_VERSION 0.4.0
+ENV PYSTON_TAG v0.5.0
+ENV PYSTON_VERSION 0.5.0
 
 RUN set -x \
-    && curl -SL "https://github.com/dropbox/pyston/releases/download/${PYSTON_TAG}/pyston-${PYSTON_VERSION}-linux64.tar.gz" | tar -xzC /
-
-RUN /pyston-${PYSTON_VERSION}-linux64/pyston /pyston-${PYSTON_VERSION}-linux64/virtualenv/virtualenv.py /pyston_env
+    && curl -SL "https://github.com/dropbox/pyston/releases/download/${PYSTON_TAG}/pyston-${PYSTON_VERSION}-linux64.tar.gz" | tar -xzC / \
+    && /pyston-${PYSTON_VERSION}-linux64/pyston /pyston-${PYSTON_VERSION}-linux64/virtualenv/virtualenv.py /pyston_env
 
 ENV PATH /pyston_env/bin/:$PATH
 

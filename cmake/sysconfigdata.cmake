@@ -9,3 +9,8 @@ if (${ENABLE_REF_DEBUG})
 endif()
 
 configure_file(lib_pyston/_sysconfigdata.py.in lib_pyston/_sysconfigdata.py)
+
+# CMake sucks: it has no idea that configure-generated files can be installed.
+# Just tell it to install whatever file is at that particular location, and rely on
+# the rest of the build rules to ensure that it's made in time.
+install(FILES ${CMAKE_BINARY_DIR}/lib_pyston/_sysconfigdata.py DESTINATION lib_pyston)
