@@ -51,6 +51,28 @@ index 9cc38f0..ab05ad1 100644
  // originally copied from PyCFunction_Call() in CPython's Objects/methodobject.c
  // PyPy does not have this function
  static PyObject * __Pyx_CyFunction_Call(PyObject *func, PyObject *arg, PyObject *kw) {
+@@ -1143,7 +1145,9 @@
+ //////////////////// ClassMethod ////////////////////
+ 
+ static PyObject* __Pyx_Method_ClassMethod(PyObject *method) {
+-#if CYTHON_COMPILING_IN_PYPY
++// pyston change:
++// #if CYTHON_COMPILING_IN_PYPY
++#if 0 && CYTHON_COMPILING_IN_PYPY
+     if (PyObject_TypeCheck(method, &PyWrapperDescr_Type)) {
+         // cdef classes
+         return PyClassMethod_New(method);
+@@ -1152,7 +1156,9 @@
+     // It appears that PyMethodDescr_Type is not anywhere exposed in the Python/C API
+     static PyTypeObject *methoddescr_type = NULL;
+     if (methoddescr_type == NULL) {
+-       PyObject *meth = PyObject_GetAttrString((PyObject*)&PyList_Type, "append");
++       // Pyston change:
++       // PyObject *meth = PyObject_GetAttrString((PyObject*)&PyList_Type, "append");
++       PyObject *meth = PyObject_GetAttrString((PyObject*)&PyUnicode_Type, "split");
+        if (!meth) return NULL;
+        methoddescr_type = Py_TYPE(meth);
+        Py_DECREF(meth);
 diff --git a/Cython/Utility/Exceptions.c b/Cython/Utility/Exceptions.c
 index 354a776..567970d 100644
 --- a/Cython/Utility/Exceptions.c

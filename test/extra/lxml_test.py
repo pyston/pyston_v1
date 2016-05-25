@@ -22,18 +22,14 @@ def install_and_test_lxml():
     subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=CYTHON_DIR)
     subprocess.check_call([PYTHON_EXE, "-c", "import Cython"], cwd=CYTHON_DIR)
 
-    url = "https://pypi.python.org/packages/source/l/lxml/lxml-3.0.1.tar.gz"
+    url = "https://pypi.python.org/packages/source/l/lxml/lxml-3.6.0.tar.gz"
     subprocess.check_call(["wget", url], cwd=SRC_DIR)
-    subprocess.check_call(["tar", "-zxf", "lxml-3.0.1.tar.gz"], cwd=SRC_DIR)
-    LXML_DIR = os.path.abspath(os.path.join(SRC_DIR, "lxml-3.0.1"))
-
-    PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "lxml_patch.patch"))
-    subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=LXML_DIR)
-    print "Applied lxml patch"
+    subprocess.check_call(["tar", "-zxf", "lxml-3.6.0.tar.gz"], cwd=SRC_DIR)
+    LXML_DIR = os.path.abspath(os.path.join(SRC_DIR, "lxml-3.6.0"))
 
     subprocess.check_call([PYTHON_EXE, "setup.py", "build_ext", "-i", "--with-cython"], cwd=LXML_DIR)
  
-    expected = [{'ran': 1381, 'failures': 1}]
+    expected = [{'ran': 1724, 'failures': 1, 'errors': 1}]
     run_test([PYTHON_EXE, "test.py"], cwd=LXML_DIR, expected=expected)
     
 create_virtenv(ENV_NAME, None, force_create = True)
