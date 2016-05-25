@@ -25,9 +25,9 @@ def install_and_test_cffi():
 
     # looks like clang 3.5 causes more errors like: 214 != -42 doing casts
     if os.environ.has_key("CC") and "clang" in os.environ["CC"]:
-        expected = [{ "failed": 34, "passed": 1643, "skipped": 70, "xfailed": 4, "error": 5 }]
+        expected = [{ "failed": 20, "passed": 1657, "skipped": 70, "xfailed": 4, "error": 5 }]
     else:
-        expected = [{ "failed": 25, "passed": 1652, "skipped": 70, "xfailed": 4, "error": 5 }]
+        expected = [{ "failed": 11, "passed": 1666, "skipped": 70, "xfailed": 4, "error": 5 }]
     run_test([PYTEST_EXE], cwd=CFFI_DIR, expected=expected)
    
 create_virtenv(ENV_NAME, ["pytest==2.8.7", "py==1.4.31", "pycparser==2.14"], force_create = True)
