@@ -33,7 +33,7 @@ def install_and_test_lxml():
 
     subprocess.check_call([PYTHON_EXE, "setup.py", "build_ext", "-i", "--with-cython"], cwd=LXML_DIR)
  
-    expected = [{'ran': 1381, 'failures': 3}]
+    expected = [{'ran': 1381, 'failures': 1}]
     run_test([PYTHON_EXE, "test.py"], cwd=LXML_DIR, expected=expected)
     
 create_virtenv(ENV_NAME, None, force_create = True)

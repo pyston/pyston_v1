@@ -513,7 +513,7 @@ static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
 
         auto requested_builtins = PyDict_GetItemString(globals_dict, "__builtins__");
         if (requested_builtins == NULL)
-            PyDict_SetItemString(globals_dict, "__builtins__", builtins_module);
+            PyDict_SetItemString(globals_dict, "__builtins__", PyEval_GetBuiltins());
         else
             RELEASE_ASSERT(requested_builtins == builtins_module
                                || requested_builtins == builtins_module->getAttrWrapper(),
@@ -577,7 +577,7 @@ void exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_f
     if (PyDict_GetItemString(globals, "__builtins__") == NULL)
         // Pyston change:
         // PyDict_SetItemString(globals, "__builtins__", f->f_builtins);
-        PyDict_SetItemString(globals, "__builtins__", builtins_module);
+        PyDict_SetItemString(globals, "__builtins__", PyEval_GetBuiltins());
 
     if (PyCode_Check(prog)) {
         /* Pyston change:

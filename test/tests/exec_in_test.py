@@ -224,3 +224,5 @@ exec """
 def g():
     print sorted(globals().items())
 """ in d
+
+exec "hasattr(__builtins__, 'get')" in {} # check if __builtins__ becomes dict like instead of a module

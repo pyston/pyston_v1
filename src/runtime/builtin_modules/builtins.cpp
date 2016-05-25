@@ -1671,7 +1671,7 @@ Box* input(Box* prompt) {
     // in the current global scope.
     // e.g. eval('input()', {})
     if (PyDict_GetItemString(gbls, "__builtins__") == NULL) {
-        if (PyDict_SetItemString(gbls, "__builtins__", builtins_module) != 0)
+        if (PyDict_SetItemString(gbls, "__builtins__", PyEval_GetBuiltins()) != 0)
             throwCAPIException();
     }
 
