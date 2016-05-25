@@ -668,10 +668,10 @@ CMAKE_SHAREDMODS := sharedmods ext_pyston
 
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
-	$(NINJA) -C $(CMAKE_DIR_DBG) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_DBG) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_DBG)/pyston $@
 pyston_release: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(CMAKE_DIR_RELEASE) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_RELEASE) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_RELEASE)/pyston $@
 
 CMAKE_SETUP_GCC := $(CMAKE_DIR_GCC)/build.ninja
@@ -1103,5 +1103,5 @@ clang_lint: $(foreach FN,$(MAIN_SRCS),$(dir $(FN))lint_$(notdir $(FN:.cpp=)))
 package: pyston_pgo
 	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC_PGO) package
 
-package_nonpgo:
+package_nonpgo: pyston_release
 	$(NINJA) -C $(CMAKE_DIR_RELEASE) package
