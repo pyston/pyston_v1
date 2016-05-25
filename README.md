@@ -26,9 +26,16 @@ You can also build Pyston directly from source.  We have some build instructions
 
 ##### NumPy
 
-To use NumPy, one needs a modified Cython, and then to pip install directly from NumPy's github to force re-running Cython.  If you are running in our docker distribution, you can do:
+The easiest way to get started with NumPy-on-Pyston is to use another one of docker containers:
 
 ```
+docker run -it pyston/pyston-numpy
+```
+
+To install it yourself, one needs a modified Cython, as well as to install numpy from source in order to invoke our modified Cython.
+
+```
+pip install https://github.com/dropbox/pyston/releases/download/v0.5.0/Cython-0.22.0-pyston.tar.gz
 pip install git+git://github.com/numpy/numpy@v1.11.0
 ```
 
