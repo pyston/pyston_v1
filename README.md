@@ -51,8 +51,11 @@ See [travis-ci.org/dropbox/pyston/builds](https://travis-ci.org/dropbox/pyston/b
 
 ### Roadmap
 
-##### v0.5: Coming soon
-- Focus is on being ready to run Dropbox's production services.  Blog post coming soon.
+##### v0.6: coming soon
+
+##### v0.5: [released 5/25/2016](https://blog.pyston.org/2016/05/25/pyston-0-5-released/)
+- Reference counting
+- Signals support, generator cleanup, more C API support
 
 ##### v0.4: [released 11/3/2015](http://blog.pyston.org/2015/11/03/102/)
 - Many new features and better language support
