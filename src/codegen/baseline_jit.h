@@ -23,6 +23,9 @@
 
 namespace pyston {
 
+// passes MAP_32BIT to mmap when allocating the memory for the bjit code.
+// it's nice for inspecting the generated asm because the debugger is able to show the name of called C/C++ functions
+#define ENABLE_BASELINEJIT_MAP_32BIT 0
 #define ENABLE_BASELINEJIT_ICS 1
 
 class AST_stmt;
@@ -147,8 +150,18 @@ public:
     static constexpr int sp_adjustment = scratch_size + num_stack_args * 8 + 8 /* = alignment */;
 
 private:
+    struct MemoryManager {
+    private:
+        uint8_t* addr;
+
+    public:
+        MemoryManager();
+        ~MemoryManager();
+        uint8_t* get() { return addr; }
+    };
+
     // the memory block contains the EH frame directly followed by the generated machine code.
-    std::unique_ptr<uint8_t[]> memory;
+    MemoryManager memory;
     int entry_offset;
     assembler::Assembler a;
     bool is_currently_writing;
