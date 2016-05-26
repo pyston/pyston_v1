@@ -5732,8 +5732,8 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         bool neg = (op_type == AST_TYPE::IsNot);
 
         if (rewrite_args) {
-            RewriterVar* cmpres = rewrite_args->lhs->cmp(neg ? AST_TYPE::NotEq : AST_TYPE::Eq, rewrite_args->rhs,
-                                                         rewrite_args->destination);
+            RewriterVar* cmpres
+                = rewrite_args->lhs->cmp(neg ? AST_TYPE::NotEq : AST_TYPE::Eq, rewrite_args->rhs, assembler::RDI);
             rewrite_args->out_rtn
                 = rewrite_args->rewriter->call(false, (void*)boxBool, cmpres)->setType(RefType::OWNED);
             rewrite_args->out_success = true;

@@ -223,7 +223,7 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
 
     RewriterVar* args_array = nullptr;
     if (args.size())
-        args_array = allocArgs(args);
+        args_array = allocArgs(args, RewriterVar::SetattrType::REF_USED);
     else
         RELEASE_ASSERT(!keyword_names_var, "0 args but keyword names are set");
 
@@ -244,7 +244,10 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
 }
 
 RewriterVar* JitFragmentWriter::emitCompare(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
-    // TODO: can directly emit the assembly for Is/IsNot
+    if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot) {
+        RewriterVar* cmp_result = lhs->cmp(op_type == AST_TYPE::IsNot ? AST_TYPE::NotEq : AST_TYPE::Eq, rhs);
+        return call(false, (void*)boxBool, cmp_result)->setType(RefType::OWNED);
+    }
     return emitPPCall((void*)compare, { lhs, rhs, imm(op_type) }, 2, 240, node).first->setType(RefType::OWNED);
 }
 
