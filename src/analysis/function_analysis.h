@@ -55,6 +55,50 @@ public:
 
 class PhiAnalysis;
 
+class VRegSet {
+private:
+    // TODO: switch just to a bool*
+    std::vector<bool> v;
+
+public:
+    VRegSet(int num_vregs) : v(num_vregs, false) {}
+
+    void set(int vreg) { v[vreg] = true; }
+
+    class iterator {
+    public:
+        const VRegSet& set;
+        int i;
+        iterator(const VRegSet& set, int i) : set(set), i(i) {}
+
+        iterator& operator++() {
+            do {
+                i++;
+            } while (i < set.v.size() && !set.v[i]);
+            return *this;
+        }
+
+        bool operator==(const iterator& rhs) const { return i == rhs.i; }
+        bool operator!=(const iterator& rhs) const { return !(*this == rhs); }
+
+        int operator*() {
+            return i;
+        }
+    };
+
+    iterator begin() const {
+        for (int i = 0; i < v.size(); i++) {
+            if (v[i])
+                return iterator(*this, i);
+        }
+        return iterator(*this, this->v.size());
+    }
+
+    iterator end() const {
+        return iterator(*this, this->v.size());
+    }
+};
+
 class DefinednessAnalysis {
 public:
     enum DefinitionLevel {
@@ -63,7 +107,7 @@ public:
         PotentiallyDefined,
         Defined,
     };
-    typedef llvm::DenseSet<InternedString> RequiredSet;
+    typedef VRegSet RequiredSet;
 
 private:
     llvm::DenseMap<CFGBlock*, llvm::DenseMap<InternedString, DefinitionLevel>> defined_at_beginning, defined_at_end;

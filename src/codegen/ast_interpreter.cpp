@@ -745,8 +745,11 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     // Currently we pass None because the LLVM jit will decref this value even though it may not be set.
     static Box* const VAL_UNDEFINED = (Box*)None;
 
-    for (auto& name : phis->definedness.getDefinedNamesAtEnd(current_block)) {
-        Box* val = vregs[getVRegInfo().getVReg(name)];
+    const VRegSet& defined = phis->definedness.getDefinedNamesAtEnd(current_block);
+    for (int vreg : defined) {
+        InternedString name = source_info->cfg->getVRegInfo().getName(vreg);
+
+        Box* val = vregs[vreg];
         if (!liveness->isLiveAtEnd(name, current_block))
             continue;
 

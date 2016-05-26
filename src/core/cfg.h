@@ -87,6 +87,10 @@ class VRegInfo {
 private:
     llvm::DenseMap<InternedString, int> sym_vreg_map_user_visible;
     llvm::DenseMap<InternedString, int> sym_vreg_map;
+
+    // Reverse map, from vreg->symbol name.
+    std::vector<InternedString> vreg_sym_map;
+
     int num_vregs_cross_block = -1;
     int num_vregs = -1;
 
@@ -103,6 +107,12 @@ public:
         assert(it != sym_vreg_map.end());
         assert(it->second != -1);
         return it->second;
+    }
+
+    InternedString getName(int vreg) const {
+        assert(hasVRegsAssigned());
+        assert(vreg >= 0 && vreg < num_vregs);
+        return vreg_sym_map[vreg];
     }
 
     bool isUserVisibleVReg(int vreg) const { return vreg < sym_vreg_map_user_visible.size(); }

@@ -2681,6 +2681,7 @@ public:
     int next_vreg;
     llvm::DenseMap<InternedString, int> sym_vreg_map;
     llvm::DenseMap<InternedString, std::unordered_set<CFGBlock*>> sym_blocks_map;
+    std::vector<InternedString> vreg_sym_map;
 
     enum Step { TrackBlockUsage = 0, UserVisible, CrossBlock, SingleBlockUse } step;
 
@@ -2750,12 +2751,20 @@ public:
     int assignVReg(InternedString id) {
         auto it = sym_vreg_map.find(id);
         if (sym_vreg_map.end() == it) {
+            ASSERT(next_vreg == sym_vreg_map.size(), "%d %d", next_vreg, sym_vreg_map.size());
+            assert(next_vreg == vreg_sym_map.size());
+
             sym_vreg_map[id] = next_vreg;
+            vreg_sym_map.push_back(id);
             return next_vreg++;
         }
         return it->second;
     }
 };
+
+// XXX temporarily disable vreg reuse, since for the transition we want to make it very
+// easy to convert between vregs and names.
+#define REUSE_VREGS 0
 
 void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* scope_info) {
     assert(!hasVRegsAssigned());
@@ -2768,8 +2777,10 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* s
         for (CFGBlock* b : cfg->blocks) {
             visitor.current_block = b;
 
+#if REUSE_VREGS
             if (step == AssignVRegsVisitor::SingleBlockUse)
                 visitor.next_vreg = num_vregs_cross_block;
+#endif
 
             if (b == cfg->getStartingBlock()) {
                 for (auto* name : param_names.arg_names) {
@@ -2796,6 +2807,7 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* s
             num_vregs = num_vregs_cross_block = visitor.next_vreg;
     }
     sym_vreg_map = std::move(visitor.sym_vreg_map);
+    vreg_sym_map = std::move(visitor.vreg_sym_map);
     assert(hasVRegsAssigned());
 }
 
