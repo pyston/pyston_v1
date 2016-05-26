@@ -686,12 +686,12 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
     if (backedge)
         ++edgecount;
 
-    if (ENABLE_BASELINEJIT && backedge && edgecount == OSR_THRESHOLD_INTERPRETER && !jit && !node->target->code) {
+    if (ENABLE_BASELINEJIT && backedge && edgecount >= OSR_THRESHOLD_INTERPRETER && !jit && !node->target->code) {
         should_jit = true;
         startJITing(node->target);
     }
 
-    if (backedge && edgecount == OSR_THRESHOLD_BASELINE) {
+    if (backedge && edgecount >= OSR_THRESHOLD_BASELINE) {
         Box* rtn = doOSR(node);
         if (rtn)
             return Value(rtn, NULL);
