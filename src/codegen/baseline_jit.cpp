@@ -361,7 +361,7 @@ RewriterVar* JitFragmentWriter::emitExceptionMatches(RewriterVar* v, RewriterVar
 }
 
 RewriterVar* JitFragmentWriter::emitGetAttr(RewriterVar* obj, BoxedString* s, AST_expr* node) {
-    return emitPPCall((void*)getattr, { obj, imm(s) }, 2, 512, node, getTypeRecorderForNode(node))
+    return emitPPCall((void*)getattr, { obj, imm(s) }, 2, 256, node, getTypeRecorderForNode(node))
         .first->setType(RefType::OWNED);
 }
 
@@ -393,23 +393,21 @@ RewriterVar* JitFragmentWriter::emitGetBoxedLocals() {
 }
 
 RewriterVar* JitFragmentWriter::emitGetClsAttr(RewriterVar* obj, BoxedString* s) {
-    return emitPPCall((void*)getclsattr, { obj, imm(s) }, 2, 512).first->setType(RefType::OWNED);
+    return emitPPCall((void*)getclsattr, { obj, imm(s) }, 2, 256).first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitGetGlobal(Box* global, BoxedString* s) {
+RewriterVar* JitFragmentWriter::emitGetGlobal(BoxedString* s) {
     if (s->s() == "None") {
         RewriterVar* r = imm(None)->setType(RefType::BORROWED);
         return r;
     }
 
-    RewriterVar* args[] = { NULL, NULL };
-    args[0] = imm(global);
-    args[1] = imm(s);
-    return emitPPCall((void*)getGlobal, args, 2, 512).first->setType(RefType::OWNED);
+    RewriterVar* globals = getInterp()->getAttr(ASTInterpreterJitInterface::getGlobalsOffset());
+    return emitPPCall((void*)getGlobal, { globals, imm(s) }, 1, 128).first->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitGetItem(AST_expr* node, RewriterVar* value, RewriterVar* slice) {
-    return emitPPCall((void*)getitem, { value, slice }, 2, 512, node).first->setType(RefType::OWNED);
+    return emitPPCall((void*)getitem, { value, slice }, 1, 256, node).first->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitGetLocal(InternedString s, int vreg) {
@@ -541,16 +539,18 @@ RewriterVar* JitFragmentWriter::emitYield(RewriterVar* v) {
 }
 
 void JitFragmentWriter::emitDelAttr(RewriterVar* target, BoxedString* attr) {
-    emitPPCall((void*)delattr, { target, imm(attr) }, 1, 512).first;
+    emitPPCall((void*)delattr, { target, imm(attr) }, 1, 144).first;
 }
 
 void JitFragmentWriter::emitDelGlobal(BoxedString* name) {
     RewriterVar* globals = getInterp()->getAttr(ASTInterpreterJitInterface::getGlobalsOffset());
-    emitPPCall((void*)delGlobal, { globals, imm(name) }, 1, 512).first;
+    // does not get rewriten yet
+    // emitPPCall((void*)delGlobal, { globals, imm(name) }, 1, 512).first;
+    call(false, (void*)delGlobal, globals, imm(name));
 }
 
 void JitFragmentWriter::emitDelItem(RewriterVar* target, RewriterVar* slice) {
-    emitPPCall((void*)delitem, { target, slice }, 1, 512).first;
+    emitPPCall((void*)delitem, { target, slice }, 1, 256).first;
 }
 
 void JitFragmentWriter::emitDelName(InternedString name) {
@@ -623,7 +623,7 @@ void JitFragmentWriter::emitReturn(RewriterVar* v) {
 }
 
 void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr) {
-    auto rtn = emitPPCall((void*)setattr, { obj, imm(s), attr }, 2, 512, node);
+    auto rtn = emitPPCall((void*)setattr, { obj, imm(s), attr }, 2, 256, node);
     attr->refConsumed(rtn.second);
 }
 
@@ -647,8 +647,13 @@ void JitFragmentWriter::emitSetExcInfo(RewriterVar* type, RewriterVar* value, Re
     traceback->refConsumed();
 }
 
-void JitFragmentWriter::emitSetGlobal(Box* global, BoxedString* s, STOLEN(RewriterVar*) v) {
-    auto rtn = emitPPCall((void*)setGlobal, { imm(global), imm(s), v }, 2, 512);
+void JitFragmentWriter::emitSetGlobal(BoxedString* s, STOLEN(RewriterVar*) v, bool are_globals_from_module) {
+    RewriterVar* globals = getInterp()->getAttr(ASTInterpreterJitInterface::getGlobalsOffset());
+    std::pair<RewriterVar*, RewriterAction*> rtn;
+    if (are_globals_from_module)
+        rtn = emitPPCall((void*)setattr, { globals, imm(s), v }, 1, 256);
+    else
+        rtn = emitPPCall((void*)setGlobal, { globals, imm(s), v }, 1, 256);
     v->refConsumed(rtn.second);
 }
 

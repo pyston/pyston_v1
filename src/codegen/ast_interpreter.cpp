@@ -458,7 +458,7 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
     ScopeInfo::VarScopeType vst = node->lookup_type;
     if (vst == ScopeInfo::VarScopeType::GLOBAL) {
         if (jit)
-            jit->emitSetGlobal(frame_info.globals, name.getBox(), value);
+            jit->emitSetGlobal(name.getBox(), value, getMD()->source->scoping->areGlobalsFromModule());
         setGlobal(frame_info.globals, name.getBox(), value.o);
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
         if (jit)
@@ -1661,7 +1661,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             assert(!node->is_kill);
             Value v;
             if (jit)
-                v.var = jit->emitGetGlobal(frame_info.globals, node->id.getBox());
+                v.var = jit->emitGetGlobal(node->id.getBox());
 
             v.o = getGlobal(frame_info.globals, node->id.getBox());
             return v;

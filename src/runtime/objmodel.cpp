@@ -7302,6 +7302,9 @@ extern "C" Box* getGlobal(Box* globals, BoxedString* name) {
 }
 
 extern "C" void setGlobal(Box* globals, BoxedString* name, STOLEN(Box*) value) {
+    static StatCounter slowpath_setglobal("slowpath_setglobal");
+    slowpath_setglobal.log();
+
     if (globals->cls == attrwrapper_cls) {
         globals = unwrapAttrWrapper(globals);
         RELEASE_ASSERT(globals->cls == module_cls, "%s", globals->cls->tp_name);

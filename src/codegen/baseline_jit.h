@@ -234,7 +234,7 @@ public:
     RewriterVar* emitGetBoxedLocal(BoxedString* s);
     RewriterVar* emitGetBoxedLocals();
     RewriterVar* emitGetClsAttr(RewriterVar* obj, BoxedString* s);
-    RewriterVar* emitGetGlobal(Box* global, BoxedString* s);
+    RewriterVar* emitGetGlobal(BoxedString* s);
     RewriterVar* emitGetItem(AST_expr* node, RewriterVar* value, RewriterVar* slice);
     RewriterVar* emitGetLocal(InternedString s, int vreg);
     RewriterVar* emitGetPystonIter(RewriterVar* v);
@@ -268,7 +268,7 @@ public:
     void emitSetBlockLocal(InternedString s, STOLEN(RewriterVar*) v);
     void emitSetCurrentInst(AST_stmt* node);
     void emitSetExcInfo(RewriterVar* type, RewriterVar* value, RewriterVar* traceback);
-    void emitSetGlobal(Box* global, BoxedString* s, STOLEN(RewriterVar*) v);
+    void emitSetGlobal(BoxedString* s, STOLEN(RewriterVar*) v, bool are_globals_from_module);
     void emitSetItemName(BoxedString* s, RewriterVar* v);
     void emitSetItem(RewriterVar* target, RewriterVar* slice, RewriterVar* value);
     void emitSetLocal(InternedString s, int vreg, bool set_closure, STOLEN(RewriterVar*) v);
