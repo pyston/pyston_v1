@@ -471,13 +471,12 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
         bool closure = vst == ScopeInfo::VarScopeType::CLOSURE;
         if (jit) {
             bool is_live = true;
-            // TODO: turn this optimization back on.
-            // if (!closure)
-            // is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
+            if (!closure)
+                is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
             if (is_live)
                 jit->emitSetLocal(name, node->vreg, closure, value);
             else
-                jit->emitSetBlockLocal(name, value);
+                jit->emitSetBlockLocal(name, node->vreg, value);
         }
 
         if (closure) {
@@ -1779,6 +1778,10 @@ Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
 
 int ASTInterpreterJitInterface::getBoxedLocalsOffset() {
     return offsetof(ASTInterpreter, frame_info.boxedLocals);
+}
+
+int ASTInterpreterJitInterface::getCreatedClosureOffset() {
+    return offsetof(ASTInterpreter, created_closure);
 }
 
 int ASTInterpreterJitInterface::getCurrentBlockOffset() {

@@ -1233,9 +1233,8 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
 std::vector<Location> Rewriter::getDecrefLocations() {
     std::vector<Location> decref_infos;
     for (RewriterVar& var : vars) {
-        if (var.locations.size() && var.needsDecref()) {
+        if (var.locations.size() && var.needsDecref(current_action_idx)) {
             bool found_location = false;
-
             for (Location l : var.locations) {
                 if (l.type == Location::Scratch) {
                     // convert to stack based location because later on we may not know the offset of the scratch area
@@ -1359,8 +1358,22 @@ void RewriterVar::refUsed() {
     rewriter->addAction([=]() { this->bumpUse(); }, { this }, ActionType::NORMAL);
 }
 
-bool RewriterVar::needsDecref() {
-    return reftype == RefType::OWNED && !this->refHandedOff();
+bool RewriterVar::needsDecref(int current_action_index) {
+    rewriter->assertPhaseEmitting();
+
+    if (reftype != RefType::OWNED)
+        return false;
+
+    // if nothing consumes this reference we need to create a decref entry
+    if (num_refs_consumed == 0)
+        return true;
+
+    // don't create decref entry if the currenty action hands off the ownership
+    int reference_handed_off_action_index = uses[last_refconsumed_numuses - 1];
+    if (reference_handed_off_action_index == current_action_index)
+        return false;
+
+    return true;
 }
 
 void RewriterVar::registerOwnedAttr(int byte_offset) {
@@ -1513,6 +1526,7 @@ void Rewriter::commit() {
             _incref(var, 1);
         }
 
+        current_action_idx = i;
         actions[i].action();
 
         if (failed) {
@@ -2215,6 +2229,7 @@ Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const L
       return_location(this->rewrite->returnRegister()),
       failed(false),
       needs_invalidation_support(needs_invalidation_support),
+      current_action_idx(-1),
       added_changing_action(false),
       marked_inside_ic(false),
       done_guarding(false),

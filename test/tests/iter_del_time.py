@@ -1,4 +1,5 @@
-# fail-if: '-n' in EXTRA_JIT_ARGS or '-O' in EXTRA_JIT_ARGS
+# expected: fail
+# this only works in the interpreter and not in the bjit and llvm jit
 
 class C(object):
     def next(self):

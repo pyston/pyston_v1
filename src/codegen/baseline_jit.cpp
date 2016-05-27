@@ -385,17 +385,16 @@ RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s, int vreg) {
     auto it = local_syms.find(s);
     if (it == local_syms.end()) {
         auto r = emitGetLocal(s, vreg);
-        // TODO: clear out the vreg?
-        // assert(r->reftype == RefType::OWNED);
-        // emitSetLocal(s, vreg, false, imm(nullptr));
-        // emitSetBlockLocal(s, r);
+        assert(r->reftype == RefType::OWNED);
+        emitSetBlockLocal(s, vreg, r);
         return r;
     }
     return it->second;
 }
 
 void JitFragmentWriter::emitKillTemporary(InternedString s, int vreg) {
-    emitSetLocal(s, vreg, false, imm(nullptr));
+    if (!local_syms.count(s))
+        emitSetLocal(s, vreg, false, imm(nullptr));
 }
 
 RewriterVar* JitFragmentWriter::emitGetBoxedLocal(BoxedString* s) {
@@ -549,8 +548,26 @@ std::vector<RewriterVar*> JitFragmentWriter::emitUnpackIntoArray(RewriterVar* v,
 }
 
 RewriterVar* JitFragmentWriter::emitYield(RewriterVar* v) {
-    auto rtn = call(false, (void*)ASTInterpreterJitInterface::yieldHelper, getInterp(), v)->setType(RefType::OWNED);
+    llvm::SmallVector<RewriterVar*, 16> local_args;
+    local_args.push_back(interp->getAttr(ASTInterpreterJitInterface::getCreatedClosureOffset()));
+    // we have to pass all owned references which are not stored in the vregs to yield() so that the GC can traverse it
+    for (auto&& sym : local_syms) {
+        if (sym.second == v)
+            continue;
+        if (sym.second->reftype == RefType::OWNED)
+            local_args.push_back(sym.second);
+    }
+    // erase duplicate entries
+    std::sort(local_args.begin(), local_args.end());
+    local_args.erase(std::unique(local_args.begin(), local_args.end()), local_args.end());
+
+    auto&& args = allocArgs(local_args, RewriterVar::SetattrType::REF_USED);
+    RewriterVar* generator = interp->getAttr(ASTInterpreterJitInterface::getGeneratorOffset());
+    auto rtn = call(false, (void*)yield, generator, v, args, imm(local_args.size()))->setType(RefType::OWNED);
     v->refConsumed();
+    for (auto&& var : local_args) {
+        var->refUsed();
+    }
     return rtn;
 }
 
@@ -643,10 +660,12 @@ void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedStrin
     attr->refConsumed(rtn.second);
 }
 
-void JitFragmentWriter::emitSetBlockLocal(InternedString s, STOLEN(RewriterVar*) v) {
+void JitFragmentWriter::emitSetBlockLocal(InternedString s, int vreg, STOLEN(RewriterVar*) v) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitSetBlockLocal() start");
     RewriterVar* prev = local_syms[s];
+    if (!prev)
+        emitSetLocal(s, vreg, false, imm(nullptr)); // clear out the vreg
     local_syms[s] = v;
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitSetBlockLocal() end");

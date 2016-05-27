@@ -254,7 +254,7 @@ private:
     bool isDoneUsing() { return next_use == uses.size(); }
     bool hasScratchAllocation() const { return scratch_allocation.second > 0; }
     void resetHasScratchAllocation() { scratch_allocation = std::make_pair(0, 0); }
-    bool needsDecref();
+    bool needsDecref(int current_action_index);
 
     // Indicates if this variable is an arg, and if so, what location the arg is from.
     bool is_arg;
@@ -432,6 +432,8 @@ protected:
              bool needs_invalidation_support = true);
 
     std::deque<RewriterAction> actions;
+    int current_action_idx; // in the emitting phase get's set to index of currently executed action
+
     template <typename F> RewriterAction* addAction(F&& action, llvm::ArrayRef<RewriterVar*> vars, ActionType type) {
         assertPhaseCollecting();
         for (RewriterVar* var : vars) {
