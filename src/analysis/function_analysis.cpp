@@ -243,9 +243,9 @@ private:
     typedef DefinednessBBAnalyzer::Map Map;
     Map& state;
 
-    void _doSet(InternedString s) {
-        ASSERT(state.count(s), "%s", s.c_str());
-        state[s] = DefinednessAnalysis::Defined;
+    void _doSet(int vreg) {
+        assert(vreg >= 0 && vreg < state.numVregs());
+        state[vreg] = DefinednessAnalysis::Defined;
     }
 
     void _doSet(AST* t) {
@@ -258,12 +258,10 @@ private:
                 if (name->lookup_type == ScopeInfo::VarScopeType::FAST
                     || name->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
                     assert(name->vreg != -1);
-                    assert(state.count(name->id));
-                    _doSet(name->id);
+                    _doSet(name->vreg);
                 } else if (name->lookup_type == ScopeInfo::VarScopeType::GLOBAL
                            || name->lookup_type == ScopeInfo::VarScopeType::NAME) {
                     assert(name->vreg == -1);
-                    assert(!state.count(name->id));
                     // skip
                 } else {
                     RELEASE_ASSERT(0, "%d", name->lookup_type);
@@ -304,8 +302,8 @@ public:
                 AST_Name* name = ast_cast<AST_Name>(t);
                 if (name->lookup_type != ScopeInfo::VarScopeType::GLOBAL
                     && name->lookup_type != ScopeInfo::VarScopeType::NAME) {
-                    ASSERT(state.count(name->id), "%s", name->id.c_str());
-                    state[name->id] = DefinednessAnalysis::Undefined;
+                    assert(name->vreg != -1);
+                    state[name->vreg] = DefinednessAnalysis::Undefined;
                 }
             } else {
                 // The CFG pass should reduce all deletes to the "basic" deletes on names/attributes/subscripts.
@@ -318,21 +316,23 @@ public:
     }
 
     virtual bool visit_classdef(AST_ClassDef* node) {
-        _doSet(node->name);
+        assert(0 && "I think this isn't needed");
+        //_doSet(node->name);
         return true;
     }
 
     virtual bool visit_functiondef(AST_FunctionDef* node) {
-        _doSet(node->name);
+        assert(0 && "I think this isn't needed");
+        //_doSet(node->name);
         return true;
     }
 
     virtual bool visit_alias(AST_alias* node) {
-        InternedString name = node->name;
+        int vreg = node->name_vreg;
         if (node->asname.s().size())
-            name = node->asname;
+            vreg = node->asname_vreg;
 
-        _doSet(name);
+        _doSet(vreg);
         return true;
     }
     virtual bool visit_import(AST_Import* node) { return false; }
@@ -347,9 +347,9 @@ public:
 
     virtual bool visit_arguments(AST_arguments* node) {
         if (node->kwarg.s().size())
-            _doSet(node->kwarg);
+            _doSet(node->kwarg_vreg);
         if (node->vararg.s().size())
-            _doSet(node->vararg);
+            _doSet(node->vararg_vreg);
         for (int i = 0; i < node->args.size(); i++) {
             _doSet(node->args[i]);
         }
@@ -371,7 +371,8 @@ void DefinednessBBAnalyzer::processBB(Map& starting, CFGBlock* block) const {
     if (VERBOSITY("analysis") >= 3) {
         printf("At end of block %d:\n", block->idx);
         for (const auto& p : starting) {
-            printf("%s: %d\n", p.first.c_str(), p.second);
+            if (p.second != DefinednessAnalysis::Undefined)
+                printf("%s: %d\n", block->cfg->getVRegInfo().getName(p.first).c_str(), p.second);
         }
     }
 }
@@ -388,33 +389,33 @@ void DefinednessAnalysis::run(llvm::DenseMap<InternedString, DefinednessAnalysis
     auto&& vreg_info = cfg->getVRegInfo();
     int nvregs = vreg_info.getTotalNumOfVRegs();
     ASSERT(nvregs == initial_map.size(), "%d %d", nvregs, initial_map.size());
+
+    VRegMap<DefinednessAnalysis::DefinitionLevel> real_initial_map(nvregs);
     for (auto&& p : initial_map) {
-        // Run it through getVReg to make sure that the vreg exists
-        ASSERT(vreg_info.getVReg(p.first) >= 0, "%s", p.first.c_str());
+        real_initial_map[vreg_info.getVReg(p.first)] = p.second;
     }
 
-    computeFixedPoint(std::move(initial_map), initial_block, DefinednessBBAnalyzer(scope_info), false,
+    computeFixedPoint(std::move(real_initial_map), initial_block, DefinednessBBAnalyzer(scope_info), false,
                       defined_at_beginning, defined_at_end);
 
     for (const auto& p : defined_at_end) {
-        assert(p.second.size() == nvregs);
+        assert(p.second.numVregs() == nvregs);
 
         assert(!defined_at_end_sets.count(p.first));
         RequiredSet& required = defined_at_end_sets.insert(std::make_pair(p.first, RequiredSet(nvregs))).first->second;
 
-        //required.resize(nvregs, /* value= */ false);
+        // required.resize(nvregs, /* value= */ false);
 
         for (int vreg = 0; vreg < nvregs; vreg++) {
-            // TODO shouldn't have to use name at all
-            InternedString name = vreg_info.getName(vreg);
-
 #ifndef NDEBUG
-            ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
-            assert(vst != ScopeInfo::VarScopeType::GLOBAL && vst != ScopeInfo::VarScopeType::NAME);
+            ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(vreg_info.getName(vreg));
+            ASSERT(vst != ScopeInfo::VarScopeType::GLOBAL && vst != ScopeInfo::VarScopeType::NAME, "%s",
+                   vreg_info.getName(vreg).c_str());
 #endif
 
-            assert(p.second.count(name));
-            auto status = p.second.find(name)->second;
+            auto status = p.second[vreg];
+            // assert(p.second.count(name));
+            // auto status = p.second.find(name)->second;
             assert(status != DefinednessAnalysis::Unknown);
             if (status != DefinednessAnalysis::Undefined)
                 required.set(vreg);
@@ -427,10 +428,9 @@ void DefinednessAnalysis::run(llvm::DenseMap<InternedString, DefinednessAnalysis
 
 DefinednessAnalysis::DefinitionLevel DefinednessAnalysis::isDefinedAtEnd(InternedString name, CFGBlock* block) {
     assert(defined_at_end.count(block));
-    auto& map = defined_at_end[block];
-    if (map.count(name) == 0)
-        return Undefined;
-    return map[name];
+    auto&& map = defined_at_end.find(block)->second;
+    auto cfg = block->cfg;
+    return map[cfg->getVRegInfo().getVReg(name)];
 }
 
 const DefinednessAnalysis::RequiredSet& DefinednessAnalysis::getDefinedNamesAtEnd(CFGBlock* block) {
@@ -528,8 +528,11 @@ bool PhiAnalysis::isPotentiallyUndefinedAfter(InternedString name, CFGBlock* blo
 bool PhiAnalysis::isPotentiallyUndefinedAt(InternedString name, CFGBlock* block) {
     assert(!startswith(name.s(), "!"));
 
+    auto cfg = block->cfg;
+    int vreg = cfg->getVRegInfo().getVReg(name);
+
     assert(definedness.defined_at_beginning.count(block));
-    return definedness.defined_at_beginning[block][name] != DefinednessAnalysis::Defined;
+    return definedness.defined_at_beginning.find(block)->second[vreg] != DefinednessAnalysis::Defined;
 }
 
 std::unique_ptr<LivenessAnalysis> computeLivenessInfo(CFG* cfg) {

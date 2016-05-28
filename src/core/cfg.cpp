@@ -1613,7 +1613,6 @@ public:
 
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeClass(def));
-        // is this name mangling correct?
         pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, 0, true));
 
         return true;
@@ -1635,7 +1634,6 @@ public:
 
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeFunction(def));
-        // is this name mangling correct?
         pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, node->col_offset, true));
 
         return true;
@@ -2687,9 +2685,21 @@ public:
 
     AssignVRegsVisitor(ScopeInfo* scope_info) : scope_info(scope_info), current_block(0), next_vreg(0) {}
 
+    bool visit_alias(AST_alias* node) override {
+        if (node->asname.s().size())
+            node->asname_vreg = assignVReg(node->asname);
+        else
+            node->name_vreg = assignVReg(node->name);
+        return true;
+    }
+
     bool visit_arguments(AST_arguments* node) override {
         for (AST_expr* d : node->defaults)
             d->accept(this);
+        if (node->kwarg.s().size())
+            node->kwarg_vreg = assignVReg(node->kwarg);
+        if (node->vararg.s().size())
+            node->vararg_vreg = assignVReg(node->vararg);
         return true;
     }
 
@@ -2749,6 +2759,8 @@ public:
     }
 
     int assignVReg(InternedString id) {
+        assert(id.s().size());
+
         auto it = sym_vreg_map.find(id);
         if (sym_vreg_map.end() == it) {
             ASSERT(next_vreg == sym_vreg_map.size(), "%d %d", next_vreg, sym_vreg_map.size());

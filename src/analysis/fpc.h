@@ -21,6 +21,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "analysis/function_analysis.h"
 #include "core/cfg.h"
 #include "core/common.h"
 #include "core/options.h"
@@ -29,7 +30,7 @@ namespace pyston {
 
 template <typename T> class BBAnalyzer {
 public:
-    typedef llvm::DenseMap<InternedString, T> Map;
+    typedef VRegMap<T> Map;
     typedef llvm::DenseMap<CFGBlock*, Map> AllMap;
 
     virtual ~BBAnalyzer() {}
@@ -56,10 +57,12 @@ void computeFixedPoint(typename BBAnalyzer<T>::Map&& initial_map, CFGBlock* init
     assert(!starting_states.size());
     assert(!ending_states.size());
 
+    int num_vregs = initial_map.numVregs();
+
     llvm::SmallPtrSet<CFGBlock*, 32> in_queue;
     std::priority_queue<CFGBlock*, llvm::SmallVector<CFGBlock*, 32>, CFGBlockMinIndex> q;
 
-    starting_states.insert(make_pair(initial_block, std::move(initial_map)));
+    starting_states.insert(std::make_pair(initial_block, std::move(initial_map)));
     q.push(initial_block);
     in_queue.insert(initial_block);
 
@@ -70,9 +73,10 @@ void computeFixedPoint(typename BBAnalyzer<T>::Map&& initial_map, CFGBlock* init
         q.pop();
         in_queue.erase(block);
 
-        Map& initial = starting_states[block];
+        assert(starting_states.count(block));
+        Map& initial = starting_states.find(block)->second;
         if (VERBOSITY("analysis") >= 2)
-            printf("fpc on block %d - %d entries\n", block->idx, initial.size());
+            printf("fpc on block %d - %d entries\n", block->idx, initial.numVregs());
 
         Map ending = Map(initial);
 
@@ -87,19 +91,16 @@ void computeFixedPoint(typename BBAnalyzer<T>::Map&& initial_map, CFGBlock* init
                 initial = true;
             }
 
-            Map& next = starting_states[next_block];
+            auto it = starting_states.find(next_block);
+            if (it == starting_states.end())
+                it = starting_states.insert(std::make_pair(next_block, Map(num_vregs))).first;
+
+            Map& next = it->second;
             // merge ending->next
             for (const auto& p : ending) {
-                bool existed = next.count(p.first);
                 T& next_elt = next[p.first];
 
                 T new_elt = analyzer.merge(p.second, next_elt);
-
-                if (!existed) {
-                    assert(new_elt != next_elt);
-                    if (initial)
-                        assert(new_elt == p.second);
-                }
 
                 if (next_elt != new_elt) {
                     next_elt = new_elt;
@@ -108,10 +109,7 @@ void computeFixedPoint(typename BBAnalyzer<T>::Map&& initial_map, CFGBlock* init
             }
 
 #ifndef NDEBUG
-            for (const auto& p : next) {
-                assert(ending.count(p.first));
-            }
-            assert(next.size() == ending.size());
+            assert(next.numVregs() == ending.numVregs());
 #endif
 
             if (changed && in_queue.insert(next_block).second) {
@@ -119,7 +117,8 @@ void computeFixedPoint(typename BBAnalyzer<T>::Map&& initial_map, CFGBlock* init
             }
         }
 
-        ending_states[block] = std::move(ending);
+        ending_states.erase(block);
+        ending_states.insert(std::make_pair(block, std::move(ending)));
     }
 
     if (VERBOSITY("analysis")) {

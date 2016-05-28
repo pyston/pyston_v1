@@ -217,6 +217,7 @@ public:
 class AST_alias : public AST {
 public:
     InternedString name, asname;
+    int name_vreg = -1, asname_vreg = -1;
 
     virtual void accept(ASTVisitor* v);
 
@@ -233,6 +234,7 @@ public:
     // These are represented as strings, not names; not sure why.
     // If they don't exist, the string is empty.
     InternedString kwarg, vararg;
+    int kwarg_vreg = -1, vararg_vreg = -1;
 
     virtual void accept(ASTVisitor* v);
 

@@ -81,9 +81,7 @@ public:
         bool operator==(const iterator& rhs) const { return i == rhs.i; }
         bool operator!=(const iterator& rhs) const { return !(*this == rhs); }
 
-        int operator*() {
-            return i;
-        }
+        int operator*() { return i; }
     };
 
     iterator begin() const {
@@ -94,9 +92,49 @@ public:
         return iterator(*this, this->v.size());
     }
 
-    iterator end() const {
-        return iterator(*this, this->v.size());
+    iterator end() const { return iterator(*this, this->v.size()); }
+};
+
+template <typename T> class VRegMap {
+private:
+    // TODO: switch just to a T*
+    std::vector<T> v;
+
+public:
+    VRegMap(int num_vregs) : v(num_vregs) {}
+
+    T& operator[](int vreg) {
+        assert(vreg >= 0 && vreg < v.size());
+        return v[vreg];
     }
+
+    const T& operator[](int vreg) const {
+        assert(vreg >= 0 && vreg < v.size());
+        return v[vreg];
+    }
+
+    class iterator {
+    public:
+        const VRegMap<T>& map;
+        int i;
+        iterator(const VRegMap<T>& map, int i) : map(map), i(i) {}
+
+        iterator& operator++() {
+            i++;
+            return *this;
+        }
+
+        bool operator==(const iterator& rhs) const { return i == rhs.i; }
+        bool operator!=(const iterator& rhs) const { return !(*this == rhs); }
+
+        std::pair<int, const T&> operator*() { return std::pair<int, const T&>(i, map[i]); }
+    };
+
+    int numVregs() const { return v.size(); }
+
+    iterator begin() const { return iterator(*this, 0); }
+
+    iterator end() const { return iterator(*this, this->v.size()); }
 };
 
 class DefinednessAnalysis {
@@ -110,7 +148,7 @@ public:
     typedef VRegSet RequiredSet;
 
 private:
-    llvm::DenseMap<CFGBlock*, llvm::DenseMap<InternedString, DefinitionLevel>> defined_at_beginning, defined_at_end;
+    llvm::DenseMap<CFGBlock*, VRegMap<DefinitionLevel>> defined_at_beginning, defined_at_end;
     llvm::DenseMap<CFGBlock*, RequiredSet> defined_at_end_sets;
 
 public:
