@@ -108,7 +108,7 @@ def get_expected_output(fn):
     env = dict(os.environ)
     env["PYTHONPATH"] = EXTMODULE_DIR
     env["PYTHONIOENCODING"] = PYTHONIOENCODING
-    p = subprocess.Popen(["python", "-Wignore", fn], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits, env=env)
+    p = subprocess.Popen(["python2", "-Wignore", fn], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits, env=env)
     out, err = p.communicate()
     code = p.wait()
 

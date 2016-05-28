@@ -354,7 +354,7 @@ extern "C" double PyLong_AsDouble(PyObject* vv) noexcept {
     mpfr_init_set_z(result, l->n, MPFR_RNDN);
 
     double result_f = mpfr_get_d(result, MPFR_RNDN);
-    if (isinf(result_f)) {
+    if (std::isinf(result_f)) {
         PyErr_SetString(PyExc_OverflowError, "long int too large to convert to float");
         return -1;
     }
@@ -408,11 +408,11 @@ extern "C" PyAPI_FUNC(PyObject*) _PyLong_Format(PyObject* aa, int base, int addL
 }
 
 extern "C" PyObject* PyLong_FromDouble(double v) noexcept {
-    if (isnan(v)) {
+    if (std::isnan(v)) {
         PyErr_SetString(PyExc_ValueError, "cannot convert float NaN to integer");
         return NULL;
     }
-    if (isinf(v)) {
+    if (std::isinf(v)) {
         PyErr_SetString(PyExc_OverflowError, "cannot convert float infinity to integer");
         return NULL;
     }
@@ -1408,7 +1408,7 @@ Box* longTrueDiv(BoxedLong* v1, Box* _v2) {
 
     double result_f = mpfr_get_d(result, MPFR_RNDN);
 
-    if (isinf(result_f)) {
+    if (std::isinf(result_f)) {
         raiseExcHelper(OverflowError, "integer division result too large for a float");
     }
     return boxFloat(result_f);
@@ -1438,7 +1438,7 @@ Box* longRTrueDiv(BoxedLong* v1, Box* _v2) {
     mpfr_div(result, lhs_f, rhs_f, MPFR_RNDN);
 
     double result_f = mpfr_get_d(result, MPFR_RNDZ);
-    if (isinf(result_f)) {
+    if (std::isinf(result_f)) {
         raiseExcHelper(OverflowError, "integer division result too large for a float");
     }
     return boxFloat(result_f);

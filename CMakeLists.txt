@@ -87,7 +87,7 @@ endif()
 if(ENABLE_SELF_HOST)
   set(PYTHON_EXE "pyston")
 else()
-  find_program(PYTHON_EXE python)
+  set(PYTHON_EXE "python2")
 endif()
 
 # initial clang flags (set here so they're used when building llvm)

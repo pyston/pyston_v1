@@ -64,6 +64,16 @@ def ctypes_ext():
     if platform.linux_distribution()[0] == "Fedora":
         ffi_lib = "ffi"
 
+    # Hack: platform.linux_distribution()[0] is '' on python2 on arch
+    # this change only works with libffi-3.2.1
+    try:
+        with open('/etc/issue') as f:
+            if f.read().startswith('Arch Linux'):
+                ffi_lib = "ffi"
+                ffi_inc = ["/usr/lib/libffi-3.2.1/include"]
+    except Exception:
+        pass
+
     ext.include_dirs.extend(ffi_inc)
     ext.libraries.append(ffi_lib)
 
