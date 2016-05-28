@@ -155,7 +155,7 @@ public:
     ~ASTInterpreter() { Py_XDECREF(this->created_closure); }
 
     const VRegInfo& getVRegInfo() const { return source_info->cfg->getVRegInfo(); }
-    const llvm::DenseMap<InternedString, int>& getSymVRegMap() const {
+    const llvm::DenseMap<InternedString, DefaultedInt<-1>>& getSymVRegMap() const {
         return source_info->cfg->getVRegInfo().getSymVRegMap();
     }
 
@@ -745,7 +745,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     // Currently we pass None because the LLVM jit will decref this value even though it may not be set.
     static Box* const VAL_UNDEFINED = (Box*)None;
 
-    const VRegSet& defined = phis->definedness.getDefinedNamesAtEnd(current_block);
+    const VRegSet& defined = phis->definedness.getDefinedVregsAtEnd(current_block);
     for (int vreg : defined) {
         InternedString name = source_info->cfg->getVRegInfo().getName(vreg);
 

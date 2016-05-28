@@ -82,6 +82,8 @@ public:
                ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info, RefcountTracker* refcount_tracker);
     ~IRGenState();
 
+    CFG* getCFG() { return getSourceInfo()->cfg; }
+
     CompiledFunction* getCurFunction() { return cf; }
     FunctionMetadata* getMD() { return md; }
 

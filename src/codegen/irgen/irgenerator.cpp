@@ -2682,8 +2682,9 @@ private:
             }
         }
 
-        const PhiAnalysis::RequiredSet& all_phis = irstate->getPhis()->getAllRequiredAfter(myblock);
-        for (PhiAnalysis::RequiredSet::const_iterator it = all_phis.begin(), end = all_phis.end(); it != end; ++it) {
+        for (int vreg : irstate->getPhis()->getAllRequiredAfter(myblock)) {
+            auto name = irstate->getCFG()->getVRegInfo().getName(vreg);
+            auto it = &name; // hack, remove
             if (VERBOSITY() >= 3)
                 printf("phi will be required for %s\n", it->c_str());
             assert(scope_info->getScopeTypeOfName(*it) != ScopeInfo::VarScopeType::GLOBAL);

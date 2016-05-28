@@ -378,32 +378,26 @@ void DefinednessBBAnalyzer::processBB(Map& starting, CFGBlock* block) const {
     }
 }
 
-void DefinednessAnalysis::run(llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map,
-                              CFGBlock* initial_block, ScopeInfo* scope_info) {
+void DefinednessAnalysis::run(VRegMap<DefinednessAnalysis::DefinitionLevel> initial_map, CFGBlock* initial_block,
+                              ScopeInfo* scope_info) {
     Timer _t("DefinednessAnalysis()", 10);
 
     // Don't run this twice:
     assert(!defined_at_end.size());
 
     auto cfg = initial_block->cfg;
+    int nvregs = cfg->getVRegInfo().getTotalNumOfVRegs();
+    assert(initial_map.numVregs() == nvregs);
 
     auto&& vreg_info = cfg->getVRegInfo();
-    int nvregs = vreg_info.getTotalNumOfVRegs();
-    ASSERT(nvregs == initial_map.size(), "%d %d", nvregs, initial_map.size());
-
-    VRegMap<DefinednessAnalysis::DefinitionLevel> real_initial_map(nvregs);
-    for (auto&& p : initial_map) {
-        real_initial_map[vreg_info.getVReg(p.first)] = p.second;
-    }
-
-    computeFixedPoint(std::move(real_initial_map), initial_block, DefinednessBBAnalyzer(scope_info), false,
+    computeFixedPoint(std::move(initial_map), initial_block, DefinednessBBAnalyzer(scope_info), false,
                       defined_at_beginning, defined_at_end);
 
     for (const auto& p : defined_at_end) {
         assert(p.second.numVregs() == nvregs);
 
         assert(!defined_at_end_sets.count(p.first));
-        RequiredSet& required = defined_at_end_sets.insert(std::make_pair(p.first, RequiredSet(nvregs))).first->second;
+        VRegSet& required = defined_at_end_sets.insert(std::make_pair(p.first, VRegSet(nvregs))).first->second;
 
         // required.resize(nvregs, /* value= */ false);
 
@@ -434,15 +428,14 @@ DefinednessAnalysis::DefinitionLevel DefinednessAnalysis::isDefinedAtEnd(Interne
     return map[cfg->getVRegInfo().getVReg(name)];
 }
 
-const DefinednessAnalysis::RequiredSet& DefinednessAnalysis::getDefinedNamesAtEnd(CFGBlock* block) {
+const VRegSet& DefinednessAnalysis::getDefinedVregsAtEnd(CFGBlock* block) {
     assert(defined_at_end_sets.count(block));
     return defined_at_end_sets.find(block)->second;
 }
 
-PhiAnalysis::PhiAnalysis(llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map,
-                         CFGBlock* initial_block, bool initials_need_phis, LivenessAnalysis* liveness,
-                         ScopeInfo* scope_info)
-    : definedness(), liveness(liveness) {
+PhiAnalysis::PhiAnalysis(VRegMap<DefinednessAnalysis::DefinitionLevel> initial_map, CFGBlock* initial_block,
+                         bool initials_need_phis, LivenessAnalysis* liveness, ScopeInfo* scope_info)
+    : definedness(), empty_set(initial_map.numVregs()), liveness(liveness) {
     auto cfg = initial_block->cfg;
     auto&& vreg_info = cfg->getVRegInfo();
 
@@ -450,13 +443,17 @@ PhiAnalysis::PhiAnalysis(llvm::DenseMap<InternedString, DefinednessAnalysis::Def
     // then we should include the initial arguments as an extra entry point.
     assert(initials_need_phis == (initial_block->predecessors.size() > 0));
 
+    int num_vregs = initial_map.numVregs();
+    assert(num_vregs == vreg_info.getTotalNumOfVRegs());
+
     definedness.run(std::move(initial_map), initial_block, scope_info);
 
     Timer _t("PhiAnalysis()", 10);
 
     for (const auto& p : definedness.defined_at_end) {
         CFGBlock* block = p.first;
-        RequiredSet& required = required_phis[block];
+        assert(!required_phis.count(block));
+        VRegSet& required = required_phis.insert(std::make_pair(block, VRegSet(num_vregs))).first->second;
 
         int npred = 0;
         for (CFGBlock* pred : block->predecessors) {
@@ -469,13 +466,13 @@ PhiAnalysis::PhiAnalysis(llvm::DenseMap<InternedString, DefinednessAnalysis::Def
                 if (!definedness.defined_at_end.count(pred))
                     continue;
 
-                const VRegSet& defined = definedness.getDefinedNamesAtEnd(pred);
+                const VRegSet& defined = definedness.getDefinedVregsAtEnd(pred);
                 for (int vreg : defined) {
                     auto s = vreg_info.getName(vreg);
-                    if (required.count(s) == 0 && liveness->isLiveAtEnd(s, pred)) {
+                    if (!required[vreg] && liveness->isLiveAtEnd(s, pred)) {
                         // printf("%d-%d %s\n", pred->idx, block->idx, s.c_str());
 
-                        required.insert(s);
+                        required.set(vreg);
                     }
                 }
             }
@@ -486,23 +483,23 @@ PhiAnalysis::PhiAnalysis(llvm::DenseMap<InternedString, DefinednessAnalysis::Def
     us_phis.log(_t.end());
 }
 
-const PhiAnalysis::RequiredSet& PhiAnalysis::getAllRequiredAfter(CFGBlock* block) {
-    static RequiredSet empty;
+const VRegSet& PhiAnalysis::getAllRequiredAfter(CFGBlock* block) {
     if (block->successors.size() == 0)
-        return empty;
+        return empty_set;
     assert(required_phis.count(block->successors[0]));
-    return required_phis[block->successors[0]];
+    return required_phis.find(block->successors[0])->second;
 }
 
-const PhiAnalysis::RequiredSet& PhiAnalysis::getAllRequiredFor(CFGBlock* block) {
+const VRegSet& PhiAnalysis::getAllRequiredFor(CFGBlock* block) {
     assert(required_phis.count(block));
-    return required_phis[block];
+    return required_phis.find(block)->second;
 }
 
+// TODO: switch this to taking a vreg
 bool PhiAnalysis::isRequired(InternedString name, CFGBlock* block) {
     assert(!startswith(name.s(), "!"));
     assert(required_phis.count(block));
-    return required_phis[block].count(name) != 0;
+    return required_phis.find(block)->second[block->cfg->getVRegInfo().getVReg(name)];
 }
 
 bool PhiAnalysis::isRequiredAfter(InternedString name, CFGBlock* block) {
@@ -548,31 +545,34 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames& args, CFG* cf
     static StatCounter counter("num_phi_analysis");
     counter.log();
 
-    llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map;
     auto&& vreg_info = cfg->getVRegInfo();
+    int num_vregs = vreg_info.getTotalNumOfVRegs();
+
+    VRegMap<DefinednessAnalysis::DefinitionLevel> initial_map(num_vregs);
 
     assert(vreg_info.hasVRegsAssigned());
-    for (auto p : vreg_info.getSymVRegMap())
-        initial_map[p.first] = DefinednessAnalysis::Undefined;
+    for (int vreg = 0; vreg < num_vregs; vreg++) {
+        initial_map[vreg] = DefinednessAnalysis::Undefined;
+    }
 
-    auto maybe_add = [&](llvm::StringRef s) {
-        InternedString e = scope_info->internString(s);
-        ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(e);
+    auto maybe_add = [&](AST_Name* n) {
+        ScopeInfo::VarScopeType vst = n->lookup_type;
+        assert(vst != ScopeInfo::VarScopeType::UNKNOWN);
         assert(vst != ScopeInfo::VarScopeType::GLOBAL);
         if (vst == ScopeInfo::VarScopeType::NAME)
             return;
-        assert(vreg_info.getVReg(e) >= 0); // just run it through for the assertions
-        initial_map[e] = DefinednessAnalysis::Defined;
+        assert(n->vreg >= 0);
+        initial_map[n->vreg] = DefinednessAnalysis::Defined;
     };
 
-    for (auto e : args.args)
+    for (auto e : args.arg_names)
         maybe_add(e);
-    if (args.vararg.size())
-        maybe_add(args.vararg);
-    if (args.kwarg.size())
-        maybe_add(args.kwarg);
+    if (args.vararg_name)
+        maybe_add(args.vararg_name);
+    if (args.kwarg_name)
+        maybe_add(args.kwarg_name);
 
-    assert(initial_map.size() == vreg_info.getTotalNumOfVRegs());
+    assert(initial_map.numVregs() == vreg_info.getTotalNumOfVRegs());
 
     return std::unique_ptr<PhiAnalysis>(
         new PhiAnalysis(std::move(initial_map), cfg->getStartingBlock(), false, liveness, scope_info));
@@ -583,10 +583,12 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor* entry
     static StatCounter counter("num_phi_analysis");
     counter.log();
 
-    llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map;
+    auto cfg = entry_descriptor->md->source->cfg;
+    int num_vregs = cfg->getVRegInfo().getTotalNumOfVRegs();
+    VRegMap<DefinednessAnalysis::DefinitionLevel> initial_map(num_vregs);
 
-    for (auto p : entry_descriptor->md->source->cfg->getVRegInfo().getSymVRegMap()) {
-        initial_map[p.first] = DefinednessAnalysis::Undefined;
+    for (int vreg = 0; vreg < num_vregs; vreg++) {
+        initial_map[vreg] = DefinednessAnalysis::Undefined;
     }
 
     llvm::StringSet<> potentially_undefined;
@@ -602,11 +604,12 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor* entry
         if (p.first.s() == PASSED_CLOSURE_NAME || p.first.s() == FRAME_INFO_PTR_NAME
             || p.first.s() == PASSED_GENERATOR_NAME || p.first.s() == CREATED_CLOSURE_NAME)
             continue;
-        ASSERT(initial_map.count(p.first), "%s", p.first.c_str());
+        int vreg = cfg->getVRegInfo().getVReg(p.first);
+        ASSERT(initial_map[vreg] == DefinednessAnalysis::Undefined, "%s %d", p.first.c_str(), initial_map[vreg]);
         if (potentially_undefined.count(p.first.s()))
-            initial_map[p.first] = DefinednessAnalysis::PotentiallyDefined;
+            initial_map[vreg] = DefinednessAnalysis::PotentiallyDefined;
         else
-            initial_map[p.first] = DefinednessAnalysis::Defined;
+            initial_map[vreg] = DefinednessAnalysis::Defined;
     }
 
     return std::unique_ptr<PhiAnalysis>(

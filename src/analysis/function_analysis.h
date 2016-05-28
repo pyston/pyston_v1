@@ -63,7 +63,15 @@ private:
 public:
     VRegSet(int num_vregs) : v(num_vregs, false) {}
 
-    void set(int vreg) { v[vreg] = true; }
+    // TODO: what is the referenc type here?
+    bool operator[](int vreg) {
+        assert(vreg >= 0 && vreg < v.size());
+        return v[vreg];
+    }
+    void set(int vreg) {
+        assert(vreg >= 0 && vreg < v.size());
+        v[vreg] = true;
+    }
 
     class iterator {
     public:
@@ -145,44 +153,44 @@ public:
         PotentiallyDefined,
         Defined,
     };
-    typedef VRegSet RequiredSet;
 
 private:
     llvm::DenseMap<CFGBlock*, VRegMap<DefinitionLevel>> defined_at_beginning, defined_at_end;
-    llvm::DenseMap<CFGBlock*, RequiredSet> defined_at_end_sets;
+    llvm::DenseMap<CFGBlock*, VRegSet> defined_at_end_sets;
 
 public:
     DefinednessAnalysis() {}
 
-    void run(llvm::DenseMap<InternedString, DefinitionLevel> initial_map, CFGBlock* initial_block,
-             ScopeInfo* scope_info);
+    void run(VRegMap<DefinitionLevel> initial_map, CFGBlock* initial_block, ScopeInfo* scope_info);
 
     DefinitionLevel isDefinedAtEnd(InternedString name, CFGBlock* block);
-    const RequiredSet& getDefinedNamesAtEnd(CFGBlock* block);
+    const VRegSet& getDefinedVregsAtEnd(CFGBlock* block);
 
     friend class PhiAnalysis;
 };
 
 class PhiAnalysis {
 public:
-    typedef llvm::DenseSet<InternedString> RequiredSet;
-
     DefinednessAnalysis definedness;
+
+    VRegSet empty_set;
 
 private:
     LivenessAnalysis* liveness;
-    llvm::DenseMap<CFGBlock*, RequiredSet> required_phis;
+    llvm::DenseMap<CFGBlock*, VRegSet> required_phis;
 
 public:
     // Initials_need_phis specifies that initial_map should count as an additional entry point
     // that may require phis.
-    PhiAnalysis(llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map,
-                CFGBlock* initial_block, bool initials_need_phis, LivenessAnalysis* liveness, ScopeInfo* scope_info);
+    PhiAnalysis(VRegMap<DefinednessAnalysis::DefinitionLevel> initial_map, CFGBlock* initial_block,
+                bool initials_need_phis, LivenessAnalysis* liveness, ScopeInfo* scope_info);
 
+    // TODO: convert these to taking vregs
     bool isRequired(InternedString name, CFGBlock* block);
     bool isRequiredAfter(InternedString name, CFGBlock* block);
-    const RequiredSet& getAllRequiredAfter(CFGBlock* block);
-    const RequiredSet& getAllRequiredFor(CFGBlock* block);
+    const VRegSet& getAllRequiredAfter(CFGBlock* block);
+    const VRegSet& getAllRequiredFor(CFGBlock* block);
+    // TODO: convert these to taking vregs
     // If "name" may be undefined at the beginning of any immediate successor block of "block":
     bool isPotentiallyUndefinedAfter(InternedString name, CFGBlock* block);
     // If "name" may be undefined at the beginning of "block"

@@ -42,6 +42,26 @@ class CFG;
 class ParamNames;
 class ScopeInfo;
 
+// Simple class to override the default value of an int.
+template <int D = -1> class DefaultedInt {
+private:
+    int x;
+
+public:
+    DefaultedInt() : x(D) {}
+    DefaultedInt(int x) : x(x) {}
+    DefaultedInt(const DefaultedInt& rhs) : x(rhs.x) {}
+    DefaultedInt(DefaultedInt&& rhs) : x(rhs.x) {}
+    void operator=(const DefaultedInt& rhs) { x = rhs.x; }
+    void operator=(DefaultedInt&& rhs) { x = rhs.x; }
+    template <typename T> bool operator<(T rhs) const { return x < rhs; }
+    template <typename T> bool operator>(T rhs) const { return x > rhs; }
+    template <typename T> bool operator<=(T rhs) const { return x <= rhs; }
+    template <typename T> bool operator>=(T rhs) const { return x >= rhs; }
+
+    operator int() const { return x; }
+};
+
 class CFGBlock {
 public:
     CFG* cfg;
@@ -85,8 +105,8 @@ public:
 // llvm jit    : [user visible]
 class VRegInfo {
 private:
-    llvm::DenseMap<InternedString, int> sym_vreg_map_user_visible;
-    llvm::DenseMap<InternedString, int> sym_vreg_map;
+    llvm::DenseMap<InternedString, DefaultedInt<-1>> sym_vreg_map_user_visible;
+    llvm::DenseMap<InternedString, DefaultedInt<-1>> sym_vreg_map;
 
     // Reverse map, from vreg->symbol name.
     std::vector<InternedString> vreg_sym_map;
@@ -97,8 +117,10 @@ private:
 public:
     // map of all assigned names. if the name is block local the vreg number is not unique because this vregs get reused
     // between blocks.
-    const llvm::DenseMap<InternedString, int>& getSymVRegMap() { return sym_vreg_map; }
-    const llvm::DenseMap<InternedString, int>& getUserVisibleSymVRegMap() { return sym_vreg_map_user_visible; }
+    const llvm::DenseMap<InternedString, DefaultedInt<-1>>& getSymVRegMap() { return sym_vreg_map; }
+    const llvm::DenseMap<InternedString, DefaultedInt<-1>>& getUserVisibleSymVRegMap() {
+        return sym_vreg_map_user_visible;
+    }
 
     int getVReg(InternedString name) const {
         assert(hasVRegsAssigned());

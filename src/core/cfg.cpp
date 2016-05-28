@@ -2677,7 +2677,7 @@ public:
     ScopeInfo* scope_info;
     CFGBlock* current_block;
     int next_vreg;
-    llvm::DenseMap<InternedString, int> sym_vreg_map;
+    llvm::DenseMap<InternedString, DefaultedInt<-1>> sym_vreg_map;
     llvm::DenseMap<InternedString, std::unordered_set<CFGBlock*>> sym_blocks_map;
     std::vector<InternedString> vreg_sym_map;
 
@@ -2685,9 +2685,7 @@ public:
 
     AssignVRegsVisitor(ScopeInfo* scope_info) : scope_info(scope_info), current_block(0), next_vreg(0) {}
 
-    bool visit_alias(AST_alias* node) override {
-        RELEASE_ASSERT(0, "these should be removed by the cfg");
-    }
+    bool visit_alias(AST_alias* node) override { RELEASE_ASSERT(0, "these should be removed by the cfg"); }
 
     bool visit_arguments(AST_arguments* node) override {
         for (AST_expr* d : node->defaults)

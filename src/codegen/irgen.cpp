@@ -361,12 +361,14 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     PhiAnalysis* phi_analysis = irstate->getPhis();
     assert(phi_analysis);
 
+    CFG* cfg = source->cfg;
+
     if (entry_descriptor != NULL)
-        assert(blocks.count(source->cfg->getStartingBlock()) == 0);
+        assert(blocks.count(cfg->getStartingBlock()) == 0);
 
     // We need the entry blocks pre-allocated so that we can jump forward to them.
     std::unordered_map<CFGBlock*, llvm::BasicBlock*> llvm_entry_blocks;
-    for (CFGBlock* block : source->cfg->blocks) {
+    for (CFGBlock* block : cfg->blocks) {
         if (blocks.count(block) == 0) {
             llvm_entry_blocks[block] = NULL;
             continue;
@@ -514,8 +516,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     CFGBlock* initial_block = NULL;
     if (entry_descriptor) {
         initial_block = entry_descriptor->backedge->target;
-    } else if (blocks.count(source->cfg->getStartingBlock())) {
-        initial_block = source->cfg->getStartingBlock();
+    } else if (blocks.count(cfg->getStartingBlock())) {
+        initial_block = cfg->getStartingBlock();
     }
 
     // The rest of this code assumes that for each non-entry block that gets evaluated,
@@ -548,14 +550,13 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         // Set initial symbol table:
         // If we're in the starting block, no phis or symbol table changes for us.
         // Generate function entry code instead.
-        if (block == source->cfg->getStartingBlock()) {
+        if (block == cfg->getStartingBlock()) {
             assert(entry_descriptor == NULL);
 
             if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast != NULL
                 && source->ast->type != AST_TYPE::Module) {
-                llvm::BasicBlock* preentry_bb
-                    = llvm::BasicBlock::Create(g.context, "pre_entry", irstate->getLLVMFunction(),
-                                               llvm_entry_blocks[source->cfg->getStartingBlock()]);
+                llvm::BasicBlock* preentry_bb = llvm::BasicBlock::Create(
+                    g.context, "pre_entry", irstate->getLLVMFunction(), llvm_entry_blocks[cfg->getStartingBlock()]);
                 llvm::BasicBlock* reopt_bb = llvm::BasicBlock::Create(g.context, "reopt", irstate->getLLVMFunction());
                 emitter->getBuilder()->SetInsertPoint(preentry_bb);
 
@@ -580,7 +581,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 llvm::MDNode* branch_weights = llvm::MDNode::get(g.context, llvm::ArrayRef<llvm::Metadata*>(md_vals));
 
                 llvm::BranchInst* guard = emitter->getBuilder()->CreateCondBr(
-                    reopt_test, reopt_bb, llvm_entry_blocks[source->cfg->getStartingBlock()], branch_weights);
+                    reopt_test, reopt_bb, llvm_entry_blocks[cfg->getStartingBlock()], branch_weights);
 
                 emitter->getBuilder()->SetInsertPoint(reopt_bb);
                 // emitter->getBuilder()->CreateCall(g.funcs.my_assert, getConstantInt(0, g.i1));
@@ -603,7 +604,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 postcall->setTailCall(true);
                 emitter->getBuilder()->CreateRet(postcall);
 
-                emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[source->cfg->getStartingBlock()]);
+                emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[cfg->getStartingBlock()]);
             }
 
             generator->doFunctionEntry(*irstate->getParamNames(), cf->spec->arg_types);
@@ -640,7 +641,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 (*phis)[p.first] = std::make_pair(analyzed_type, phi);
             }
         } else if (pred == NULL) {
-            assert(traversal_order.size() < source->cfg->blocks.size());
+            assert(traversal_order.size() < cfg->blocks.size());
             assert(phis);
             assert(block->predecessors.size());
             for (int i = 0; i < block->predecessors.size(); i++) {
@@ -651,7 +652,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
 
             std::set<InternedString> names;
-            for (const auto& s : phi_analysis->getAllRequiredFor(block)) {
+            for (const int vreg : phi_analysis->getAllRequiredFor(block)) {
+                auto s = cfg->getVRegInfo().getName(vreg);
                 names.insert(s);
                 if (phi_analysis->isPotentiallyUndefinedAfter(s, block->predecessors[0])) {
                     names.insert(getIsDefinedName(s, source->getInternedStrings()));
@@ -832,7 +834,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     // the relevant IR, so after we have done all of it, go back through and populate the phi nodes.
     // Also, do some checking to make sure that the phi analysis stuff worked out, and that all blocks
     // agreed on what symbols + types they should be propagating for the phis.
-    for (CFGBlock* b : source->cfg->blocks) {
+    for (CFGBlock* b : cfg->blocks) {
         PHITable* phis = created_phis[b];
         if (phis == NULL)
             continue;
@@ -910,7 +912,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     }
 
     // deallocate/dereference memory
-    for (CFGBlock* b : source->cfg->blocks) {
+    for (CFGBlock* b : cfg->blocks) {
         if (ending_symbol_tables[b] == NULL)
             continue;
 
