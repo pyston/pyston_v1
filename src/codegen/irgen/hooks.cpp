@@ -77,13 +77,13 @@ ParamNames::ParamNames(AST* ast, InternedStringPool& pool)
             }
         }
 
-        vararg = arguments->vararg.s();
-        if (vararg.size())
-            vararg_name = new AST_Name(pool.get(vararg), AST_TYPE::Param, arguments->lineno, arguments->col_offset);
+        vararg_name = arguments->vararg;
+        if (vararg_name)
+            vararg = vararg_name->id.s();
 
-        kwarg = arguments->kwarg.s();
-        if (kwarg.size())
-            kwarg_name = new AST_Name(pool.get(kwarg), AST_TYPE::Param, arguments->lineno, arguments->col_offset);
+        kwarg_name = arguments->kwarg;
+        if (kwarg_name)
+            kwarg = kwarg_name->id.s();
     } else {
         RELEASE_ASSERT(0, "%d", ast->type);
     }

@@ -1007,8 +1007,8 @@ private:
         InternedString func_name = internString("<comprehension>");
         func->name = func_name;
         func->args = new AST_arguments();
-        func->args->vararg = internString("");
-        func->args->kwarg = internString("");
+        func->args->vararg = NULL;
+        func->args->kwarg = NULL;
         scoping_analysis->registerScopeReplacement(node, func); // critical bit
         return new AST_MakeFunction(func);
     }
@@ -2686,20 +2686,12 @@ public:
     AssignVRegsVisitor(ScopeInfo* scope_info) : scope_info(scope_info), current_block(0), next_vreg(0) {}
 
     bool visit_alias(AST_alias* node) override {
-        if (node->asname.s().size())
-            node->asname_vreg = assignVReg(node->asname);
-        else
-            node->name_vreg = assignVReg(node->name);
-        return true;
+        RELEASE_ASSERT(0, "these should be removed by the cfg");
     }
 
     bool visit_arguments(AST_arguments* node) override {
         for (AST_expr* d : node->defaults)
             d->accept(this);
-        if (node->kwarg.s().size())
-            node->kwarg_vreg = assignVReg(node->kwarg);
-        if (node->vararg.s().size())
-            node->vararg_vreg = assignVReg(node->vararg);
         return true;
     }
 

@@ -2,8 +2,7 @@
 
 def f1():
     exec ""
-    from os import path as os_path
-    print os_path.join("a", "b")
+    from sys import version as sys_version
 f1()
 
 def f2():

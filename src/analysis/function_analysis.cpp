@@ -82,6 +82,7 @@ public:
 
     bool isKilledAt(AST_Name* node, bool is_live_at_end) { return node->is_kill; }
 
+    bool visit_import(AST_Import* node) { RELEASE_ASSERT(0, "these should all get removed by the cfg"); }
 
     bool visit_classdef(AST_ClassDef* node) {
         _doStore(node->name);
@@ -346,10 +347,10 @@ public:
     }
 
     virtual bool visit_arguments(AST_arguments* node) {
-        if (node->kwarg.s().size())
-            _doSet(node->kwarg_vreg);
-        if (node->vararg.s().size())
-            _doSet(node->vararg_vreg);
+        if (node->kwarg)
+            _doSet(node->kwarg);
+        if (node->vararg)
+            _doSet(node->vararg);
         for (int i = 0; i < node->args.size(); i++) {
             _doSet(node->args[i]);
         }

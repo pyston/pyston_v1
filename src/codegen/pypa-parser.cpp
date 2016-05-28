@@ -301,8 +301,12 @@ AST_arguments* readItem(pypa::AstArguments& a, InternedStringPool& interned_stri
     readVector(ptr->defaults, a.defaults, interned_strings);
     ptr->defaults.erase(std::remove(ptr->defaults.begin(), ptr->defaults.end(), nullptr), ptr->defaults.end());
     readVector(ptr->args, a.arguments, interned_strings);
-    ptr->kwarg = readName(a.kwargs, interned_strings);
-    ptr->vararg = readName(a.args, interned_strings);
+    InternedString kwarg_name = readName(a.kwargs, interned_strings);
+    if (kwarg_name.s().size())
+        ptr->kwarg = new AST_Name(kwarg_name, AST_TYPE::Store, -1, -1);
+    InternedString vararg_name = readName(a.args, interned_strings);
+    if (vararg_name.s().size())
+        ptr->vararg = new AST_Name(vararg_name, AST_TYPE::Store, -1, -1);
     return ptr;
 }
 

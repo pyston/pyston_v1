@@ -600,13 +600,13 @@ public:
                 e->accept(this);
             }
 
-            if (node->args->vararg.s().size()) {
-                mangleNameInPlace(node->args->vararg, cur->private_name, scoping->getInternedStrings());
-                doWrite(node->args->vararg);
+            if (node->args->vararg) {
+                mangleNameInPlace(node->args->vararg->id, cur->private_name, scoping->getInternedStrings());
+                doWrite(node->args->vararg->id);
             }
-            if (node->args->kwarg.s().size()) {
-                mangleNameInPlace(node->args->kwarg, cur->private_name, scoping->getInternedStrings());
-                doWrite(node->args->kwarg);
+            if (node->args->kwarg) {
+                mangleNameInPlace(node->args->kwarg->id, cur->private_name, scoping->getInternedStrings());
+                doWrite(node->args->kwarg->id);
             }
 
             this->currently_visiting_functiondef_args = false;
@@ -668,13 +668,13 @@ public:
         if (node == orig_node) {
             for (AST_expr* e : node->args->args)
                 e->accept(this);
-            if (node->args->vararg.s().size()) {
-                mangleNameInPlace(node->args->vararg, cur->private_name, scoping->getInternedStrings());
-                doWrite(node->args->vararg);
+            if (node->args->vararg) {
+                mangleNameInPlace(node->args->vararg->id, cur->private_name, scoping->getInternedStrings());
+                doWrite(node->args->vararg->id);
             }
-            if (node->args->kwarg.s().size()) {
-                mangleNameInPlace(node->args->kwarg, cur->private_name, scoping->getInternedStrings());
-                doWrite(node->args->kwarg);
+            if (node->args->kwarg) {
+                mangleNameInPlace(node->args->kwarg->id, cur->private_name, scoping->getInternedStrings());
+                doWrite(node->args->kwarg->id);
             }
             node->body->accept(this);
         } else {

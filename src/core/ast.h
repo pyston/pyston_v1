@@ -226,15 +226,14 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::alias;
 };
 
+class AST_Name;
+
 class AST_arguments : public AST {
 public:
     // no lineno, col_offset attributes
     std::vector<AST_expr*> args, defaults;
 
-    // These are represented as strings, not names; not sure why.
-    // If they don't exist, the string is empty.
-    InternedString kwarg, vararg;
-    int kwarg_vreg = -1, vararg_vreg = -1;
+    AST_Name* kwarg = NULL, * vararg = NULL;
 
     virtual void accept(ASTVisitor* v);
 
@@ -1118,7 +1117,7 @@ public:
 };
 
 template <typename T> T* ast_cast(AST* node) {
-    assert(node->type == T::TYPE);
+    assert(!node || node->type == T::TYPE);
     return static_cast<T*>(node);
 }
 
