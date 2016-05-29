@@ -308,8 +308,8 @@ private:
     static Box* createTupleHelper(uint64_t num, Box** data);
     static Box* exceptionMatchesHelper(Box* obj, Box* cls);
     static Box* hasnextHelper(Box* b);
-    static Box* nonzeroHelper(Box* b);
-    static Box* notHelper(Box* b);
+    static BORROWED(Box*) nonzeroHelper(Box* b);
+    static BORROWED(Box*) notHelper(Box* b);
     static Box* runtimeCallHelper(Box* obj, ArgPassSpec argspec, TypeRecorder* type_recorder, Box** args,
                                   std::vector<BoxedString*>* keyword_names);
 

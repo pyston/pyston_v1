@@ -454,11 +454,11 @@ RewriterVar* JitFragmentWriter::emitLandingpad() {
 
 RewriterVar* JitFragmentWriter::emitNonzero(RewriterVar* v) {
     // nonzeroHelper returns bool
-    return call(false, (void*)nonzeroHelper, v)->setType(RefType::OWNED);
+    return call(false, (void*)nonzeroHelper, v)->setType(RefType::BORROWED);
 }
 
 RewriterVar* JitFragmentWriter::emitNotNonzero(RewriterVar* v) {
-    return call(false, (void*)notHelper, v)->setType(RefType::OWNED);
+    return call(false, (void*)notHelper, v)->setType(RefType::BORROWED);
 }
 
 RewriterVar* JitFragmentWriter::emitRepr(RewriterVar* v) {
@@ -960,12 +960,12 @@ Box* JitFragmentWriter::hasnextHelper(Box* b) {
     return boxBool(pyston::hasnext(b));
 }
 
-Box* JitFragmentWriter::nonzeroHelper(Box* b) {
-    return boxBool(b->nonzeroIC());
+BORROWED(Box*) JitFragmentWriter::nonzeroHelper(Box* b) {
+    return b->nonzeroIC() ? True : False;
 }
 
-Box* JitFragmentWriter::notHelper(Box* b) {
-    return boxBool(!b->nonzeroIC());
+BORROWED(Box*) JitFragmentWriter::notHelper(Box* b) {
+    return b->nonzeroIC() ? False : True;
 }
 
 Box* JitFragmentWriter::runtimeCallHelper(Box* obj, ArgPassSpec argspec, TypeRecorder* type_recorder, Box** args,
@@ -1164,12 +1164,12 @@ void JitFragmentWriter::_emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val
     // Really, we should probably do a decref on either side post-jump.
     // But the automatic refcounter doesn't support that, and since the value is either True or False,
     // we can get away with doing the decref early.
-    // TODO: better solution is to just make NONZERO return a borrowed ref, so we don't have to decref at all.
-    _decref(var);
-    // Hax: override the automatic refcount system
-    assert(var->reftype == RefType::OWNED);
+    if (var->reftype == RefType::OWNED) {
+        _decref(var);
+        // Hax: override the automatic refcount system
+        var->reftype = RefType::BORROWED;
+    }
     assert(var->num_refs_consumed == 0);
-    var->reftype = RefType::BORROWED;
 
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {
