@@ -478,7 +478,7 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
         if (jit) {
             bool is_live = true;
             if (!closure)
-                is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
+                is_live = source_info->getLiveness()->isLiveAtEnd(node->vreg, current_block);
             if (is_live)
                 jit->emitSetLocal(name, node->vreg, closure, value);
             else
@@ -720,7 +720,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
     llvm::SmallVector<int, 16> dead_vregs;
     for (auto&& sym : getSymVRegMap()) {
-        if (!liveness->isLiveAtEnd(sym.first, current_block)) {
+        if (!liveness->isLiveAtEnd(sym.second, current_block)) {
             dead_vregs.push_back(sym.second);
         } else if (phis->isRequiredAfter(sym.first, current_block)) {
             assert(scope_info->getScopeTypeOfName(sym.first) != ScopeInfo::VarScopeType::GLOBAL);
@@ -747,12 +747,12 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
     const VRegSet& defined = phis->definedness.getDefinedVregsAtEnd(current_block);
     for (int vreg : defined) {
-        InternedString name = source_info->cfg->getVRegInfo().getName(vreg);
 
-        Box* val = vregs[vreg];
-        if (!liveness->isLiveAtEnd(name, current_block))
+        if (!liveness->isLiveAtEnd(vreg, current_block))
             continue;
 
+        InternedString name = source_info->cfg->getVRegInfo().getName(vreg);
+        Box* val = vregs[vreg];
         if (phis->isPotentiallyUndefinedAfter(name, current_block)) {
             bool is_defined = val != NULL;
             // TODO only mangle once
@@ -1690,8 +1690,10 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
                 bool is_live = true;
                 if (node->is_kill) {
                     is_live = false;
-                } else if (node->lookup_type == ScopeInfo::VarScopeType::FAST)
-                    is_live = source_info->getLiveness()->isLiveAtEnd(node->id, current_block);
+                } else if (node->lookup_type == ScopeInfo::VarScopeType::FAST) {
+                    assert(node->vreg != -1);
+                    is_live = source_info->getLiveness()->isLiveAtEnd(node->vreg, current_block);
+                }
 
                 if (is_live) {
                     assert(!node->is_kill);

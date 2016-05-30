@@ -2643,6 +2643,7 @@ private:
         // cf->func->dump();
 
         SourceInfo* source = irstate->getSourceInfo();
+        auto cfg = source->cfg;
         ScopeInfo* scope_info = irstate->getScopeInfo();
 
         // Sort the names here to make the process deterministic:
@@ -2656,7 +2657,7 @@ private:
             // ASSERT(p.first[0] != '!' || isIsDefinedName(p.first), "left a fake variable in the real
             // symbol table? '%s'", p.first.c_str());
 
-            if (!irstate->getLiveness()->isLiveAtEnd(p.first, myblock)) {
+            if (!irstate->getLiveness()->isLiveAtEnd(cfg->getVRegInfo().getVReg(p.first), myblock)) {
                 symbol_table.erase(getIsDefinedName(p.first));
                 symbol_table.erase(p.first);
             } else if (irstate->getPhis()->isRequiredAfter(p.first, myblock)) {

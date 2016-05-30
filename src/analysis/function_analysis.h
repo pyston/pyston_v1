@@ -33,6 +33,48 @@ class CFGBlock;
 class ScopeInfo;
 class LivenessBBVisitor;
 
+template <typename T> class VRegMap {
+private:
+    // TODO: switch just to a T*
+    std::vector<T> v;
+
+public:
+    VRegMap(int num_vregs) : v(num_vregs) {}
+
+    T& operator[](int vreg) {
+        assert(vreg >= 0 && vreg < v.size());
+        return v[vreg];
+    }
+
+    const T& operator[](int vreg) const {
+        assert(vreg >= 0 && vreg < v.size());
+        return v[vreg];
+    }
+
+    class iterator {
+    public:
+        const VRegMap<T>& map;
+        int i;
+        iterator(const VRegMap<T>& map, int i) : map(map), i(i) {}
+
+        iterator& operator++() {
+            i++;
+            return *this;
+        }
+
+        bool operator==(const iterator& rhs) const { return i == rhs.i; }
+        bool operator!=(const iterator& rhs) const { return !(*this == rhs); }
+
+        std::pair<int, const T&> operator*() { return std::pair<int, const T&>(i, map[i]); }
+    };
+
+    int numVregs() const { return v.size(); }
+
+    iterator begin() const { return iterator(*this, 0); }
+
+    iterator end() const { return iterator(*this, this->v.size()); }
+};
+
 class LivenessAnalysis {
 private:
     CFG* cfg;
@@ -41,7 +83,7 @@ private:
     typedef llvm::DenseMap<CFGBlock*, std::unique_ptr<LivenessBBVisitor>> LivenessCacheMap;
     LivenessCacheMap liveness_cache;
 
-    llvm::DenseMap<InternedString, llvm::DenseMap<CFGBlock*, bool>> result_cache;
+    VRegMap<llvm::DenseMap<CFGBlock*, bool>> result_cache;
 
 public:
     LivenessAnalysis(CFG* cfg);
@@ -50,7 +92,7 @@ public:
     // we don't keep track of node->parent_block relationships, so you have to pass both:
     bool isKill(AST_Name* node, CFGBlock* parent_block);
 
-    bool isLiveAtEnd(InternedString name, CFGBlock* block);
+    bool isLiveAtEnd(int vreg, CFGBlock* block);
 };
 
 class PhiAnalysis;
@@ -99,48 +141,6 @@ public:
         }
         return iterator(*this, this->v.size());
     }
-
-    iterator end() const { return iterator(*this, this->v.size()); }
-};
-
-template <typename T> class VRegMap {
-private:
-    // TODO: switch just to a T*
-    std::vector<T> v;
-
-public:
-    VRegMap(int num_vregs) : v(num_vregs) {}
-
-    T& operator[](int vreg) {
-        assert(vreg >= 0 && vreg < v.size());
-        return v[vreg];
-    }
-
-    const T& operator[](int vreg) const {
-        assert(vreg >= 0 && vreg < v.size());
-        return v[vreg];
-    }
-
-    class iterator {
-    public:
-        const VRegMap<T>& map;
-        int i;
-        iterator(const VRegMap<T>& map, int i) : map(map), i(i) {}
-
-        iterator& operator++() {
-            i++;
-            return *this;
-        }
-
-        bool operator==(const iterator& rhs) const { return i == rhs.i; }
-        bool operator!=(const iterator& rhs) const { return !(*this == rhs); }
-
-        std::pair<int, const T&> operator*() { return std::pair<int, const T&>(i, map[i]); }
-    };
-
-    int numVregs() const { return v.size(); }
-
-    iterator begin() const { return iterator(*this, 0); }
 
     iterator end() const { return iterator(*this, this->v.size()); }
 };

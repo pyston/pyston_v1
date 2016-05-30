@@ -53,40 +53,35 @@ private:
         }
     };
 
-    llvm::DenseMap<InternedString, Status> statuses;
+    VRegMap<Status> statuses;
     LivenessAnalysis* analysis;
 
-    void _doLoad(InternedString name, AST_Name* node) {
-        Status& status = statuses[name];
+    void _doLoad(int vreg, AST_Name* node) {
+        Status& status = statuses[vreg];
         status.addUsage(Status::USED);
     }
 
-    void _doStore(InternedString name) {
-        Status& status = statuses[name];
+    void _doStore(int vreg) {
+        assert(vreg >= 0);
+        Status& status = statuses[vreg];
         status.addUsage(Status::DEFINED);
     }
 
-    Status::Usage getStatusFirst(InternedString name) const {
-        auto it = statuses.find(name);
-        if (it == statuses.end())
-            return Status::NONE;
-        return it->second.first;
-    }
+    Status::Usage getStatusFirst(int vreg) const { return statuses[vreg].first; }
 
 public:
-    LivenessBBVisitor(LivenessAnalysis* analysis) : analysis(analysis) {}
+    LivenessBBVisitor(LivenessAnalysis* analysis)
+        : statuses(analysis->cfg->getVRegInfo().getTotalNumOfVRegs()), analysis(analysis) {}
 
-    bool firstIsUse(InternedString name) const { return getStatusFirst(name) == Status::USED; }
+    bool firstIsUse(int vreg) const { return getStatusFirst(vreg) == Status::USED; }
 
-    bool firstIsDef(InternedString name) const { return getStatusFirst(name) == Status::DEFINED; }
+    bool firstIsDef(int vreg) const { return getStatusFirst(vreg) == Status::DEFINED; }
 
     bool isKilledAt(AST_Name* node, bool is_live_at_end) { return node->is_kill; }
 
     bool visit_import(AST_Import* node) { RELEASE_ASSERT(0, "these should all get removed by the cfg"); }
 
     bool visit_classdef(AST_ClassDef* node) {
-        _doStore(node->name);
-
         for (auto e : node->bases)
             e->accept(this);
         for (auto e : node->decorator_list)
@@ -94,12 +89,13 @@ public:
 
         return true;
     }
+
     bool visit_functiondef(AST_FunctionDef* node) {
         for (auto* d : node->decorator_list)
             d->accept(this);
-        node->args->accept(this);
+        for (auto* d : node->args->defaults)
+            d->accept(this);
 
-        _doStore(node->name);
         return true;
     }
 
@@ -110,16 +106,19 @@ public:
     }
 
     bool visit_name(AST_Name* node) {
+        if (node->vreg == -1)
+            return true;
+
         if (node->ctx_type == AST_TYPE::Load)
-            _doLoad(node->id, node);
+            _doLoad(node->vreg, node);
         else if (node->ctx_type == AST_TYPE::Del) {
             // Hack: we don't have a bytecode for temporary-kills:
-            if (node->id.s()[0] == '#')
+            if (node->vreg >= analysis->cfg->getVRegInfo().getNumOfUserVisibleVRegs())
                 return true;
-            _doLoad(node->id, node);
-            _doStore(node->id);
+            _doLoad(node->vreg, node);
+            _doStore(node->vreg);
         } else if (node->ctx_type == AST_TYPE::Store || node->ctx_type == AST_TYPE::Param)
-            _doStore(node->id);
+            _doStore(node->vreg);
         else {
             ASSERT(0, "%d", node->ctx_type);
             abort();
@@ -127,17 +126,10 @@ public:
         return true;
     }
 
-    bool visit_alias(AST_alias* node) {
-        InternedString name = node->name;
-        if (node->asname.s().size())
-            name = node->asname;
-
-        _doStore(name);
-        return true;
-    }
+    bool visit_alias(AST_alias* node) { RELEASE_ASSERT(0, "these should be removed by the cfg"); }
 };
 
-LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg) {
+LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg), result_cache(cfg->getVRegInfo().getTotalNumOfVRegs()) {
     Timer _t("LivenessAnalysis()", 100);
 
     for (CFGBlock* b : cfg->blocks) {
@@ -159,27 +151,28 @@ bool LivenessAnalysis::isKill(AST_Name* node, CFGBlock* parent_block) {
     if (node->id.s()[0] != '#')
         return false;
 
-    return liveness_cache[parent_block]->isKilledAt(node, isLiveAtEnd(node->id, parent_block));
+    return liveness_cache[parent_block]->isKilledAt(node, isLiveAtEnd(node->vreg, parent_block));
 }
 
-bool LivenessAnalysis::isLiveAtEnd(InternedString name, CFGBlock* block) {
-    if (name.s()[0] != '#')
+bool LivenessAnalysis::isLiveAtEnd(int vreg, CFGBlock* block) {
+    // Is a user-visible name, always live:
+    if (vreg < block->cfg->getVRegInfo().getNumOfUserVisibleVRegs())
         return true;
 
     if (block->successors.size() == 0)
         return false;
 
-    if (!result_cache.count(name)) {
+    if (!result_cache[vreg].size()) {
         Timer _t("LivenessAnalysis()", 10);
 
-        llvm::DenseMap<CFGBlock*, bool>& map = result_cache[name];
+        llvm::DenseMap<CFGBlock*, bool>& map = result_cache[vreg];
 
         // Approach:
         // - Find all uses (blocks where the status is USED)
         // - Trace backwards, marking all blocks as live-at-end
         // - If we hit a block that is DEFINED, stop
         for (CFGBlock* b : cfg->blocks) {
-            if (!liveness_cache[b]->firstIsUse(name))
+            if (!liveness_cache[b]->firstIsUse(vreg))
                 continue;
 
             std::deque<CFGBlock*> q;
@@ -195,7 +188,7 @@ bool LivenessAnalysis::isLiveAtEnd(InternedString name, CFGBlock* block) {
                     continue;
 
                 map[thisblock] = true;
-                if (!liveness_cache[thisblock]->firstIsDef(name)) {
+                if (!liveness_cache[thisblock]->firstIsDef(vreg)) {
                     for (CFGBlock* pred : thisblock->predecessors) {
                         q.push_back(pred);
                     }
@@ -208,7 +201,7 @@ bool LivenessAnalysis::isLiveAtEnd(InternedString name, CFGBlock* block) {
         us_liveness.log(_t.end());
     }
 
-    return result_cache[name][block];
+    return result_cache[vreg][block];
 }
 
 class DefinednessBBAnalyzer : public BBAnalyzer<DefinednessAnalysis::DefinitionLevel> {
@@ -468,8 +461,7 @@ PhiAnalysis::PhiAnalysis(VRegMap<DefinednessAnalysis::DefinitionLevel> initial_m
 
                 const VRegSet& defined = definedness.getDefinedVregsAtEnd(pred);
                 for (int vreg : defined) {
-                    auto s = vreg_info.getName(vreg);
-                    if (!required[vreg] && liveness->isLiveAtEnd(s, pred)) {
+                    if (!required[vreg] && liveness->isLiveAtEnd(vreg, pred)) {
                         // printf("%d-%d %s\n", pred->idx, block->idx, s.c_str());
 
                         required.set(vreg);
