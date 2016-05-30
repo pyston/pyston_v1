@@ -38,19 +38,22 @@ static llvm::DenseMap<CFGBlock*, std::vector<void*>> block_patch_locations;
 //
 // long foo(char* c);
 // void bjit() {
+//   asm volatile ("" ::: "r15");
 //   asm volatile ("" ::: "r14");
 //   asm volatile ("" ::: "r13");
+//   asm volatile ("" ::: "r12");
 //   char scratch[256+16];
 //   foo(scratch);
 // }
 //
-// It omits the frame pointer but saves r13 and r14
+// It omits the frame pointer but saves r12, r13, r14 and r15
 // use 'objdump -s -j .eh_frame <obj.file>' to dump it
 const unsigned char eh_info[]
-    = { 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x7a, 0x52, 0x00, 0x01, 0x78, 0x10,
-        0x01, 0x1b, 0x0c, 0x07, 0x08, 0x90, 0x01, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x1c, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x42, 0x0e, 0x10, 0x42,
-        0x0e, 0x18, 0x47, 0x0e, 0xb0, 0x02, 0x8d, 0x03, 0x8e, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    = { 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x7a, 0x52, 0x00, 0x01, 0x78, 0x10, 0x01,
+        0x1b, 0x0c, 0x07, 0x08, 0x90, 0x01, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x00, 0x42, 0x0e, 0x10, 0x42, 0x0e, 0x18, 0x42,
+        0x0e, 0x20, 0x42, 0x0e, 0x28, 0x47, 0x0e, 0xc0, 0x02, 0x8c, 0x05, 0x8d, 0x04, 0x8e, 0x03, 0x8f,
+        0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 static_assert(JitCodeBlock::num_stack_args == 2, "have to update EH table!");
 static_assert(JitCodeBlock::scratch_size == 256, "have to update EH table!");
 
@@ -70,8 +73,10 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     uint8_t* code = a.curInstPointer();
 
     // emit prolog
+    a.push(assembler::R15);
     a.push(assembler::R14);
     a.push(assembler::R13);
+    a.push(assembler::R12);
     static_assert(sp_adjustment % 16 == 8, "stack isn't aligned");
     a.sub(assembler::Immediate(sp_adjustment), assembler::RSP);
     a.mov(assembler::RDI, assembler::R13);                                // interpreter pointer
@@ -136,6 +141,12 @@ void JitCodeBlock::fragmentFinished(int bytes_written, int num_bytes_overlapping
     ic_info.appendDecrefInfosTo(decref_infos);
 }
 
+static const assembler::Register bjit_allocatable_regs[]
+    = { assembler::RAX, assembler::RCX, assembler::RDX,
+        // no RSP
+        // no RBP
+        assembler::RDI, assembler::RSI, assembler::R8,  assembler::R9,
+        assembler::R10, assembler::R11, assembler::R12, assembler::R15 };
 
 JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic_info,
                                      std::unique_ptr<ICSlotRewrite> rewrite, int code_offset, int num_bytes_overlapping,
@@ -149,6 +160,8 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
       code_block(code_block),
       interp(0),
       ic_info(std::move(ic_info)) {
+    allocatable_regs = bjit_allocatable_regs;
+
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: JitFragmentWriter() start");
     interp = createNewVar();
@@ -1009,8 +1022,10 @@ void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, ExitInfo
         exit_info.exit_start = assembler->curInstPointer();
         block_next->getInReg(assembler::RAX, true);
         assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
+        assembler->pop(assembler::R12);
         assembler->pop(assembler::R13);
         assembler->pop(assembler::R14);
+        assembler->pop(assembler::R15);
         assembler->retq();
 
         // make sure we have at least 'min_patch_size' of bytes available.
@@ -1042,8 +1057,10 @@ void JitFragmentWriter::_emitOSRPoint() {
         assembler->clear_reg(assembler::RAX); // = next block to execute
         assembler->mov(assembler::Immediate(ASTInterpreterJitInterface::osr_dummy_value), assembler::RDX);
         assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
+        assembler->pop(assembler::R12);
         assembler->pop(assembler::R13);
         assembler->pop(assembler::R14);
+        assembler->pop(assembler::R15);
         assembler->retq();
     }
     interp->bumpUse();
@@ -1145,8 +1162,10 @@ void JitFragmentWriter::_emitReturn(RewriterVar* return_val) {
     return_val->getInReg(assembler::RDX, true);
     assembler->clear_reg(assembler::RAX);
     assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
+    assembler->pop(assembler::R12);
     assembler->pop(assembler::R13);
     assembler->pop(assembler::R14);
+    assembler->pop(assembler::R15);
     assembler->retq();
     return_val->bumpUse();
 }

@@ -24,7 +24,7 @@
 
 namespace pyston {
 
-static const assembler::Register allocatable_regs[] = {
+static const assembler::Register std_allocatable_regs[] = {
     assembler::RAX, assembler::RCX, assembler::RDX,
     // no RSP
     // no RBP
@@ -1234,17 +1234,29 @@ std::vector<Location> Rewriter::getDecrefLocations() {
     std::vector<Location> decref_infos;
     for (RewriterVar& var : vars) {
         if (var.locations.size() && var.needsDecref()) {
-            // TODO: add code to handle other location types and choose best location if there are several
-            Location l = *var.locations.begin();
-            if (l.type == Location::Scratch) {
-                // convert to stack based location because later on we may not know the offset of the scratch area from
-                // the SP.
-                decref_infos.emplace_back(Location::Stack, indirectFor(l).offset);
-            } else if (l.type == Location::Register) {
-                // CSRs shouldn't be getting allocated, and we should only be calling this at a callsite:
-                RELEASE_ASSERT(0, "we shouldn't be trying to decref anything in a register");
-            } else
-                RELEASE_ASSERT(0, "not implemented");
+            bool found_location = false;
+
+            for (Location l : var.locations) {
+                if (l.type == Location::Scratch) {
+                    // convert to stack based location because later on we may not know the offset of the scratch area
+                    // from the SP.
+                    decref_infos.emplace_back(Location::Stack, indirectFor(l).offset);
+                    found_location = true;
+                    break;
+                } else if (l.type == Location::Register) {
+                    // we only allow registers which are not clobbered by a call
+                    if (l.isClobberedByCall())
+                        continue;
+                    decref_infos.emplace_back(l);
+                    found_location = true;
+                    break;
+                } else
+                    RELEASE_ASSERT(0, "not implemented");
+            }
+            if (!found_location) {
+                // this is very rare. just fail the rewrite for now
+                failed = true;
+            }
         }
     }
 
@@ -2208,7 +2220,8 @@ Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const L
       done_guarding(false),
       last_guard_action(-1),
       offset_eq_jmp_slowpath(-1),
-      offset_ne_jmp_slowpath(-1) {
+      offset_ne_jmp_slowpath(-1),
+      allocatable_regs(std_allocatable_regs) {
     initPhaseCollecting();
 
     finished = false;
