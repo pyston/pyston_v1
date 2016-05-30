@@ -550,7 +550,7 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames& args, CFG* cf
     auto maybe_add = [&](AST_Name* n) {
         ScopeInfo::VarScopeType vst = n->lookup_type;
         assert(vst != ScopeInfo::VarScopeType::UNKNOWN);
-        assert(vst != ScopeInfo::VarScopeType::GLOBAL);
+        assert(vst != ScopeInfo::VarScopeType::GLOBAL); // global-and-local error
         if (vst == ScopeInfo::VarScopeType::NAME)
             return;
         assert(n->vreg >= 0);

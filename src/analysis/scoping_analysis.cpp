@@ -587,29 +587,33 @@ public:
         }
     }
 
+    void visitOrignodeArgs(AST_arguments* args) {
+        this->currently_visiting_functiondef_args = true;
+
+        int counter = 0;
+        for (AST_expr* e : args->args) {
+            if (e->type == AST_TYPE::Tuple) {
+                doWrite(scoping->getInternedStrings().get("." + std::to_string(counter)));
+            }
+            counter++;
+            e->accept(this);
+        }
+
+        if (args->vararg) {
+            mangleNameInPlace(args->vararg->id, cur->private_name, scoping->getInternedStrings());
+            doWrite(args->vararg->id);
+        }
+        if (args->kwarg) {
+            mangleNameInPlace(args->kwarg->id, cur->private_name, scoping->getInternedStrings());
+            doWrite(args->kwarg->id);
+        }
+
+        this->currently_visiting_functiondef_args = false;
+    }
+
     bool visit_functiondef(AST_FunctionDef* node) override {
         if (node == orig_node) {
-            this->currently_visiting_functiondef_args = true;
-
-            int counter = 0;
-            for (AST_expr* e : node->args->args) {
-                if (e->type == AST_TYPE::Tuple) {
-                    doWrite(scoping->getInternedStrings().get("." + std::to_string(counter)));
-                }
-                counter++;
-                e->accept(this);
-            }
-
-            if (node->args->vararg) {
-                mangleNameInPlace(node->args->vararg->id, cur->private_name, scoping->getInternedStrings());
-                doWrite(node->args->vararg->id);
-            }
-            if (node->args->kwarg) {
-                mangleNameInPlace(node->args->kwarg->id, cur->private_name, scoping->getInternedStrings());
-                doWrite(node->args->kwarg->id);
-            }
-
-            this->currently_visiting_functiondef_args = false;
+            visitOrignodeArgs(node->args);
 
             for (AST_stmt* s : node->body)
                 s->accept(this);
@@ -666,16 +670,7 @@ public:
 
     bool visit_lambda(AST_Lambda* node) override {
         if (node == orig_node) {
-            for (AST_expr* e : node->args->args)
-                e->accept(this);
-            if (node->args->vararg) {
-                mangleNameInPlace(node->args->vararg->id, cur->private_name, scoping->getInternedStrings());
-                doWrite(node->args->vararg->id);
-            }
-            if (node->args->kwarg) {
-                mangleNameInPlace(node->args->kwarg->id, cur->private_name, scoping->getInternedStrings());
-                doWrite(node->args->kwarg->id);
-            }
+            visitOrignodeArgs(node->args);
             node->body->accept(this);
         } else {
             for (auto* e : node->args->defaults)
