@@ -66,7 +66,7 @@ extern "C" Box* executeInnerAndSetupFrame(ASTInterpreter& interpreter, CFGBlock*
  */
 class ASTInterpreter {
 public:
-    ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs, FrameInfo* deopt_frame_info = NULL);
+    ASTInterpreter(FunctionMetadata* md, Box** vregs, FrameInfo* deopt_frame_info = NULL);
 
     void initArguments(BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
@@ -154,9 +154,9 @@ private:
 public:
     ~ASTInterpreter() { Py_XDECREF(this->created_closure); }
 
-    llvm::DenseMap<InternedString, int>& getSymVRegMap() {
-        assert(source_info->cfg);
-        return source_info->cfg->sym_vreg_map;
+    const VRegInfo& getVRegInfo() const { return source_info->cfg->getVRegInfo(); }
+    const llvm::DenseMap<InternedString, int>& getSymVRegMap() const {
+        return source_info->cfg->getVRegInfo().getSymVRegMap();
     }
 
     AST_stmt* getCurrentStatement() {
@@ -183,8 +183,7 @@ public:
 };
 
 void ASTInterpreter::addSymbol(InternedString name, Box* new_value, bool allow_duplicates) {
-    assert(getSymVRegMap().count(name));
-    Box*& value = vregs[getSymVRegMap()[name]];
+    Box*& value = vregs[getVRegInfo().getVReg(name)];
     Box* old_value = value;
     value = incref(new_value);
     if (allow_duplicates)
@@ -222,7 +221,7 @@ void ASTInterpreter::setGlobals(Box* globals) {
     this->frame_info.globals = incref(globals);
 }
 
-ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs, FrameInfo* deopt_frame_info)
+ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, FrameInfo* deopt_frame_info)
     : current_block(0),
       frame_info(ExcInfo(NULL, NULL, NULL)),
       edgecount(0),
@@ -255,7 +254,7 @@ ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, int num_vregs,
 
     frame_info.vregs = vregs;
     frame_info.md = md;
-    frame_info.num_vregs = num_vregs;
+    frame_info.num_vregs = getVRegInfo().getNumOfCrossBlockVRegs();
 
     assert(scope_info);
 }
@@ -482,8 +481,8 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
         if (closure) {
             ASTInterpreterJitInterface::setLocalClosureHelper(this, node->vreg, name, value.o);
         } else {
-            assert(getSymVRegMap().count(name));
-            assert(getSymVRegMap()[name] == node->vreg);
+            assert(getVRegInfo().getVReg(node->id) == node->vreg);
+            frame_info.num_vregs = std::max(frame_info.num_vregs, node->vreg + 1);
             Box* prev = vregs[node->vreg];
             vregs[node->vreg] = value.o;
             Py_XDECREF(prev);
@@ -712,23 +711,16 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     std::unique_ptr<PhiAnalysis> phis
         = computeRequiredPhis(getMD()->param_names, source_info->cfg, liveness, scope_info);
 
-    llvm::DenseMap<int, InternedString> offset_name_map;
-    for (auto&& v : getSymVRegMap()) {
-        offset_name_map[v.second] = v.first;
-    }
-
-    std::vector<InternedString> dead_symbols;
-    for (int i = 0; i < getSymVRegMap().size(); ++i) {
-        if (!liveness->isLiveAtEnd(offset_name_map[i], current_block)) {
-            dead_symbols.push_back(offset_name_map[i]);
-        } else if (phis->isRequiredAfter(offset_name_map[i], current_block)) {
-            assert(scope_info->getScopeTypeOfName(offset_name_map[i]) != ScopeInfo::VarScopeType::GLOBAL);
+    llvm::SmallVector<int, 16> dead_vregs;
+    for (auto&& sym : getSymVRegMap()) {
+        if (!liveness->isLiveAtEnd(sym.first, current_block)) {
+            dead_vregs.push_back(sym.second);
+        } else if (phis->isRequiredAfter(sym.first, current_block)) {
+            assert(scope_info->getScopeTypeOfName(sym.first) != ScopeInfo::VarScopeType::GLOBAL);
         } else {
         }
     }
-    for (auto&& dead : dead_symbols) {
-        assert(getSymVRegMap().count(dead));
-        int vreg_num = getSymVRegMap()[dead];
+    for (auto&& vreg_num : dead_vregs) {
         Py_CLEAR(vregs[vreg_num]);
     }
 
@@ -747,8 +739,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     static Box* const VAL_UNDEFINED = (Box*)None;
 
     for (auto& name : phis->definedness.getDefinedNamesAtEnd(current_block)) {
-        assert(getSymVRegMap().count(name));
-        Box* val = vregs[getSymVRegMap()[name]];
+        Box* val = vregs[getVRegInfo().getVReg(name)];
         if (!liveness->isLiveAtEnd(name, current_block))
             continue;
 
@@ -1343,8 +1334,7 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                 } else {
                     assert(vst == ScopeInfo::VarScopeType::FAST);
 
-                    assert(getSymVRegMap().count(target->id));
-                    assert(getSymVRegMap()[target->id] == target->vreg);
+                    assert(getVRegInfo().getVReg(target->id) == target->vreg);
 
                     if (target->id.s()[0] == '#') {
                         assert(vregs[target->vreg] != NULL);
@@ -1358,6 +1348,7 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                         }
                     }
 
+                    frame_info.num_vregs = std::max(frame_info.num_vregs, target->vreg + 1);
                     Py_DECREF(vregs[target->vreg]);
                     vregs[target->vreg] = NULL;
                 }
@@ -1690,8 +1681,8 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             }
 
             assert(node->vreg >= 0);
-            assert(getSymVRegMap().count(node->id));
-            assert(getSymVRegMap()[node->id] == node->vreg);
+            assert(getVRegInfo().getVReg(node->id) == node->vreg);
+            frame_info.num_vregs = std::max(frame_info.num_vregs, node->vreg + 1);
             Box* val = vregs[node->vreg];
 
             if (val) {
@@ -1867,8 +1858,8 @@ void ASTInterpreterJitInterface::setExcInfoHelper(void* _interpreter, STOLEN(Box
 void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, long vreg, InternedString id, Box* v) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
 
-    assert(interpreter->getSymVRegMap().count(id));
-    assert(interpreter->getSymVRegMap()[id] == vreg);
+    interpreter->frame_info.num_vregs = std::max(interpreter->frame_info.num_vregs, (int)vreg + 1);
+    assert(interpreter->getVRegInfo().getVReg(id) == vreg);
     Box* prev = interpreter->vregs[vreg];
     interpreter->vregs[vreg] = v;
     auto closure_offset = interpreter->scope_info->getClosureOffset(id);
@@ -1980,17 +1971,17 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
     // (For instance, throwing the exception will try to fetch the current statement, but we determine
     // that by looking at the cfg.)
     if (!source_info->cfg)
-        source_info->cfg = computeCFG(source_info, source_info->body);
+        source_info->cfg = computeCFG(source_info, source_info->body, md->param_names);
 
     Box** vregs = NULL;
-    int num_vregs = md->calculateNumVRegs();
+    int num_vregs = source_info->cfg->getVRegInfo().getTotalNumOfVRegs();
     if (num_vregs > 0) {
         vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
         memset(vregs, 0, sizeof(Box*) * num_vregs);
     }
 
     ++md->times_interpreted;
-    ASTInterpreter interpreter(md, vregs, num_vregs);
+    ASTInterpreter interpreter(md, vregs);
 
     ScopeInfo* scope_info = md->source->getScopeInfo();
 
@@ -2022,16 +2013,16 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
     // that by looking at the cfg.)
     SourceInfo* source_info = md->source.get();
     if (!source_info->cfg)
-        source_info->cfg = computeCFG(source_info, source_info->body);
+        source_info->cfg = computeCFG(source_info, source_info->body, md->param_names);
 
     Box** vregs = NULL;
-    int num_vregs = md->calculateNumVRegs();
+    int num_vregs = source_info->cfg->getVRegInfo().getTotalNumOfVRegs();
     if (num_vregs > 0) {
         vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
         memset(vregs, 0, sizeof(Box*) * num_vregs);
     }
 
-    ASTInterpreter interpreter(md, vregs, num_vregs);
+    ASTInterpreter interpreter(md, vregs);
     interpreter.initArguments(NULL, NULL, NULL, NULL, NULL, NULL);
     interpreter.setBoxedLocals(incref(boxedLocals));
 
@@ -2060,7 +2051,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
     // there wouldn't be enough space for the compiler generated ones which the interpreter (+bjit) stores inside the
     // vreg array.
     Box** vregs = NULL;
-    int num_vregs = md->calculateNumVRegs();
+    int num_vregs = source_info->cfg->getVRegInfo().getTotalNumOfVRegs();
     if (num_vregs > 0) {
         vregs = (Box**)alloca(sizeof(Box*) * num_vregs);
         memset(vregs, 0, sizeof(Box*) * num_vregs);
@@ -2071,7 +2062,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
     RELEASE_ASSERT(cur_thread_state.frame_info == frame_state.frame_info, "");
     cur_thread_state.frame_info = frame_state.frame_info->back;
 
-    ASTInterpreter interpreter(md, vregs, num_vregs, frame_state.frame_info);
+    ASTInterpreter interpreter(md, vregs, frame_state.frame_info);
 
     for (const auto& p : *frame_state.locals) {
         assert(p.first->cls == str_cls);

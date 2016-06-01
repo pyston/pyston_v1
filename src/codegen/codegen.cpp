@@ -73,34 +73,6 @@ BORROWED(BoxedCode*) FunctionMetadata::getCode() {
     return code_obj;
 }
 
-int FunctionMetadata::calculateNumVRegs() {
-    SourceInfo* source_info = source.get();
-
-    CFG* cfg = source_info->cfg;
-    assert(cfg && "We don't calculate the CFG inside this function because it can raise an exception and its "
-                  "therefore not safe to call at every point");
-
-    if (!cfg->hasVregsAssigned()) {
-        ScopeInfo* scope_info = source->getScopeInfo();
-        cfg->assignVRegs(param_names, scope_info);
-    }
-    return cfg->sym_vreg_map.size();
-}
-
-int FunctionMetadata::calculateNumUserVisibleVRegs() {
-    SourceInfo* source_info = source.get();
-
-    CFG* cfg = source_info->cfg;
-    assert(cfg && "We don't calculate the CFG inside this function because it can raise an exception and its "
-                  "therefore not safe to call at every point");
-
-    if (!cfg->hasVregsAssigned()) {
-        ScopeInfo* scope_info = source->getScopeInfo();
-        cfg->assignVRegs(param_names, scope_info);
-    }
-    return cfg->sym_vreg_map_user_visible.size();
-}
-
 void FunctionMetadata::addVersion(CompiledFunction* compiled) {
     assert(compiled);
     assert((compiled->spec != NULL) + (compiled->entry_descriptor != NULL) == 1);

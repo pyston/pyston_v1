@@ -43,7 +43,8 @@ TEST_F(AnalysisTest, augassign) {
     SourceInfo* si = new SourceInfo(createModule(boxString("augassign"), fn.c_str()), scoping, future_flags, func,
             func->body, boxString(fn));
 
-    CFG* cfg = computeCFG(si, func->body);
+    ParamNames param_names(si->ast, si->getInternedStrings());
+    CFG* cfg = computeCFG(si, func->body, param_names);
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
 
     //cfg->print();
@@ -74,7 +75,7 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
                     fn.c_str()), scoping, future_flags, func, func->body, boxString(fn)));
     FunctionMetadata* clfunc = new FunctionMetadata(0, false, false, std::move(si));
 
-    CFG* cfg = computeCFG(clfunc->source.get(), func->body);
+    CFG* cfg = computeCFG(clfunc->source.get(), func->body, clfunc->param_names);
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
 
     // cfg->print();
