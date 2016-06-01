@@ -2494,7 +2494,7 @@ public:
         AUTO_DECREF(key);
 
         Box* r = self->b->getattr(key);
-        return incref(r ? True : False);
+        return incref(r ? Py_True : Py_False);
     }
 
     static Box* hasKey(Box* _self, Box* _key) {
@@ -2508,7 +2508,7 @@ public:
         if (!rtn)
             return -1;
         AUTO_DECREF(rtn);
-        return rtn == True;
+        return rtn == Py_True;
     }
 
     static Box* keys(Box* _self) {
@@ -2739,7 +2739,7 @@ public:
                                                      _other, NULL, NULL, NULL, NULL);
     }
 
-    static Box* ne(Box* _self, Box* _other) { return incref(eq(_self, _other) == True ? False : True); }
+    static Box* ne(Box* _self, Box* _other) { return incref(eq(_self, _other) == Py_True ? Py_False : Py_True); }
 
     friend class AttrWrapperIter;
 };
@@ -4170,10 +4170,10 @@ void setupRuntime() {
     LONG = typeFromClass(long_cls);
     BOXED_COMPLEX = typeFromClass(complex_cls);
 
-    True = new BoxedBool(true);
-    False = new BoxedBool(false);
-    constants.push_back(True);
-    constants.push_back(False);
+    pyston_True = new BoxedBool(true);
+    pyston_False = new BoxedBool(false);
+    constants.push_back(pyston_True);
+    constants.push_back(pyston_False);
 
     // Need to initialize interned_ints early:
     setupInt();

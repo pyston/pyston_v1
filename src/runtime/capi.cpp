@@ -572,7 +572,7 @@ extern "C" long _Py_HashPointer(void* p) noexcept {
 
 extern "C" int PyObject_IsTrue(PyObject* o) noexcept {
     if (o->cls == bool_cls)
-        return o == True;
+        return o == Py_True;
 
     try {
         return o->nonzeroIC();

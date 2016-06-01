@@ -114,7 +114,7 @@ extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float
 extern std::vector<BoxedClass*> exception_types;
 
 extern "C" {
-extern Box* None, *NotImplemented, *True, *False, *Ellipsis;
+extern Box* None, *NotImplemented, *pyston_True, *pyston_False, *Ellipsis;
 }
 extern "C" {
 extern Box* repr_obj, *len_obj, *hash_obj, *range_obj, *abs_obj, *min_obj, *max_obj, *open_obj, *id_obj, *chr_obj,

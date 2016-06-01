@@ -62,9 +62,9 @@ private:
             llvm::errs() << "Constant-folding this load: " << *li << '\n';
         }
         if (gv->getName() == "True")
-            li->replaceAllUsesWith(embedConstantPtr(True, g.llvm_bool_type_ptr));
+            li->replaceAllUsesWith(embedConstantPtr(Py_True, g.llvm_bool_type_ptr));
         else
-            li->replaceAllUsesWith(embedConstantPtr(False, g.llvm_bool_type_ptr));
+            li->replaceAllUsesWith(embedConstantPtr(Py_False, g.llvm_bool_type_ptr));
         return true;
     }
 

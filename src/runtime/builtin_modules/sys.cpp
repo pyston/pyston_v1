@@ -767,7 +767,7 @@ void setupSys() {
                                                  "exit", { None }, NULL, exit_doc));
 
     sys_module->giveAttr("warnoptions", new BoxedList());
-    sys_module->giveAttrBorrowed("py3kwarning", False);
+    sys_module->giveAttrBorrowed("py3kwarning", Py_False);
     sys_module->giveAttr("byteorder", boxString(isLittleEndian() ? "little" : "big"));
 
     sys_module->giveAttr("platform", boxString(Py_GetPlatform()));
@@ -792,7 +792,7 @@ void setupSys() {
                                                   "getrecursionlimit", getrecursionlimit_doc));
 
     // As we don't support compile() etc yet force 'dont_write_bytecode' to true.
-    sys_module->giveAttrBorrowed("dont_write_bytecode", True);
+    sys_module->giveAttrBorrowed("dont_write_bytecode", Py_True);
 
     sys_module->giveAttr("prefix", boxString(Py_GetPrefix()));
     sys_module->giveAttr("exec_prefix", boxString(Py_GetExecPrefix()));

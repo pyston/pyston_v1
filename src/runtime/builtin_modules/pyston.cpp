@@ -74,6 +74,6 @@ void setupPyston() {
                                               FunctionMetadata::create((void*)clearStats, NONE, 0), "clearStats"));
     pyston_module->giveAttr(
         "dumpStats", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)dumpStats, NONE, 1, false, false),
-                                                      "dumpStats", { False }));
+                                                      "dumpStats", { Py_False }));
 }
 }

@@ -2354,7 +2354,7 @@ void setupBuiltins() {
     builtins_module->giveAttrBorrowed("Ellipsis", Ellipsis);
     builtins_module->giveAttrBorrowed("None", None);
 
-    builtins_module->giveAttrBorrowed("__debug__", False);
+    builtins_module->giveAttrBorrowed("__debug__", Py_False);
 
     notimplemented_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "NotImplementedType", false,
                                             NULL, NULL, false);
@@ -2486,10 +2486,10 @@ void setupBuiltins() {
         = new FunctionMetadata(4, false, false, ParamNames({ "", "cmp", "key", "reverse" }, "", ""));
     sorted_func->addVersion((void*)sorted, LIST, { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN });
     builtins_module->giveAttr(
-        "sorted", new BoxedBuiltinFunctionOrMethod(sorted_func, "sorted", { None, None, False }, NULL, sorted_doc));
+        "sorted", new BoxedBuiltinFunctionOrMethod(sorted_func, "sorted", { None, None, Py_False }, NULL, sorted_doc));
 
-    builtins_module->giveAttrBorrowed("True", True);
-    builtins_module->giveAttrBorrowed("False", False);
+    builtins_module->giveAttrBorrowed("True", Py_True);
+    builtins_module->giveAttrBorrowed("False", Py_False);
 
     range_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)range, LIST, 3, false, false), "range",
                                                  { NULL, NULL }, NULL, range_doc);

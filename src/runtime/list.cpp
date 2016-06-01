@@ -1009,7 +1009,7 @@ extern "C" int PyList_Sort(PyObject* v) noexcept {
     }
 
     try {
-        listSort((BoxedList*)v, None, None, False);
+        listSort((BoxedList*)v, None, None, Py_False);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -1492,7 +1492,7 @@ void setupList() {
     list_cls->giveAttr("sort",
                        new BoxedFunction(FunctionMetadata::create((void*)listSortFunc, NONE, 4, false, false,
                                                                   ParamNames({ "", "cmp", "key", "reverse" }, "", "")),
-                                         { None, None, False }));
+                                         { None, None, Py_False }));
     list_cls->giveAttr("__contains__", new BoxedFunction(FunctionMetadata::create((void*)listContains, BOXED_BOOL, 2)));
 
     list_cls->giveAttr(
