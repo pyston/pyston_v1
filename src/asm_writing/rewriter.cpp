@@ -917,18 +917,9 @@ RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
 }
 
 RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
-                            llvm::ArrayRef<RewriterVar*> args_xmm) {
+                            llvm::ArrayRef<RewriterVar*> args_xmm, llvm::ArrayRef<RewriterVar*> additional_uses) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
     RewriterVar* result = createNewVar();
-    RewriterVar::SmallVector uses;
-    for (RewriterVar* v : args) {
-        assert(v != NULL);
-        uses.push_back(v);
-    }
-    for (RewriterVar* v : args_xmm) {
-        assert(v != NULL);
-        uses.push_back(v);
-    }
 
     ActionType type;
     if (has_side_effects)
@@ -936,36 +927,65 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, llvm::ArrayR
     else
         type = ActionType::NORMAL;
 
-    // It's not nice to pass llvm::SmallVectors through a closure, especially with our SmallFunction
-    // optimization, so just regionAlloc them and copy the data in:
-    RewriterVar** _args = (RewriterVar**)this->regionAlloc(sizeof(RewriterVar*) * args.size());
-    memcpy(_args, args.begin(), sizeof(RewriterVar*) * args.size());
-    RewriterVar** _args_xmm = (RewriterVar**)this->regionAlloc(sizeof(RewriterVar*) * args_xmm.size());
-    memcpy(_args_xmm, args_xmm.begin(), sizeof(RewriterVar*) * args_xmm.size());
-
-    int args_size = args.size();
-    assert(args_xmm.size() <= 0x7fff);
-    // Hack: pack this into a short to make sure it fits in the closure
-    short xmm_args_size = args_xmm.size();
 
     // TODO: we don't need to generate the decref info for calls which can't throw
     bool can_throw = true;
+    auto args_array_ref = regionAllocArgs(args, args_xmm, additional_uses);
 
     // Hack: explicitly order the closure arguments so they pad nicer
-    addAction([args_size, xmm_args_size, has_side_effects, can_throw, this, result, func_addr, _args, _args_xmm]() {
-        this->_call(result, has_side_effects, can_throw, func_addr, llvm::ArrayRef<RewriterVar*>(_args, args_size),
-                    llvm::ArrayRef<RewriterVar*>(_args_xmm, xmm_args_size));
-        for (int i = 0; i < args_size; i++)
-            _args[i]->bumpUse();
-        for (int i = 0; i < xmm_args_size; i++)
-            _args_xmm[i]->bumpUse();
-    }, uses, type);
+    struct LambdaClosure {
+        RewriterVar** args_array;
+
+        struct {
+            unsigned int has_side_effects : 1;
+            unsigned int can_throw : 1;
+            unsigned int num_args : 16;
+            unsigned int num_args_xmm : 16;
+            unsigned int num_additional_uses : 16;
+        };
+
+        llvm::ArrayRef<RewriterVar*> allArgs() const {
+            return llvm::makeArrayRef(args_array, num_args + num_args_xmm + num_additional_uses);
+        }
+
+        llvm::ArrayRef<RewriterVar*> args() const { return allArgs().slice(0, num_args); }
+
+        llvm::ArrayRef<RewriterVar*> argsXmm() const { return allArgs().slice(num_args, num_args_xmm); }
+
+        llvm::ArrayRef<RewriterVar*> additionalUses() const {
+            return allArgs().slice((int)num_args + (int)num_args_xmm, num_additional_uses);
+        }
+
+        LambdaClosure(llvm::MutableArrayRef<RewriterVar*> args_array_ref, llvm::ArrayRef<RewriterVar*> _args,
+                      llvm::ArrayRef<RewriterVar*> _args_xmm, llvm::ArrayRef<RewriterVar*> _addition_uses,
+                      bool has_side_effects, bool can_throw)
+            : args_array(args_array_ref.data()),
+              has_side_effects(has_side_effects),
+              can_throw(can_throw),
+              num_args(_args.size()),
+              num_args_xmm(_args_xmm.size()),
+              num_additional_uses(_addition_uses.size()) {
+            assert(_args.size() < 1 << 16);
+            assert(_args_xmm.size() < 1 << 16);
+            assert(_addition_uses.size() < 1 << 16);
+        }
+
+    } lambda_closure(args_array_ref, args, args_xmm, additional_uses, has_side_effects, can_throw);
+    assert(lambda_closure.args().size() == args.size());
+    assert(lambda_closure.argsXmm().size() == args_xmm.size());
+    assert(lambda_closure.additionalUses().size() == additional_uses.size());
+
+    addAction([this, result, func_addr, lambda_closure]() {
+        this->_call(result, lambda_closure.has_side_effects, lambda_closure.can_throw, func_addr, lambda_closure.args(),
+                    lambda_closure.argsXmm(), lambda_closure.allArgs());
+    }, lambda_closure.allArgs(), type);
 
     return result;
 }
 
 void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> args,
-                          llvm::ArrayRef<RewriterVar*> args_xmm, Location preserve) {
+                          llvm::ArrayRef<RewriterVar*> args_xmm, Location preserve,
+                          llvm::ArrayRef<RewriterVar*> bump_if_possible) {
     if (has_side_effects)
         assert(done_guarding);
 
@@ -1052,6 +1072,10 @@ void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> ar
     }
 #endif
 
+    for (auto&& use : bump_if_possible) {
+        use->bumpUseEarlyIfPossible();
+    }
+
     // Spill caller-saved registers:
     for (auto check_reg : caller_save_registers) {
         // check_reg.dump();
@@ -1114,7 +1138,8 @@ void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> ar
 }
 
 void Rewriter::_call(RewriterVar* result, bool has_side_effects, bool can_throw, void* func_addr,
-                     llvm::ArrayRef<RewriterVar*> args, llvm::ArrayRef<RewriterVar*> args_xmm) {
+                     llvm::ArrayRef<RewriterVar*> args, llvm::ArrayRef<RewriterVar*> args_xmm,
+                     llvm::ArrayRef<RewriterVar*> vars_to_bump) {
     if (LOG_IC_ASSEMBLY)
         assembler->comment("_call");
 
@@ -1123,17 +1148,7 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, bool can_throw,
     if (failed)
         return;
 
-    _setupCall(has_side_effects, args, args_xmm, assembler::R11);
-
-    // This duty is now on the caller:
-    /*
-    for (RewriterVar* arg : args) {
-        arg->bumpUse();
-    }
-    for (RewriterVar* arg_xmm : args_xmm) {
-        arg_xmm->bumpUse();
-    }
-    */
+    _setupCall(has_side_effects, args, args_xmm, assembler::R11, vars_to_bump);
 
     assertConsistent();
 
@@ -1164,6 +1179,10 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, bool can_throw,
 
     if (result)
         result->releaseIfNoUses();
+
+    for (RewriterVar* var : vars_to_bump) {
+        var->bumpUseLateIfNecessary();
+    }
 }
 
 std::vector<Location> Rewriter::getDecrefLocations() {
@@ -1286,12 +1305,7 @@ void RewriterVar::refConsumed(RewriterAction* action) {
     last_refconsumed_numuses = uses.size();
     if (!action)
         action = rewriter->getLastAction();
-    action->consumed_refs.emplace_back(this);
-}
-
-void RewriterVar::refUsed() {
-    // TODO: This is a pretty silly implementation that might prevent other optimizations?
-    rewriter->addAction([=]() { this->bumpUse(); }, { this }, ActionType::NORMAL);
+    action->consumed_refs.push_front(this);
 }
 
 bool RewriterVar::needsDecref(int current_action_index) {
@@ -1892,7 +1906,7 @@ void Rewriter::_checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val, asse
     } else
         assembler->cmp(var_reg, assembler::Immediate(exc_val), type);
 
-    _setupCall(false, RewriterVar::SmallVector(), RewriterVar::SmallVector());
+    _setupCall(false, {});
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
         assembler->mov(assembler::Immediate((void*)throwCAPIException), assembler::R11);

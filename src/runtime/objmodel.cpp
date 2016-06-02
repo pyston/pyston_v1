@@ -4870,32 +4870,32 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
             } else {
                 // Hacky workaround: the rewriter can only pass arguments in registers, so use this helper function
                 // to unpack some of the additional arguments:
+                llvm::SmallVector<RewriterVar*, 4> additional_uses;
                 RewriterVar* arg_array = rewrite_args->rewriter->allocate(4);
                 arg_vec.push_back(arg_array);
-                if (num_output_args >= 1)
+                if (num_output_args >= 1) {
                     arg_array->setAttr(0, rewrite_args->arg1, RewriterVar::SetattrType::REF_USED);
-                if (num_output_args >= 2)
+                    additional_uses.push_back(rewrite_args->arg1);
+                }
+                if (num_output_args >= 2) {
                     arg_array->setAttr(8, rewrite_args->arg2, RewriterVar::SetattrType::REF_USED);
-                if (num_output_args >= 3)
+                    additional_uses.push_back(rewrite_args->arg2);
+                }
+                if (num_output_args >= 3) {
                     arg_array->setAttr(16, rewrite_args->arg3, RewriterVar::SetattrType::REF_USED);
-                if (num_output_args >= 4)
+                    additional_uses.push_back(rewrite_args->arg3);
+                }
+                if (num_output_args >= 4) {
                     arg_array->setAttr(24, rewrite_args->args, RewriterVar::SetattrType::REF_USED);
+                    additional_uses.push_back(rewrite_args->args);
+                }
 
                 if (S == CXX)
-                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelper, arg_vec)
-                                                ->setType(RefType::OWNED);
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelper, arg_vec, {},
+                                                                         additional_uses)->setType(RefType::OWNED);
                 else
-                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelperCapi, arg_vec)
-                                                ->setType(RefType::OWNED);
-
-                if (num_output_args >= 1)
-                    rewrite_args->arg1->refUsed();
-                if (num_output_args >= 2)
-                    rewrite_args->arg2->refUsed();
-                if (num_output_args >= 3)
-                    rewrite_args->arg3->refUsed();
-                if (num_output_args >= 4)
-                    rewrite_args->args->refUsed();
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)astInterpretHelperCapi, arg_vec,
+                                                                         {}, additional_uses)->setType(RefType::OWNED);
             }
 
             rewrite_args->out_success = true;

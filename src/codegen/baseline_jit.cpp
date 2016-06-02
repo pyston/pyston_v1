@@ -222,10 +222,10 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
     call_args.push_back(args.size() > 1 ? args[1] : imm(0ul));
     call_args.push_back(args.size() > 2 ? args[2] : imm(0ul));
 
+    llvm::ArrayRef<RewriterVar*> additional_uses;
     if (args.size() > 3) {
-        RewriterVar* scratch = allocate(args.size() - 3);
-        for (int i = 0; i < args.size() - 3; ++i)
-            scratch->setAttr(i * sizeof(void*), args[i + 3], RewriterVar::SetattrType::REF_USED);
+        additional_uses = args.slice(3);
+        RewriterVar* scratch = allocArgs(additional_uses, RewriterVar::SetattrType::REF_USED);
         call_args.push_back(scratch);
     } else if (keyword_names) {
         call_args.push_back(imm(0ul));
@@ -234,11 +234,8 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
     if (keyword_names)
         call_args.push_back(imm(keyword_names));
 
-    auto r = emitPPCall((void*)callattr, call_args, 2, 640, node, type_recorder).first->setType(RefType::OWNED);
-    for (int i = 3; i < args.size(); i++) {
-        args[i]->refUsed();
-    }
-    return r;
+    return emitPPCall((void*)callattr, call_args, 2, 640, node, type_recorder, additional_uses)
+        .first->setType(RefType::OWNED);
 #else
     // We could make this faster but for now: keep it simple, stupid...
     RewriterVar* attr_var = imm(attr);
@@ -285,44 +282,9 @@ void JitFragmentWriter::emitDictSet(RewriterVar* dict, RewriterVar* k, RewriterV
     v->refConsumed();
 }
 
-// TODO: merge this function's functionality with refUsed
 RewriterVar* JitFragmentWriter::emitCallWithAllocatedArgs(void* func_addr, const llvm::ArrayRef<RewriterVar*> args,
                                                           const llvm::ArrayRef<RewriterVar*> additional_uses) {
-    RewriterVar* result = createNewVar();
-    RewriterVar::SmallVector uses;
-    for (RewriterVar* v : args) {
-        assert(v != NULL);
-        uses.push_back(v);
-    }
-    for (RewriterVar* v : additional_uses) {
-        assert(v != NULL);
-        uses.push_back(v);
-    }
-
-    // It's not nice to pass llvm::SmallVectors through a closure, especially with our SmallFunction
-    // optimization, so just regionAlloc them and copy the data in:
-    RewriterVar** _args = (RewriterVar**)this->regionAlloc(sizeof(RewriterVar*) * args.size());
-    memcpy(_args, args.begin(), sizeof(RewriterVar*) * args.size());
-    RewriterVar** _args_additional = (RewriterVar**)this->regionAlloc(sizeof(RewriterVar*) * additional_uses.size());
-    memcpy(_args_additional, additional_uses.begin(), sizeof(RewriterVar*) * additional_uses.size());
-
-    int args_size = args.size();
-    assert(additional_uses.size() <= 0x7fff);
-    // Hack: pack this into a short to make sure it fits in the closure
-    short args_additional_size = additional_uses.size();
-
-    bool can_throw = true;
-
-    // Hack: explicitly order the closure arguments so they pad nicer
-    addAction([args_size, args_additional_size, can_throw, func_addr, this, result, _args, _args_additional]() {
-        this->_call(result, false, can_throw, func_addr, llvm::ArrayRef<RewriterVar*>(_args, args_size),
-                    llvm::ArrayRef<RewriterVar*>());
-        for (int i = 0; i < args_size; i++)
-            _args[i]->bumpUse();
-        for (int i = 0; i < args_additional_size; i++)
-            _args_additional[i]->bumpUse();
-    }, uses, ActionType::NORMAL);
-    return result;
+    return call(false, func_addr, args, {}, additional_uses);
 }
 
 RewriterVar* JitFragmentWriter::emitCreateList(const llvm::ArrayRef<RewriterVar*> values) {
@@ -504,21 +466,18 @@ RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj
     call_args.push_back(args.size() > 1 ? args[1] : imm(0ul));
     call_args.push_back(args.size() > 2 ? args[2] : imm(0ul));
 
+    llvm::ArrayRef<RewriterVar*> additional_uses;
     if (args.size() > 3) {
-        RewriterVar* scratch = allocate(args.size() - 3);
-        for (int i = 0; i < args.size() - 3; ++i)
-            scratch->setAttr(i * sizeof(void*), args[i + 3], RewriterVar::SetattrType::REF_USED);
+        additional_uses = args.slice(3);
+        RewriterVar* scratch = allocArgs(additional_uses, RewriterVar::SetattrType::REF_USED);
         call_args.push_back(scratch);
     } else
         call_args.push_back(imm(0ul));
     if (keyword_names)
         call_args.push_back(imm(keyword_names));
 
-    auto r = emitPPCall((void*)runtimeCall, call_args, 2, 640, node, type_recorder).first->setType(RefType::OWNED);
-    for (int i = 3; i < args.size(); i++) {
-        args[i]->refUsed();
-    }
-    return r;
+    return emitPPCall((void*)runtimeCall, call_args, 2, 640, node, type_recorder, additional_uses)
+        .first->setType(RefType::OWNED);
 #else
     RewriterVar* argspec_var = imm(argspec.asInt());
     RewriterVar* keyword_names_var = keyword_names ? imm(keyword_names) : nullptr;
@@ -576,11 +535,9 @@ RewriterVar* JitFragmentWriter::emitYield(RewriterVar* v) {
 
     auto&& args = allocArgs(local_args, RewriterVar::SetattrType::REF_USED);
     RewriterVar* generator = interp->getAttr(ASTInterpreterJitInterface::getGeneratorOffset());
-    auto rtn = call(false, (void*)yield, generator, v, args, imm(local_args.size()))->setType(RefType::OWNED);
+    auto rtn = call(false, (void*)yield, { generator, v, args, imm(local_args.size()) }, {}, local_args)
+                   ->setType(RefType::OWNED);
     v->refConsumed();
-    for (auto&& var : local_args) {
-        var->refUsed();
-    }
     return rtn;
 }
 
@@ -906,31 +863,38 @@ uint64_t JitFragmentWriter::asUInt(InternedString s) {
 }
 #endif
 
-std::pair<RewriterVar*, RewriterAction*> JitFragmentWriter::emitPPCall(void* func_addr,
-                                                                       llvm::ArrayRef<RewriterVar*> args, int num_slots,
-                                                                       int slot_size, AST* ast_node,
-                                                                       TypeRecorder* type_recorder) {
+std::pair<RewriterVar*, RewriterAction*>
+JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, unsigned char num_slots,
+                              unsigned short slot_size, AST* ast_node, TypeRecorder* type_recorder,
+                              llvm::ArrayRef<RewriterVar*> additional_uses) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitPPCall() start");
     RewriterVar::SmallVector args_vec(args.begin(), args.end());
 #if ENABLE_BASELINEJIT_ICS
     RewriterVar* result = createNewVar();
 
-    int args_size = args.size();
-    RewriterVar** _args = (RewriterVar**)regionAlloc(sizeof(RewriterVar*) * args_size);
-    memcpy(_args, args.begin(), sizeof(RewriterVar*) * args_size);
+    auto args_array_ref = regionAllocArgs(args, additional_uses);
 
-    RewriterAction* call_action = addAction([=]() {
-        this->_emitPPCall(result, func_addr, llvm::ArrayRef<RewriterVar*>(_args, args_size), num_slots, slot_size,
-                          ast_node);
-    }, args, ActionType::NORMAL);
+    assert(args.size() < 1ul << 32);
+    int args_size = args.size();
+    assert(additional_uses.size() < 1 << 8);
+    unsigned char num_additional = additional_uses.size();
+    RewriterVar** args_array = args_array_ref.data();
+
+    RewriterAction* call_action
+        = addAction([this, result, func_addr, ast_node, args_array, args_size, slot_size, num_slots, num_additional]() {
+            auto all_args = llvm::makeArrayRef(args_array, args_size + num_additional);
+            auto args = all_args.slice(0, args_size);
+            this->_emitPPCall(result, func_addr, args, num_slots, slot_size, ast_node, all_args);
+        }, args_array_ref, ActionType::NORMAL);
 
     if (type_recorder) {
         RewriterVar* type_recorder_var = imm(type_recorder);
         RewriterVar* obj_cls_var = result->getAttr(offsetof(Box, cls));
-        addAction([=]() { _emitRecordType(type_recorder_var, obj_cls_var); }, { type_recorder_var, obj_cls_var },
-                  ActionType::NORMAL);
-        result->refUsed();
+        addAction([=]() {
+            _emitRecordType(type_recorder_var, obj_cls_var);
+            result->bumpUse();
+        }, { type_recorder_var, obj_cls_var, result }, ActionType::NORMAL);
 
         emitPendingCallsCheck();
         return std::make_pair(result, call_action);
@@ -1025,7 +989,7 @@ void JitFragmentWriter::_emitGetLocal(RewriterVar* val_var, const char* name) {
     assembler::Register var_reg = val_var->getInReg();
     assembler->test(var_reg, var_reg);
 
-    _setupCall(false, RewriterVar::SmallVector(), RewriterVar::SmallVector());
+    _setupCall(false, {});
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
         assembler->mov(assembler::Immediate((uint64_t)name), assembler::RDI);
@@ -1100,7 +1064,8 @@ void JitFragmentWriter::_emitOSRPoint() {
 }
 
 void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
-                                    int num_slots, int slot_size, AST* ast_node) {
+                                    int num_slots, int slot_size, AST* ast_node,
+                                    llvm::ArrayRef<RewriterVar*> vars_to_bump) {
     assembler::Register r = allocReg(assembler::R11);
 
     if (args.size() > 6) { // only 6 args can get passed in registers.
@@ -1109,11 +1074,9 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::
             assembler::Register reg = args[i]->getInReg(Location::any(), true);
             assembler->mov(reg, assembler::Indirect(assembler::RSP, sizeof(void*) * (i - 6)));
         }
-        RewriterVar::SmallVector reg_args(args.begin(), args.begin() + 6);
-        assert(reg_args.size() == 6);
-        _setupCall(false, reg_args, RewriterVar::SmallVector());
+        _setupCall(false, args.slice(0, 6), {}, Location::any(), vars_to_bump);
     } else
-        _setupCall(false, args, RewriterVar::SmallVector());
+        _setupCall(false, args, {}, Location::any(), vars_to_bump);
 
     if (failed)
         return;
@@ -1158,15 +1121,8 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::
 
     result->releaseIfNoUses();
 
-    // TODO: it would be nice to be able to bumpUse on these earlier so that we could potentially avoid spilling
-    // the args across the call if we don't need to.
-    // This had to get moved to the very end of this function due to the fact that bumpUse can cause refcounting
-    // operations to happen.
-    // I'm not sure though that just moving this earlier is good enough though -- we also might need to teach setupCall
-    // that the args might not be needed afterwards?
-    // Anyway this feels like micro-optimizations at the moment and we can figure it out later.
-    for (RewriterVar* arg : args) {
-        arg->bumpUse();
+    for (RewriterVar* use : vars_to_bump) {
+        use->bumpUseLateIfNecessary();
     }
 }
 

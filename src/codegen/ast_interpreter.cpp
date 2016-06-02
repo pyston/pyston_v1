@@ -1172,12 +1172,9 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
             closure_var = jit->imm(0ul);
         if (!passed_globals_var)
             passed_globals_var = jit->imm(0ul);
-        rtn.var = jit->call(false, (void*)createFunctionFromMetadata, jit->imm(md), closure_var, passed_globals_var,
-                            defaults_var, jit->imm(args->defaults.size()))->setType(RefType::OWNED);
-
-        for (auto d_var : defaults_vars) {
-            d_var->refUsed();
-        }
+        rtn.var = jit->call(false, (void*)createFunctionFromMetadata, { jit->imm(md), closure_var, passed_globals_var,
+                                                                        defaults_var, jit->imm(args->defaults.size()) },
+                            {}, defaults_vars)->setType(RefType::OWNED);
     }
 
     rtn.o = createFunctionFromMetadata(md, closure, passed_globals, u.il);
