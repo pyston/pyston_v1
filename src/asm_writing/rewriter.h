@@ -514,8 +514,8 @@ protected:
     void _setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> args, llvm::ArrayRef<RewriterVar*> args_xmm,
                     Location preserve = Location::any());
     // _call does not call bumpUse on its arguments:
-    void _call(RewriterVar* result, bool has_side_effects, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
-               llvm::ArrayRef<RewriterVar*> args_xmm);
+    void _call(RewriterVar* result, bool has_side_effects, bool can_throw, void* func_addr,
+               llvm::ArrayRef<RewriterVar*> args, llvm::ArrayRef<RewriterVar*> args_xmm = {});
     void _add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest);
     int _allocate(RewriterVar* result, int n);
     void _allocateAndCopy(RewriterVar* result, RewriterVar* array, int n);
@@ -612,16 +612,13 @@ public:
     // 2) does not have any side-effects that would be user-visible if we bailed out from the middle of the
     // inline cache.  (Extra allocations don't count even though they're potentially visible if you look
     // hard enough.)
-    RewriterVar* call(bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
-                      const RewriterVar::SmallVector& args_xmm = RewriterVar::SmallVector());
-    RewriterVar* call(bool has_side_effects, void* func_addr);
-    RewriterVar* call(bool has_side_effects, void* func_addr, RewriterVar* arg0);
-    RewriterVar* call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1);
-    RewriterVar* call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2);
-    RewriterVar* call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2,
-                      RewriterVar* arg3);
-    RewriterVar* call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2,
-                      RewriterVar* arg3, RewriterVar* arg4);
+    RewriterVar* call(bool has_side_effects, void* func_addr, llvm::ArrayRef<RewriterVar*> args = {},
+                      llvm::ArrayRef<RewriterVar*> args_xmm = {});
+    template <typename... Args>
+    RewriterVar* call(bool has_side_effects, void* func_addr, RewriterVar* arg1, Args... args) {
+        return call(has_side_effects, func_addr, llvm::ArrayRef<RewriterVar*>({ arg1, args... }), {});
+    }
+
     RewriterVar* add(RewriterVar* a, int64_t b, Location dest);
     // Allocates n pointer-sized stack slots:
     RewriterVar* allocate(int n);

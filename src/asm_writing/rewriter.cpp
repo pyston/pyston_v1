@@ -540,8 +540,8 @@ void Rewriter::_incref(RewriterVar* var, int num_refs) {
 
 // this->_trap();
 
-// this->_call(NULL, true, (void*)Helper::incref, llvm::ArrayRef<RewriterVar*>(&var, 1),
-// llvm::ArrayRef<RewriterVar*>());
+// this->_call(NULL, true, false /* can't throw */, (void*)Helper::incref, { var });
+
 #ifdef Py_REF_DEBUG
     // assembler->trap();
     for (int i = 0; i < num_refs; ++i)
@@ -569,16 +569,13 @@ void Rewriter::_decref(RewriterVar* var) {
     assert(!var->nullable);
 // assembler->trap();
 
-// this->_call(NULL, true, (void*)Helper::decref, llvm::ArrayRef<RewriterVar*>(&var, 1),
-// llvm::ArrayRef<RewriterVar*>(NULL, (int)0));
+// this->_call(NULL, true, false /* can't throw */, (void*)Helper::decref, { var });
 
 #ifdef Py_REF_DEBUG
     // assembler->trap();
     assembler->decq(assembler::Immediate(&_Py_RefTotal));
 #endif
-
-    _setupCall(true, llvm::ArrayRef<RewriterVar*>(&var, 1), llvm::ArrayRef<RewriterVar*>(NULL, (size_t)0),
-               assembler::RAX);
+    _setupCall(true, { var }, {}, assembler::RAX);
 
 
 #ifdef Py_REF_DEBUG
@@ -612,8 +609,7 @@ void Rewriter::_xdecref(RewriterVar* var) {
     assert(var->nullable);
     // assembler->trap();
 
-    this->_call(NULL, true, (void*)Helper::xdecref, llvm::ArrayRef<RewriterVar*>(&var, 1),
-                llvm::ArrayRef<RewriterVar*>(NULL, (size_t)0));
+    this->_call(NULL, true, false /* can't throw */, (void*)Helper::xdecref, { var });
 
     // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
     // (ie the caller should call bumpUse)
@@ -920,72 +916,9 @@ RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
     return const_loader_var;
 }
 
-RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr) {
+RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
+                            llvm::ArrayRef<RewriterVar*> args_xmm) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
-
-    RewriterVar::SmallVector args;
-    RewriterVar::SmallVector args_xmm;
-    return call(has_side_effects, func_addr, args, args_xmm);
-}
-
-RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0) {
-    STAT_TIMER(t0, "us_timer_rewriter", 10);
-
-    RewriterVar::SmallVector args;
-    RewriterVar::SmallVector args_xmm;
-    args.push_back(arg0);
-    return call(has_side_effects, func_addr, args, args_xmm);
-}
-
-RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1) {
-    STAT_TIMER(t0, "us_timer_rewriter", 10);
-
-    RewriterVar::SmallVector args;
-    RewriterVar::SmallVector args_xmm;
-    args.push_back(arg0);
-    args.push_back(arg1);
-    return call(has_side_effects, func_addr, args, args_xmm);
-}
-
-RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1,
-                            RewriterVar* arg2) {
-    STAT_TIMER(t0, "us_timer_rewriter", 10);
-
-    RewriterVar::SmallVector args;
-    RewriterVar::SmallVector args_xmm;
-    args.push_back(arg0);
-    args.push_back(arg1);
-    args.push_back(arg2);
-    return call(has_side_effects, func_addr, args, args_xmm);
-}
-
-RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1,
-                            RewriterVar* arg2, RewriterVar* arg3) {
-    STAT_TIMER(t0, "us_timer_rewriter", 10);
-
-    RewriterVar::SmallVector args;
-    RewriterVar::SmallVector args_xmm;
-    args.push_back(arg0);
-    args.push_back(arg1);
-    args.push_back(arg2);
-    args.push_back(arg3);
-    return call(has_side_effects, func_addr, args, args_xmm);
-}
-
-RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, RewriterVar* arg0, RewriterVar* arg1,
-                            RewriterVar* arg2, RewriterVar* arg3, RewriterVar* arg4) {
-    RewriterVar::SmallVector args;
-    RewriterVar::SmallVector args_xmm;
-    args.push_back(arg0);
-    args.push_back(arg1);
-    args.push_back(arg2);
-    args.push_back(arg3);
-    args.push_back(arg4);
-    return call(has_side_effects, func_addr, args, args_xmm);
-}
-
-RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const RewriterVar::SmallVector& args,
-                            const RewriterVar::SmallVector& args_xmm) {
     RewriterVar* result = createNewVar();
     RewriterVar::SmallVector uses;
     for (RewriterVar* v : args) {
@@ -1015,9 +948,12 @@ RewriterVar* Rewriter::call(bool has_side_effects, void* func_addr, const Rewrit
     // Hack: pack this into a short to make sure it fits in the closure
     short xmm_args_size = args_xmm.size();
 
+    // TODO: we don't need to generate the decref info for calls which can't throw
+    bool can_throw = true;
+
     // Hack: explicitly order the closure arguments so they pad nicer
-    addAction([args_size, xmm_args_size, has_side_effects, this, result, func_addr, _args, _args_xmm]() {
-        this->_call(result, has_side_effects, func_addr, llvm::ArrayRef<RewriterVar*>(_args, args_size),
+    addAction([args_size, xmm_args_size, has_side_effects, can_throw, this, result, func_addr, _args, _args_xmm]() {
+        this->_call(result, has_side_effects, can_throw, func_addr, llvm::ArrayRef<RewriterVar*>(_args, args_size),
                     llvm::ArrayRef<RewriterVar*>(_args_xmm, xmm_args_size));
         for (int i = 0; i < args_size; i++)
             _args[i]->bumpUse();
@@ -1177,8 +1113,8 @@ void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> ar
 #endif
 }
 
-void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
-                     llvm::ArrayRef<RewriterVar*> args_xmm) {
+void Rewriter::_call(RewriterVar* result, bool has_side_effects, bool can_throw, void* func_addr,
+                     llvm::ArrayRef<RewriterVar*> args, llvm::ArrayRef<RewriterVar*> args_xmm) {
     if (LOG_IC_ASSEMBLY)
         assembler->comment("_call");
 
@@ -1215,8 +1151,8 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, void* func_addr
         assert(assembler->hasFailed() || asm_address == (uint64_t)assembler->curInstPointer());
     }
 
-    // TODO: we don't need to generate the decref info for calls which can't throw
-    registerDecrefInfoHere();
+    if (can_throw)
+        registerDecrefInfoHere();
 
     if (!failed) {
         assert(vars_by_location.count(assembler::RAX) == 0);

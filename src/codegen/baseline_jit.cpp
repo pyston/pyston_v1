@@ -311,9 +311,11 @@ RewriterVar* JitFragmentWriter::emitCallWithAllocatedArgs(void* func_addr, const
     // Hack: pack this into a short to make sure it fits in the closure
     short args_additional_size = additional_uses.size();
 
+    bool can_throw = true;
+
     // Hack: explicitly order the closure arguments so they pad nicer
-    addAction([args_size, args_additional_size, func_addr, this, result, _args, _args_additional]() {
-        this->_call(result, false, func_addr, llvm::ArrayRef<RewriterVar*>(_args, args_size),
+    addAction([args_size, args_additional_size, can_throw, func_addr, this, result, _args, _args_additional]() {
+        this->_call(result, false, can_throw, func_addr, llvm::ArrayRef<RewriterVar*>(_args, args_size),
                     llvm::ArrayRef<RewriterVar*>());
         for (int i = 0; i < args_size; i++)
             _args[i]->bumpUse();
