@@ -2667,16 +2667,15 @@ private:
                 ConcreteCompilerVariable* v = p.second->makeConverted(emitter, phi_type);
                 symbol_table[p.first] = v;
             } else {
-#ifndef NDEBUG
                 if (myblock->successors.size()) {
                     // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't
                     // want
                     // here, but this is just for debugging so I guess let it happen for now:
                     ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(p.first, myblock);
-                    ASSERT(p.second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
-                           p.first.c_str(), ending_type->debugName().c_str(), p.second->getType()->debugName().c_str());
+                    RELEASE_ASSERT(p.second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
+                                   p.first.c_str(), ending_type->debugName().c_str(),
+                                   p.second->getType()->debugName().c_str());
                 }
-#endif
             }
         }
 
