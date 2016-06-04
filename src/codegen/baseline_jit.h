@@ -25,7 +25,7 @@ namespace pyston {
 
 // passes MAP_32BIT to mmap when allocating the memory for the bjit code.
 // it's nice for inspecting the generated asm because the debugger is able to show the name of called C/C++ functions
-#define ENABLE_BASELINEJIT_MAP_32BIT 0
+#define ENABLE_BASELINEJIT_MAP_32BIT 1
 #define ENABLE_BASELINEJIT_ICS 1
 
 class AST_stmt;
