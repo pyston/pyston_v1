@@ -1272,7 +1272,7 @@ AST_Module* caching_parse_file(const char* fn, FutureFlags inherited_flags) {
         if (good) {
             if (strncmp(&file_data[0], getMagic(), MAGIC_STRING_LENGTH) != 0) {
                 oss << "magic string did not match\n";
-                if (VERBOSITY() || tries == MAX_TRIES) {
+                if (VERBOSITY() >= 2 || tries == MAX_TRIES) {
                     fprintf(stderr, "Warning: corrupt or non-Pyston .pyc file found; ignoring\n");
                     fprintf(stderr, "%d %d %d %d\n", file_data[0], file_data[1], file_data[2], file_data[3]);
                     fprintf(stderr, "%d %d %d %d\n", getMagic()[0], getMagic()[1], getMagic()[2], getMagic()[3]);

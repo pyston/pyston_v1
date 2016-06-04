@@ -474,7 +474,7 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
         // Interestingly, it seems like MAP_GROWSDOWN will leave a page-size gap between the redzone and the growable
         // region.
 
-        if (VERBOSITY() >= 1) {
+        if (VERBOSITY() >= 3) {
             printf("Created new generator stack, starts at %p, currently extends to %p\n", (void*)stack_high,
                    initial_stack_limit);
             printf("Created a redzone from %p-%p\n", (void*)stack_low, (void*)(stack_low + STACK_REDZONE_SIZE));
