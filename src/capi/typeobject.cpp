@@ -3557,6 +3557,12 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     if (base == NULL)
         base = cls->tp_base = object_cls;
 
+    // Initialize the base class
+    if (base != NULL && unlikely(base->tp_dict == NULL) && !(base->is_pyston_class)) {
+        int ret = PyType_Ready(base);
+        assert(ret == 0);
+    }
+
     // CPython only increfs the base if it picked one, not if it one was passed in.
     // Not sure why.
     Py_INCREF(base);
