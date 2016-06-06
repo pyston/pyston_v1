@@ -207,6 +207,9 @@ private:
     RewriterVar* interp;
     RewriterVar* vregs_array;
     llvm::DenseMap<InternedString, RewriterVar*> local_syms;
+    // keeps track which non block local vregs are known to have a non NULL value
+    // TODO: in the future we could reuse this information between different basic blocks
+    llvm::DenseSet<int> known_non_null_vregs;
     std::unique_ptr<ICInfo> ic_info;
 
     // Optional points to a CFGBlock and a patch location which should get patched to a direct jump if

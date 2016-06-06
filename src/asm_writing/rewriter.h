@@ -202,7 +202,8 @@ public:
 
     template <typename Src, typename Dst> inline RewriterVar* getAttrCast(int offset, Location loc = Location::any());
 
-    bool isConstant() { return is_constant; }
+    bool isConstant() const { return is_constant; }
+    bool isContantNull() const { return isConstant() && constant_value == 0; }
 
 protected:
     void incref();
