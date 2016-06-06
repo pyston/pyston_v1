@@ -68,3 +68,9 @@ for x in data:
                                                                  arg2=y)))
             except Exception as e:
                 print(e.message)
+
+
+class F(float):
+    pass
+
+print(1j.__truediv__(F(1)))

@@ -220,7 +220,7 @@ extern "C" Box* complexDivFloat(BoxedComplex* lhs, BoxedFloat* rhs) {
     if (!PyComplex_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__div__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
-    assert(rhs->cls == float_cls);
+    assert(PyFloat_Check(rhs));
     if (rhs->d == 0.0) {
         raiseDivZeroExc();
     }
