@@ -3487,7 +3487,7 @@ static Box* tppProxyToTpCall(Box* self, CallRewriteArgs* rewrite_args, ArgPassSp
 }
 
 Box* proxyToTppCall(Box* self, Box* args, Box* kw) noexcept {
-    assert(self->cls->tpp_call.get<CAPI>() != NULL && self->cls->tpp_call.get<CAPI>() != tppProxyToTpCall<CAPI>);
+    assert(self->cls->tpp_call.get<CAPI>() != NULL && self->cls->tpp_call.get<CAPI>() != &tppProxyToTpCall<CAPI>);
     return self->cls->tpp_call.call<CAPI>(self, NULL, ArgPassSpec(0, 0, true, true), args, kw, NULL, NULL, NULL);
 }
 
