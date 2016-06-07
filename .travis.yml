@@ -1,7 +1,7 @@
 language: cpp
 
 compiler:
-  - clang
+  # - clang
   - gcc
 
 env:
@@ -13,8 +13,8 @@ env:
 
 matrix:
   exclude:
-    - compiler: gcc
-      env: TRAVIS_BUILD_TYPE=Debug CCACHE_DIR=$HOME/.ccache_debug
+    # - compiler: gcc
+    #   env: TRAVIS_BUILD_TYPE=Debug CCACHE_DIR=$HOME/.ccache_debug
 
 # use travis-ci docker based infrastructure
 sudo: false
@@ -28,12 +28,12 @@ addons:
   apt:
     sources:
     - kubuntu-backports
-    - llvm-toolchain-precise-3.5
+    # - llvm-toolchain-precise-3.5
     - ubuntu-toolchain-r-test
     packages:
     - autoconf
     - ccache
-    - clang-3.5
+    # - clang-3.5
     - cmake
     - g++-4.8
     - gdb
@@ -78,7 +78,7 @@ before_script:
 
 script:
   - ccache -z
-  - ninja -j4 pyston check-deps && PYSTON_RUN_ARGS=G travis_wait 45 ctest --output-on-failure
+  - ninja -j4 pyston check-deps && PYSTON_RUN_ARGS=G travis_wait 60 ctest --output-on-failure
   - ccache -s
   - if [ -n "$(git status --porcelain --untracked=no)" ]; then echo "test suite left the source directory dirty"; git status; false; fi
 
