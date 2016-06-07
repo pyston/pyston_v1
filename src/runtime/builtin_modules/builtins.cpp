@@ -1235,7 +1235,7 @@ Box* zip(BoxedTuple* containers) {
     std::vector<BoxIterator> iterators;
     iterators.reserve(containers->size());
     for (auto&& range : ranges) {
-        iterators.push_back(std::move(range.begin()));
+        iterators.push_back(range.begin());
     }
 
     while (true) {
