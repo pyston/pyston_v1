@@ -190,8 +190,7 @@ typedef struct bufferinfo {
                              pointed to by strides in simple case.*/
     int readonly;
     int ndim;
-    // Pyston change: changed this from char* to const char*
-    const char *format;
+    PYSTON_CONST char *format;
     Py_ssize_t *shape;
     Py_ssize_t *strides;
     Py_ssize_t *suboffsets;

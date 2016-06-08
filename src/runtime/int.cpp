@@ -110,16 +110,40 @@ extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) noexcept {
 }
 
 extern "C" long PyInt_AsLong(PyObject* op) noexcept {
-    // This method should do quite a bit more, including checking tp_as_number->nb_int (or calling __int__?)
+    PyNumberMethods* nb;
+    BoxedInt* io;
+    long val;
 
-    if (PyInt_Check(op))
+    if (op && PyInt_Check(op))
         return static_cast<BoxedInt*>(op)->n;
 
-    if (op->cls == long_cls)
-        return PyLong_AsLong(op);
+    if (op == NULL || (nb = Py_TYPE(op)->tp_as_number) == NULL || nb->nb_int == NULL) {
+        PyErr_SetString(PyExc_TypeError, "an integer is required");
+        return -1;
+    }
 
-    PyErr_SetString(PyExc_TypeError, "an integer is required");
-    return -1;
+    io = (BoxedInt*)(*nb->nb_int)(op);
+    if (io == NULL)
+        return -1;
+    if (!PyInt_Check(io)) {
+        if (PyLong_Check(io)) {
+            /* got a long? => retry int conversion */
+            val = PyLong_AsLong((PyObject*)io);
+            Py_DECREF(io);
+            if ((val == -1) && PyErr_Occurred())
+                return -1;
+            return val;
+        } else {
+            Py_DECREF(io);
+            PyErr_SetString(PyExc_TypeError, "__int__ method should return an integer");
+            return -1;
+        }
+    }
+
+    val = static_cast<BoxedInt*>(io)->n;
+    Py_DECREF(io);
+
+    return val;
 }
 
 extern "C" Py_ssize_t PyInt_AsSsize_t(PyObject* op) noexcept {

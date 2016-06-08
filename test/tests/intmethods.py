@@ -39,6 +39,14 @@ class D(object):
     def __int__(self):
         return self.n
 
+
+class E(object):
+    def __int__(self):
+        print "__int__ called"
+        return 42
+
+print(chr(E()))
+
 for a in (False, True, 2, 3.0, D(4), D(C(5)), D(False)):
     i = int.__new__(C, a)
     print type(i), i, type(int(a))

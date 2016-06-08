@@ -16,6 +16,12 @@
 #define PYSTON_NOEXCEPT
 #endif
 
+#ifdef _PYSTON_API
+#define PYSTON_CONST const
+#else
+#define PYSTON_CONST
+#endif
+
 #define Py_PROTO(x) x
 
 // Pyston change: these are just hard-coded for now:
