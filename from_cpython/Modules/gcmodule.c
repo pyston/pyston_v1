@@ -876,6 +876,54 @@ get_time(void)
     return result;
 }
 
+#ifdef Py_TRACE_REFS
+// Similar to visit_decref, but changed to operate on all objects, not just
+// gc-tracked ones.
+static int
+visit_findleaks(PyObject *op, void *data) {
+    assert(op != NULL);
+    op->ob_refcnt--;
+    return 0;
+}
+
+extern PyObject refchain;
+
+// Pyston addition.  Mostly copied from collect() but stripped down a lot.
+void
+_PyGC_FindLeaks(void)
+{
+    int i;
+    PyGC_Head *young; /* the generation we are examining */
+    int generation = NUM_GENERATIONS - 1;
+
+    /* merge younger generations with one we are currently collecting */
+    for (i = 0; i < generation; i++) {
+        gc_list_merge(GEN_HEAD(i), GEN_HEAD(generation));
+    }
+
+    /* handy references */
+    young = GEN_HEAD(generation);
+
+    traverseproc traverse;
+    PyGC_Head *gc = young->gc.gc_next;
+    for (; gc != young; gc=gc->gc.gc_next) {
+        traverse = Py_TYPE(FROM_GC(gc))->tp_traverse;
+        (void) traverse(FROM_GC(gc),
+                       (visitproc)visit_findleaks,
+                       NULL);
+    }
+
+    PyObject* op;
+    fprintf(stderr, "Leaked references:\n");
+    for (op = refchain._ob_next; op != &refchain; op = op->_ob_next) {
+        if (op->ob_refcnt == 0)
+            continue;
+        fprintf(stderr, "%p [%" PY_FORMAT_SIZE_T "d] %s     \033[40mwatch -l ((PyObject*)%p)->ob_refcnt\033[0m\n", op,
+                op->ob_refcnt, Py_TYPE(op)->tp_name, op);
+    }
+}
+#endif
+
 /* This is the main function.  Read this to understand how the
  * collection process works. */
 static Py_ssize_t

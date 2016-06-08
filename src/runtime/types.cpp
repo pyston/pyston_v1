@@ -4741,7 +4741,7 @@ extern "C" void Py_Finalize() noexcept {
     if (assert_refs) {
 #ifdef Py_TRACE_REFS
         if (_Py_RefTotal != 0)
-            _Py_PrintReferenceAddressesCapped(stderr, 10);
+            _PyGC_FindLeaks();
 #endif
 
         RELEASE_ASSERT(_Py_RefTotal == 0, "%ld refs remaining!", _Py_RefTotal);
