@@ -509,8 +509,10 @@ extern "C" long _Py_HashDouble(double v) noexcept {
              * of mapping keys will turn out weird.
              */
 
+    // pyston change: was if (!Py_IS_FINITE(v)) {
     if (!std::isfinite(v)) {
-        if (Py_IS_INFINITY(v))
+        // pyston change: was if (Py_IS_INFINITY(v)) {
+        if (std::isinf(v))
             return v < 0 ? -271828 : 314159;
         else
             return 0;

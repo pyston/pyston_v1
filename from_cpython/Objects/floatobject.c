@@ -409,9 +409,7 @@ float_str(PyFloatObject *v)
  * coercion to double.  So this part is painful too.
  */
 
-// Pyston change: don't need this for now
-#if 0
-static PyObject*
+PyObject*
 float_richcompare(PyObject *v, PyObject *w, int op)
 {
     double i, j;
@@ -624,7 +622,6 @@ float_richcompare(PyObject *v, PyObject *w, int op)
     Py_INCREF(Py_NotImplemented);
     return Py_NotImplemented;
 }
-#endif
 
 static long
 float_hash(PyFloatObject *v)
@@ -1887,7 +1884,7 @@ float_subtype_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     return newobj;
 }
 
-static PyObject *
+PyObject *
 float_getnewargs(PyFloatObject *v)
 {
     return Py_BuildValue("(d)", v->ob_fval);
@@ -1902,7 +1899,7 @@ typedef enum {
 static float_format_type double_format, float_format;
 static float_format_type detected_double_format, detected_float_format;
 
-static PyObject *
+PyObject *
 float_getformat(PyTypeObject *v, PyObject* arg)
 {
     char* s;
@@ -2200,6 +2197,8 @@ PyTypeObject PyFloat_Type = {
     0,                                          /* tp_alloc */
     float_new,                                  /* tp_new */
 };
+// pyston change:
+#endif
 
 void
 _PyFloat_Init(void)
@@ -2255,6 +2254,8 @@ _PyFloat_Init(void)
         PyStructSequence_InitType(&FloatInfoType, &floatinfo_desc);
 }
 
+// pyston change: don't need this
+#if 0
 int
 PyFloat_ClearFreeList(void)
 {
@@ -2351,8 +2352,6 @@ PyFloat_Fini(void)
 }
 #endif
 
-// pyston change: comment this out
-#if 0
 /*----------------------------------------------------------------------------
  * _PyFloat_{Pack,Unpack}{4,8}.  See floatobject.h.
  */
@@ -2762,4 +2761,3 @@ _PyFloat_Unpack8(const unsigned char *p, int le)
         return x;
     }
 }
-#endif
