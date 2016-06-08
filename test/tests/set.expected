@@ -1,0 +1,541 @@
+[0, 1, 2]
+[1, 2, 3, 4]
+'[0, 1, 2]' [0, 1, 2]
+[0]
+[3, 4]
+[0, 3, 4]
+[1, 2]
+[0, 1, 2, 3, 4]
+5
+[0, 1, 2, 3, 4]
+[0, 1, 2, 3, 4]
+6
+7
+set([1])
+1
+5
+[0, 1, 2, 3, 4]
+frozenset([])
+False
+False
+frozenset([])
+set([])
+frozenset([])
+set([])
+0 False
+0 False
+1 False
+1 False
+2 True
+2 True
+3 True
+3 True
+4 True
+4 True
+5 False
+5 False
+6 False
+6 False
+7 False
+7 False
+5
+set([])
+[10, 15]
+[0, 1, 2, 3, 4, 5, 6, 7, 10, 15]
+[0, 1, 2, 3, 4, 5, 7, 10, 15]
+6
+set([5])
+set([1]) set([])
+[1, 3, 5] [5]
+[3, 5, 6] [5]
+[1, 5] [1, 5]
+frozenset([5]) 2
+
+[0, 1, 2, 3, 4]
+set([])
+set([])
+None
+[2, 3, 4, 5, 6]
+[0, 1] [0, 1]
+[0] [0]
+[1, 2, 3] [1, 2, 3]
+[3] [3]
+unsupported operand type(s) for |: 'set' and 'list'
+<type 'set'> [] False True [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4] [] [0, 1, 2, 3, 4]
+False True
+False False True True
+<type 'frozenset'> [] False True [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4] [] [0, 1, 2, 3, 4]
+False True
+False False True True
+<class '__main__.MySet'> [] False True [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4] [] [0, 1, 2, 3, 4]
+False True
+False False True True
+<class '__main__.MyFrozenset'> [] False True [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4] [] [0, 1, 2, 3, 4]
+False True
+False False True True
+<type 'list'> [] False True [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4] [] [0, 1, 2, 3, 4]
+False True
+can only compare to a set
+<type 'list'> [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] True False [] False [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] [0, 1, 2, 3, 4] [5, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0] False True [1, 2, 3, 4] False [0, 1, 2, 3, 4] [0] [1, 2, 3, 4]
+False True
+False False True True
+<type 'frozenset'> [0] False True [1, 2, 3, 4] False [0, 1, 2, 3, 4] [0] [1, 2, 3, 4]
+False True
+False False True True
+<class '__main__.MySet'> [0] False True [1, 2, 3, 4] False [0, 1, 2, 3, 4] [0] [1, 2, 3, 4]
+False True
+False False True True
+<class '__main__.MyFrozenset'> [0] False True [1, 2, 3, 4] False [0, 1, 2, 3, 4] [0] [1, 2, 3, 4]
+False True
+False False True True
+<type 'list'> [0] False True [1, 2, 3, 4] False [0, 1, 2, 3, 4] [0] [1, 2, 3, 4]
+False True
+can only compare to a set
+<type 'list'> [1, 2, 3, 4, 5, 6, 7, 8, 9] False False [0] False [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] [1, 2, 3, 4] [0, 5, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+False False True True
+<type 'frozenset'> [0, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+False False True True
+<class '__main__.MySet'> [0, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+False False True True
+<class '__main__.MyFrozenset'> [0, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+False False True True
+<type 'list'> [0, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'list'> [2, 3, 4, 5, 6, 7, 8, 9] False False [0, 1] False [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] [2, 3, 4] [0, 1, 5, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2] False True [3, 4] False [0, 1, 2, 3, 4] [0, 1, 2] [3, 4]
+False True
+False False True True
+<type 'frozenset'> [0, 1, 2] False True [3, 4] False [0, 1, 2, 3, 4] [0, 1, 2] [3, 4]
+False True
+False False True True
+<class '__main__.MySet'> [0, 1, 2] False True [3, 4] False [0, 1, 2, 3, 4] [0, 1, 2] [3, 4]
+False True
+False False True True
+<class '__main__.MyFrozenset'> [0, 1, 2] False True [3, 4] False [0, 1, 2, 3, 4] [0, 1, 2] [3, 4]
+False True
+False False True True
+<type 'list'> [0, 1, 2] False True [3, 4] False [0, 1, 2, 3, 4] [0, 1, 2] [3, 4]
+False True
+can only compare to a set
+<type 'list'> [3, 4, 5, 6, 7, 8, 9] False False [0, 1, 2] False [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] [3, 4] [0, 1, 2, 5, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2, 3] False True [4] False [0, 1, 2, 3, 4] [0, 1, 2, 3] [4]
+False True
+False False True True
+<type 'frozenset'> [0, 1, 2, 3] False True [4] False [0, 1, 2, 3, 4] [0, 1, 2, 3] [4]
+False True
+False False True True
+<class '__main__.MySet'> [0, 1, 2, 3] False True [4] False [0, 1, 2, 3, 4] [0, 1, 2, 3] [4]
+False True
+False False True True
+<class '__main__.MyFrozenset'> [0, 1, 2, 3] False True [4] False [0, 1, 2, 3, 4] [0, 1, 2, 3] [4]
+False True
+False False True True
+<type 'list'> [0, 1, 2, 3] False True [4] False [0, 1, 2, 3, 4] [0, 1, 2, 3] [4]
+False True
+can only compare to a set
+<type 'list'> [4, 5, 6, 7, 8, 9] False False [0, 1, 2, 3] False [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] [4] [0, 1, 2, 3, 5, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2, 3, 4] True True [] False [0, 1, 2, 3, 4] [0, 1, 2, 3, 4] []
+True False
+False True False True
+<type 'frozenset'> [0, 1, 2, 3, 4] True True [] False [0, 1, 2, 3, 4] [0, 1, 2, 3, 4] []
+True False
+False True False True
+<class '__main__.MySet'> [0, 1, 2, 3, 4] True True [] False [0, 1, 2, 3, 4] [0, 1, 2, 3, 4] []
+True False
+False True False True
+<class '__main__.MyFrozenset'> [0, 1, 2, 3, 4] True True [] False [0, 1, 2, 3, 4] [0, 1, 2, 3, 4] []
+True False
+False True False True
+<type 'list'> [0, 1, 2, 3, 4] True True [] False [0, 1, 2, 3, 4] [0, 1, 2, 3, 4] []
+False True
+can only compare to a set
+<type 'list'> [5, 6, 7, 8, 9] False False [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] [] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2, 3, 4, 5] True False [] False [0, 1, 2, 3, 4, 5] [0, 1, 2, 3, 4] [5]
+False True
+True True False False
+<type 'frozenset'> [0, 1, 2, 3, 4, 5] True False [] False [0, 1, 2, 3, 4, 5] [0, 1, 2, 3, 4] [5]
+False True
+True True False False
+<class '__main__.MySet'> [0, 1, 2, 3, 4, 5] True False [] False [0, 1, 2, 3, 4, 5] [0, 1, 2, 3, 4] [5]
+False True
+True True False False
+<class '__main__.MyFrozenset'> [0, 1, 2, 3, 4, 5] True False [] False [0, 1, 2, 3, 4, 5] [0, 1, 2, 3, 4] [5]
+False True
+True True False False
+<type 'list'> [0, 1, 2, 3, 4, 5] True False [] False [0, 1, 2, 3, 4, 5] [0, 1, 2, 3, 4] [5]
+False True
+can only compare to a set
+<type 'list'> [6, 7, 8, 9] False False [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4, 6, 7, 8, 9] [] [0, 1, 2, 3, 4, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2, 3, 4, 5, 6] True False [] False [0, 1, 2, 3, 4, 5, 6] [0, 1, 2, 3, 4] [5, 6]
+False True
+True True False False
+<type 'frozenset'> [0, 1, 2, 3, 4, 5, 6] True False [] False [0, 1, 2, 3, 4, 5, 6] [0, 1, 2, 3, 4] [5, 6]
+False True
+True True False False
+<class '__main__.MySet'> [0, 1, 2, 3, 4, 5, 6] True False [] False [0, 1, 2, 3, 4, 5, 6] [0, 1, 2, 3, 4] [5, 6]
+False True
+True True False False
+<class '__main__.MyFrozenset'> [0, 1, 2, 3, 4, 5, 6] True False [] False [0, 1, 2, 3, 4, 5, 6] [0, 1, 2, 3, 4] [5, 6]
+False True
+True True False False
+<type 'list'> [0, 1, 2, 3, 4, 5, 6] True False [] False [0, 1, 2, 3, 4, 5, 6] [0, 1, 2, 3, 4] [5, 6]
+False True
+can only compare to a set
+<type 'list'> [7, 8, 9] False False [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4, 7, 8, 9] [] [0, 1, 2, 3, 4, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2, 3, 4, 5, 6, 7] True False [] False [0, 1, 2, 3, 4, 5, 6, 7] [0, 1, 2, 3, 4] [5, 6, 7]
+False True
+True True False False
+<type 'frozenset'> [0, 1, 2, 3, 4, 5, 6, 7] True False [] False [0, 1, 2, 3, 4, 5, 6, 7] [0, 1, 2, 3, 4] [5, 6, 7]
+False True
+True True False False
+<class '__main__.MySet'> [0, 1, 2, 3, 4, 5, 6, 7] True False [] False [0, 1, 2, 3, 4, 5, 6, 7] [0, 1, 2, 3, 4] [5, 6, 7]
+False True
+True True False False
+<class '__main__.MyFrozenset'> [0, 1, 2, 3, 4, 5, 6, 7] True False [] False [0, 1, 2, 3, 4, 5, 6, 7] [0, 1, 2, 3, 4] [5, 6, 7]
+False True
+True True False False
+<type 'list'> [0, 1, 2, 3, 4, 5, 6, 7] True False [] False [0, 1, 2, 3, 4, 5, 6, 7] [0, 1, 2, 3, 4] [5, 6, 7]
+False True
+can only compare to a set
+<type 'list'> [8, 9] False False [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4, 8, 9] [] [0, 1, 2, 3, 4, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2, 3, 4, 5, 6, 7, 8] True False [] False [0, 1, 2, 3, 4, 5, 6, 7, 8] [0, 1, 2, 3, 4] [5, 6, 7, 8]
+False True
+True True False False
+<type 'frozenset'> [0, 1, 2, 3, 4, 5, 6, 7, 8] True False [] False [0, 1, 2, 3, 4, 5, 6, 7, 8] [0, 1, 2, 3, 4] [5, 6, 7, 8]
+False True
+True True False False
+<class '__main__.MySet'> [0, 1, 2, 3, 4, 5, 6, 7, 8] True False [] False [0, 1, 2, 3, 4, 5, 6, 7, 8] [0, 1, 2, 3, 4] [5, 6, 7, 8]
+False True
+True True False False
+<class '__main__.MyFrozenset'> [0, 1, 2, 3, 4, 5, 6, 7, 8] True False [] False [0, 1, 2, 3, 4, 5, 6, 7, 8] [0, 1, 2, 3, 4] [5, 6, 7, 8]
+False True
+True True False False
+<type 'list'> [0, 1, 2, 3, 4, 5, 6, 7, 8] True False [] False [0, 1, 2, 3, 4, 5, 6, 7, 8] [0, 1, 2, 3, 4] [5, 6, 7, 8]
+False True
+can only compare to a set
+<type 'list'> [9] False False [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4, 9] [] [0, 1, 2, 3, 4, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [] False True [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4] [] [0, 1, 2, 3, 4]
+False True
+False False True True
+<type 'frozenset'> [] False True [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4] [] [0, 1, 2, 3, 4]
+False True
+False False True True
+<class '__main__.MySet'> [] False True [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4] [] [0, 1, 2, 3, 4]
+False True
+False False True True
+<class '__main__.MyFrozenset'> [] False True [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4] [] [0, 1, 2, 3, 4]
+False True
+False False True True
+<type 'list'> [] False True [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4] [] [0, 1, 2, 3, 4]
+False True
+can only compare to a set
+<type 'list'> [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] True False [] False [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] [0, 1, 2, 3, 4] [5, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0] False True [1, 2, 3, 4] False [0, 1, 2, 3, 4] [0] [1, 2, 3, 4]
+False True
+False False True True
+<type 'frozenset'> [0] False True [1, 2, 3, 4] False [0, 1, 2, 3, 4] [0] [1, 2, 3, 4]
+False True
+False False True True
+<class '__main__.MySet'> [0] False True [1, 2, 3, 4] False [0, 1, 2, 3, 4] [0] [1, 2, 3, 4]
+False True
+False False True True
+<class '__main__.MyFrozenset'> [0] False True [1, 2, 3, 4] False [0, 1, 2, 3, 4] [0] [1, 2, 3, 4]
+False True
+False False True True
+<type 'list'> [0] False True [1, 2, 3, 4] False [0, 1, 2, 3, 4] [0] [1, 2, 3, 4]
+False True
+can only compare to a set
+<type 'list'> [1, 2, 3, 4, 5, 6, 7, 8, 9] False False [0] False [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] [1, 2, 3, 4] [0, 5, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+False False True True
+<type 'frozenset'> [0, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+False False True True
+<class '__main__.MySet'> [0, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+False False True True
+<class '__main__.MyFrozenset'> [0, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+False False True True
+<type 'list'> [0, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'list'> [2, 3, 4, 5, 6, 7, 8, 9] False False [0, 1] False [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] [2, 3, 4] [0, 1, 5, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2] False True [3, 4] False [0, 1, 2, 3, 4] [0, 1, 2] [3, 4]
+False True
+False False True True
+<type 'frozenset'> [0, 1, 2] False True [3, 4] False [0, 1, 2, 3, 4] [0, 1, 2] [3, 4]
+False True
+False False True True
+<class '__main__.MySet'> [0, 1, 2] False True [3, 4] False [0, 1, 2, 3, 4] [0, 1, 2] [3, 4]
+False True
+False False True True
+<class '__main__.MyFrozenset'> [0, 1, 2] False True [3, 4] False [0, 1, 2, 3, 4] [0, 1, 2] [3, 4]
+False True
+False False True True
+<type 'list'> [0, 1, 2] False True [3, 4] False [0, 1, 2, 3, 4] [0, 1, 2] [3, 4]
+False True
+can only compare to a set
+<type 'list'> [3, 4, 5, 6, 7, 8, 9] False False [0, 1, 2] False [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] [3, 4] [0, 1, 2, 5, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2, 3] False True [4] False [0, 1, 2, 3, 4] [0, 1, 2, 3] [4]
+False True
+False False True True
+<type 'frozenset'> [0, 1, 2, 3] False True [4] False [0, 1, 2, 3, 4] [0, 1, 2, 3] [4]
+False True
+False False True True
+<class '__main__.MySet'> [0, 1, 2, 3] False True [4] False [0, 1, 2, 3, 4] [0, 1, 2, 3] [4]
+False True
+False False True True
+<class '__main__.MyFrozenset'> [0, 1, 2, 3] False True [4] False [0, 1, 2, 3, 4] [0, 1, 2, 3] [4]
+False True
+False False True True
+<type 'list'> [0, 1, 2, 3] False True [4] False [0, 1, 2, 3, 4] [0, 1, 2, 3] [4]
+False True
+can only compare to a set
+<type 'list'> [4, 5, 6, 7, 8, 9] False False [0, 1, 2, 3] False [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] [4] [0, 1, 2, 3, 5, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2, 3, 4] True True [] False [0, 1, 2, 3, 4] [0, 1, 2, 3, 4] []
+True False
+False True False True
+<type 'frozenset'> [0, 1, 2, 3, 4] True True [] False [0, 1, 2, 3, 4] [0, 1, 2, 3, 4] []
+True False
+False True False True
+<class '__main__.MySet'> [0, 1, 2, 3, 4] True True [] False [0, 1, 2, 3, 4] [0, 1, 2, 3, 4] []
+True False
+False True False True
+<class '__main__.MyFrozenset'> [0, 1, 2, 3, 4] True True [] False [0, 1, 2, 3, 4] [0, 1, 2, 3, 4] []
+True False
+False True False True
+<type 'list'> [0, 1, 2, 3, 4] True True [] False [0, 1, 2, 3, 4] [0, 1, 2, 3, 4] []
+False True
+can only compare to a set
+<type 'list'> [5, 6, 7, 8, 9] False False [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] [] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2, 3, 4, 5] True False [] False [0, 1, 2, 3, 4, 5] [0, 1, 2, 3, 4] [5]
+False True
+True True False False
+<type 'frozenset'> [0, 1, 2, 3, 4, 5] True False [] False [0, 1, 2, 3, 4, 5] [0, 1, 2, 3, 4] [5]
+False True
+True True False False
+<class '__main__.MySet'> [0, 1, 2, 3, 4, 5] True False [] False [0, 1, 2, 3, 4, 5] [0, 1, 2, 3, 4] [5]
+False True
+True True False False
+<class '__main__.MyFrozenset'> [0, 1, 2, 3, 4, 5] True False [] False [0, 1, 2, 3, 4, 5] [0, 1, 2, 3, 4] [5]
+False True
+True True False False
+<type 'list'> [0, 1, 2, 3, 4, 5] True False [] False [0, 1, 2, 3, 4, 5] [0, 1, 2, 3, 4] [5]
+False True
+can only compare to a set
+<type 'list'> [6, 7, 8, 9] False False [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4, 6, 7, 8, 9] [] [0, 1, 2, 3, 4, 6, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2, 3, 4, 5, 6] True False [] False [0, 1, 2, 3, 4, 5, 6] [0, 1, 2, 3, 4] [5, 6]
+False True
+True True False False
+<type 'frozenset'> [0, 1, 2, 3, 4, 5, 6] True False [] False [0, 1, 2, 3, 4, 5, 6] [0, 1, 2, 3, 4] [5, 6]
+False True
+True True False False
+<class '__main__.MySet'> [0, 1, 2, 3, 4, 5, 6] True False [] False [0, 1, 2, 3, 4, 5, 6] [0, 1, 2, 3, 4] [5, 6]
+False True
+True True False False
+<class '__main__.MyFrozenset'> [0, 1, 2, 3, 4, 5, 6] True False [] False [0, 1, 2, 3, 4, 5, 6] [0, 1, 2, 3, 4] [5, 6]
+False True
+True True False False
+<type 'list'> [0, 1, 2, 3, 4, 5, 6] True False [] False [0, 1, 2, 3, 4, 5, 6] [0, 1, 2, 3, 4] [5, 6]
+False True
+can only compare to a set
+<type 'list'> [7, 8, 9] False False [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4, 7, 8, 9] [] [0, 1, 2, 3, 4, 7, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2, 3, 4, 5, 6, 7] True False [] False [0, 1, 2, 3, 4, 5, 6, 7] [0, 1, 2, 3, 4] [5, 6, 7]
+False True
+True True False False
+<type 'frozenset'> [0, 1, 2, 3, 4, 5, 6, 7] True False [] False [0, 1, 2, 3, 4, 5, 6, 7] [0, 1, 2, 3, 4] [5, 6, 7]
+False True
+True True False False
+<class '__main__.MySet'> [0, 1, 2, 3, 4, 5, 6, 7] True False [] False [0, 1, 2, 3, 4, 5, 6, 7] [0, 1, 2, 3, 4] [5, 6, 7]
+False True
+True True False False
+<class '__main__.MyFrozenset'> [0, 1, 2, 3, 4, 5, 6, 7] True False [] False [0, 1, 2, 3, 4, 5, 6, 7] [0, 1, 2, 3, 4] [5, 6, 7]
+False True
+True True False False
+<type 'list'> [0, 1, 2, 3, 4, 5, 6, 7] True False [] False [0, 1, 2, 3, 4, 5, 6, 7] [0, 1, 2, 3, 4] [5, 6, 7]
+False True
+can only compare to a set
+<type 'list'> [8, 9] False False [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4, 8, 9] [] [0, 1, 2, 3, 4, 8, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+<type 'set'> [0, 1, 2, 3, 4, 5, 6, 7, 8] True False [] False [0, 1, 2, 3, 4, 5, 6, 7, 8] [0, 1, 2, 3, 4] [5, 6, 7, 8]
+False True
+True True False False
+<type 'frozenset'> [0, 1, 2, 3, 4, 5, 6, 7, 8] True False [] False [0, 1, 2, 3, 4, 5, 6, 7, 8] [0, 1, 2, 3, 4] [5, 6, 7, 8]
+False True
+True True False False
+<class '__main__.MySet'> [0, 1, 2, 3, 4, 5, 6, 7, 8] True False [] False [0, 1, 2, 3, 4, 5, 6, 7, 8] [0, 1, 2, 3, 4] [5, 6, 7, 8]
+False True
+True True False False
+<class '__main__.MyFrozenset'> [0, 1, 2, 3, 4, 5, 6, 7, 8] True False [] False [0, 1, 2, 3, 4, 5, 6, 7, 8] [0, 1, 2, 3, 4] [5, 6, 7, 8]
+False True
+True True False False
+<type 'list'> [0, 1, 2, 3, 4, 5, 6, 7, 8] True False [] False [0, 1, 2, 3, 4, 5, 6, 7, 8] [0, 1, 2, 3, 4] [5, 6, 7, 8]
+False True
+can only compare to a set
+<type 'list'> [9] False False [0, 1, 2, 3, 4] True [0, 1, 2, 3, 4, 9] [] [0, 1, 2, 3, 4, 9]
+False True
+can only compare to a set
+<type 'list'> [0, 0, 1, 1] False True [2, 3, 4] False [0, 1, 2, 3, 4] [0, 1] [2, 3, 4]
+False True
+can only compare to a set
+True False
+[5] [1, 5]
+[3] [1, 5]
+[1, 3] [1, 5]
+set([3]) [3, 5] [1, 5]
+set([1, 3, 5]) [3, 5] [1, 5]
+set([1, 3]) [3, 5] [1, 5]
+set([5]) [3, 5] [1, 5]
+Testing with base = <type 'set'>
+Calling __new__:
+Calling __init__:
+iterating 0
+iterating 1
+iterating 2
+iterating 3
+iterating 4
+Trying subclassing
+starting new
+ending new
+starting init
+iterating 0
+iterating 1
+iterating 2
+iterating 3
+iterating 4
+[0, 1, 2, 3, 4]
+MySet([])
+Testing with base = <type 'frozenset'>
+Calling __new__:
+iterating 0
+iterating 1
+iterating 2
+iterating 3
+iterating 4
+Calling __init__:
+Trying subclassing
+starting new
+iterating 0
+iterating 1
+iterating 2
+iterating 3
+iterating 4
+ending new
+starting init
+[]
+MySet([0, 1, 2, 3, 4])
+TypeError
+set() does not take keyword arguments
+frozenset() does not take keyword arguments
+True
+Ready
+calling __hash__
+calling __hash__
+None
+calling __hash__
+False
+set([1L]) set([1]) set([1]) set([1L])
+set([1])

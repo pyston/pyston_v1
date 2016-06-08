@@ -391,13 +391,13 @@ PhiAnalysis::PhiAnalysis(llvm::DenseMap<InternedString, DefinednessAnalysis::Def
                          CFGBlock* initial_block, bool initials_need_phis, LivenessAnalysis* liveness,
                          ScopeInfo* scope_info)
     : definedness(), liveness(liveness) {
-    Timer _t("PhiAnalysis()", 10);
-
     // I think this should always be the case -- if we're going to generate phis for the initial block,
     // then we should include the initial arguments as an extra entry point.
     assert(initials_need_phis == (initial_block->predecessors.size() > 0));
 
     definedness.run(std::move(initial_map), initial_block, scope_info);
+
+    Timer _t("PhiAnalysis()", 10);
 
     for (const auto& p : definedness.defined_at_end) {
         CFGBlock* block = p.first;

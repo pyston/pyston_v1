@@ -1,3 +1,6 @@
+# This file changed behavior in a recent version of CPython, so there is a
+# set.expected file
+
 s1 = {1, 1}
 
 def sorted(s):
