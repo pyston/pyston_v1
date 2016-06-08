@@ -342,7 +342,7 @@ endmacro()
 
 # tests         testname directory arguments
 add_pyston_test(defaults tests --order-by-mtime -t50)
-add_pyston_test(force_llvm tests -a=-n -a=-X -t50)
+add_pyston_test(force_llvm tests -a=-n -a=-X -t75)
 if(${CMAKE_BUILD_TYPE} STREQUAL "Release")
   add_pyston_test(max_compilation_tier tests -a=-O -a=-X -t50)
 endif()
