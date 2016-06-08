@@ -823,16 +823,16 @@ Box* longFloat(BoxedLong* v) {
     return longToFloat(v);
 }
 
-Box* longRepr(BoxedLong* v) {
+template <ExceptionStyle S> Box* longRepr(Box* v) noexcept(S == CAPI) {
     if (!PyLong_Check(v))
-        raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'long' object but received a '%s'", getTypeName(v));
-    return _PyLong_Format(v, 10, 1 /* add L */, 0);
+        return setDescrTypeError<S>(v, "long", "__repr__");
+    return callCAPIFromStyle<S>(_PyLong_Format, v, 10, 1 /* add L */, 0);
 }
 
-Box* longStr(BoxedLong* v) {
+template <ExceptionStyle S> Box* longStr(Box* v) noexcept(S == CAPI) {
     if (!PyLong_Check(v))
-        raiseExcHelper(TypeError, "descriptor '__str__' requires a 'long' object but received a '%s'", getTypeName(v));
-    return _PyLong_Format(v, 10, 0 /* no L */, 0);
+        return setDescrTypeError<S>(v, "long", "__str__");
+    return callCAPIFromStyle<S>(_PyLong_Format, v, 10, 0 /* no L */, 0);
 }
 
 Box* long__format__(BoxedLong* self, Box* format_spec) noexcept {
@@ -1744,8 +1744,8 @@ void setupLong() {
 
     long_cls->giveAttr("__int__", new BoxedFunction(FunctionMetadata::create((void*)longInt, UNKNOWN, 1)));
     long_cls->giveAttr("__float__", new BoxedFunction(FunctionMetadata::create((void*)longFloat, UNKNOWN, 1)));
-    long_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)longRepr, STR, 1)));
-    long_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)longStr, STR, 1)));
+    long_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)longRepr<CXX>, STR, 1)));
+    long_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)longStr<CXX>, STR, 1)));
     long_cls->giveAttr("__format__", new BoxedFunction(FunctionMetadata::create((void*)longFormat, STR, 2)));
     long_cls->giveAttr("__bin__", new BoxedFunction(FunctionMetadata::create((void*)longBin, STR, 1)));
     long_cls->giveAttr("__hex__", new BoxedFunction(FunctionMetadata::create((void*)longHex, STR, 1)));
@@ -1786,5 +1786,7 @@ void setupLong() {
 
     long_cls->tp_as_number->nb_power = long_pow;
     long_cls->tp_hash = long_hash;
+    long_cls->tp_repr = longRepr<CAPI>;
+    long_cls->tp_str = longStr<CAPI>;
 }
 }

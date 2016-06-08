@@ -780,16 +780,16 @@ extern "C" Box* floatFloat(BoxedFloat* self) {
     return boxFloat(self->d);
 }
 
-Box* floatStr(BoxedFloat* self) {
+template <ExceptionStyle S> Box* floatStr(BoxedFloat* self) noexcept(S == CAPI) {
     if (!PyFloat_Check(self))
-        raiseExcHelper(TypeError, "descriptor '__str__' requires a 'float' object but received a '%s'",
-                       getTypeName(self));
-
-    return float_str_or_repr(self->d, PyFloat_STR_PRECISION, 'g');
+        return setDescrTypeError<S>(self, "float", "__str__");
+    return callCAPIFromStyle<S>(float_str_or_repr, self->d, PyFloat_STR_PRECISION, 'g');
 }
 
-Box* floatRepr(BoxedFloat* self) {
-    return float_str_or_repr(self->d, 0, 'r');
+template <ExceptionStyle S> Box* floatRepr(BoxedFloat* self) noexcept(S == CAPI) {
+    if (!PyFloat_Check(self))
+        return setDescrTypeError<S>(self, "float", "__repr__");
+    return callCAPIFromStyle<S>(float_str_or_repr, self->d, 0, 'r');
 }
 
 Box* floatToInt(BoxedFloat* self) {
@@ -996,8 +996,8 @@ void setupFloat() {
 
     // float_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)floatNonzero, NULL, 1)));
     float_cls->giveAttr("__float__", new BoxedFunction(FunctionMetadata::create((void*)floatFloat, BOXED_FLOAT, 1)));
-    float_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)floatStr, STR, 1)));
-    float_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)floatRepr, STR, 1)));
+    float_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)floatStr<CXX>, STR, 1)));
+    float_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)floatRepr<CXX>, STR, 1)));
     float_cls->giveAttr("__coerce__", new BoxedFunction(FunctionMetadata::create((void*)floatCoerce, UNKNOWN, 2)));
 
     float_cls->giveAttr("__trunc__", new BoxedFunction(FunctionMetadata::create((void*)floatTrunc, UNKNOWN, 1)));
@@ -1021,8 +1021,9 @@ void setupFloat() {
 
     _PyFloat_Init();
 
-    float_cls->tp_str = float_str;
     float_cls->tp_as_number->nb_power = float_pow;
     float_cls->tp_new = (newfunc)floatNewPacked;
+    float_cls->tp_repr = (reprfunc)floatRepr<CAPI>;
+    float_cls->tp_str = (reprfunc)floatStr<CAPI>;
 }
 }

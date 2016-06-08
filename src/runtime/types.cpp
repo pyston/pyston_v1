@@ -1503,10 +1503,13 @@ static Box* builtinFunctionOrMethodCall(BoxedBuiltinFunctionOrMethod* self, Box*
                                                     NULL);
 }
 
-extern "C" BoxedString* functionRepr(BoxedFunction* v) {
+template <ExceptionStyle S> static Box* functionRepr(Box* _v) noexcept(S == CAPI) {
+    if (!isSubclass(_v->cls, function_cls))
+        return setDescrTypeError<S>(_v, "function", "__repr__");
+    BoxedFunction* v = (BoxedFunction*)_v;
     if (!v->name)
-        return (BoxedString*)PyString_FromFormat("<function <name_missing?> at %p>", v);
-    return (BoxedString*)PyString_FromFormat("<function %s at %p>", PyString_AsString(v->name), v);
+        return callCAPIFromStyle<S>(PyString_FromFormat, "<function <name_missing?> at %p>", v);
+    return callCAPIFromStyle<S>(PyString_FromFormat, "<function %s at %p>", PyString_AsString(v->name), v);
 }
 
 static Box* functionGet(BoxedFunction* self, Box* inst, Box* owner) {
@@ -2057,7 +2060,12 @@ extern "C" PyObject* PySlice_New(PyObject* start, PyObject* stop, PyObject* step
     return createSlice(start, stop, step);
 }
 
-Box* typeRepr(BoxedClass* self) {
+Box* typeRepr(Box* _self) {
+    if (!isSubclass(_self->cls, type_cls))
+        return setDescrTypeError<CXX>(_self, "type", "__repr__");
+
+    BoxedClass* self = (BoxedClass*)_self;
+
     std::string O("");
     llvm::raw_string_ostream os(O);
 
@@ -2079,6 +2087,10 @@ Box* typeRepr(BoxedClass* self) {
     os << "'>";
 
     return boxString(os.str());
+}
+
+static Box* type_repr(Box* self) noexcept {
+    return callCXXFromStyle<CAPI>(typeRepr, self);
 }
 
 static PyObject* type_module(Box* _type, void* context) noexcept {
@@ -4364,6 +4376,7 @@ void setupRuntime() {
     type_cls->freeze();
 
     type_cls->tp_new = type_new;
+    type_cls->tp_repr = type_repr;
     type_cls->tpp_call.capi_val = &typeTppCall<CAPI>;
     type_cls->tpp_call.cxx_val = &typeTppCall<CXX>;
 
@@ -4428,7 +4441,7 @@ void setupRuntime() {
             { None, None, None }));
     function_cls->giveAttrBorrowed("__dict__", dict_descr);
     function_cls->giveAttrDescriptor("__name__", func_name, func_set_name);
-    function_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)functionRepr, STR, 1)));
+    function_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)functionRepr<CXX>, STR, 1)));
     function_cls->giveAttrMember("__module__", T_OBJECT, offsetof(BoxedFunction, modname), false);
     function_cls->giveAttrMember("__doc__", T_OBJECT, offsetof(BoxedFunction, doc), false);
     function_cls->giveAttrBorrowed("func_doc", function_cls->getattr(getStaticString("__doc__")));
@@ -4448,6 +4461,7 @@ void setupRuntime() {
     function_cls->giveAttrMember("func_closure", T_OBJECT, offsetof(BoxedFunction, closure), true);
     function_cls->freeze();
     function_cls->tp_descr_get = function_descr_get;
+    function_cls->tp_repr = functionRepr<CAPI>;
 
     builtin_function_or_method_cls->giveAttrMember("__module__", T_OBJECT,
                                                    offsetof(BoxedBuiltinFunctionOrMethod, modname));

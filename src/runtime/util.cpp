@@ -227,7 +227,7 @@ extern "C" void dumpEx(void* p, int levels) {
         }
 
         if (PyLong_Check(b)) {
-            PyObject* str = longRepr(static_cast<BoxedLong*>(b));
+            PyObject* str = long_cls->tp_repr(b);
             AUTO_DECREF(str);
             printf("Long value: %s\n", static_cast<BoxedString*>(str)->c_str());
         }
