@@ -39,6 +39,7 @@ struct ASTInterpreterJitInterface {
     static constexpr uint64_t osr_dummy_value = -1;
 
     static int getBoxedLocalsOffset();
+    static int getCreatedClosureOffset();
     static int getCurrentBlockOffset();
     static int getCurrentInstOffset();
     static int getEdgeCountOffset();

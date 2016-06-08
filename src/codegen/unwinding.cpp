@@ -593,11 +593,7 @@ public:
                             assert(l.stack_second_offset % 8 == 0);
                             b = b_ptr[l.stack_second_offset / 8];
                         } else if (l.type == Location::Register) {
-                            RELEASE_ASSERT(0, "untested");
-                            // This branch should never get hit since we shouldn't generate Register locations,
-                            // since we don't allow allocating callee-save registers.
-                            // If we did, this code might be right:
-                            // b = (Box*)get_cursor_reg(cursor, l.regnum);
+                            b = (Box*)get_cursor_reg(cursor, l.regnum);
                         } else {
                             RELEASE_ASSERT(0, "not implemented");
                         }

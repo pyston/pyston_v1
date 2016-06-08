@@ -755,6 +755,7 @@ void Assembler::incq(Indirect mem) {
     }
 
     assert(src_idx >= 0 && src_idx < 8);
+    bool needssib = (src_idx == 0b100);
 
     if (rex)
         emitRex(rex);
@@ -763,8 +764,12 @@ void Assembler::incq(Indirect mem) {
     assert(-0x80 <= mem.offset && mem.offset < 0x80);
     if (mem.offset == 0) {
         emitModRM(0b00, 0, src_idx);
+        if (needssib)
+            emitSIB(0b00, 0b100, src_idx);
     } else {
         emitModRM(0b01, 0, src_idx);
+        if (needssib)
+            emitSIB(0b00, 0b100, src_idx);
         emitByte(mem.offset);
     }
 }

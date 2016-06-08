@@ -458,7 +458,7 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
     ScopeInfo::VarScopeType vst = node->lookup_type;
     if (vst == ScopeInfo::VarScopeType::GLOBAL) {
         if (jit)
-            jit->emitSetGlobal(frame_info.globals, name.getBox(), value);
+            jit->emitSetGlobal(name.getBox(), value, getMD()->source->scoping->areGlobalsFromModule());
         setGlobal(frame_info.globals, name.getBox(), value.o);
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
         if (jit)
@@ -471,13 +471,12 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
         bool closure = vst == ScopeInfo::VarScopeType::CLOSURE;
         if (jit) {
             bool is_live = true;
-            // TODO: turn this optimization back on.
-            // if (!closure)
-            // is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
+            if (!closure)
+                is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
             if (is_live)
                 jit->emitSetLocal(name, node->vreg, closure, value);
             else
-                jit->emitSetBlockLocal(name, value);
+                jit->emitSetBlockLocal(name, node->vreg, value);
         }
 
         if (closure) {
@@ -686,12 +685,12 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
     if (backedge)
         ++edgecount;
 
-    if (ENABLE_BASELINEJIT && backedge && edgecount == OSR_THRESHOLD_INTERPRETER && !jit && !node->target->code) {
+    if (ENABLE_BASELINEJIT && backedge && edgecount >= OSR_THRESHOLD_INTERPRETER && !jit && !node->target->code) {
         should_jit = true;
         startJITing(node->target);
     }
 
-    if (backedge && edgecount == OSR_THRESHOLD_BASELINE) {
+    if (backedge && edgecount >= OSR_THRESHOLD_BASELINE) {
         Box* rtn = doOSR(node);
         if (rtn)
             return Value(rtn, NULL);
@@ -1173,12 +1172,9 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::
             closure_var = jit->imm(0ul);
         if (!passed_globals_var)
             passed_globals_var = jit->imm(0ul);
-        rtn.var = jit->call(false, (void*)createFunctionFromMetadata, jit->imm(md), closure_var, passed_globals_var,
-                            defaults_var, jit->imm(args->defaults.size()))->setType(RefType::OWNED);
-
-        for (auto d_var : defaults_vars) {
-            d_var->refUsed();
-        }
+        rtn.var = jit->call(false, (void*)createFunctionFromMetadata, { jit->imm(md), closure_var, passed_globals_var,
+                                                                        defaults_var, jit->imm(args->defaults.size()) },
+                            {}, defaults_vars)->setType(RefType::OWNED);
     }
 
     rtn.o = createFunctionFromMetadata(md, closure, passed_globals, u.il);
@@ -1661,7 +1657,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             assert(!node->is_kill);
             Value v;
             if (jit)
-                v.var = jit->emitGetGlobal(frame_info.globals, node->id.getBox());
+                v.var = jit->emitGetGlobal(node->id.getBox());
 
             v.o = getGlobal(frame_info.globals, node->id.getBox());
             return v;
@@ -1779,6 +1775,10 @@ Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
 
 int ASTInterpreterJitInterface::getBoxedLocalsOffset() {
     return offsetof(ASTInterpreter, frame_info.boxedLocals);
+}
+
+int ASTInterpreterJitInterface::getCreatedClosureOffset() {
+    return offsetof(ASTInterpreter, created_closure);
 }
 
 int ASTInterpreterJitInterface::getCurrentBlockOffset() {

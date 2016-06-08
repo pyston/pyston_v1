@@ -23,6 +23,9 @@
 
 namespace pyston {
 
+// passes MAP_32BIT to mmap when allocating the memory for the bjit code.
+// it's nice for inspecting the generated asm because the debugger is able to show the name of called C/C++ functions
+#define ENABLE_BASELINEJIT_MAP_32BIT 1
 #define ENABLE_BASELINEJIT_ICS 1
 
 class AST_stmt;
@@ -70,8 +73,9 @@ class JitFragmentWriter;
 // register or stack slot but we aren't if it outlives the block - we have to store it in the interpreter instance.
 //
 // We use the following callee-save regs to speed up the generated code:
-//      r13: pointer to ASTInterpreter instance
-//      r14: pointer to the vregs array
+//      r12, r15: temporary values
+//      r13:      pointer to ASTInterpreter instance
+//      r14:      pointer to the vregs array
 //
 // To execute a specific CFGBlock one has to call:
 //      CFGBlock* block;
@@ -90,8 +94,10 @@ class JitFragmentWriter;
 //
 // Basic layout of generated code block is:
 // entry_code:
+//      push   %r15                 ; save r15
 //      push   %r14                 ; save r14
 //      push   %r13                 ; save r13
+//      push   %r12                 ; save r12
 //      sub    $0x118,%rsp          ; setup scratch, 0x118 = scratch_size + 16 = space for two func args passed on the
 //                                                                               stack + 8 byte for stack alignment
 //      mov    %rdi,%r13            ; copy the pointer to ASTInterpreter instance into r13
@@ -107,8 +113,10 @@ class JitFragmentWriter;
 //      jne    end_side_exit
 //      movabs $0x215bb60,%rax      ; rax = CFGBlock* to interpret next (rax is the 1. return reg)
 //      add    $0x118,%rsp          ; restore stack pointer
+//      pop    %r12                 ; restore r12
 //      pop    %r13                 ; restore r13
 //      pop    %r14                 ; restore r14
+//      pop    %r15                 ; restore r15
 //      ret                         ; exit to the interpreter which will interpret the specified CFGBLock*
 //    end_side_exit:
 //      ....
@@ -120,8 +128,10 @@ class JitFragmentWriter;
 //                                    in this case 0 which means we are finished
 //      movabs $0x1270014108,%rdx   ; rdx must contain the Box* value to return
 //      add    $0x118,%rsp          ; restore stack pointer
+//      pop    %r12                 ; restore r12
 //      pop    %r13                 ; restore r13
 //      pop    %r14                 ; restore r14
+//      pop    %r15                 ; restore r15
 //      ret
 //
 // nth_JitFragment:
@@ -140,8 +150,18 @@ public:
     static constexpr int sp_adjustment = scratch_size + num_stack_args * 8 + 8 /* = alignment */;
 
 private:
+    struct MemoryManager {
+    private:
+        uint8_t* addr;
+
+    public:
+        MemoryManager();
+        ~MemoryManager();
+        uint8_t* get() { return addr; }
+    };
+
     // the memory block contains the EH frame directly followed by the generated machine code.
-    std::unique_ptr<uint8_t[]> memory;
+    MemoryManager memory;
     int entry_offset;
     assembler::Assembler a;
     bool is_currently_writing;
@@ -234,7 +254,7 @@ public:
     RewriterVar* emitGetBoxedLocal(BoxedString* s);
     RewriterVar* emitGetBoxedLocals();
     RewriterVar* emitGetClsAttr(RewriterVar* obj, BoxedString* s);
-    RewriterVar* emitGetGlobal(Box* global, BoxedString* s);
+    RewriterVar* emitGetGlobal(BoxedString* s);
     RewriterVar* emitGetItem(AST_expr* node, RewriterVar* value, RewriterVar* slice);
     RewriterVar* emitGetLocal(InternedString s, int vreg);
     RewriterVar* emitGetPystonIter(RewriterVar* v);
@@ -265,10 +285,10 @@ public:
     void emitRaise3(RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2);
     void emitReturn(RewriterVar* v);
     void emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr);
-    void emitSetBlockLocal(InternedString s, STOLEN(RewriterVar*) v);
+    void emitSetBlockLocal(InternedString s, int vreg, STOLEN(RewriterVar*) v);
     void emitSetCurrentInst(AST_stmt* node);
     void emitSetExcInfo(RewriterVar* type, RewriterVar* value, RewriterVar* traceback);
-    void emitSetGlobal(Box* global, BoxedString* s, STOLEN(RewriterVar*) v);
+    void emitSetGlobal(BoxedString* s, STOLEN(RewriterVar*) v, bool are_globals_from_module);
     void emitSetItemName(BoxedString* s, RewriterVar* v);
     void emitSetItem(RewriterVar* target, RewriterVar* slice, RewriterVar* value);
     void emitSetLocal(InternedString s, int vreg, bool set_closure, STOLEN(RewriterVar*) v);
@@ -296,8 +316,9 @@ private:
     RewriterVar* emitCallWithAllocatedArgs(void* func_addr, const llvm::ArrayRef<RewriterVar*> args,
                                            const llvm::ArrayRef<RewriterVar*> additional_uses);
     std::pair<RewriterVar*, RewriterAction*> emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args,
-                                                        int num_slots, int slot_size, AST* ast_node = NULL,
-                                                        TypeRecorder* type_recorder = NULL);
+                                                        unsigned char num_slots, unsigned short slot_size,
+                                                        AST* ast_node = NULL, TypeRecorder* type_recorder = NULL,
+                                                        llvm::ArrayRef<RewriterVar*> additional_uses = {});
 
     static void assertNameDefinedHelper(const char* id);
     static Box* callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, TypeRecorder* type_recorder,
@@ -308,8 +329,8 @@ private:
     static Box* createTupleHelper(uint64_t num, Box** data);
     static Box* exceptionMatchesHelper(Box* obj, Box* cls);
     static Box* hasnextHelper(Box* b);
-    static Box* nonzeroHelper(Box* b);
-    static Box* notHelper(Box* b);
+    static BORROWED(Box*) nonzeroHelper(Box* b);
+    static BORROWED(Box*) notHelper(Box* b);
     static Box* runtimeCallHelper(Box* obj, ArgPassSpec argspec, TypeRecorder* type_recorder, Box** args,
                                   std::vector<BoxedString*>* keyword_names);
 
@@ -317,7 +338,7 @@ private:
     void _emitJump(CFGBlock* b, RewriterVar* block_next, ExitInfo& exit_info);
     void _emitOSRPoint();
     void _emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots,
-                     int slot_size, AST* ast_node);
+                     int slot_size, AST* ast_node, llvm::ArrayRef<RewriterVar*> vars_to_bump);
     void _emitRecordType(RewriterVar* type_recorder_var, RewriterVar* obj_cls_var);
     void _emitReturn(RewriterVar* v);
     void _emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val_constant, CFGBlock* next_block,
