@@ -303,7 +303,7 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset) {
         code_block = code_blocks[code_blocks.size() - 1].get();
 
     if (!code_block || code_block->shouldCreateNewBlock()) {
-        code_blocks.push_back(std::unique_ptr<JitCodeBlock>(new JitCodeBlock(source_info->getName()->s())));
+        code_blocks.push_back(llvm::make_unique<JitCodeBlock>(source_info->getName()->s()));
         code_block = code_blocks[code_blocks.size() - 1].get();
         exit_offset = 0;
     }

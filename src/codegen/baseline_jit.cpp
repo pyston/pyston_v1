@@ -72,6 +72,8 @@ JitCodeBlock::MemoryManager::MemoryManager() {
 JitCodeBlock::MemoryManager::~MemoryManager() {
     munmap(addr, JitCodeBlock::memory_size);
     addr = NULL;
+
+    RELEASE_ASSERT(0, "we have to unregister this block from g.func_addr_registry");
 }
 
 JitCodeBlock::JitCodeBlock(llvm::StringRef name)
@@ -111,7 +113,9 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     registerDynamicEhFrame((uint64_t)code, code_size, (uint64_t)eh_frame_addr, size - 4);
     registerEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, size);
 
-    g.func_addr_registry.registerFunction(("bjit_" + name).str(), code, code_size, NULL);
+    static int num_block = 0;
+    auto unique_name = ("bjit_" + name + "_" + llvm::Twine(num_block++)).str();
+    g.func_addr_registry.registerFunction(unique_name, code, code_size, NULL);
 }
 
 std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, int patch_jump_offset) {

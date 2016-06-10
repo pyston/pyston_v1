@@ -11,6 +11,8 @@ corresponding flags to dump the necessary output, and the collect and process it
 There's a tool called annotate.py in the tools/ directory that can combine the results of perf and data dumped from the
 run, to get instruction-level profiles; this is supported directly in perf for non-JIT'd functions, but I couldn't
 figure out another way to get it working for JIT'd ones.
+We also have a script which allows 'perf report' to display bjit and LLVM jited functions directly, it works by pretending to be objdump
+so the usage is: perf report --objdump=tools/perf_jit.py
 Note: this tool will show the *final* assembly code that was output, ie with all the patchpoints filled in with whatever
 code they had at the exit of the program.
 
