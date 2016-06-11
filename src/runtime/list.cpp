@@ -727,6 +727,11 @@ Box* listMul(BoxedList* self, Box* rhs) {
         return incref(NotImplemented);
     }
 
+    if (n > 0 && Py_SIZE(self) > PY_SSIZE_T_MAX / n) {
+        PyErr_NoMemory();
+        throwCAPIException();
+    }
+
     int s = self->size;
 
     BoxedList* rtn = new BoxedList();
@@ -753,6 +758,11 @@ Box* listImul(BoxedList* self, Box* rhs) {
             throwCAPIException();
     } else {
         return incref(NotImplemented);
+    }
+
+    if (n > 0 && Py_SIZE(self) > PY_SSIZE_T_MAX / n) {
+        PyErr_NoMemory();
+        throwCAPIException();
     }
 
     int s = self->size;
@@ -1129,7 +1139,7 @@ Box* listIndex(BoxedList* self, Box* elt, Box* _start, Box** args) {
     }
     stop = std::min(stop, self->size);
 
-    for (int64_t i = start; i < stop; i++) {
+    for (int64_t i = start; i < stop && i < self->size; i++) {
         Box* e = self->elts->elts[i];
 
         int r = PyObject_RichCompareBool(e, elt, Py_EQ);
@@ -1170,6 +1180,8 @@ BoxedClass* list_reverse_iterator_cls = NULL;
 
 Box* listInit(BoxedList* self, Box* container) {
     assert(PyList_Check(self));
+
+    BoxedList::clear(self);
 
     if (container) {
         Box* r = listIAdd(self, container);
