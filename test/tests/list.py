@@ -1,3 +1,5 @@
+import sys
+
 l = range(5)
 print l
 print l * 5
@@ -68,7 +70,7 @@ for i in xrange(1, 6):
         print list_index.index(i, -1, -1)
     except ValueError as e:
         print e
-        
+
 assert list_index.index(3) == 2
 assert [1, '2'].index('2') == 1
 
@@ -243,4 +245,37 @@ except Exception as e:
 try:
     print range(5).index(10, 100, 200)
 except Exception as e:
+    print e
+
+
+lst = [4, 5, 6, 7]
+n = int((sys.maxsize * 2 + 2) // len(lst))
+
+try:
+    lst * n
+except MemoryError as e:
+    print e
+else:
+    raise RuntimeError('MemoryError not raised')
+
+try:
+    lst *= n
+except MemoryError as e:
+    print e
+
+l = [1, 2, 3]
+l.__init__()
+print l
+
+class EvilCmp:
+    def __init__(self, victim):
+        self.victim = victim
+    def __eq__(self, other):
+        del self.victim[:]
+        return False
+a = []
+a[:] = [EvilCmp(a) for _ in xrange(100)]
+try:
+    a.index(None)
+except ValueError as e:
     print e
