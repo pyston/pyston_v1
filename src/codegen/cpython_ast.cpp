@@ -61,6 +61,8 @@ private:
     InternedStringPool* pool = NULL;
     int loop_depth = 0;
     int in_finally = 0;
+    int interactive = 0;
+    int nestlevel = 0;
     llvm::StringRef fn;
 
 public:
@@ -511,7 +513,9 @@ public:
                 auto v = stmt->v.FunctionDef;
                 r->name = convert(v.name);
                 r->args = convert(v.args, r);
+                nestlevel++;
                 r->body = convert<stmt_ty, AST_stmt*>(v.body);
+                nestlevel--;
                 r->decorator_list = convert<expr_ty, AST_expr*>(v.decorator_list);
                 return r;
             }
@@ -520,7 +524,9 @@ public:
                 auto v = stmt->v.ClassDef;
                 r->name = convert(v.name);
                 r->bases = convert<expr_ty, AST_expr*>(v.bases);
+                nestlevel++;
                 r->body = convert<stmt_ty, AST_stmt*>(v.body);
+                nestlevel--;
                 r->decorator_list = convert<expr_ty, AST_expr*>(v.decorator_list);
                 return r;
             }
@@ -666,6 +672,11 @@ public:
                 auto r = new AST_Expr();
                 auto v = stmt->v.Expr;
                 r->value = convert(v.value);
+                if (interactive && nestlevel <= 0) {
+                    auto print_expr = new AST_LangPrimitive(AST_LangPrimitive::PRINT_EXPR);
+                    print_expr->args.push_back(r->value);
+                    r->value = print_expr;
+                }
                 return r;
             }
             case Pass_kind:
@@ -704,11 +715,11 @@ public:
                 return rtn;
             }
             case Interactive_kind: {
+                this->interactive = 1;
                 AST_Module* rtn = new AST_Module(llvm::make_unique<InternedStringPool>());
                 assert(!this->pool);
                 this->pool = rtn->interned_strings.get();
                 convertAll<stmt_ty>(mod->v.Interactive.body, rtn->body);
-                makeModuleInteractive(rtn);
                 return rtn;
             }
             case Expression_kind: {

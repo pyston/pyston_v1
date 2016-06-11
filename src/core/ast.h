@@ -1444,10 +1444,6 @@ template <class T, class R> void findNodes(const R& roots, std::vector<T*>& outp
     }
 }
 
-// Take a normally-parsed module, and convert it (inplace) to a form that will print out any bare expressions.
-// This is used for "single" mode or the repl.
-void makeModuleInteractive(AST_Module* m);
-
 llvm::StringRef getOpSymbol(int op_type);
 BORROWED(BoxedString*) getOpName(int op_type);
 int getReverseCmpOp(int op_type, bool& success);
