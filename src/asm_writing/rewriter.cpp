@@ -510,17 +510,11 @@ void RewriterVar::incref() {
 }
 
 void RewriterVar::decref() {
-    rewriter->addAction([=]() {
-        rewriter->_decref(this);
-        this->bumpUse();
-    }, { this }, ActionType::MUTATION);
+    rewriter->addAction([=]() { rewriter->_decref(this, { this }); }, { this }, ActionType::MUTATION);
 }
 
 void RewriterVar::xdecref() {
-    rewriter->addAction([=]() {
-        rewriter->_xdecref(this);
-        this->bumpUse();
-    }, { this }, ActionType::MUTATION);
+    rewriter->addAction([=]() { rewriter->_xdecref(this, { this }); }, { this }, ActionType::MUTATION);
 }
 
 void Rewriter::_incref(RewriterVar* var, int num_refs) {
@@ -565,17 +559,17 @@ void Rewriter::_incref(RewriterVar* var, int num_refs) {
     // (ie the caller should call bumpUse)
 }
 
-void Rewriter::_decref(RewriterVar* var) {
+void Rewriter::_decref(RewriterVar* var, llvm::ArrayRef<RewriterVar*> vars_to_bump) {
     assert(!var->nullable);
 // assembler->trap();
 
-// this->_call(NULL, true, false /* can't throw */, (void*)Helper::decref, { var });
+// this->_call(NULL, true, false /* can't throw */, (void*)Helper::decref, { var }, {}, vars_to_bump);
 
 #ifdef Py_REF_DEBUG
     // assembler->trap();
     assembler->decq(assembler::Immediate(&_Py_RefTotal));
 #endif
-    _setupCall(true, { var }, {}, assembler::RAX);
+    _setupCall(true, { var }, {}, assembler::RAX, vars_to_bump);
 
 
 #ifdef Py_REF_DEBUG
@@ -603,13 +597,16 @@ void Rewriter::_decref(RewriterVar* var) {
 
     // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
     // (ie the caller should call bumpUse)
+    for (auto&& use : vars_to_bump) {
+        use->bumpUseLateIfNecessary();
+    }
 }
 
-void Rewriter::_xdecref(RewriterVar* var) {
+void Rewriter::_xdecref(RewriterVar* var, llvm::ArrayRef<RewriterVar*> vars_to_bump) {
     assert(var->nullable);
     // assembler->trap();
 
-    this->_call(NULL, true, false /* can't throw */, (void*)Helper::xdecref, { var });
+    this->_call(NULL, true, false /* can't throw */, (void*)Helper::xdecref, { var }, {}, vars_to_bump);
 
     // Doesn't call bumpUse, since this function is designed to be callable from other emitting functions.
     // (ie the caller should call bumpUse)
