@@ -416,6 +416,20 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
 RewriterVar* RewriterVar::getAttr(int offset, Location dest, assembler::MovType type) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
+    // if no changing action happened we can reuse get attributes
+    if (!rewriter->added_changing_action) {
+        RewriterVar*& result = getattrs[std::make_pair(offset, (int)type)];
+        if (result) {
+            if (dest != Location::any())
+                result->getInReg(dest, true /* allow_constant_in_reg */);
+        } else {
+            result = rewriter->createNewVar();
+            rewriter->addAction([=]() { rewriter->_getAttr(result, this, offset, dest, type); }, { this },
+                                ActionType::NORMAL);
+        }
+        return result;
+    }
+
     RewriterVar* result = rewriter->createNewVar();
     rewriter->addAction([=]() { rewriter->_getAttr(result, this, offset, dest, type); }, { this }, ActionType::NORMAL);
     return result;

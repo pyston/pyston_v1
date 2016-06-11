@@ -177,6 +177,8 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
       ic_info(std::move(ic_info)) {
     allocatable_regs = bjit_allocatable_regs;
 
+    added_changing_action = true;
+
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: JitFragmentWriter() start");
     interp = createNewVar();

@@ -263,7 +263,8 @@ private:
     Location arg_loc;
     std::pair<int /*offset*/, int /*size*/> scratch_allocation;
 
-    llvm::SmallSet<std::tuple<int, uint64_t, bool>, 4> attr_guards; // used to detect duplicate guards
+    llvm::SmallSet<std::tuple<int, uint64_t, bool>, 4> attr_guards;  // used to detect duplicate guards
+    llvm::SmallDenseMap<std::pair<int, int>, RewriterVar*> getattrs; // used to detect duplicate getAttrs
 
     // Gets a copy of this variable in a register, spilling/reloading if necessary.
     // TODO have to be careful with the result since the interface doesn't guarantee
