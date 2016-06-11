@@ -43,10 +43,9 @@ class ParamNames;
 class ScopeInfo;
 
 class CFGBlock {
-private:
+public:
     CFG* cfg;
 
-public:
     // Baseline JIT helper fields:
     // contains address to the start of the code of this basic block
     void* code;
@@ -70,23 +69,68 @@ public:
     void _print() { print(); }
 };
 
+// the vregs are split into three parts.
+// user visible: used for all non compiler generated names, name could be used in a single block or multiple
+//               all frames contain atleast this vregs in order to do frame introspection
+// cross block : used for compiler generated names which get used in several blocks or which have closure scope
+// single block: used by compiler created names which are only used in a single block.
+//               get reused for different names
+//
+// we assign the lowest numbers to the user visible ones, followed by the cross block ones and finally the single block
+// ones. we do this because not all tiers use all of the vregs and it still makes it fast to switch between tiers.
+//
+// usage by our different tiers:
+// interpreter : [user visible] [cross block] [single block]
+// baseline jit: [user visible] [cross block]
+// llvm jit    : [user visible]
+class VRegInfo {
+private:
+    llvm::DenseMap<InternedString, int> sym_vreg_map_user_visible;
+    llvm::DenseMap<InternedString, int> sym_vreg_map;
+    int num_vregs_cross_block = -1;
+    int num_vregs = -1;
+
+public:
+    // map of all assigned names. if the name is block local the vreg number is not unique because this vregs get reused
+    // between blocks.
+    const llvm::DenseMap<InternedString, int>& getSymVRegMap() { return sym_vreg_map; }
+    const llvm::DenseMap<InternedString, int>& getUserVisibleSymVRegMap() { return sym_vreg_map_user_visible; }
+
+    int getVReg(InternedString name) const {
+        assert(hasVRegsAssigned());
+        assert(sym_vreg_map.count(name));
+        auto it = sym_vreg_map.find(name);
+        assert(it != sym_vreg_map.end());
+        assert(it->second != -1);
+        return it->second;
+    }
+
+    bool isUserVisibleVReg(int vreg) const { return vreg < sym_vreg_map_user_visible.size(); }
+    bool isCrossBlockVReg(int vreg) const { return !isUserVisibleVReg(vreg) && vreg < num_vregs_cross_block; }
+    bool isBlockLocalVReg(int vreg) const { return vreg >= num_vregs_cross_block; }
+
+    int getTotalNumOfVRegs() const { return num_vregs; }
+    int getNumOfUserVisibleVRegs() const { return sym_vreg_map_user_visible.size(); }
+    int getNumOfCrossBlockVRegs() const { return num_vregs_cross_block; }
+
+    bool hasVRegsAssigned() const { return num_vregs != -1; }
+    void assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* scope_info);
+};
+
 // Control Flow Graph
 class CFG {
 private:
     int next_idx;
-    bool has_vregs_assigned;
+    VRegInfo vreg_info;
 
 public:
     std::vector<CFGBlock*> blocks;
 
-    // Contains the vreg assignment for every name including the user visible ones
-    // (which will have lower ids than the compiler generated ones).
-    llvm::DenseMap<InternedString, int> sym_vreg_map;
-    llvm::DenseMap<InternedString, int> sym_vreg_map_user_visible;
-
-    CFG() : next_idx(0), has_vregs_assigned(false) {}
+public:
+    CFG() : next_idx(0) {}
 
     CFGBlock* getStartingBlock() { return blocks[0]; }
+    VRegInfo& getVRegInfo() { return vreg_info; }
 
     CFGBlock* addBlock() {
         int idx = next_idx;
@@ -113,13 +157,10 @@ public:
     }
 
     void print(llvm::raw_ostream& stream = llvm::outs());
-
-    bool hasVregsAssigned() { return has_vregs_assigned; }
-    void assignVRegs(const ParamNames& param_names, ScopeInfo* scope_info);
 };
 
 class SourceInfo;
-CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body);
+CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamNames& param_names);
 void printCFG(CFG* cfg);
 }
 

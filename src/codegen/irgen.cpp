@@ -1009,8 +1009,6 @@ CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames
 
     assert((entry_descriptor != NULL) + (spec != NULL) == 1);
 
-    md->calculateNumVRegs();
-
     if (VERBOSITY("irgen") >= 2)
         source->cfg->print();
 

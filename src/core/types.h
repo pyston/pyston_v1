@@ -508,9 +508,6 @@ public:
     void addVersion(void* f, ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types,
                     ExceptionStyle exception_style = CXX);
 
-    int calculateNumVRegs();
-    int calculateNumUserVisibleVRegs();
-
     // Helper function, meant for the C++ runtime, which allocates a FunctionMetadata object and calls addVersion
     // once to it.
     static FunctionMetadata* create(void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs,

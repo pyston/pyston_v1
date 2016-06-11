@@ -244,7 +244,7 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         assert(al->isStaticAlloca());
 
         assert(!vregs);
-        int num_user_visible_vregs = getMD()->calculateNumUserVisibleVRegs();
+        int num_user_visible_vregs = getSourceInfo()->cfg->getVRegInfo().getNumOfUserVisibleVRegs();
         if (num_user_visible_vregs > 0) {
             auto* vregs_alloca
                 = builder.CreateAlloca(g.llvm_value_type_ptr, getConstantInt(num_user_visible_vregs), "vregs");
@@ -1896,7 +1896,7 @@ private:
         auto cfg = irstate->getSourceInfo()->cfg;
         assert(vreg >= 0);
 
-        if (vreg < cfg->sym_vreg_map_user_visible.size()) {
+        if (cfg->getVRegInfo().isUserVisibleVReg(vreg)) {
             // looks like this store don't have to be volatile because llvm knows that the vregs are visible thru the
             // FrameInfo which escapes.
             auto* gep = emitter.getBuilder()->CreateConstInBoundsGEP1_64(irstate->getVRegsVar(), vreg);
@@ -2617,8 +2617,7 @@ private:
         auto vst = irstate->getScopeInfo()->getScopeTypeOfName(name);
         int vreg = -1;
         if (vst == ScopeInfo::VarScopeType::FAST || vst == ScopeInfo::VarScopeType::CLOSURE) {
-            assert(cfg->sym_vreg_map.count(name));
-            vreg = cfg->sym_vreg_map[name];
+            vreg = cfg->getVRegInfo().getVReg(name);
         }
         _doSet(vreg, name, vst, var, unw_info);
     }

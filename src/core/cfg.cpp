@@ -181,7 +181,7 @@ private:
 
     unsigned int next_var_index = 0;
 
-    friend CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body);
+    friend CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamNames& param_names);
 
 public:
     CFGVisitor(SourceInfo* source, AST_TYPE::AST_TYPE root_type, FutureFlags future_flags,
@@ -2556,13 +2556,15 @@ void CFG::print(llvm::raw_ostream& stream) {
 
 class AssignVRegsVisitor : public NoopASTVisitor {
 public:
-    int index = 0;
-    bool only_user_visible;
-    llvm::DenseMap<InternedString, int> sym_vreg_map;
     ScopeInfo* scope_info;
+    CFGBlock* current_block;
+    int next_vreg;
+    llvm::DenseMap<InternedString, int> sym_vreg_map;
+    llvm::DenseMap<InternedString, std::unordered_set<CFGBlock*>> sym_blocks_map;
 
-    AssignVRegsVisitor(ScopeInfo* scope_info, bool only_user_visible)
-        : only_user_visible(only_user_visible), scope_info(scope_info) {}
+    enum Step { TrackBlockUsage = 0, UserVisible, CrossBlock, SingleBlockUse } step;
+
+    AssignVRegsVisitor(ScopeInfo* scope_info) : scope_info(scope_info), current_block(0), next_vreg(0) {}
 
     bool visit_arguments(AST_arguments* node) override {
         for (AST_expr* d : node->defaults)
@@ -2590,66 +2592,94 @@ public:
         return true;
     }
 
+
+    bool isNameUsedInSingleBlock(InternedString id) {
+        assert(step != TrackBlockUsage);
+        assert(sym_blocks_map.count(id));
+        return sym_blocks_map[id].size() == 1;
+    }
+
     bool visit_name(AST_Name* node) override {
         if (node->vreg != -1)
-            return true;
-
-        if (only_user_visible && node->id.isCompilerCreatedName())
             return true;
 
         if (node->lookup_type == ScopeInfo::VarScopeType::UNKNOWN)
             node->lookup_type = scope_info->getScopeTypeOfName(node->id);
 
-        if (node->lookup_type == ScopeInfo::VarScopeType::FAST || node->lookup_type == ScopeInfo::VarScopeType::CLOSURE)
-            node->vreg = assignVReg(node->id);
+        if (node->lookup_type != ScopeInfo::VarScopeType::FAST && node->lookup_type != ScopeInfo::VarScopeType::CLOSURE)
+            return true;
+
+        if (step == TrackBlockUsage) {
+            sym_blocks_map[node->id].insert(current_block);
+            return true;
+        } else if (step == UserVisible) {
+            if (node->id.isCompilerCreatedName())
+                return true;
+        } else {
+            bool is_block_local = node->lookup_type == ScopeInfo::VarScopeType::FAST
+                                  && isNameUsedInSingleBlock(node->id);
+            if (step == CrossBlock && is_block_local)
+                return true;
+            if (step == SingleBlockUse && !is_block_local)
+                return true;
+        }
+        node->vreg = assignVReg(node->id);
         return true;
     }
 
     int assignVReg(InternedString id) {
         auto it = sym_vreg_map.find(id);
         if (sym_vreg_map.end() == it) {
-            sym_vreg_map[id] = index;
-            return index++;
+            sym_vreg_map[id] = next_vreg;
+            return next_vreg++;
         }
         return it->second;
     }
 };
 
-void CFG::assignVRegs(const ParamNames& param_names, ScopeInfo* scope_info) {
-    if (has_vregs_assigned)
-        return;
+void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* scope_info) {
+    assert(!hasVRegsAssigned());
 
-    AssignVRegsVisitor visitor(scope_info, true);
+    // warning: don't rearrange the steps, they need to be run in this exact order!
+    AssignVRegsVisitor visitor(scope_info);
+    for (auto step : { AssignVRegsVisitor::TrackBlockUsage, AssignVRegsVisitor::UserVisible,
+                       AssignVRegsVisitor::CrossBlock, AssignVRegsVisitor::SingleBlockUse }) {
+        visitor.step = step;
+        for (CFGBlock* b : cfg->blocks) {
+            visitor.current_block = b;
 
-    // we need todo two passes: first we assign the user visible vars a vreg and then the compiler created get there
-    // value.
-    for (int i = 0; i < 2; ++i) {
-        for (CFGBlock* b : blocks) {
+            if (step == AssignVRegsVisitor::SingleBlockUse)
+                visitor.next_vreg = num_vregs_cross_block;
+
+            if (b == cfg->getStartingBlock()) {
+                for (auto* name : param_names.arg_names) {
+                    name->accept(&visitor);
+                }
+                if (param_names.vararg_name)
+                    param_names.vararg_name->accept(&visitor);
+
+                if (param_names.kwarg_name)
+                    param_names.kwarg_name->accept(&visitor);
+            }
+
             for (AST_stmt* stmt : b->body) {
                 stmt->accept(&visitor);
             }
+
+            if (step == AssignVRegsVisitor::SingleBlockUse)
+                num_vregs = std::max(num_vregs, visitor.next_vreg);
         }
 
-        for (auto* name : param_names.arg_names) {
-            name->accept(&visitor);
-        }
-
-        if (param_names.vararg_name)
-            param_names.vararg_name->accept(&visitor);
-
-        if (param_names.kwarg_name)
-            param_names.kwarg_name->accept(&visitor);
-
-        if (visitor.only_user_visible) {
-            visitor.only_user_visible = false;
+        if (step == AssignVRegsVisitor::UserVisible)
             sym_vreg_map_user_visible = visitor.sym_vreg_map;
-        }
+        else if (step == AssignVRegsVisitor::CrossBlock)
+            num_vregs = num_vregs_cross_block = visitor.next_vreg;
     }
     sym_vreg_map = std::move(visitor.sym_vreg_map);
-    has_vregs_assigned = true;
+    assert(hasVRegsAssigned());
 }
 
-CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
+CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamNames& param_names) {
     STAT_TIMER(t0, "us_timer_computecfg", 0);
 
     CFG* rtn = new CFG();
@@ -2890,6 +2920,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         rtn->print();
     }
 
+    rtn->getVRegInfo().assignVRegs(rtn, param_names, source->getScopeInfo());
 
     return rtn;
 }

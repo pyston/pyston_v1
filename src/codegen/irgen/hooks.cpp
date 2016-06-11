@@ -271,7 +271,7 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
 
     // Do the analysis now if we had deferred it earlier:
     if (source->cfg == NULL) {
-        source->cfg = computeCFG(source, source->body);
+        source->cfg = computeCFG(source, source->body, f->param_names);
     }
 
 
