@@ -1012,6 +1012,8 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
             // ignore those while interpreting.
             if ((((AST_Expr*)node)->value)->type != AST_TYPE::Str) {
                 rtn = visit_expr((AST_Expr*)node);
+                Py_DECREF(rtn.o);
+                rtn = Value();
                 ASTInterpreterJitInterface::pendingCallsCheckHelper();
             }
             break;
@@ -1028,8 +1030,13 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
             break;
         case AST_TYPE::Return:
             rtn = visit_return((AST_Return*)node);
-            ASTInterpreterJitInterface::pendingCallsCheckHelper();
-            break;
+            try {
+                ASTInterpreterJitInterface::pendingCallsCheckHelper();
+            } catch (ExcInfo e) {
+                Py_DECREF(rtn.o);
+                throw e;
+            }
+            return rtn;
         case AST_TYPE::Global:
             rtn = visit_global((AST_Global*)node);
             ASTInterpreterJitInterface::pendingCallsCheckHelper();
@@ -1041,13 +1048,20 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
             break;
         case AST_TYPE::Jump:
             rtn = visit_jump((AST_Jump*)node);
-            break;
+            return rtn;
         case AST_TYPE::Invoke:
             rtn = visit_invoke((AST_Invoke*)node);
             break;
         default:
             RELEASE_ASSERT(0, "not implemented");
     };
+
+    // This assertion tries to make sure that we are refcount-safe if an exception
+    // is thrown from pendingCallsCheckHelper.  Any statement that returns a value needs
+    // to be careful to wrap pendingCallsCheckHelper, and it can signal that it was careful
+    // by returning from the function instead of breaking.
+    assert(!rtn.o);
+
     return rtn;
 }
 
