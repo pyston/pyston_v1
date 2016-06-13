@@ -22,14 +22,14 @@ test_helper.create_virtenv(ENV_NAME, DEPENDENCIES)
 SRC_DIR = ENV_NAME
 ENV_DIR = os.path.abspath(ENV_NAME)
 PYTHON_EXE = os.path.abspath(ENV_NAME + "/bin/python")
-CYTHON_DIR = os.path.abspath(os.path.join(SRC_DIR, "Cython-0.22"))
+CYTHON_DIR = os.path.abspath(os.path.join(SRC_DIR, "cython-0.22"))
 NUMPY_DIR = os.path.abspath(os.path.join(SRC_DIR, "numpy"))
 
 print_progress_header("Setting up Cython...")
 if not os.path.exists(CYTHON_DIR):
 
-    url = "http://cython.org/release/Cython-0.22.tar.gz"
-    subprocess.check_call(["wget", url], cwd=SRC_DIR)
+    url = "https://github.com/cython/cython/archive/0.22.tar.gz"
+    subprocess.check_call(["wget", url, "-O", "Cython-0.22.tar.gz"], cwd=SRC_DIR)
     subprocess.check_call(["tar", "-zxf", "Cython-0.22.tar.gz"], cwd=SRC_DIR)
 
     if USE_CUSTOM_PATCHES:
