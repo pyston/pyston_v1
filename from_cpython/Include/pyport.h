@@ -22,14 +22,7 @@
 #define PYSTON_CONST
 #endif
 
-#define Py_PROTO(x) x
-
-// Pyston change: these are just hard-coded for now:
-typedef ssize_t         Py_ssize_t;
-#define Py_FORMAT_PARSETUPLE(func,p1,p2)
-#define Py_GCC_ATTRIBUTE(x) __attribute__(x)
-
-// Pyston change: the rest of these have just been copied from CPython's pyport.h, in an arbitrary order:
+// Pyston change: the rest of these have just been copied from CPython's pyport.h:
 
 
 /**************************************************************************
