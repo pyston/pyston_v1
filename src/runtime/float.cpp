@@ -748,8 +748,9 @@ template <ExceptionStyle S> Box* floatNew(BoxedClass* _cls, Box* a) noexcept(S =
 // Roughly analogous to CPython's float_new.
 // The arguments need to be unpacked from args and kwds.
 static Box* floatNewPacked(BoxedClass* type, Box* args, Box* kwds) noexcept {
-    PyObject* x = False; // False is like initalizing it to 0.0 but faster because we don't need to box it in case the
-                         // optional arg exists
+    PyObject* x
+        = Py_False; // False is like initalizing it to 0.0 but faster because we don't need to box it in case the
+                    // optional arg exists
     static char* kwlist[2] = { NULL, NULL };
     kwlist[0] = const_cast<char*>("x");
 

@@ -624,7 +624,7 @@ extern "C" int PyDict_Contains(PyObject* op, PyObject* key) noexcept {
             Box* rtn = PyObject_CallMethod(op, "__contains__", "O", key);
             if (!rtn)
                 return -1;
-            return autoDecref(rtn) == True;
+            return autoDecref(rtn) == Py_True;
         }
 
         BoxedDict* mp = (BoxedDict*)op;
@@ -695,7 +695,7 @@ Box* dictNe(BoxedDict* self, Box* _rhs) {
     if (eq == NotImplemented)
         return eq;
     AUTO_DECREF(eq);
-    if (eq == True)
+    if (eq == Py_True)
         Py_RETURN_FALSE;
     Py_RETURN_TRUE;
 }

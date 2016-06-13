@@ -117,7 +117,7 @@ Box* seqiter_next(Box* s) noexcept {
         else
             RELEASE_ASSERT(0, "");
         AUTO_XDECREF(hasnext);
-        if (hasnext != True)
+        if (hasnext != Py_True)
             return NULL;
     }
 

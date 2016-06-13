@@ -20,7 +20,7 @@
 
 namespace pyston {
 
-Box* True, *False;
+Box* pyston_True, *pyston_False;
 
 extern "C" PyObject* PyBool_FromLong(long n) noexcept {
     return boxBool(n != 0);
@@ -34,13 +34,13 @@ extern "C" Box* boolRepr(BoxedBool* v) {
     static BoxedString* true_str = getStaticString("True");
     static BoxedString* false_str = getStaticString("False");
 
-    if (v == True)
+    if (v == Py_True)
         return incref(true_str);
     return incref(false_str);
 }
 
 size_t bool_hash(BoxedBool* v) {
-    return v == True;
+    return v == Py_True;
 }
 
 Box* boolHash(BoxedBool* v) {

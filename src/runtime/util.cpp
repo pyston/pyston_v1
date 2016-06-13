@@ -168,7 +168,7 @@ extern "C" void dumpEx(void* p, int levels) {
         printf("Refcount: %ld\n", b->ob_refcnt);
 
         if (b->cls == bool_cls) {
-            printf("The %s object\n", b == True ? "True" : "False");
+            printf("The %s object\n", b == Py_True ? "True" : "False");
         }
 
         if (PyType_Check(b)) {

@@ -973,11 +973,11 @@ Box* JitFragmentWriter::hasnextHelper(Box* b) {
 }
 
 BORROWED(Box*) JitFragmentWriter::nonzeroHelper(Box* b) {
-    return b->nonzeroIC() ? True : False;
+    return b->nonzeroIC() ? Py_True : Py_False;
 }
 
 BORROWED(Box*) JitFragmentWriter::notHelper(Box* b) {
-    return b->nonzeroIC() ? False : True;
+    return b->nonzeroIC() ? Py_False : Py_True;
 }
 
 Box* JitFragmentWriter::runtimeCallHelper(Box* obj, ArgPassSpec argspec, TypeRecorder* type_recorder, Box** args,
@@ -1167,7 +1167,7 @@ void JitFragmentWriter::_emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val
     assert(next_block_var->is_constant);
     uint64_t val = val_constant->constant_value;
 
-    assert(val == (uint64_t)True || val == (uint64_t)False);
+    assert(val == (uint64_t)Py_True || val == (uint64_t)Py_False);
 
     // HAXX ahead:
     // Override the automatic refcounting system, to force a decref to happen before the jump.

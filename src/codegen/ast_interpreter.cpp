@@ -635,7 +635,7 @@ Value ASTInterpreter::visit_extslice(AST_ExtSlice* node) {
 
 Value ASTInterpreter::visit_branch(AST_Branch* node) {
     Value v = visit_expr(node->test);
-    ASSERT(v.o == True || v.o == False, "Should have called NONZERO before this branch");
+    ASSERT(v.o == Py_True || v.o == Py_False, "Should have called NONZERO before this branch");
 
     // TODO could potentially avoid doing this if we skip the incref in NONZERO
     AUTO_DECREF(v.o);
@@ -644,10 +644,10 @@ Value ASTInterpreter::visit_branch(AST_Branch* node) {
         // Special note: emitSideExit decrefs v for us.
         // TODO: since the value is always True or False, maybe could optimize by putting the decref
         // before the conditional instead of after.
-        jit->emitSideExit(v, v.o, v.o == True ? node->iffalse : node->iftrue);
+        jit->emitSideExit(v, v.o, v.o == Py_True ? node->iffalse : node->iftrue);
     }
 
-    if (v.o == True)
+    if (v.o == Py_True)
         next_block = node->iftrue;
     else
         next_block = node->iffalse;

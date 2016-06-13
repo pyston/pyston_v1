@@ -5709,7 +5709,7 @@ static bool convert3wayCompareResultToBool(Box* v, int op_type) {
 template <bool negate> Box* nonzeroAndBox(Box* b) {
     if (likely(b->cls == bool_cls)) {
         if (negate)
-            return boxBool(b != True);
+            return boxBool(b != Py_True);
         return incref(b);
     }
 
@@ -5836,7 +5836,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         if (contained->cls == bool_cls) {
             if (op_type == AST_TYPE::NotIn) {
                 Py_DECREF(contained);
-                return boxBool(contained == False);
+                return boxBool(contained == Py_False);
             } else {
                 return contained;
             }

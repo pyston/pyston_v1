@@ -690,7 +690,7 @@ Box* setNe(BoxedSet* self, BoxedSet* rhs) {
     Box* r = setEq(self, rhs);
     AUTO_DECREF(r);
     assert(r->cls == bool_cls);
-    return boxBool(r == False);
+    return boxBool(r == Py_False);
 }
 
 Box* setLe(BoxedSet* self, BoxedSet* rhs) {

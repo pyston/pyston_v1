@@ -2194,7 +2194,7 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
         for (auto e : *static_cast<BoxedTuple*>(elt)) {
             auto b = strStartswith(self, e, start, _args);
             assert(b->cls == bool_cls);
-            if (b == True)
+            if (b == Py_True)
                 return b;
             Py_DECREF(b);
         }
@@ -2266,7 +2266,7 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
         for (auto e : *static_cast<BoxedTuple*>(elt)) {
             auto b = strEndswith(self, e, start, _args);
             assert(b->cls == bool_cls);
-            if (b == True)
+            if (b == Py_True)
                 return b;
             Py_DECREF(b);
         }

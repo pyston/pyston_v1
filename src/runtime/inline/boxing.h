@@ -40,7 +40,7 @@ extern "C" inline bool unboxBool(Box* b) {
     // - the jit knows True is constant once the program starts
     // - this function will get inlined as well as boxBool
     // So in the presence of optimizations, I think this should do better:
-    return b == True;
+    return b == Py_True;
     // return static_cast<BoxedBool*>(b)->b;
 }
 }

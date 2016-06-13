@@ -9,10 +9,7 @@ extern "C" {
 #endif
 
 
-// Pyston change: Try to avoid having to support mixing ints and bools
-// typedef PyIntObject PyBoolObject;
-struct _PyBoolObject;
-typedef struct _PyBoolObject PyBoolObject;
+typedef PyIntObject PyBoolObject;
 
 // Pyston change: this is no longer a static object
 PyAPI_DATA(PyTypeObject*) bool_cls;
@@ -26,10 +23,10 @@ Don't forget to apply Py_INCREF() when returning either!!! */
 // Pyston change: these are currently stored as pointers, not as static globals
 /* Don't use these directly */
 //PyAPI_DATA(PyIntObject) _Py_ZeroStruct, _Py_TrueStruct;
-PyAPI_DATA(PyObject) *True, *False;
+PyAPI_DATA(PyObject) *pyston_True, *pyston_False;
 /* Use these macros */
-#define Py_False ((PyObject *) False)
-#define Py_True ((PyObject *) True)
+#define Py_False ((PyObject *) pyston_False)
+#define Py_True ((PyObject *) pyston_True)
 
 /* Macros for returning Py_True or Py_False, respectively */
 #define Py_RETURN_TRUE return Py_INCREF(Py_True), Py_True
