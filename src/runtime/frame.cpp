@@ -347,6 +347,7 @@ extern "C" PyFrameObject* PyFrame_New(PyThreadState* tstate, PyCodeObject* code,
 extern "C" BORROWED(PyObject*) PyFrame_GetGlobals(PyFrameObject* f) noexcept {
     return BoxedFrame::globals((Box*)f, NULL);
 }
+
 extern "C" BORROWED(PyObject*) PyFrame_GetCode(PyFrameObject* f) noexcept {
     return BoxedFrame::code((Box*)f, NULL);
 }
