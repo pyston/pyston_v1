@@ -81,6 +81,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
 
 # compile specified files in from_cpython/Objects
 file(GLOB_RECURSE STDOBJECT_SRCS Objects
+    abstract.c
     bufferobject.c
     bytearrayobject.c
     bytes_methods.c
@@ -97,6 +98,7 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     iterobject.c
     memoryobject.c
     obmalloc.c
+    sliceobject.c
     stringobject.c
     structseq.c
     traceback.c
