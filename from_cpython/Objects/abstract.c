@@ -1,9 +1,15 @@
+// This file is originally from CPython 2.7, with modifications for Pyston
+
 /* Abstract Object Interface (many thanks to Jim Fulton) */
 
 #include "Python.h"
 #include <ctype.h>
 #include "structmember.h" /* we need the offsetof() macro from there */
+
+// pyston change: comment this out
+#if 0
 #include "longintrepr.h"
+#endif
 
 #define NEW_STYLE_NUMBER(o) PyType_HasFeature((o)->ob_type, \
                 Py_TPFLAGS_CHECKTYPES)
@@ -18,7 +24,8 @@ type_error(const char *msg, PyObject *obj)
     return NULL;
 }
 
-static PyObject *
+// pyston change: removed the static keyword, this function is also used in src/capi/abstract.cpp
+PyObject *
 null_error(void)
 {
     if (!PyErr_Occurred())
@@ -57,6 +64,8 @@ PyObject_Type(PyObject *o)
     return v;
 }
 
+// pyston change: comment this out
+#if 0
 Py_ssize_t
 PyObject_Size(PyObject *o)
 {
@@ -73,6 +82,7 @@ PyObject_Size(PyObject *o)
 
     return PyMapping_Size(o);
 }
+#endif
 
 #undef PyObject_Length
 Py_ssize_t
@@ -131,6 +141,8 @@ _PyObject_LengthHint(PyObject *o, Py_ssize_t defaultvalue)
     return rv;
 }
 
+// pyston change: comment this out
+#if 0
 PyObject *
 PyObject_GetItem(PyObject *o, PyObject *key)
 {
@@ -222,6 +234,7 @@ PyObject_DelItem(PyObject *o, PyObject *key)
     type_error("'%.200s' object does not support item deletion", o);
     return -1;
 }
+#endif
 
 int
 PyObject_DelItemString(PyObject *o, char *key)
@@ -356,6 +369,8 @@ int PyObject_AsWriteBuffer(PyObject *obj,
 
 /* Buffer C-API for Python 3.0 */
 
+// pyston change: comment this out
+#if 0
 int
 PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags)
 {
@@ -367,6 +382,7 @@ PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags)
     }
     return (*(obj->ob_type->tp_as_buffer->bf_getbuffer))(obj, view, flags);
 }
+#endif
 
 static int
 _IsFortranContiguous(Py_buffer *view)
@@ -720,6 +736,8 @@ PyBuffer_Release(Py_buffer *view)
     view->obj = NULL;
 }
 
+// pyston change: comment this out
+#if 0
 PyObject *
 PyObject_Format(PyObject* obj, PyObject *format_spec)
 {
@@ -876,6 +894,7 @@ done:
     Py_XDECREF(empty);
     return result;
 }
+#endif
 
 /* Operations on numbers */
 
@@ -1572,6 +1591,8 @@ _PyNumber_ConvertIntegralToInt(PyObject *integral, const char* error_format)
         int_name = PyString_InternFromString("__int__");
         if (int_name == NULL)
             return NULL;
+        // Pyston change:
+        PyGC_RegisterStaticConstant(int_name);
     }
 
     if (integral && (!PyInt_Check(integral) &&
@@ -1595,8 +1616,11 @@ _PyNumber_ConvertIntegralToInt(PyObject *integral, const char* error_format)
 
 non_integral_error:
     if (PyInstance_Check(integral)) {
-        type_name = PyString_AS_STRING(((PyInstanceObject *)integral)
-                                       ->in_class->cl_name);
+        // Pyston change:
+        // type_name = PyString_AS_STRING(((PyInstanceObject *)integral)
+        //                                ->in_class->cl_name);
+        // type_name = static_cast<BoxedInstance*>(integral)->inst_cls->name->data();
+        type_name = PyString_AS_STRING(PyClass_Name(PyInstance_Class(integral)));
     }
     else {
         type_name = integral->ob_type->tp_name;
@@ -1605,7 +1629,6 @@ non_integral_error:
     Py_DECREF(integral);
     return NULL;
 }
-
 
 PyObject *
 PyNumber_Int(PyObject *o)
@@ -1620,6 +1643,8 @@ PyNumber_Int(PyObject *o)
         trunc_name = PyString_InternFromString("__trunc__");
         if (trunc_name == NULL)
             return NULL;
+        // Pyston change:
+        PyGC_RegisterStaticConstant(trunc_name);
     }
 
     if (o == NULL)
@@ -1705,6 +1730,8 @@ PyNumber_Long(PyObject *o)
         trunc_name = PyString_InternFromString("__trunc__");
         if (trunc_name == NULL)
             return NULL;
+        // Pyston change:
+        PyGC_RegisterStaticConstant(trunc_name);
     }
 
     if (o == NULL)
@@ -2445,7 +2472,7 @@ PyMapping_Length(PyObject *o)
 #define PyMapping_Length PyMapping_Size
 
 PyObject *
-PyMapping_GetItemString(PyObject *o, char *key)
+PyMapping_GetItemString(PyObject *o, const char *key)
 {
     PyObject *okey, *r;
 
@@ -2461,7 +2488,7 @@ PyMapping_GetItemString(PyObject *o, char *key)
 }
 
 int
-PyMapping_SetItemString(PyObject *o, char *key, PyObject *value)
+PyMapping_SetItemString(PyObject *o, const char *key, PyObject *value)
 {
     PyObject *okey;
     int r;
@@ -2517,6 +2544,8 @@ PyObject_CallObject(PyObject *o, PyObject *a)
     return PyEval_CallObjectWithKeywords(o, a, NULL);
 }
 
+// pyston change: comment this out
+#if 0
 PyObject *
 PyObject_Call(PyObject *func, PyObject *arg, PyObject *kw)
 {
@@ -2538,6 +2567,7 @@ PyObject_Call(PyObject *func, PyObject *arg, PyObject *kw)
                  func->ob_type->tp_name);
     return NULL;
 }
+#endif
 
 static PyObject*
 call_function_tail(PyObject *callable, PyObject *args)
@@ -2566,7 +2596,7 @@ call_function_tail(PyObject *callable, PyObject *args)
 }
 
 PyObject *
-PyObject_CallFunction(PyObject *callable, char *format, ...)
+PyObject_CallFunction(PyObject *callable, const char *format, ...)
 {
     va_list va;
     PyObject *args;
@@ -2586,7 +2616,7 @@ PyObject_CallFunction(PyObject *callable, char *format, ...)
 }
 
 PyObject *
-_PyObject_CallFunction_SizeT(PyObject *callable, char *format, ...)
+_PyObject_CallFunction_SizeT(PyObject *callable, const char *format, ...)
 {
     va_list va;
     PyObject *args;
@@ -2605,8 +2635,10 @@ _PyObject_CallFunction_SizeT(PyObject *callable, char *format, ...)
     return call_function_tail(callable, args);
 }
 
+// pyston change: comment this out
+#if 0
 PyObject *
-PyObject_CallMethod(PyObject *o, char *name, char *format, ...)
+PyObject_CallMethod(PyObject *o, const char *name, const char *format, ...)
 {
     va_list va;
     PyObject *args;
@@ -2645,7 +2677,7 @@ PyObject_CallMethod(PyObject *o, char *name, char *format, ...)
 }
 
 PyObject *
-_PyObject_CallMethod_SizeT(PyObject *o, char *name, char *format, ...)
+_PyObject_CallMethod_SizeT(PyObject *o, const char *name, const char *format, ...)
 {
     va_list va;
     PyObject *args;
@@ -2682,9 +2714,11 @@ _PyObject_CallMethod_SizeT(PyObject *o, char *name, char *format, ...)
 
     return retval;
 }
+#endif
 
 
-static PyObject *
+// pyston change: removed the static keyword, this function is also used in src/capi/abstract.cpp
+PyObject *
 objargs_mktuple(va_list va)
 {
     int i, n = 0;
@@ -2714,6 +2748,8 @@ objargs_mktuple(va_list va)
     return result;
 }
 
+// pyston change: comment this out
+#if 0
 PyObject *
 PyObject_CallMethodObjArgs(PyObject *callable, PyObject *name, ...)
 {
@@ -2741,6 +2777,7 @@ PyObject_CallMethodObjArgs(PyObject *callable, PyObject *name, ...)
 
     return tmp;
 }
+#endif
 
 PyObject *
 PyObject_CallFunctionObjArgs(PyObject *callable, ...)
@@ -2792,7 +2829,9 @@ PyObject_CallFunctionObjArgs(PyObject *callable, ...)
  * When there's no exception to propagate, it's customary for the caller to
  * set a TypeError.
  */
-static PyObject *
+
+ // pyston change: removed the static keyword, this function is also used in src/capi/abstract.cpp
+PyObject *
 abstract_get_bases(PyObject *cls)
 {
     static PyObject *__bases__ = NULL;
@@ -2802,6 +2841,8 @@ abstract_get_bases(PyObject *cls)
         __bases__ = PyString_InternFromString("__bases__");
         if (__bases__ == NULL)
             return NULL;
+        // Pyston change:
+        PyGC_RegisterStaticConstant(__bases__);
     }
     bases = PyObject_GetAttr(cls, __bases__);
     if (bases == NULL) {
@@ -2854,7 +2895,8 @@ abstract_issubclass(PyObject *derived, PyObject *cls)
     }
 }
 
-static int
+// pyston change: removed the static keyword, this function is also used in src/capi/abstract.cpp
+int
 check_class(PyObject *cls, const char *error)
 {
     PyObject *bases = abstract_get_bases(cls);
@@ -2879,11 +2921,15 @@ recursive_isinstance(PyObject *inst, PyObject *cls)
         __class__ = PyString_InternFromString("__class__");
         if (__class__ == NULL)
             return -1;
+        // Pyston change:
+        PyGC_RegisterStaticConstant(__class__);
     }
 
     if (PyClass_Check(cls) && PyInstance_Check(inst)) {
-        PyObject *inclass =
-            (PyObject*)((PyInstanceObject*)inst)->in_class;
+        // Pyston change:
+        // PyObject *inclass =
+        //     (PyObject*)((PyInstanceObject*)inst)->in_class;
+        PyObject *inclass = PyInstance_Class(inst);
         retval = PyClass_IsSubclass(inclass, cls);
     }
     else if (PyType_Check(cls)) {
@@ -2922,6 +2968,8 @@ recursive_isinstance(PyObject *inst, PyObject *cls)
     return retval;
 }
 
+// pyston change: comment this out
+#if 0
 int
 PyObject_IsInstance(PyObject *inst, PyObject *cls)
 {
@@ -2974,8 +3022,10 @@ PyObject_IsInstance(PyObject *inst, PyObject *cls)
     }
     return recursive_isinstance(inst, cls);
 }
+#endif
 
-static  int
+// pyston change: removed the static keyword, this function is also used in src/capi/abstract.cpp
+int
 recursive_issubclass(PyObject *derived, PyObject *cls)
 {
     int retval;
@@ -3005,6 +3055,8 @@ recursive_issubclass(PyObject *derived, PyObject *cls)
     return retval;
 }
 
+// pyston change: comment this out
+#if 0
 int
 PyObject_IsSubclass(PyObject *derived, PyObject *cls)
 {
@@ -3059,6 +3111,7 @@ _PyObject_RealIsInstance(PyObject *inst, PyObject *cls)
 {
     return recursive_isinstance(inst, cls);
 }
+#endif
 
 int
 _PyObject_RealIsSubclass(PyObject *derived, PyObject *cls)
@@ -3066,7 +3119,8 @@ _PyObject_RealIsSubclass(PyObject *derived, PyObject *cls)
     return recursive_issubclass(derived, cls);
 }
 
-
+// pyston change: comment this out
+#if 0
 PyObject *
 PyObject_GetIter(PyObject *o)
 {
@@ -3111,3 +3165,4 @@ PyIter_Next(PyObject *iter)
         PyErr_Clear();
     return result;
 }
+#endif

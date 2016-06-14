@@ -1,3 +1,5 @@
+// This file is originally from CPython 2.7, with modifications for Pyston
+
 /*
 Written by Jim Hugunin and Chris Chase.
 
@@ -14,6 +16,9 @@ this type and there is exactly one in existence.
 */
 
 #include "Python.h"
+
+// pyston change: comment this out
+#if 0
 #include "structmember.h"
 
 static PyObject *
@@ -78,6 +83,7 @@ PySlice_New(PyObject *start, PyObject *stop, PyObject *step)
 
     return (PyObject *) obj;
 }
+#endif
 
 PyObject *
 _PySlice_FromIndices(Py_ssize_t istart, Py_ssize_t istop)
@@ -98,6 +104,8 @@ _PySlice_FromIndices(Py_ssize_t istart, Py_ssize_t istop)
     return slice;
 }
 
+// pyston change: comment this out
+#if 0
 int
 PySlice_GetIndices(PySliceObject *r, Py_ssize_t length,
                    Py_ssize_t *start, Py_ssize_t *stop, Py_ssize_t *step)
@@ -360,3 +368,4 @@ PyTypeObject PySlice_Type = {
     0,                                          /* tp_alloc */
     slice_new,                                  /* tp_new */
 };
+#endif

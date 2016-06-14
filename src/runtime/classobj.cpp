@@ -215,6 +215,12 @@ extern "C" PyObject* PyInstance_New(PyObject* klass, PyObject* arg, PyObject* kw
     }
 }
 
+extern "C" BORROWED(PyObject*) PyInstance_Class(PyObject* _inst) noexcept {
+    RELEASE_ASSERT(PyInstance_Check(_inst), "");
+    BoxedInstance* inst = (BoxedInstance*)_inst;
+    return inst->inst_cls;
+}
+
 static Box* classobjGetattribute(Box* _cls, Box* _attr) {
     RELEASE_ASSERT(_cls->cls == classobj_cls, "");
     BoxedClassobj* cls = static_cast<BoxedClassobj*>(_cls);

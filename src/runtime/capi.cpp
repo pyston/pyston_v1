@@ -1906,6 +1906,38 @@ extern "C" int PyCFunction_ClearFreeList() noexcept {
     return 0; // number of entries cleared
 }
 
+extern "C" int PyNumber_Coerce(PyObject** pv, PyObject** pw) noexcept {
+    int err = PyNumber_CoerceEx(pv, pw);
+    if (err <= 0)
+        return err;
+    PyErr_SetString(PyExc_TypeError, "number coercion failed");
+    return -1;
+}
+
+extern "C" int PyNumber_CoerceEx(PyObject** pv, PyObject** pw) noexcept {
+    PyObject* v = *pv;
+    PyObject* w = *pw;
+    int res;
+
+    /* Shortcut only for old-style types */
+    if (v->cls == w->cls && !PyType_HasFeature(v->cls, Py_TPFLAGS_CHECKTYPES)) {
+        Py_INCREF(v);
+        Py_INCREF(w);
+        return 0;
+    }
+    if (v->cls->tp_as_number && v->cls->tp_as_number->nb_coerce) {
+        res = (*v->cls->tp_as_number->nb_coerce)(pv, pw);
+        if (res <= 0)
+            return res;
+    }
+    if (w->cls->tp_as_number && w->cls->tp_as_number->nb_coerce) {
+        res = (*w->cls->tp_as_number->nb_coerce)(pw, pv);
+        if (res <= 0)
+            return res;
+    }
+    return 1;
+}
+
 void setupCAPI() {
     capifunc_cls->giveAttr(
         "__repr__", new BoxedFunction(FunctionMetadata::create((void*)BoxedCApiFunction::__repr__<CXX>, UNKNOWN, 1)));

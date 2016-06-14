@@ -64,8 +64,12 @@ PyAPI_FUNC(BORROWED(PyObject *)) PyClass_Name(PyObject *) PYSTON_NOEXCEPT;
 
 PyAPI_FUNC(PyObject *) PyInstance_New(PyObject *, PyObject *,
                                             PyObject *) PYSTON_NOEXCEPT;
+
 PyAPI_FUNC(PyObject *) PyInstance_NewRaw(PyObject *, PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyMethod_New(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
+
+// Pyston change: pyston addition returns PyInstanceObject->in_class
+PyAPI_FUNC(BORROWED(PyObject*)) PyInstance_Class(PyObject* _inst) PYSTON_NOEXCEPT;
 
 PyAPI_FUNC(PyObject *) PyMethod_Function(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyMethod_Self(PyObject *) PYSTON_NOEXCEPT;
@@ -107,4 +111,3 @@ PyAPI_FUNC(int) PyMethod_ClearFreeList(void) PYSTON_NOEXCEPT;
 }
 #endif
 #endif /* !Py_CLASSOBJECT_H */
-
