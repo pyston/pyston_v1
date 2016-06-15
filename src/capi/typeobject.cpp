@@ -702,15 +702,17 @@ static long slot_tp_hash(PyObject* self) noexcept {
 PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
     STAT_TIMER(t0, "us_timer_slot_tpcall", SLOT_AVOIDABILITY(self));
 
-    try {
-        Py_FatalError("this function is untested");
+    static PyObject* call_str;
+    PyObject* meth = lookup_method(self, "__call__", &call_str);
+    PyObject* res;
 
-        // TODO: runtime ICs?
-        return runtimeCall(self, ArgPassSpec(0, 0, true, true), args, kwds, NULL, NULL, NULL);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
+    if (meth == NULL)
         return NULL;
-    }
+
+    res = PyObject_Call(meth, args, kwds);
+
+    Py_DECREF(meth);
+    return res;
 }
 
 static const char* name_op[] = {
