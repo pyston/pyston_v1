@@ -136,10 +136,13 @@ public:
     static Box* lineno(Box* obj, void*) noexcept {
         auto f = static_cast<BoxedFrame*>(obj);
 
-        if (f->hasExited())
+        if (f->hasExited()) {
+            ASSERT(f->_linenumber > 0 && f->_linenumber < 1000000, "%d", f->_linenumber);
             return boxInt(f->_linenumber);
+        }
 
         AST_stmt* stmt = f->frame_info->stmt;
+        ASSERT(stmt->lineno > 0 && stmt->lineno < 1000000, "%d", stmt->lineno);
         return boxInt(stmt->lineno);
     }
 
@@ -153,6 +156,7 @@ public:
         globals(this, NULL);
         assert(!_locals);
         _locals = incref(locals(this, NULL));
+        ASSERT(frame_info->stmt->lineno > 0 && frame_info->stmt->lineno < 1000000, "%d", frame_info->stmt->lineno);
         _linenumber = frame_info->stmt->lineno;
 
         frame_info = NULL; // this means exited == true

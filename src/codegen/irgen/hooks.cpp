@@ -403,6 +403,7 @@ static FunctionMetadata* compileEval(AST_Expression* parsedExpr, BoxedString* fn
     // We need body (list of statements) to compile.
     // Obtain this by simply making a single statement which contains the expression.
     AST_Return* stmt = new AST_Return();
+    stmt->lineno = parsedExpr->body->lineno;
     stmt->value = parsedExpr->body;
     std::vector<AST_stmt*> body = { stmt };
 

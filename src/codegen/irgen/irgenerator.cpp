@@ -1240,6 +1240,7 @@ private:
     CompilerVariable* evalLambda(AST_Lambda* node, const UnwindInfo& unw_info) {
         AST_Return* expr = new AST_Return();
         expr->value = node->body;
+        expr->lineno = node->body->lineno;
 
         std::vector<AST_stmt*> body = { expr };
         CompilerVariable* func = _createFunction(node, unw_info, node->args, body);
@@ -2270,6 +2271,8 @@ private:
             opt_rtn_type = val->getConcreteType();
 
         ConcreteCompilerVariable* rtn = val->makeConverted(emitter, opt_rtn_type);
+
+        emitter.emitSetCurrentStmt(node);
 
         if (!irstate->getCurFunction()->entry_descriptor)
             emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
