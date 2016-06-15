@@ -64,17 +64,12 @@ public:
     };
 
 private:
-    ICSetupInfo(ICType type, int num_slots, int slot_size, bool has_return_value, TypeRecorder* type_recorder)
-        : type(type),
-          num_slots(num_slots),
-          slot_size(slot_size),
-          has_return_value(has_return_value),
-          type_recorder(type_recorder) {}
+    ICSetupInfo(ICType type, int size, bool has_return_value, TypeRecorder* type_recorder)
+        : type(type), size(size), has_return_value(has_return_value), type_recorder(type_recorder) {}
 
 public:
     const ICType type;
-
-    const int num_slots, slot_size;
+    const int size;
     const bool has_return_value;
     TypeRecorder* const type_recorder;
 
@@ -95,8 +90,7 @@ public:
         return llvm::CallingConv::C;
     }
 
-    static ICSetupInfo* initialize(bool has_return_value, int num_slots, int slot_size, ICType type,
-                                   TypeRecorder* type_recorder);
+    static ICSetupInfo* initialize(bool has_return_value, int size, ICType type, TypeRecorder* type_recorder);
 };
 
 struct PatchpointInfo {

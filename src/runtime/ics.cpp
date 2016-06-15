@@ -188,7 +188,7 @@ static void writeTrivialEhFrame(void* eh_frame_addr, void* func_addr, uint64_t f
 #define SCRATCH_BYTES 0x30
 #endif
 
-RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) {
+RuntimeIC::RuntimeIC(void* func_addr, int patchable_size) {
     static StatCounter sc("runtime_ics_num");
     sc.log();
 
@@ -228,8 +228,6 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) {
 #endif
         static const int CALL_SIZE = 13;
 
-        int patchable_size = num_slots * slot_size;
-
         int total_code_size = PROLOGUE_SIZE + patchable_size + CALL_SIZE + EPILOGUE_SIZE;
 
 #ifdef NVALGRIND
@@ -248,7 +246,7 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) {
         // printf("Allocated runtime IC at %p\n", addr);
 
         std::unique_ptr<ICSetupInfo> setup_info(
-            ICSetupInfo::initialize(true, num_slots, slot_size, ICSetupInfo::Generic, NULL));
+            ICSetupInfo::initialize(true, patchable_size, ICSetupInfo::Generic, NULL));
         uint8_t* pp_start = (uint8_t*)addr + PROLOGUE_SIZE;
         uint8_t* pp_end = pp_start + patchable_size + CALL_SIZE;
 

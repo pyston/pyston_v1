@@ -502,8 +502,11 @@ protected:
     }
 
     int last_guard_action;
-    int offset_eq_jmp_slowpath;
-    int offset_ne_jmp_slowpath;
+    int offset_eq_jmp_next_slot;
+    int offset_ne_jmp_next_slot;
+
+    // keeps track of all jumps to the next slot so we can patch them if the size of the current slot changes
+    std::vector<NextSlotJumpInfo> next_slot_jmps;
 
     // Move the original IC args back into their original registers:
     void restoreArgs();
@@ -535,9 +538,9 @@ protected:
     // Do the bookkeeping to say that var is no longer in location l
     void removeLocationFromVar(RewriterVar* var, Location l);
 
-    bool finishAssembly(int continue_offset) override;
+    bool finishAssembly(int continue_offset, bool& should_fill_with_nops, bool& variable_size_slots) override;
 
-    void _slowpathJump(bool condition_eq);
+    void _nextSlotJump(bool condition_eq);
     void _trap();
     void _loadConst(RewriterVar* result, int64_t val);
     void _setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> args = {},

@@ -206,6 +206,7 @@ public:
     uint8_t* startAddr() const { return start_addr; }
     int bytesLeft() const { return end_addr - addr; }
     int bytesWritten() const { return addr - start_addr; }
+    int size() const { return end_addr - start_addr; }
     uint8_t* curInstPointer() { return addr; }
     void setCurInstPointer(uint8_t* ptr) { addr = ptr; }
     bool isExactlyFull() const { return addr == end_addr; }

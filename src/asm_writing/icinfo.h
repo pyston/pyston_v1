@@ -15,10 +15,12 @@
 #ifndef PYSTON_ASMWRITING_ICINFO_H
 #define PYSTON_ASMWRITING_ICINFO_H
 
+#include <deque>
 #include <memory>
 #include <unordered_set>
 #include <vector>
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/IR/CallingConv.h"
 
 #include "asm_writing/assembler.h"
@@ -55,11 +57,15 @@ struct DecrefInfo {
 
 struct ICSlotInfo {
 public:
-    ICSlotInfo(ICInfo* ic, int idx) : ic(ic), idx(idx), num_inside(0) {}
+    ICSlotInfo(ICInfo* ic, uint8_t* addr, int size)
+        : ic(ic), start_addr(addr), num_inside(0), size(size), used(false) {}
 
     ICInfo* ic;
-    int idx;        // the index inside the ic
-    int num_inside; // the number of stack frames that are currently inside this slot
+    uint8_t* start_addr;
+    int num_inside; // the number of stack frames that are currently inside this slot will also get increased during a
+                    // rewrite
+    int size;
+    bool used; // if this slot is empty or got invalidated
 
     std::vector<void*> gc_references;
     std::vector<DecrefInfo> decref_infos;
@@ -68,59 +74,12 @@ public:
     void clear();
 };
 
-class ICSlotRewrite {
-public:
-    class CommitHook {
-    public:
-        virtual ~CommitHook() {}
-        virtual bool finishAssembly(int fastpath_offset) = 0;
-    };
-
-private:
-    ICInfo* ic;
-    const char* debug_name;
-
-    uint8_t* buf;
-
-    assembler::Assembler assembler;
-
-    llvm::SmallVector<std::pair<ICInvalidator*, int64_t>, 4> dependencies;
-
-    ICSlotInfo* ic_entry;
-
-public:
-    ICSlotRewrite(ICInfo* ic, const char* debug_name);
-    ~ICSlotRewrite();
-
-    assembler::Assembler* getAssembler() { return &assembler; }
-    int getSlotSize();
-    int getScratchRspOffset();
-    int getScratchSize();
-    uint8_t* getSlotStart();
-
-    TypeRecorder* getTypeRecorder();
-
-    assembler::GenericRegister returnRegister();
-
-    ICSlotInfo* prepareEntry();
-
-    void addDependenceOn(ICInvalidator&);
-    void commit(CommitHook* hook, std::vector<void*> gc_references,
-                std::vector<std::pair<uint64_t, std::vector<Location>>> decref_infos);
-    void abort();
-
-    const ICInfo* getICInfo() { return ic; }
-
-    const char* debugName() { return debug_name; }
-
-    friend class ICInfo;
-};
-
 typedef BitSet<16> LiveOutSet;
 
+class ICSlotRewrite;
 class ICInfo {
 private:
-    std::vector<ICSlotInfo> slots;
+    std::deque<ICSlotInfo> slots;
     // For now, just use a round-robin eviction policy.
     // This is probably a bunch worse than LRU, but it's also
     // probably a bunch better than the "always evict slot #0" policy
@@ -129,8 +88,6 @@ private:
     int next_slot_to_try;
 
     const StackInfo stack_info;
-    const int num_slots;
-    const int slot_size;
     const llvm::CallingConv::ID calling_conv;
     LiveOutSet live_outs;
     const assembler::GenericRegister return_register;
@@ -148,15 +105,15 @@ private:
     ICSlotInfo* pickEntryForRewrite(const char* debug_name);
 
 public:
-    ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int num_slots,
-           int slot_size, llvm::CallingConv::ID calling_conv, LiveOutSet live_outs,
-           assembler::GenericRegister return_register, TypeRecorder* type_recorder,
-           std::vector<Location> ic_global_decref_locations);
+    ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int size,
+           llvm::CallingConv::ID calling_conv, LiveOutSet live_outs, assembler::GenericRegister return_register,
+           TypeRecorder* type_recorder, std::vector<Location> ic_global_decref_locations);
     ~ICInfo();
     void* const start_addr, *const slowpath_rtn_addr, *const continue_addr;
 
-    int getSlotSize() { return slot_size; }
-    int getNumSlots() { return num_slots; }
+    // returns a suggestion about how large this IC should be based on the number of used slots
+    int calculateSuggestedSize();
+
     llvm::CallingConv::ID getCallingConvention() { return calling_conv; }
     const LiveOutSet& getLiveOuts() { return live_outs; }
 
@@ -182,6 +139,54 @@ public:
     void associateNodeWithICInfo(AST* node);
 
     void appendDecrefInfosTo(std::vector<DecrefInfo>& dest_decref_infos);
+};
+
+typedef std::tuple<int /*offset of jmp instr*/, int /*end of jmp instr*/, assembler::ConditionCode> NextSlotJumpInfo;
+
+class ICSlotRewrite {
+public:
+    class CommitHook {
+    public:
+        virtual ~CommitHook() {}
+        virtual bool finishAssembly(int fastpath_offset, bool& should_fill_with_nops, bool& variable_size_slots) = 0;
+    };
+
+private:
+    ICSlotInfo* ic_entry;
+    const char* debug_name;
+    uint8_t* buf;
+    assembler::Assembler assembler;
+    llvm::SmallVector<std::pair<ICInvalidator*, int64_t>, 4> dependencies;
+
+    ICSlotRewrite(ICSlotInfo* ic_entry, const char* debug_name);
+
+public:
+    static std::unique_ptr<ICSlotRewrite> create(ICInfo* ic, const char* debug_name);
+
+    ~ICSlotRewrite();
+
+    const char* debugName() { return debug_name; }
+    assembler::Assembler* getAssembler() { return &assembler; }
+    ICInfo* getICInfo() { return ic_entry->ic; }
+    int getSlotSize() { return ic_entry->size; }
+    uint8_t* getSlotStart() { return ic_entry->start_addr; }
+    TypeRecorder* getTypeRecorder() { return getICInfo()->type_recorder; }
+    assembler::GenericRegister returnRegister() { return getICInfo()->return_register; }
+    int getScratchSize() { return getICInfo()->stack_info.scratch_size; }
+    int getScratchRspOffset() {
+        assert(getICInfo()->stack_info.scratch_size);
+        return getICInfo()->stack_info.scratch_rsp_offset;
+    }
+
+    ICSlotInfo* prepareEntry() { return (ic_entry && ic_entry->num_inside == 1) ? ic_entry : NULL; }
+
+    void addDependenceOn(ICInvalidator&);
+    void commit(CommitHook* hook, std::vector<void*> gc_references,
+                std::vector<std::pair<uint64_t, std::vector<Location>>> decref_infos,
+                llvm::ArrayRef<NextSlotJumpInfo> next_slot_jumps);
+    void abort();
+
+    friend class ICInfo;
 };
 
 inline void registerGCTrackedICInfo(ICInfo* ic) {

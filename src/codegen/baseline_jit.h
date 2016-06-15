@@ -302,7 +302,7 @@ public:
     void abortCompilation();
     int finishCompilation();
 
-    bool finishAssembly(int continue_offset) override;
+    bool finishAssembly(int continue_offset, bool& should_fill_with_nops, bool& variable_size_slots) override;
 
 private:
     RewriterVar* allocArgs(const llvm::ArrayRef<RewriterVar*> args, RewriterVar::SetattrType);
@@ -319,8 +319,8 @@ private:
     RewriterVar* emitCallWithAllocatedArgs(void* func_addr, const llvm::ArrayRef<RewriterVar*> args,
                                            const llvm::ArrayRef<RewriterVar*> additional_uses);
     std::pair<RewriterVar*, RewriterAction*> emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args,
-                                                        unsigned char num_slots, unsigned short slot_size,
-                                                        AST* ast_node = NULL, TypeRecorder* type_recorder = NULL,
+                                                        unsigned short pp_size, AST* ast_node = NULL,
+                                                        TypeRecorder* type_recorder = NULL,
                                                         llvm::ArrayRef<RewriterVar*> additional_uses = {});
 
     static void assertNameDefinedHelper(const char* id);
@@ -340,8 +340,8 @@ private:
     void _emitGetLocal(RewriterVar* val_var, const char* name);
     void _emitJump(CFGBlock* b, RewriterVar* block_next, ExitInfo& exit_info);
     void _emitOSRPoint();
-    void _emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args, int num_slots,
-                     int slot_size, AST* ast_node, llvm::ArrayRef<RewriterVar*> vars_to_bump);
+    void _emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args, unsigned short pp_size,
+                     AST* ast_node, llvm::ArrayRef<RewriterVar*> vars_to_bump);
     void _emitRecordType(RewriterVar* type_recorder_var, RewriterVar* obj_cls_var);
     void _emitReturn(RewriterVar* v);
     void _emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val_constant, CFGBlock* next_block,
