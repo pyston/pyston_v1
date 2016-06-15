@@ -9,15 +9,33 @@ def get_objdump(func):
     for l in open(args.perf_map_dir + "/index.txt"):
         addr, this_func = l.split()
         if this_func == func:
-            # print ' '.join(["objdump", "-b", "binary", "-m", "i386", "-D", "perf_map/" + func, "--adjust-vma=0x%s" % addr])
-            p = subprocess.Popen(["objdump", "-b", "binary", "-m", "i386:x86-64", "-D", args.perf_map_dir + "/" + func, "--adjust-vma=0x%s" % addr], stdout=subprocess.PIPE)
+            obj_args = ["objdump", "-b", "binary", "-m", "i386:x86-64", "-D", args.perf_map_dir + "/" + func, "--adjust-vma=0x%s" % addr]
+            if not args.print_raw_bytes:
+                obj_args += ["--no-show-raw"]
+            p = subprocess.Popen(obj_args, stdout=subprocess.PIPE)
             r = p.communicate()[0]
             assert p.wait() == 0
             return r
-
     raise Exception("Couldn't find function %r to objdump" % func)
 
+def getNameForAddr(addr):
+    for l in open(args.perf_map_dir + "/index.txt"):
+        this_addr, this_func = l.split()
+        if int(this_addr, 16) == addr:
+            return this_func
+    raise Exception("Couldn't find function with addr %x" % addr)
+
 _symbols = None
+
+def demangle(sym):
+    if os.path.exists("tools/demangle"):
+        demangled = commands.getoutput("tools/demangle %s" % sym)
+        if demangled == "Error: unable to demangle":
+            demangled = sym
+    else:
+        demangled = commands.getoutput("c++filt %s" % sym)
+    return demangled
+
 def lookupAsSymbol(n):
     global _symbols
     if _symbols is None:
@@ -31,12 +49,11 @@ def lookupAsSymbol(n):
     if not sym:
         return sym
 
-    demangled = None
-    if sym.startswith('_') and os.path.exists("tools/demangle"):
-        demangled = commands.getoutput("tools/demangle %s" % sym)
-        if demangled != "Error: unable to demangle":
-            return demangled
-    return sym + "()"
+    if sym.startswith('_'):
+        demangled = demangle(sym)
+        # perf report does not like '<'
+        return demangled.replace("<", "_")
+    return sym
 
 _heap_proc = None
 heapmap_args = None
@@ -81,13 +98,33 @@ def lookupAsHeapAddr(n):
 def lookupConstant(n):
     sym = lookupAsSymbol(n)
     if sym:
-        return "# " + sym
+        return "; " + sym
 
     heap = lookupAsHeapAddr(n)
     if heap:
-        return "# " + heap
+        return "; " + heap
 
     return ""
+
+def getCommentForInst(inst):
+    patterns = ["movabs \\$0x([0-9a-f]+),",
+                "mov    \\$0x([0-9a-f]+),",
+                "cmpq   \\$0x([0-9a-f]+),",
+                "callq  0x([0-9a-f]+)",
+                ]
+
+    for pattern in patterns:
+        m = re.search(pattern, inst)
+        if m:
+            n = int(m.group(1), 16)
+            if n:
+                return lookupConstant(n)
+    return None
+
+def printLine(count, inst, extra = ""):
+    if args.print_perf_counts:
+        print str(count).rjust(8),
+    print inst.ljust(70), extra
 
 if __name__ == "__main__":
     # TODO: if it's not passed, maybe default to annotating the
@@ -95,7 +132,7 @@ if __name__ == "__main__":
     # the time is spent)?
 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument("func_name", metavar="FUNC_NAME")
+    parser.add_argument("func_name", metavar="FUNC_NAME_OR_ADDR", help="name or address of function to inspect")
     parser.add_argument("--collapse-nops", dest="collapse_nops", action="store", default=5, type=int)
     parser.add_argument("--no-collapse-nops", dest="collapse_nops", action="store_false")
     parser.add_argument("--heap-map-args", nargs='+', help="""
@@ -109,9 +146,18 @@ equivalent to '--heap-map-args ./pyston_release -i BENCHMARK'.
     """.strip())
     parser.add_argument("--perf-data", default="perf.data")
     parser.add_argument("--perf-map-dir", default="perf_map")
+    parser.add_argument("--print-raw-bytes", default=True, action='store_true')
+    parser.add_argument("--no-print-raw-bytes", dest="print_raw_bytes", action='store_false')
+    parser.add_argument("--print-perf-counts", default=True, action='store_true')
+    parser.add_argument("--no-print-perf-counts", dest="print_perf_counts", action='store_false')
     args = parser.parse_args()
 
-    func = args.func_name
+    if args.func_name.lower().startswith("0x"):
+        addr = int(args.func_name, 16)
+        func = getNameForAddr(addr)
+    else:
+        func = args.func_name
+
     if args.heap_map_args:
         heapmap_args = args.heap_map_args
     elif args.heap_map_target:
@@ -134,39 +180,26 @@ equivalent to '--heap-map-args ./pyston_release -i BENCHMARK'.
 
         counts[addr] = int(count)
 
-    nops = None # (count, num, start, end)
+    nop_lines = [] # list of tuple(int(count), str(line))
     for l in objdump.split('\n')[7:]:
         addr = l.split(':')[0]
         count = counts.pop(addr.strip(), 0)
-
-        extra = ""
-
-        m = re.search("movabs \\$0x([0-9a-f]{4,}),", l)
-        if m:
-            n = int(m.group(1), 16)
-            extra = lookupConstant(n)
-
-        m = re.search("mov    \\$0x([0-9a-f]{4,}),", l)
-        if m:
-            n = int(m.group(1), 16)
-            extra = lookupConstant(n)
+        extra = getCommentForInst(l) or ""
 
         if args.collapse_nops and l.endswith("\tnop"):
-            addr = l.split()[0][:-1]
-            if not nops:
-                nops = (count, 1, addr, addr)
-            else:
-                nops = (nops[0] + count, nops[1] + 1, nops[2], addr)
+            nop_lines.append((count, l))
         else:
-            if nops:
-                if int(nops[3], 16) - int(nops[2], 16) + 1 <= args.collapse_nops:
-                    nop_count = nops[0]
-                    for addr in xrange(int(nops[2], 16), int(nops[3], 16) + 1):
-                        print str(nop_count).rjust(8), ("    %s              nop" % ("%x:      90" % addr).ljust(29)).ljust(70)
-                        nop_count = 0
+            if len(nop_lines):
+                if len(nop_lines) <= args.collapse_nops:
+                    for nop in nop_lines:
+                        printLine(nop[0], nop[1])
                 else:
-                    print str(nops[0]).rjust(8), ("    %s              nop*%d" % (("%s-%s" % (nops[2], nops[3])).ljust(29), nops[1])).ljust(70)
-                nops = None
-            print str(count).rjust(8), l.ljust(70), extra
+                    sum_count = sum([nop[0] for nop in nop_lines])
+                    addr_start = int(nop_lines[0][1].split(':')[0], 16)
+                    addr_end = int(nop_lines[-1][1].split(':')[0], 16)
+                    addr_range = ("%x-%x" % (addr_start, addr_end)).ljust(29)
+                    printLine(sum_count, "    %s              nop*%d" % (addr_range, len(nop_lines)))
+                nop_lines = []
+            printLine(count, l, extra)
 
     assert not counts, counts

@@ -819,7 +819,7 @@ endef
 
 .PHONY: perf_report
 perf_report:
-	perf report -n
+	perf report -n --objdump=tools/perf_jit.py
 
 .PHONY: run run_% dbg_% debug_% perf_%
 run: run_dbg
