@@ -1195,7 +1195,7 @@ extern "C" void _PyTrash_thread_destroy_chain() noexcept {
  */
 extern "C" {
 // static PyObject refchain = { &refchain, &refchain };
-static PyObject refchain(Box::createRefchain());
+PyObject refchain(Box::createRefchain());
 }
 
 /* Insert op at the front of the list of all objects.  If force is true,

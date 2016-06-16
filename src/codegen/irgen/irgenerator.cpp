@@ -403,7 +403,8 @@ private:
             if (exc_dest) {
                 builder.CreateInvoke(g.funcs.makePendingCalls, join_block, exc_dest);
             } else {
-                builder.CreateCall(g.funcs.makePendingCalls);
+                auto call = builder.CreateCall(g.funcs.makePendingCalls);
+                irstate->getRefcounts()->setMayThrow(call);
                 builder.CreateBr(join_block);
             }
         }
@@ -676,10 +677,10 @@ public:
 
     llvm::Value* createDeopt(AST_stmt* current_stmt, AST_expr* node, llvm::Value* node_value) override {
         ICSetupInfo* pp = createDeoptIC();
-        llvm::Value* v
+        llvm::Instruction* v
             = createIC(pp, (void*)pyston::deopt, { embedRelocatablePtr(node, g.llvm_astexpr_type_ptr), node_value },
                        UnwindInfo(current_stmt, NULL, /* is_after_deopt*/ true));
-        llvm::Value* rtn = getBuilder()->CreateIntToPtr(v, g.llvm_value_type_ptr);
+        llvm::Value* rtn = createAfter<llvm::IntToPtrInst>(v, v, g.llvm_value_type_ptr, "");
         setType(rtn, RefType::OWNED);
         return rtn;
     }
@@ -1293,8 +1294,8 @@ private:
             llvm_args.push_back(emitter.setType(embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr),
                                                 RefType::BORROWED));
 
-            llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::getGlobal, llvm_args, unw_info);
-            llvm::Value* r = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+            llvm::Instruction* uncasted = emitter.createIC(pp, (void*)pyston::getGlobal, llvm_args, unw_info);
+            llvm::Value* r = createAfter<llvm::IntToPtrInst>(uncasted, uncasted, g.llvm_value_type_ptr, "");
             emitter.setType(r, RefType::OWNED);
             return new ConcreteCompilerVariable(UNKNOWN, r);
         } else {
@@ -1432,9 +1433,9 @@ private:
         ConcreteCompilerVariable* cvar = var->makeConverted(emitter, var->getBoxType());
 
         std::vector<llvm::Value*> args{ cvar->getValue() };
-        llvm::Value* rtn = emitter.createCall(unw_info, g.funcs.repr, args);
-        emitter.setType(rtn, RefType::BORROWED); // Well, really it's owned, and we handoff the ref to the bitcast
-        rtn = emitter.getBuilder()->CreateBitCast(rtn, g.llvm_value_type_ptr);
+        llvm::Instruction* uncasted = emitter.createCall(unw_info, g.funcs.repr, args);
+        emitter.setType(uncasted, RefType::BORROWED); // Well, really it's owned, and we handoff the ref to the bitcast
+        auto rtn = createAfter<llvm::BitCastInst>(uncasted, uncasted, g.llvm_value_type_ptr, "");
         emitter.setType(rtn, RefType::OWNED);
 
         return new ConcreteCompilerVariable(STR, rtn);

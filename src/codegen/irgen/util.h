@@ -19,6 +19,8 @@
 
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instructions.h"
 
 namespace llvm {
 class Constant;
@@ -46,6 +48,20 @@ const void* getValueOfRelocatableSym(const std::string& str);
 void visitRelocatableSymsMap(gc::GCVisitor* visitor);
 
 void dumpPrettyIR(llvm::Function* f);
+
+// Insert an instruction at the first valid point *after* the given instruction.
+// The non-triviality of this is that if the given instruction is an invoke, we have
+// to be careful about where we place the new instruction -- this puts it on the
+// normal-case destination.
+//
+// Note: I wish the `create_after` argument could be placed after the `Args... args` one.
+// And I think that that should be valid, but clang doesn't seem to be accepting it.
+template <typename T, typename... Args> T* createAfter(llvm::Instruction* create_after, Args... args) {
+    if (llvm::InvokeInst* ii = llvm::dyn_cast<llvm::InvokeInst>(create_after)) {
+        return new T(args..., ii->getNormalDest()->getFirstInsertionPt());
+    } else
+        return new T(args..., create_after->getNextNode());
+}
 }
 
 #endif

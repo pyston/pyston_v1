@@ -373,10 +373,10 @@ public:
             llvm_args.push_back(var->getValue());
             llvm_args.push_back(converted_slice->getValue());
 
-            llvm::Value* uncasted
+            llvm::Instruction* uncasted
                 = emitter.createIC(pp, (void*)(target_exception_style == CAPI ? pyston::getitem_capi : pyston::getitem),
                                    llvm_args, info.unw_info, target_exception_style, getNullPtr(g.llvm_value_type_ptr));
-            rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+            rtn = createAfter<llvm::IntToPtrInst>(uncasted, uncasted, g.llvm_value_type_ptr, "");
             emitter.setType(rtn, RefType::OWNED);
         } else {
             rtn = emitter.createCall2(
@@ -419,9 +419,9 @@ public:
         // var has __iter__()
         emitter.setCurrentBasicBlock(bb_has_iter);
         ICSetupInfo* pp = createGenericIC(info.getTypeRecorder(), true, 128);
-        llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::createBoxedIterWrapperIfNeeded,
-                                                 { converted_iter_call->getValue() }, info.unw_info);
-        llvm::Value* value_has_iter = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+        llvm::Instruction* uncasted = emitter.createIC(pp, (void*)pyston::createBoxedIterWrapperIfNeeded,
+                                                       { converted_iter_call->getValue() }, info.unw_info);
+        llvm::Value* value_has_iter = createAfter<llvm::IntToPtrInst>(uncasted, uncasted, g.llvm_value_type_ptr, "");
         emitter.setType(value_has_iter, RefType::OWNED);
         llvm::BasicBlock* value_has_iter_bb = emitter.currentBasicBlock();
         auto has_iter_terminator = emitter.getBuilder()->CreateBr(bb_join);
@@ -475,8 +475,8 @@ public:
             llvm_args.push_back(converted_rhs->getValue());
             llvm_args.push_back(getConstantInt(op_type, g.i32));
 
-            llvm::Value* uncasted = emitter.createIC(pp, rt_func_addr, llvm_args, info.unw_info);
-            rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+            llvm::Instruction* uncasted = emitter.createIC(pp, rt_func_addr, llvm_args, info.unw_info);
+            rtn = createAfter<llvm::IntToPtrInst>(uncasted, uncasted, g.llvm_value_type_ptr, "");
         } else {
             rtn = emitter.createCall3(info.unw_info, rt_func, var->getValue(), converted_rhs->getValue(),
                                       getConstantInt(op_type, g.i32));
@@ -562,9 +562,9 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
         llvm_args.push_back(var->getValue());
         llvm_args.push_back(ptr);
 
-        llvm::Value* uncasted = emitter.createIC(pp, raw_func, llvm_args, info.unw_info, target_exception_style,
-                                                 getNullPtr(g.llvm_value_type_ptr));
-        rtn_val = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+        llvm::Instruction* uncasted = emitter.createIC(pp, raw_func, llvm_args, info.unw_info, target_exception_style,
+                                                       getNullPtr(g.llvm_value_type_ptr));
+        rtn_val = createAfter<llvm::IntToPtrInst>(uncasted, uncasted, g.llvm_value_type_ptr, "");
     } else {
         rtn_val = emitter.createCall2(info.unw_info, llvm_func, var->getValue(), ptr, target_exception_style,
                                       getNullPtr(g.llvm_value_type_ptr));
@@ -666,7 +666,7 @@ _call(IREmitter& emitter, const OpInfo& info, llvm::Value* func, ExceptionStyle 
 
         assert(llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(func->getType())->getElementType())
                    ->getReturnType() == g.llvm_value_type_ptr);
-        rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+        rtn = createAfter<llvm::IntToPtrInst>(uncasted, uncasted, g.llvm_value_type_ptr, "");
     } else {
         // printf("\n");
         // func->dump();
@@ -792,8 +792,8 @@ ConcreteCompilerVariable* UnknownType::unaryop(IREmitter& emitter, const OpInfo&
         llvm_args.push_back(converted->getValue());
         llvm_args.push_back(getConstantInt(op_type, g.i32));
 
-        llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::unaryop, llvm_args, info.unw_info);
-        rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+        llvm::Instruction* uncasted = emitter.createIC(pp, (void*)pyston::unaryop, llvm_args, info.unw_info);
+        rtn = createAfter<llvm::IntToPtrInst>(uncasted, uncasted, g.llvm_value_type_ptr, "");
     } else {
         rtn = emitter.createCall2(info.unw_info, g.funcs.unaryop, converted->getValue(),
                                   getConstantInt(op_type, g.i32));

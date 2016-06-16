@@ -53,6 +53,26 @@ static int numPredecessors(llvm::BasicBlock* b) {
 llvm::Value* RefcountTracker::setType(llvm::Value* v, RefType reftype) {
     assert(!llvm::isa<llvm::UndefValue>(v));
 
+    // Force tracked cast expressions to be immediately after the thing they cast.
+    // Otherwise there is the opportunity for things to happen between them, which
+    // may cause the refcount state to be examined, and the setType() call will not
+    // be seen yet.
+    //
+    // We could relax this restriction by looking through the cast, or by requiring
+    // the caller to also call setType() on the uncasted value.  This is a simpler
+    // fix for now though.
+    if (llvm::CastInst* cast = llvm::dyn_cast<llvm::CastInst>(v)) {
+        auto uncasted = cast->getOperand(0);
+        auto uncasted_inst = llvm::cast<llvm::Instruction>(uncasted);
+        auto uncasted_invoke = llvm::dyn_cast<llvm::InvokeInst>(uncasted_inst);
+        if (uncasted_invoke)
+            assert(uncasted_invoke->getNormalDest()->getFirstNonPHI() == cast
+                   && "Refcount-tracked casts must be immediately after the value they cast");
+        else
+            assert(uncasted_inst->getNextNode() == cast
+                   && "Refcount-tracked casts must be immediately after the value they cast");
+    }
+
     auto& var = this->vars[v];
 
     assert(var.reftype == reftype || var.reftype == RefType::UNKNOWN);
@@ -898,6 +918,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 if (state.ending_refs[inst] != starting_refs) {
                     llvm::Instruction* insertion_pt = NULL;
                     llvm::BasicBlock* insertion_block = NULL, * insertion_from_block = NULL;
+                    assert(inst != inst->getParent()->getTerminator());
                     insertion_pt = inst->getNextNode();
                     while (llvm::isa<llvm::PHINode>(insertion_pt)) {
                         insertion_pt = insertion_pt->getNextNode();

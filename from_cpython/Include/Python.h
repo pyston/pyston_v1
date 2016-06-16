@@ -145,6 +145,16 @@ PyAPI_FUNC(PyObject*) _PyGC_GetGarbage(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyGC_Enable(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyGC_Disable(void) PYSTON_NOEXCEPT;
 
+#ifdef Py_TRACE_REFS
+// This function is a semi-smart leak finder.  Using the cycle-collector
+// infrastructure, it will find all non-heap references remaining.  This is
+// an improvement over calling _Py_PrintReferenceAddresses, since this will
+// automatically filter out any objects that are only indirectly leaked.
+//
+// This will destroy the heap, so it has to be the last thing called.
+PyAPI_FUNC(void) _PyGC_FindLeaks(void) PYSTON_NOEXCEPT;
+#endif
+
 #ifdef __cplusplus
 }
 #endif
