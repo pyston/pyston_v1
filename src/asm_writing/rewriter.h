@@ -570,6 +570,11 @@ protected:
     void _decref(RewriterVar* var, llvm::ArrayRef<RewriterVar*> vars_to_bump = {});
     void _xdecref(RewriterVar* var, llvm::ArrayRef<RewriterVar*> vars_to_bump = {});
 
+    // emits a call instruction using the smallest encoding.
+    // either doing a relative call if or otherwise loading the address into the supplied register and calling it.
+    // the caller of this function must make sure that the supplied register can be safely overwriten.
+    void _callOptimalEncoding(assembler::Register tmp_reg, void* func_addr);
+
     void assertConsistent() {
 #ifndef NDEBUG
         for (RewriterVar& var : vars) {

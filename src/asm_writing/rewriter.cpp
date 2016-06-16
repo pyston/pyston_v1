@@ -587,8 +587,7 @@ void Rewriter::_decref(RewriterVar* var, llvm::ArrayRef<RewriterVar*> vars_to_bu
 
 
 #ifdef Py_REF_DEBUG
-    assembler->mov(assembler::Immediate((void*)assertAlive), assembler::R11);
-    assembler->callq(assembler::R11);
+    _callOptimalEncoding(assembler::R11, (void*)assertAlive);
     assembler->mov(assembler::RAX, assembler::RDI);
 #endif
     // _setupCall doesn't remember that it added the arg regs to the location set
@@ -599,8 +598,7 @@ void Rewriter::_decref(RewriterVar* var, llvm::ArrayRef<RewriterVar*> vars_to_bu
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
 #ifdef Py_TRACE_REFS
-        assembler->mov(assembler::Immediate((void*)_Py_Dealloc), assembler::R11);
-        assembler->callq(assembler::R11);
+        _callOptimalEncoding(assembler::R11, (void*)_Py_Dealloc);
 #else
         assembler->movq(assembler::Indirect(reg, offsetof(Box, cls)), assembler::RAX);
         assembler->callq(assembler::Indirect(assembler::RAX, offsetof(BoxedClass, tp_dealloc)));
@@ -1148,6 +1146,20 @@ void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> ar
 #endif
 }
 
+void Rewriter::_callOptimalEncoding(assembler::Register tmp_reg, void* func_addr) {
+    assert(vars_by_location.count(tmp_reg) == 0);
+    uint64_t asm_address = (uint64_t)assembler->curInstPointer() + 5;
+    uint64_t real_asm_address = asm_address + (uint64_t)rewrite->getSlotStart() - (uint64_t)assembler->startAddr();
+    int64_t offset = (int64_t)((uint64_t)func_addr - real_asm_address);
+    if (isLargeConstant(offset)) {
+        const_loader.loadConstIntoReg((uint64_t)func_addr, tmp_reg);
+        assembler->callq(tmp_reg);
+    } else {
+        assembler->call(assembler::Immediate(offset));
+        assert(assembler->hasFailed() || asm_address == (uint64_t)assembler->curInstPointer());
+    }
+}
+
 void Rewriter::_call(RewriterVar* result, bool has_side_effects, bool can_throw, void* func_addr,
                      llvm::ArrayRef<RewriterVar*> args, llvm::ArrayRef<RewriterVar*> args_xmm,
                      llvm::ArrayRef<RewriterVar*> vars_to_bump) {
@@ -1163,19 +1175,7 @@ void Rewriter::_call(RewriterVar* result, bool has_side_effects, bool can_throw,
 
     assertConsistent();
 
-    // make sure setupCall doesn't use R11
-    assert(vars_by_location.count(assembler::R11) == 0);
-
-    uint64_t asm_address = (uint64_t)assembler->curInstPointer() + 5;
-    uint64_t real_asm_address = asm_address + (uint64_t)rewrite->getSlotStart() - (uint64_t)assembler->startAddr();
-    int64_t offset = (int64_t)((uint64_t)func_addr - real_asm_address);
-    if (isLargeConstant(offset)) {
-        const_loader.loadConstIntoReg((uint64_t)func_addr, r);
-        assembler->callq(r);
-    } else {
-        assembler->call(assembler::Immediate(offset));
-        assert(assembler->hasFailed() || asm_address == (uint64_t)assembler->curInstPointer());
-    }
+    _callOptimalEncoding(r, func_addr);
 
     if (can_throw)
         registerDecrefInfoHere();
@@ -1920,8 +1920,7 @@ void Rewriter::_checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val, asse
     _setupCall(false, {});
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
-        assembler->mov(assembler::Immediate((void*)throwCAPIException), assembler::R11);
-        assembler->callq(assembler::R11);
+        _callOptimalEncoding(assembler::R11, (void*)throwCAPIException);
 
         registerDecrefInfoHere();
     }

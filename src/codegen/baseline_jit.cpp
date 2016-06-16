@@ -1012,8 +1012,8 @@ void JitFragmentWriter::_emitGetLocal(RewriterVar* val_var, const char* name) {
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
         assembler->mov(assembler::Immediate((uint64_t)name), assembler::RDI);
-        assembler->mov(assembler::Immediate((void*)assertNameDefinedHelper), assembler::R11);
-        assembler->callq(assembler::R11);
+
+        _callOptimalEncoding(assembler::R11, (void*)assertNameDefinedHelper);
 
         registerDecrefInfoHere();
     }
