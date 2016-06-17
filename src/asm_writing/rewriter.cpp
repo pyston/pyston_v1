@@ -1036,7 +1036,7 @@ void Rewriter::_setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> ar
             uintptr_t counter_addr = (uintptr_t)(&picked_slot->num_inside);
             if (isLargeConstant(counter_addr)) {
                 assembler::Register reg = allocReg(Location::any(), preserve);
-                assembler->mov(assembler::Immediate(counter_addr), reg);
+                const_loader.loadConstIntoReg(counter_addr, reg);
                 assembler->incl(assembler::Indirect(reg, 0));
             } else {
                 assembler->incl(assembler::Immediate(counter_addr));
@@ -1540,7 +1540,7 @@ void Rewriter::commit() {
         uintptr_t counter_addr = (uintptr_t)(&picked_slot->num_inside);
         if (isLargeConstant(counter_addr)) {
             assembler::Register reg = allocReg(Location::any(), getReturnDestination());
-            assembler->mov(assembler::Immediate(counter_addr), reg);
+            const_loader.loadConstIntoReg(counter_addr, reg);
             assembler->decl(assembler::Indirect(reg, 0));
         } else {
             assembler->decl(assembler::Immediate(counter_addr));
