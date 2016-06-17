@@ -725,18 +725,30 @@ void Rewriter::_setAttr(RewriterVar* ptr, int offset, RewriterVar* val) {
     if (LOG_IC_ASSEMBLY)
         assembler->comment("_setAttr");
 
-    assembler::Register ptr_reg = ptr->getInReg();
-
-    bool is_immediate;
-    assembler::Immediate imm = val->tryGetAsImmediate(&is_immediate);
-
-    if (is_immediate) {
-        assembler->movq(imm, assembler::Indirect(ptr_reg, offset));
+    if (ptr->isScratchAllocation()) {
+        auto dest_loc = indirectFor(ptr->getScratchLocation(offset));
+        bool is_immediate;
+        assembler::Immediate imm = val->tryGetAsImmediate(&is_immediate);
+        if (is_immediate) {
+            assembler->movq(imm, dest_loc);
+        } else {
+            assembler::Register val_reg = val->getInReg(Location::any(), false);
+            assembler->mov(val_reg, dest_loc);
+        }
     } else {
-        assembler::Register val_reg = val->getInReg(Location::any(), false, /* otherThan */ ptr_reg);
-        assert(ptr_reg != val_reg);
+        assembler::Register ptr_reg = ptr->getInReg();
 
-        assembler->mov(val_reg, assembler::Indirect(ptr_reg, offset));
+        bool is_immediate;
+        assembler::Immediate imm = val->tryGetAsImmediate(&is_immediate);
+
+        if (is_immediate) {
+            assembler->movq(imm, assembler::Indirect(ptr_reg, offset));
+        } else {
+            assembler::Register val_reg = val->getInReg(Location::any(), false, /* otherThan */ ptr_reg);
+            assert(ptr_reg != val_reg);
+
+            assembler->mov(val_reg, assembler::Indirect(ptr_reg, offset));
+        }
     }
 
     ptr->bumpUse();
@@ -744,8 +756,8 @@ void Rewriter::_setAttr(RewriterVar* ptr, int offset, RewriterVar* val) {
     // If the value is a scratch allocated memory array we have to make sure we won't release it immediately.
     // Because this setAttr stored a reference to it inside a field and the rewriter can't currently track this uses and
     // will think it's unused.
-    if (val->hasScratchAllocation())
-        val->resetHasScratchAllocation();
+    if (val->isScratchAllocation())
+        val->resetIsScratchAllocation();
     val->bumpUse();
 
     assertConsistent();
@@ -787,6 +799,14 @@ assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_
     if (locations.size() == 0 && this->is_constant) {
         assembler::Register reg = rewriter->allocReg(dest, otherThan);
         rewriter->const_loader.loadConstIntoReg(this->constant_value, reg);
+        rewriter->addLocationToVar(this, reg);
+        return reg;
+    }
+
+    if (locations.size() == 0 && isScratchAllocation()) {
+        assembler::Register reg = rewriter->allocReg(dest, otherThan);
+        auto addr = rewriter->indirectFor(getScratchLocation());
+        rewriter->assembler->lea(addr, reg);
         rewriter->addLocationToVar(this, reg);
         return reg;
     }
@@ -1231,12 +1251,16 @@ std::vector<Location> Rewriter::getDecrefLocations() {
         // If you forget to call deregisterOwnedAttr(), and then later do something that needs to emit decref info,
         // we will try to emit the info for that owned attr even though the rewriter has decided that it doesn't need
         // to keep it alive any more.
-        ASSERT(var->locations.size() > 0,
+        ASSERT(var->locations.size() > 0 || var->isScratchAllocation(),
                "owned variable not accessible any more -- maybe forgot to call deregisterOwnedAttr?");
-        ASSERT(var->locations.size() == 1, "this code only looks at one location");
-        Location l = *var->locations.begin();
-
-        assert(l.type == Location::Scratch || l.type == Location::Stack);
+        ASSERT(var->locations.size() == 1 || var->isScratchAllocation(), "this code only looks at one location");
+        Location l;
+        if (var->locations.size()) {
+            l = *var->locations.begin();
+            assert(l.type == Location::Scratch || l.type == Location::Stack);
+        } else {
+            l = var->getScratchLocation();
+        }
 
         int offset1 = indirectFor(l).offset;
         int offset2 = p.second;
@@ -1298,13 +1322,13 @@ void RewriterVar::_release() {
     }
 
     // releases allocated scratch space
-    if (hasScratchAllocation()) {
+    if (isScratchAllocation()) {
         for (int i = 0; i < scratch_allocation.second; ++i) {
-            Location l = Location(Location::Scratch, (scratch_allocation.first + i) * 8);
+            Location l = getScratchLocation(i * 8);
             assert(rewriter->vars_by_location[l] == LOCATION_PLACEHOLDER);
             rewriter->vars_by_location.erase(l);
         }
-        resetHasScratchAllocation();
+        resetIsScratchAllocation();
     }
 
     this->locations.clear();
@@ -1353,6 +1377,11 @@ void RewriterVar::deregisterOwnedAttr(int byte_offset) {
         this->rewriter->owned_attrs.erase(p);
         this->bumpUse();
     }, { this }, ActionType::NORMAL);
+}
+
+Location RewriterVar::getScratchLocation(int additional_offset_in_bytes) {
+    assert(isScratchAllocation());
+    return Location(Location::Scratch, scratch_allocation.first * sizeof(void*) + additional_offset_in_bytes);
 }
 
 void RewriterVar::bumpUse() {
@@ -1805,12 +1834,6 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
                 assert(result->scratch_allocation == std::make_pair(0, 0));
                 result->scratch_allocation = std::make_pair(a, n);
 
-                assembler::Register r = result->initializeInReg();
-
-                // TODO we could do something like we do for constants and only load
-                // this when necessary, so it won't spill. Is that worth?
-                assembler->lea(assembler::Indirect(assembler::RSP, 8 * a + rewrite->getScratchRspOffset()), r);
-
                 assertConsistent();
                 result->releaseIfNoUses();
                 return a;
@@ -1947,7 +1970,7 @@ void Rewriter::spillRegister(assembler::Register reg, Location preserve) {
 
     // There may be no need to spill if the var is held in a different location already.
     // There is no need to spill if it is a constant
-    if (var->locations.size() > 1 || var->is_constant) {
+    if (var->locations.size() > 1 || var->is_constant || var->isScratchAllocation()) {
         removeLocationFromVar(var, reg);
         return;
     }
