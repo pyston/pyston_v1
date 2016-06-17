@@ -1240,6 +1240,7 @@ private:
     CompilerVariable* evalLambda(AST_Lambda* node, const UnwindInfo& unw_info) {
         AST_Return* expr = new AST_Return();
         expr->value = node->body;
+        expr->lineno = node->body->lineno;
 
         std::vector<AST_stmt*> body = { expr };
         CompilerVariable* func = _createFunction(node, unw_info, node->args, body);
@@ -2271,6 +2272,8 @@ private:
 
         ConcreteCompilerVariable* rtn = val->makeConverted(emitter, opt_rtn_type);
 
+        emitter.emitSetCurrentStmt(node);
+
         if (!irstate->getCurFunction()->entry_descriptor)
             emitter.getBuilder()->CreateCall(g.funcs.deinitFrame, irstate->getFrameInfoVar());
 
@@ -2667,16 +2670,15 @@ private:
                 ConcreteCompilerVariable* v = p.second->makeConverted(emitter, phi_type);
                 symbol_table[p.first] = v;
             } else {
-#ifndef NDEBUG
                 if (myblock->successors.size()) {
                     // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't
                     // want
                     // here, but this is just for debugging so I guess let it happen for now:
                     ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(p.first, myblock);
-                    ASSERT(p.second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
-                           p.first.c_str(), ending_type->debugName().c_str(), p.second->getType()->debugName().c_str());
+                    RELEASE_ASSERT(p.second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
+                                   p.first.c_str(), ending_type->debugName().c_str(),
+                                   p.second->getType()->debugName().c_str());
                 }
-#endif
             }
         }
 

@@ -608,6 +608,7 @@ void setupDescr() {
     property_cls->giveAttrMember("__doc__", T_OBJECT, offsetof(BoxedProperty, prop_doc));
     property_cls->freeze();
 
+    staticmethod_cls->giveAttrMember("__func__", T_OBJECT, offsetof(BoxedStaticmethod, sm_callable));
     staticmethod_cls->giveAttr(
         "__init__", new BoxedFunction(FunctionMetadata::create((void*)staticmethodInit, UNKNOWN, 5, false, false),
                                       { None, None, None, None }));
@@ -617,6 +618,7 @@ void setupDescr() {
     staticmethod_cls->freeze();
 
 
+    classmethod_cls->giveAttrMember("__func__", T_OBJECT, offsetof(BoxedClassmethod, cm_callable));
     classmethod_cls->giveAttr(
         "__init__", new BoxedFunction(FunctionMetadata::create((void*)classmethodInit, UNKNOWN, 5, false, false),
                                       { None, None, None, None }));

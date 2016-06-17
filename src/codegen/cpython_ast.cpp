@@ -499,6 +499,8 @@ public:
         r->type = convert(v.type);
         r->name = convert(v.name);
         r->body = convert<stmt_ty, AST_stmt*>(v.body);
+        r->lineno = eh->lineno;
+        r->col_offset = eh->col_offset;
         return r;
     }
 

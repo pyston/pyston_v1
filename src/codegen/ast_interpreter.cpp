@@ -1599,6 +1599,7 @@ Value ASTInterpreter::visit_repr(AST_Repr* node) {
 Value ASTInterpreter::visit_lambda(AST_Lambda* node) {
     AST_Return* expr = new AST_Return();
     expr->value = node->body;
+    expr->lineno = node->body->lineno;
 
     std::vector<AST_stmt*> body = { expr };
     return createFunction(node, node->args, body);

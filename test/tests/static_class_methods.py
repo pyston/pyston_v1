@@ -11,6 +11,11 @@ c = C()
 c.f(1, 2, 3, 4)
 c.g(5, 6, 7, 8)
 
+assert C.__dict__['f'].__func__ is C.f
+assert C.__dict__['g'].__func__ is C.g.im_func
+c.f.__call__(1, 2, 3, 4)
+c.g.__call__(5, 6, 7, 8)
+
 C.f(9, 10, 11, 12)
 C.f(13, 14, 15, 16)
 

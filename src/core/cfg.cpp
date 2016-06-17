@@ -34,6 +34,75 @@
 
 namespace pyston {
 
+// getLastLineno and getLastLinenoSub: gets the last line of a block.
+// getLastLineno takes the block itself, and getLastLinenoSub takes an entry
+// inside the block.  This is important because if there is a functiondef as the last
+// statement in a block, we should not look inside it.
+int getLastLinenoSub(AST* ast) {
+    if (ast->type == AST_TYPE::TryExcept) {
+        auto te = ast_cast<AST_TryExcept>(ast);
+        if (!te->orelse.empty())
+            return getLastLinenoSub(te->orelse.back());
+        return getLastLinenoSub(te->handlers.back()->body.back());
+    }
+    if (ast->type == AST_TYPE::For) {
+        return getLastLinenoSub(ast_cast<AST_For>(ast)->body.back());
+    }
+    if (ast->type == AST_TYPE::While) {
+        return getLastLinenoSub(ast_cast<AST_While>(ast)->body.back());
+    }
+    if (ast->type == AST_TYPE::TryFinally) {
+        return getLastLinenoSub(ast_cast<AST_TryFinally>(ast)->finalbody.back());
+    }
+    if (ast->type == AST_TYPE::With) {
+        return getLastLinenoSub(ast_cast<AST_With>(ast)->body.back());
+    }
+    if (ast->type == AST_TYPE::If) {
+        auto if_ = ast_cast<AST_If>(ast);
+        if (!if_->orelse.empty())
+            return getLastLinenoSub(if_->orelse.back());
+        return getLastLinenoSub(if_->body.back());
+    }
+
+    // TODO: this is not quite right if the last statement is multiline.  See exited_lineno_multiline.py
+    return ast->lineno;
+}
+
+int getLastLineno(AST* ast) {
+    switch (ast->type) {
+        case AST_TYPE::Lambda: {
+            auto lambda = ast_cast<AST_Lambda>(ast);
+            return getLastLinenoSub(lambda->body);
+        }
+        case AST_TYPE::Expression: {
+            auto expr = ast_cast<AST_Expression>(ast);
+            return getLastLinenoSub(expr->body);
+        }
+        case AST_TYPE::ClassDef: {
+            auto classdef = ast_cast<AST_ClassDef>(ast);
+            if (classdef->body.size() == 0)
+                return classdef->lineno;
+            return getLastLinenoSub(classdef->body.back());
+        }
+        case AST_TYPE::Module: {
+            auto module = ast_cast<AST_Module>(ast);
+            if (module->body.size() == 0) {
+                assert(module->lineno == 0);
+                return 1;
+            }
+            return getLastLinenoSub(module->body.back());
+        }
+        case AST_TYPE::FunctionDef: {
+            auto funcdef = ast_cast<AST_FunctionDef>(ast);
+            if (funcdef->body.size() == 0)
+                return funcdef->lineno;
+            return getLastLinenoSub(funcdef->body.back());
+        }
+        default:
+            RELEASE_ASSERT(0, "%d", ast->type);
+    }
+}
+
 void CFGBlock::connectTo(CFGBlock* successor, bool allow_backedge) {
     assert(successors.size() <= 1);
 
@@ -224,6 +293,10 @@ private:
         return makeName(id, AST_TYPE::Load, node->lineno, 0, is_kill);
     }
 
+    AST_Name* makeLoad(InternedString id, int lineno, bool is_kill = false) {
+        return makeName(id, AST_TYPE::Load, lineno, 0, is_kill);
+    }
+
     void pushLoopContinuation(CFGBlock* continue_dest, CFGBlock* break_dest) {
         assert(continue_dest
                != break_dest); // I guess this doesn't have to be true, but validates passing say_why=false
@@ -339,6 +412,7 @@ private:
             AST_expr* remapped_iter = remapExpr(c->iter);
             AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER);
             iter_call->args.push_back(remapped_iter);
+            iter_call->lineno = c->target->lineno; // Not sure if this should be c->target or c->iter
             InternedString iter_name = nodeName("lc_iter", i);
             pushAssign(iter_name, iter_call);
 
@@ -352,6 +426,7 @@ private:
             curblock = test_block;
             AST_LangPrimitive* test_call = new AST_LangPrimitive(AST_LangPrimitive::HASNEXT);
             test_call->args.push_back(makeName(iter_name, AST_TYPE::Load, node->lineno));
+            test_call->lineno = c->target->lineno;
             AST_expr* test = remapExpr(test_call);
 
             CFGBlock* body_block = cfg->addBlock();
@@ -473,12 +548,13 @@ private:
         curblock = nullptr;
     }
 
-    void pushReraise(AST* node, InternedString exc_type_name, InternedString exc_value_name,
+    void pushReraise(int lineno, InternedString exc_type_name, InternedString exc_value_name,
                      InternedString exc_traceback_name) {
         auto raise = new AST_Raise();
-        raise->arg0 = makeLoad(exc_type_name, node, true);
-        raise->arg1 = makeLoad(exc_value_name, node, true);
-        raise->arg2 = makeLoad(exc_traceback_name, node, true);
+        raise->lineno = lineno;
+        raise->arg0 = makeLoad(exc_type_name, lineno, true);
+        raise->arg1 = makeLoad(exc_value_name, lineno, true);
+        raise->arg2 = makeLoad(exc_traceback_name, lineno, true);
         push_back(raise);
         curblock = nullptr;
     }
@@ -742,6 +818,7 @@ private:
 
             AST_Branch* br = new AST_Branch();
             br->test = callNonzero(val);
+            br->lineno = val->lineno;
             push_back(br);
 
             CFGBlock* was_block = curblock;
@@ -938,7 +1015,7 @@ private:
 
     // This is a helper function used for generator expressions and comprehensions.
     // TODO(rntz): use this to handle unscoped (i.e. list) comprehensions as well?
-    void emitComprehensionLoops(std::vector<AST_stmt*>* insert_point,
+    void emitComprehensionLoops(int lineno, std::vector<AST_stmt*>* insert_point,
                                 const std::vector<AST_comprehension*>& comprehensions, AST_expr* first_generator,
                                 std::function<void(std::vector<AST_stmt*>*)> do_yield) {
         for (int i = 0; i < comprehensions.size(); i++) {
@@ -947,12 +1024,14 @@ private:
             AST_For* loop = new AST_For();
             loop->target = c->target;
             loop->iter = (i == 0) ? first_generator : c->iter;
+            loop->lineno = lineno;
 
             insert_point->push_back(loop);
             insert_point = &loop->body;
 
             for (AST_expr* if_condition : c->ifs) {
                 AST_If* if_block = new AST_If();
+                if_block->lineno = if_condition->lineno;
                 // Note: don't call callNonzero here, since we are generating
                 // AST inside a new functiondef which will go through the CFG
                 // process again.
@@ -977,11 +1056,12 @@ private:
 
         AST_MakeFunction* func = makeFunctionForScope(node);
         func->function_def->args->args.push_back(makeName(arg_name, AST_TYPE::Param, node->lineno));
-        emitComprehensionLoops(&func->function_def->body, node->generators,
+        emitComprehensionLoops(node->lineno, &func->function_def->body, node->generators,
                                makeName(arg_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true),
                                [this, node](std::vector<AST_stmt*>* insert_point) {
                                    auto y = new AST_Yield();
                                    y->value = node->elt;
+                                   y->lineno = node->lineno;
                                    insert_point->push_back(makeExpr(y));
                                });
 
@@ -1016,16 +1096,18 @@ private:
         auto asgn = new AST_Assign();
         asgn->targets.push_back(makeName(rtn_name, AST_TYPE::Store, node->lineno));
         asgn->value = new ResultType();
+        asgn->lineno = node->lineno;
         func->function_def->body.push_back(asgn);
 
         auto lambda =
             [&](std::vector<AST_stmt*>* insert_point) { emitComprehensionYield(node, rtn_name, insert_point); };
         AST_Name* first_name
             = makeName(internString("#arg"), AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true);
-        emitComprehensionLoops(&func->function_def->body, node->generators, first_name, lambda);
+        emitComprehensionLoops(node->lineno, &func->function_def->body, node->generators, first_name, lambda);
 
         auto rtn = new AST_Return();
         rtn->value = makeName(rtn_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true);
+        rtn->lineno = node->lineno;
         func->function_def->body.push_back(rtn);
 
         InternedString func_var_name = nodeName();
@@ -1090,6 +1172,8 @@ private:
         auto rtn = new AST_Lambda();
         rtn->body = node->body; // don't remap now; will be CFG'ed later
         rtn->args = remapArguments(node->args);
+        rtn->lineno = node->lineno;
+        rtn->col_offset = node->col_offset;
         // lambdas create scope, need to register as replacement
         scoping_analysis->registerScopeReplacement(node, rtn);
         return rtn;
@@ -1402,6 +1486,19 @@ public:
             return;
         }
 
+        if (type == AST_TYPE::Expr) {
+            auto expr = ast_cast<AST_Expr>(node)->value;
+            if (expr->type == AST_TYPE::LangPrimitive) {
+                auto lp = ast_cast<AST_LangPrimitive>(expr);
+                if (lp->opcode == AST_LangPrimitive::UNCACHE_EXC_INFO
+                    || lp->opcode == AST_LangPrimitive::SET_EXC_INFO) {
+                    curblock->push_back(node);
+                    return;
+                }
+                // TODO: there are others that are also nothrow
+            }
+        }
+
         if (node->type == AST_TYPE::Assign) {
             AST_Assign* asgn = ast_cast<AST_Assign>(node);
             assert(asgn->targets.size() == 1);
@@ -1430,6 +1527,19 @@ public:
                     // Assigning to a temporary name from an expression that can't throw:
                     // NB. `None' can't throw in Python, because it's hardcoded
                     // (seriously, try reassigning "None" in CPython).
+                    curblock->push_back(node);
+                    return;
+                }
+            }
+        }
+
+        // Deleting temporary names is safe, since we only use it to represent kills.
+        if (node->type == AST_TYPE::Delete) {
+            AST_Delete* del = ast_cast<AST_Delete>(node);
+            assert(del->targets.size() == 1);
+            if (del->targets[0]->type == AST_TYPE::Name) {
+                AST_Name* target = ast_cast<AST_Name>(del->targets[0]);
+                if (target->id.s()[0] == '#') {
                     curblock->push_back(node);
                     return;
                 }
@@ -2091,6 +2201,7 @@ public:
         AST_expr* remapped_iter = remapExpr(node->iter);
         AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER);
         iter_call->args.push_back(remapped_iter);
+        iter_call->lineno = node->lineno;
 
         InternedString itername = createUniqueName("#iter_");
         pushAssign(itername, iter_call);
@@ -2102,6 +2213,7 @@ public:
         curblock = test_block;
 
         AST_LangPrimitive* test_call = new AST_LangPrimitive(AST_LangPrimitive::HASNEXT);
+        test_call->lineno = node->lineno;
         test_call->args.push_back(makeName(itername, AST_TYPE::Load, node->lineno));
         AST_Branch* test_br = makeBranch(remapExpr(test_call));
 
@@ -2142,6 +2254,7 @@ public:
         if (curblock) {
             AST_LangPrimitive* end_call = new AST_LangPrimitive(AST_LangPrimitive::HASNEXT);
             end_call->args.push_back(makeName(itername, AST_TYPE::Load, node->lineno));
+            end_call->lineno = node->lineno;
             AST_Branch* end_br = makeBranch(remapExpr(end_call));
             push_back(end_br);
 
@@ -2256,9 +2369,6 @@ public:
             cfg->placeBlock(exc_handler_block);
             curblock = exc_handler_block;
 
-            // TODO This is supposed to be exc_type_name (value doesn't matter for checking matches)
-            AST_expr* exc_obj = makeLoad(exc_value_name, node);
-
             bool caught_all = false;
             for (AST_ExceptHandler* exc_handler : node->handlers) {
                 assert(!caught_all && "bare except clause not the last one in the list?");
@@ -2268,11 +2378,14 @@ public:
                     AST_expr* handled_type = remapExpr(exc_handler->type);
 
                     AST_LangPrimitive* is_caught_here = new AST_LangPrimitive(AST_LangPrimitive::CHECK_EXC_MATCH);
-                    is_caught_here->args.push_back(_dup(exc_obj));
+                    // TODO This is supposed to be exc_type_name (value doesn't matter for checking matches)
+                    is_caught_here->args.push_back(makeLoad(exc_value_name, exc_handler));
                     is_caught_here->args.push_back(handled_type);
+                    is_caught_here->lineno = exc_handler->lineno;
 
                     AST_Branch* br = new AST_Branch();
                     br->test = callNonzero(remapExpr(is_caught_here));
+                    br->lineno = exc_handler->lineno;
 
                     CFGBlock* exc_handle = cfg->addBlock();
                     exc_next = cfg->addDeferredBlock();
@@ -2288,7 +2401,7 @@ public:
                 }
 
                 if (exc_handler->name) {
-                    pushAssign(exc_handler->name, _dup(exc_obj));
+                    pushAssign(exc_handler->name, makeLoad(exc_value_name, exc_handler));
                 }
 
                 AST_LangPrimitive* set_exc_info = new AST_LangPrimitive(AST_LangPrimitive::SET_EXC_INFO);
@@ -2320,6 +2433,13 @@ public:
                 raise->arg0 = makeLoad(exc_type_name, node, true);
                 raise->arg1 = makeLoad(exc_value_name, node, true);
                 raise->arg2 = makeLoad(exc_traceback_name, node, true);
+
+                // This is weird but I think it is right.
+                // Even though the line number of the trackback will correctly point to the line that
+                // raised, this matches CPython's behavior that the frame's line number points to
+                // the last statement of the last except block.
+                raise->lineno = getLastLinenoSub(node->handlers.back()->body.back());
+
                 push_back(raise);
                 curblock = NULL;
             }
@@ -2398,7 +2518,7 @@ public:
 
             cfg->placeBlock(reraise);
             curblock = reraise;
-            pushReraise(node, exc_type_name, exc_value_name, exc_traceback_name);
+            pushReraise(getLastLinenoSub(node->finalbody.back()), exc_type_name, exc_value_name, exc_traceback_name);
 
             curblock = noexc;
         }
@@ -2511,7 +2631,7 @@ public:
             // otherwise, reraise the exception
             cfg->placeBlock(reraise_block);
             curblock = reraise_block;
-            pushReraise(node, exc_type_name, exc_value_name, exc_traceback_name);
+            pushReraise(getLastLinenoSub(node->body.back()), exc_type_name, exc_value_name, exc_traceback_name);
         }
 
         // The finally block
@@ -2705,7 +2825,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamName
             module_assign->value
                 = new AST_Name(source->getInternedStrings().get("__name__"), AST_TYPE::Load, source->ast->lineno);
         }
-        module_assign->lineno = 0;
+        module_assign->lineno = source->ast->lineno;
         visitor.push_back(module_assign);
 
         // If the first statement is just a single string, transform it to an assignment to __doc__
@@ -2716,7 +2836,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamName
                 doc_assign->targets.push_back(
                     new AST_Name(source->getInternedStrings().get("__doc__"), AST_TYPE::Store, source->ast->lineno));
                 doc_assign->value = first_expr->value;
-                doc_assign->lineno = 0;
+                doc_assign->lineno = source->ast->lineno;
                 visitor.push_back(doc_assign);
                 skip_first = true;
             }
@@ -2754,6 +2874,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamName
     for (int i = (skip_first ? 1 : 0); i < body.size(); i++) {
         if (!visitor.curblock)
             break;
+        ASSERT(body[i]->lineno > 0, "%d", body[i]->type);
         body[i]->accept(&visitor);
     }
 
@@ -2763,6 +2884,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamName
         AST_LangPrimitive* locals = new AST_LangPrimitive(AST_LangPrimitive::LOCALS);
 
         AST_Return* rtn = new AST_Return();
+        rtn->lineno = getLastLineno(source->ast);
         rtn->value = locals;
         visitor.push_back(rtn);
     } else {
@@ -2770,7 +2892,8 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamName
         // we already have to support multiple return statements in a function, but this way we can avoid
         // having to support not having a return statement:
         AST_Return* return_stmt = new AST_Return();
-        return_stmt->lineno = return_stmt->col_offset = 0;
+        return_stmt->lineno = getLastLineno(source->ast);
+        return_stmt->col_offset = 0;
         return_stmt->value = NULL;
         visitor.push_back(return_stmt);
     }
@@ -2869,6 +2992,56 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamName
     if (!no_dups)
         rtn->print();
     assert(no_dups);
+
+// Uncomment this for some heavy checking to make sure that we don't forget
+// to set lineno.  It will catch a lot of things that don't necessarily
+// need to be fixed.
+#if 0
+    for (auto b : rtn->blocks) {
+        for (auto ast : b->body) {
+            if (ast->type == AST_TYPE::Jump)
+                continue;
+            if (ast->type == AST_TYPE::Assign) {
+                auto asgn = ast_cast<AST_Assign>(ast);
+                if (asgn->value->type == AST_TYPE::LangPrimitive) {
+                    auto lp = ast_cast<AST_LangPrimitive>(asgn->value);
+                    if (lp->opcode == AST_LangPrimitive::LANDINGPAD)
+                        continue;
+                }
+            }
+            if (ast->type == AST_TYPE::Expr) {
+                auto expr = ast_cast<AST_Expr>(ast);
+                if (expr->value->type == AST_TYPE::LangPrimitive) {
+                    auto lp = ast_cast<AST_LangPrimitive>(expr->value);
+                    if (lp->opcode == AST_LangPrimitive::UNCACHE_EXC_INFO || lp->opcode == AST_LangPrimitive::SET_EXC_INFO)
+                        continue;
+                }
+            }
+
+            if (ast->type == AST_TYPE::Delete) {
+                AST_Delete* del = ast_cast<AST_Delete>(ast);
+                assert(del->targets.size() == 1);
+                if (del->targets[0]->type == AST_TYPE::Name) {
+                    AST_Name* target = ast_cast<AST_Name>(del->targets[0]);
+                    if (target->id.s()[0] == '#') {
+                        continue;
+                    }
+                }
+            }
+
+
+            //if (ast->type != AST_TYPE::Return)
+                //continue;
+            if (ast->lineno == 0) {
+                rtn->print();
+                printf("\n");
+                print_ast(ast);
+                printf("\n");
+            }
+            assert(ast->lineno > 0);
+        }
+    }
+#endif
 
 // TODO make sure the result of Invoke nodes are not used on the exceptional path
 #endif

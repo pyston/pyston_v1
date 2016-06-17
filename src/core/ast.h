@@ -1052,10 +1052,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Jump() : AST_stmt(AST_TYPE::Jump) {
-        lineno = -1;
-        col_offset = -1;
-    }
+    AST_Jump() : AST_stmt(AST_TYPE::Jump) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Jump;
 };
