@@ -900,6 +900,134 @@ static int dict_print(PyObject* mp, FILE* fp, int flags) noexcept {
     return 0;
 }
 
+static Box* characterize(BoxedDict* a, BoxedDict* b, Box** pval) noexcept {
+    Box* akey = NULL; /* smallest key in a s.t. a[akey] != b[akey] */
+    Box* aval = NULL; /* a[akey] */
+    int cmp;
+
+    for (const auto& p : a->d) {
+        Box* thiskey, *thisaval, *thisbval;
+        if (p.first.value == NULL)
+            continue;
+
+        thiskey = p.first.value;
+        Py_INCREF(thiskey); /* keep alive across compares */
+        if (akey != NULL) {
+            cmp = PyObject_RichCompareBool(akey, thiskey, Py_LT);
+
+            if (cmp < 0) {
+                Py_DECREF(thiskey);
+                goto Fail;
+            }
+            if (cmp > 0 || p.second == NULL) {
+                /* Not the *smallest* a key; or maybe it is
+                 * but the compare shrunk the dict so we can't
+                 * find its associated value anymore; or
+                 * maybe it is but the compare deleted the
+                 * a[thiskey] entry.
+                 */
+                Py_DECREF(thiskey);
+                continue;
+            }
+        }
+
+        /* Compare a[thiskey] to b[thiskey]; cmp <- true iff equal. */
+        thisaval = p.second;
+        assert(thisaval);
+        Py_INCREF(thisaval); /* keep alive */
+
+        BoxedDict::DictMap::iterator it;
+        thisbval = NULL;
+        try {
+            it = b->d.find(thiskey);
+            thisbval = it->second;
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            goto Fail;
+        }
+
+        if (it == b->d.end() || thisbval == NULL)
+            cmp = 0;
+        else {
+            /* both dicts have thiskey:  same values? */
+            cmp = PyObject_RichCompareBool((PyObject*)thisaval, (PyObject*)thisbval, Py_EQ);
+            if (cmp < 0) {
+                Py_DECREF(thiskey);
+                Py_DECREF(thisaval);
+                goto Fail;
+            }
+        }
+
+        if (cmp == 0) {
+            /* New winner. */
+            Py_XDECREF(akey);
+            Py_XDECREF(aval);
+            akey = thiskey;
+            aval = thisaval;
+        } else {
+            Py_DECREF(thiskey);
+            Py_DECREF(thisaval);
+        }
+    }
+
+    *pval = aval;
+    return akey;
+
+Fail:
+    Py_XDECREF(akey);
+    Py_XDECREF(aval);
+    *pval = NULL;
+    return NULL;
+}
+
+
+static int dict_compare(BoxedDict* a, BoxedDict* b) noexcept {
+    int res = 0;
+    Box* adiff, *bdiff, *aval, *bval;
+
+    /* Compare lengths first */
+    if (a->d.size() < b->d.size())
+        return -1; /* a is shorter */
+    else if (a->d.size() > b->d.size())
+        return 1; /* b is shorter */
+
+    /* Same length -- check all keys */
+    bdiff = bval = NULL;
+    adiff = characterize(a, b, &aval);
+    if (adiff == NULL) {
+        assert(!aval);
+        /* Either an error, or a is a subset with the same length so
+         * must be equal.
+         */
+        res = PyErr_Occurred() ? -1 : 0;
+        goto Finished;
+    }
+    bdiff = characterize(b, a, &bval);
+    if (bdiff == NULL && PyErr_Occurred()) {
+        assert(!bval);
+        res = -1;
+        goto Finished;
+    }
+    res = 0;
+    if (bdiff) {
+        /* bdiff == NULL "should be" impossible now, but perhaps
+         * the last comparison done by the characterize() on a had
+         * the side effect of making the dicts equal!
+         */
+        res = PyObject_Compare((PyObject*)adiff, (PyObject*)bdiff);
+    }
+    if (res == 0 && bval != NULL)
+        res = PyObject_Compare((PyObject*)aval, (PyObject*)bval);
+
+Finished:
+    Py_XDECREF(adiff);
+    Py_XDECREF(bdiff);
+    Py_XDECREF(aval);
+    Py_XDECREF(bval);
+    return res;
+}
+
+
 void BoxedDict::dealloc(Box* b) noexcept {
     if (_PyObject_GC_IS_TRACKED(b))
         _PyObject_GC_UNTRACK(b);
@@ -990,6 +1118,7 @@ void setupDict() {
         = dictiteritem_cls->instances_are_nonzero = true;
 
     dict_cls->tp_hash = PyObject_HashNotImplemented;
+    dict_cls->tp_compare = (cmpfunc)dict_compare;
 
     dict_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)dictLen, BOXED_INT, 1)));
     dict_cls->giveAttr("__new__", new BoxedFunction(FunctionMetadata::create((void*)dictNew, UNKNOWN, 1, true, true)));
