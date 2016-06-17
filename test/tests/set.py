@@ -269,3 +269,8 @@ print {1, 1L}, {1L, 1}, set([1, 1L]), set([1L, 1])
 s = {1}
 s.add(1L)
 print s
+
+from api_test import set_size
+
+s = set([1, 2, 3, 4])
+print(set_size(s))

@@ -7,6 +7,7 @@ extensions = [
     Extension("descr_test", sources = ["descr_test.c"]),
     Extension("slots_test", sources = ["slots_test.c"]),
     Extension("type_test", sources = ["type_test.c"]),
+    Extension("api_test", sources = ["api_test.c"]),
 ]
 
 def relpath(fn):
