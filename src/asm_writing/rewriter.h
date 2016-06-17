@@ -202,7 +202,8 @@ public:
 
     template <typename Src, typename Dst> inline RewriterVar* getAttrCast(int offset, Location loc = Location::any());
 
-    bool isConstant() { return is_constant; }
+    bool isConstant() const { return is_constant; }
+    bool isContantNull() const { return isConstant() && constant_value == 0; }
 
 protected:
     void incref();
@@ -236,11 +237,11 @@ private:
     // /* some code */
     // bumpUseLateIfNecessary();
     void bumpUseEarlyIfPossible() {
-        if (reftype != RefType::OWNED && !hasScratchAllocation())
+        if (reftype != RefType::OWNED && !isScratchAllocation())
             bumpUse();
     }
     void bumpUseLateIfNecessary() {
-        if (reftype == RefType::OWNED || hasScratchAllocation())
+        if (reftype == RefType::OWNED || isScratchAllocation())
             bumpUse();
     }
 
@@ -251,8 +252,9 @@ private:
     // Don't call it directly: call bumpUse and releaseIfNoUses instead.
     void _release();
     bool isDoneUsing() { return next_use == uses.size(); }
-    bool hasScratchAllocation() const { return scratch_allocation.second > 0; }
-    void resetHasScratchAllocation() { scratch_allocation = std::make_pair(0, 0); }
+    bool isScratchAllocation() const { return scratch_allocation.second > 0; }
+    void resetIsScratchAllocation() { scratch_allocation = std::make_pair(0, 0); }
+    Location getScratchLocation(int additional_offset_in_bytes = 0);
     bool needsDecref(int current_action_index);
 
     // Indicates if this variable is an arg, and if so, what location the arg is from.
@@ -263,7 +265,8 @@ private:
     Location arg_loc;
     std::pair<int /*offset*/, int /*size*/> scratch_allocation;
 
-    llvm::SmallSet<std::tuple<int, uint64_t, bool>, 4> attr_guards; // used to detect duplicate guards
+    llvm::SmallSet<std::tuple<int, uint64_t, bool>, 4> attr_guards;  // used to detect duplicate guards
+    llvm::SmallDenseMap<std::pair<int, int>, RewriterVar*> getattrs; // used to detect duplicate getAttrs
 
     // Gets a copy of this variable in a register, spilling/reloading if necessary.
     // TODO have to be careful with the result since the interface doesn't guarantee
@@ -565,8 +568,13 @@ protected:
 
     // These do not call bumpUse on their arguments:
     void _incref(RewriterVar* var, int num_refs = 1);
-    void _decref(RewriterVar* var);
-    void _xdecref(RewriterVar* var);
+    void _decref(RewriterVar* var, llvm::ArrayRef<RewriterVar*> vars_to_bump = {});
+    void _xdecref(RewriterVar* var, llvm::ArrayRef<RewriterVar*> vars_to_bump = {});
+
+    // emits a call instruction using the smallest encoding.
+    // either doing a relative call if or otherwise loading the address into the supplied register and calling it.
+    // the caller of this function must make sure that the supplied register can be safely overwriten.
+    void _callOptimalEncoding(assembler::Register tmp_reg, void* func_addr);
 
     void assertConsistent() {
 #ifndef NDEBUG

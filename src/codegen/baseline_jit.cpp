@@ -177,6 +177,8 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
       ic_info(std::move(ic_info)) {
     allocatable_regs = bjit_allocatable_regs;
 
+    added_changing_action = true;
+
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: JitFragmentWriter() start");
     interp = createNewVar();
@@ -410,8 +412,14 @@ RewriterVar* JitFragmentWriter::emitGetLocal(InternedString s, int vreg) {
     assert(vreg >= 0);
     // TODO Can we use BORROWED here? Not sure if there are cases when we can't rely on borrowing the ref
     // from the vregs array.  Safer like this.
-    RewriterVar* val_var = vregs_array->getAttr(vreg * 8)->setType(RefType::OWNED);
-    addAction([=]() { _emitGetLocal(val_var, s.c_str()); }, { val_var }, ActionType::NORMAL);
+    RewriterVar* val_var = vregs_array->getAttr(vreg * 8);
+    if (known_non_null_vregs.count(vreg) == 0) {
+        addAction([=]() { _emitGetLocal(val_var, s.c_str()); }, { val_var }, ActionType::NORMAL);
+        known_non_null_vregs.insert(vreg);
+    } else {
+        val_var->incref();
+    }
+    val_var->setType(RefType::OWNED);
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitGetLocal end");
     return val_var;
@@ -694,10 +702,14 @@ void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closur
         // The issue is that definedness analysis is somewhat expensive to compute, so we don't compute it
         // for the bjit.  We could try calculating it (which would require some re-plumbing), which might help
         // but I suspect is not that big a deal as long as the llvm jit implements this kind of optimization.
-        bool prev_nullable = true;
+        bool prev_nullable = known_non_null_vregs.count(vreg) == 0;
 
         assert(!block->cfg->getVRegInfo().isBlockLocalVReg(vreg));
         vregs_array->replaceAttr(8 * vreg, v, prev_nullable);
+        if (v->isContantNull())
+            known_non_null_vregs.erase(vreg);
+        else
+            known_non_null_vregs.insert(vreg);
     }
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitSetLocal() end");
@@ -999,9 +1011,8 @@ void JitFragmentWriter::_emitGetLocal(RewriterVar* val_var, const char* name) {
     _setupCall(false, {});
     {
         assembler::ForwardJump jnz(*assembler, assembler::COND_NOT_ZERO);
-        assembler->mov(assembler::Immediate((uint64_t)name), assembler::RDI);
-        assembler->mov(assembler::Immediate((void*)assertNameDefinedHelper), assembler::R11);
-        assembler->callq(assembler::R11);
+        const_loader.loadConstIntoReg((uint64_t)name, assembler::RDI);
+        _callOptimalEncoding(assembler::R11, (void*)assertNameDefinedHelper);
 
         registerDecrefInfoHere();
     }
