@@ -516,8 +516,7 @@ protected:
     // Allocates a register.  dest must be of type Register or AnyReg
     // If otherThan is a register, guaranteed to not use that register.
     assembler::Register allocReg(Location dest, Location otherThan = Location::any());
-    assembler::Register allocReg(Location dest, Location otherThan,
-                                 llvm::ArrayRef<assembler::Register> valid_registers);
+    assembler::Register allocReg(Location dest, Location otherThan, assembler::RegisterSet valid_registers);
     assembler::XMMRegister allocXMMReg(Location dest, Location otherThan = Location::any());
     // Allocates an 8-byte region in the scratch space
     Location allocScratch();
@@ -609,7 +608,7 @@ protected:
 #endif
     }
 
-    llvm::ArrayRef<assembler::Register> allocatable_regs;
+    assembler::RegisterSet allocatable_regs;
 
 public:
     // This should be called exactly once for each argument

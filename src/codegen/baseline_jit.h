@@ -73,9 +73,9 @@ class JitFragmentWriter;
 // register or stack slot but we aren't if it outlives the block - we have to store it in the interpreter instance.
 //
 // We use the following callee-save regs to speed up the generated code:
-//      r12, r15: temporary values
-//      r13:      pointer to ASTInterpreter instance
-//      r14:      pointer to the vregs array
+//      rbx, rbp, r12, r15: temporary values
+//      r13               : pointer to ASTInterpreter instance
+//      r14               : pointer to the vregs array
 //
 // To execute a specific CFGBlock one has to call:
 //      CFGBlock* block;
@@ -94,10 +94,12 @@ class JitFragmentWriter;
 //
 // Basic layout of generated code block is:
 // entry_code:
+//      push   %rbp                 ; save rbp
 //      push   %r15                 ; save r15
 //      push   %r14                 ; save r14
 //      push   %r13                 ; save r13
 //      push   %r12                 ; save r12
+//      push   %rbx                 ; save rbx
 //      sub    $0x118,%rsp          ; setup scratch, 0x118 = scratch_size + 16 = space for two func args passed on the
 //                                                                               stack + 8 byte for stack alignment
 //      mov    %rdi,%r13            ; copy the pointer to ASTInterpreter instance into r13
@@ -113,10 +115,12 @@ class JitFragmentWriter;
 //      jne    end_side_exit
 //      movabs $0x215bb60,%rax      ; rax = CFGBlock* to interpret next (rax is the 1. return reg)
 //      add    $0x118,%rsp          ; restore stack pointer
+//      pop    %rbx                 ; restore rbx
 //      pop    %r12                 ; restore r12
 //      pop    %r13                 ; restore r13
 //      pop    %r14                 ; restore r14
 //      pop    %r15                 ; restore r15
+//      pop    %rbp                 ; restore rbp
 //      ret                         ; exit to the interpreter which will interpret the specified CFGBLock*
 //    end_side_exit:
 //      ....
@@ -128,10 +132,12 @@ class JitFragmentWriter;
 //                                    in this case 0 which means we are finished
 //      movabs $0x1270014108,%rdx   ; rdx must contain the Box* value to return
 //      add    $0x118,%rsp          ; restore stack pointer
+//      pop    %rbx                 ; restore rbx
 //      pop    %r12                 ; restore r12
 //      pop    %r13                 ; restore r13
 //      pop    %r14                 ; restore r14
 //      pop    %r15                 ; restore r15
+//      pop    %rbp                 ; restore rbp
 //      ret
 //
 // nth_JitFragment:
@@ -148,6 +154,8 @@ public:
     // scratch size + space for passing additional args on the stack without having to adjust the SP when calling
     // functions with more than 6 args.
     static constexpr int sp_adjustment = scratch_size + num_stack_args * 8 + 8 /* = alignment */;
+    static constexpr assembler::RegisterSet additional_regs = assembler::RBX | assembler::RBP | assembler::R12
+                                                              | assembler::R15;
 
 private:
     struct MemoryManager {
