@@ -1036,7 +1036,7 @@ static PyObject* dict_richcompare(PyObject* v, PyObject* w, int op) noexcept {
     Box* res;
 
     if (w == Py_None) {
-        if (op == Py_NE || op == Py_GT ) {
+        if (op == Py_NE || op == Py_GT) {
             Py_RETURN_TRUE;
         } else {
             Py_RETURN_FALSE;
@@ -1048,9 +1048,9 @@ static PyObject* dict_richcompare(PyObject* v, PyObject* w, int op) noexcept {
         return incref(res);
     }
 
-    if (op == Py_EQ){
+    if (op == Py_EQ) {
         return dictEq((BoxedDict*)v, (BoxedDict*)w);
-    } else if (op == Py_NE){
+    } else if (op == Py_NE) {
         return dictNe((BoxedDict*)v, (BoxedDict*)w);
     } else {
         int cmp = dict_compare((BoxedDict*)v, (BoxedDict*)w);
