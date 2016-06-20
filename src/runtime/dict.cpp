@@ -1027,6 +1027,28 @@ Finished:
     return res;
 }
 
+static PyObject* dict_richcompare(PyObject* v, PyObject* w, int op) noexcept {
+    Box* res;
+    if (!PyDict_Check(v) || !PyDict_Check(w)) {
+        res = Py_NotImplemented;
+    } else if (op == Py_EQ) {
+        res = dictEq((BoxedDict*)v, (BoxedDict*)w);
+    } else if (op == Py_NE) {
+        res = dictNe((BoxedDict*)v, (BoxedDict*)w);
+    } else {
+        /* Py3K warning if comparison isn't == or !=  */
+        if (PyErr_WarnPy3k("dict inequality comparisons not supported "
+                           "in 3.x",
+                           1) < 0) {
+            return NULL;
+        }
+        res = Py_NotImplemented;
+    }
+    Py_INCREF(res);
+    return res;
+}
+
+
 
 void BoxedDict::dealloc(Box* b) noexcept {
     if (_PyObject_GC_IS_TRACKED(b))
@@ -1119,12 +1141,14 @@ void setupDict() {
 
     dict_cls->tp_hash = PyObject_HashNotImplemented;
     dict_cls->tp_compare = (cmpfunc)dict_compare;
+    dict_cls->tp_richcompare = dict_richcompare;
 
     dict_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)dictLen, BOXED_INT, 1)));
     dict_cls->giveAttr("__new__", new BoxedFunction(FunctionMetadata::create((void*)dictNew, UNKNOWN, 1, true, true)));
     dict_cls->giveAttr("__init__", new BoxedFunction(FunctionMetadata::create((void*)dictInit, NONE, 1, true, true)));
     dict_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)dictRepr, STR, 1)));
 
+    dict_cls->giveAttr("__cmp__", new BoxedFunction(FunctionMetadata::create((void*)dict_richcompare, UNKNOWN, 2)));
     dict_cls->giveAttr("__eq__", new BoxedFunction(FunctionMetadata::create((void*)dictEq, UNKNOWN, 2)));
     dict_cls->giveAttr("__ne__", new BoxedFunction(FunctionMetadata::create((void*)dictNe, UNKNOWN, 2)));
     dict_cls->giveAttr("__hash__", incref(None));
