@@ -664,6 +664,10 @@ Box* dictEq(BoxedDict* self, Box* _rhs) {
         raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
 
+    if (_rhs == Py_None) {
+        Py_RETURN_FALSE;
+    }
+
     if (_rhs->cls == attrwrapper_cls) {
         _rhs = attrwrapperToDict(_rhs);
     } else {
@@ -1027,27 +1031,48 @@ Finished:
     return res;
 }
 
+
 static PyObject* dict_richcompare(PyObject* v, PyObject* w, int op) noexcept {
     Box* res;
+
+    if (w == Py_None) {
+        if (op == Py_NE || op == Py_GT ) {
+            Py_RETURN_TRUE;
+        } else {
+            Py_RETURN_FALSE;
+        }
+    }
+
     if (!PyDict_Check(v) || !PyDict_Check(w)) {
         res = Py_NotImplemented;
-    } else if (op == Py_EQ) {
-        res = dictEq((BoxedDict*)v, (BoxedDict*)w);
-    } else if (op == Py_NE) {
-        res = dictNe((BoxedDict*)v, (BoxedDict*)w);
-    } else {
-        /* Py3K warning if comparison isn't == or !=  */
-        if (PyErr_WarnPy3k("dict inequality comparisons not supported "
-                           "in 3.x",
-                           1) < 0) {
-            return NULL;
-        }
-        res = Py_NotImplemented;
+        return incref(res);
     }
-    Py_INCREF(res);
-    return res;
-}
 
+    if (op == Py_EQ){
+        return dictEq((BoxedDict*)v, (BoxedDict*)w);
+    } else if (op == Py_NE){
+        return dictNe((BoxedDict*)v, (BoxedDict*)w);
+    } else {
+        int cmp = dict_compare((BoxedDict*)v, (BoxedDict*)w);
+        switch (op) {
+            case Py_LT:
+                res = (cmp < 0) ? Py_True : Py_False;
+                break;
+            case Py_LE:
+                res = (cmp <= 0) ? Py_True : Py_False;
+                break;
+            case Py_GT:
+                res = (cmp > 0) ? Py_True : Py_False;
+                break;
+            case Py_GE:
+                res = (cmp >= 0) ? Py_True : Py_False;
+                break;
+            default:
+                RELEASE_ASSERT(0, "%d", op);
+        }
+        return incref(res);
+    }
+}
 
 
 void BoxedDict::dealloc(Box* b) noexcept {
@@ -1140,7 +1165,6 @@ void setupDict() {
         = dictiteritem_cls->instances_are_nonzero = true;
 
     dict_cls->tp_hash = PyObject_HashNotImplemented;
-    dict_cls->tp_compare = (cmpfunc)dict_compare;
     dict_cls->tp_richcompare = dict_richcompare;
 
     dict_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)dictLen, BOXED_INT, 1)));
@@ -1148,7 +1172,6 @@ void setupDict() {
     dict_cls->giveAttr("__init__", new BoxedFunction(FunctionMetadata::create((void*)dictInit, NONE, 1, true, true)));
     dict_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)dictRepr, STR, 1)));
 
-    dict_cls->giveAttr("__cmp__", new BoxedFunction(FunctionMetadata::create((void*)dict_richcompare, UNKNOWN, 2)));
     dict_cls->giveAttr("__eq__", new BoxedFunction(FunctionMetadata::create((void*)dictEq, UNKNOWN, 2)));
     dict_cls->giveAttr("__ne__", new BoxedFunction(FunctionMetadata::create((void*)dictNe, UNKNOWN, 2)));
     dict_cls->giveAttr("__hash__", incref(None));
