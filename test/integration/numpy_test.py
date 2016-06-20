@@ -1,7 +1,6 @@
 import os
 import sys
 import subprocess
-import shutil
 
 """
 Using this test file.
@@ -64,6 +63,7 @@ SRC_DIR = ENV_NAME
 PYTHON_EXE = os.path.abspath(ENV_NAME + "/bin/python")
 CYTHON_DIR = os.path.abspath(os.path.join(SRC_DIR, "cython-0.22"))
 NUMPY_DIR = os.path.abspath(os.path.join(SRC_DIR, "numpy"))
+SCIPY_DIR = os.path.abspath(os.path.join(SRC_DIR, "scipy"))
 
 print_progress_header("Setting up Cython...")
 if not os.path.exists(CYTHON_DIR):
@@ -77,7 +77,6 @@ if not os.path.exists(CYTHON_DIR):
         subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=CYTHON_DIR)
         print ">>> Applied Cython patch"
 
-
     try:
         subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=CYTHON_DIR)
         subprocess.check_call([PYTHON_EXE, "-c", "import Cython"], cwd=CYTHON_DIR)
@@ -85,6 +84,10 @@ if not os.path.exists(CYTHON_DIR):
         subprocess.check_call(["rm", "-rf", CYTHON_DIR])
 else:
     print ">>> Cython already installed."
+
+env = os.environ
+CYTHON_BIN_DIR = os.path.abspath(os.path.join(ENV_NAME + "/bin"))
+env["PATH"] = CYTHON_BIN_DIR + ":" + env["PATH"]
 
 print_progress_header("Cloning up NumPy...")
 if not os.path.exists(NUMPY_DIR):
@@ -94,10 +97,6 @@ else:
     print ">>> NumPy already installed."
 
 try:
-    env = os.environ
-    CYTHON_BIN_DIR = os.path.abspath(os.path.join(ENV_NAME + "/bin"))
-    env["PATH"] = CYTHON_BIN_DIR + ":" + env["PATH"]
-
     print_progress_header("Setting up NumPy...")
     subprocess.check_call([PYTHON_EXE, "setup.py", "build"], cwd=NUMPY_DIR, env=env)
 
@@ -106,6 +105,25 @@ try:
 except:
     subprocess.check_call(["rm", "-rf", NUMPY_DIR + "/build"])
     subprocess.check_call(["rm", "-rf", NUMPY_DIR + "/dist"])
+
+    raise
+
+print_progress_header("Cloning up SciPy...")
+if not os.path.exists(SCIPY_DIR):
+    url = "https://github.com/scipy/scipy"
+    # subprocess.check_call(["git", "clone", "--depth", "1", "--branch", "v0.17.1", url], cwd=SRC_DIR)
+else:
+    print ">>> SciPy already installed."
+
+try:
+    print_progress_header("Setting up SciPy...")
+    # subprocess.check_call([PYTHON_EXE, "setup.py", "build"], cwd=SCIPY_DIR, env=env)
+
+    print_progress_header("Installing SciPy...")
+    # subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=SCIPY_DIR, env=env)
+except:
+    subprocess.check_call(["rm", "-rf", SCIPY_DIR + "/build"])
+    subprocess.check_call(["rm", "-rf", SCIPY_DIR + "/dist"])
 
     raise
 

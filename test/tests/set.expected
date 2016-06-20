@@ -539,3 +539,4 @@ calling __hash__
 False
 set([1L]) set([1]) set([1]) set([1L])
 set([1])
+4

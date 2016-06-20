@@ -457,6 +457,14 @@ extern "C" int PySet_Add(PyObject* set, PyObject* key) noexcept {
     }
 }
 
+extern "C" Py_ssize_t PySet_Size(PyObject* anyset) noexcept {
+    if (!PyAnySet_Check(anyset)) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+    BoxedSet* self = (BoxedSet*)anyset;
+    return self->s.size();
+}
 
 Box* setClear(BoxedSet* self) {
     RELEASE_ASSERT(isSubclass(self->cls, set_cls), "");

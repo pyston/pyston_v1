@@ -969,7 +969,7 @@ bench_exceptions:
 	zsh -c 'ulimit -m $(MAX_MEM_KB); time ./bench_exceptions'
 	rm bench_exceptions
 
-TEST_EXT_MODULE_NAMES := basic_test descr_test slots_test
+TEST_EXT_MODULE_NAMES := basic_test descr_test slots_test type_test api_test
 TEST_EXT_MODULE_SRCS := $(TEST_EXT_MODULE_NAMES:%=test/test_extension/%.c)
 TEST_EXT_MODULE_OBJS := $(TEST_EXT_MODULE_NAMES:%=test/test_extension/%.pyston.so)
 

@@ -200,9 +200,15 @@ extern "C" BORROWED(PyObject*) PyCode_GetFilename(PyCodeObject* op) noexcept {
     RELEASE_ASSERT(PyCode_Check((Box*)op), "");
     return BoxedCode::filename((Box*)op, NULL);
 }
+
 extern "C" BORROWED(PyObject*) PyCode_GetName(PyCodeObject* op) noexcept {
     RELEASE_ASSERT(PyCode_Check((Box*)op), "");
     return BoxedCode::name((Box*)op, NULL);
+}
+
+extern "C" int PyCode_HasFreeVars(PyCodeObject* _code) noexcept {
+    BoxedCode* code = (BoxedCode*)_code;
+    return code->f->source->getScopeInfo()->takesClosure() ? 1 : 0;
 }
 
 void setupCode() {
