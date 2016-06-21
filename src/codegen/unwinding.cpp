@@ -1093,6 +1093,10 @@ extern "C" void abort() {
     // In case displaying the traceback recursively calls abort:
     static bool recursive = false;
 
+    if (recursive) {
+        fprintf(stderr, "Recursively called abort! Make sure to check the stack trace\n");
+    }
+
     if (!recursive && !IN_SHUTDOWN) {
         recursive = true;
         Stats::dump();

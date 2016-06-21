@@ -124,7 +124,7 @@ public:
 
     int getVReg(InternedString name) const {
         assert(hasVRegsAssigned());
-        assert(sym_vreg_map.count(name));
+        ASSERT(sym_vreg_map.count(name), "%s", name.c_str());
         auto it = sym_vreg_map.find(name);
         assert(it != sym_vreg_map.end());
         assert(it->second != -1);

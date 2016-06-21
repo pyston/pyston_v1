@@ -24,6 +24,7 @@
 #include "analysis/scoping_analysis.h"
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
+#include "codegen/irgen/irgenerator.h"
 #include "codegen/osrentry.h"
 #include "codegen/type_recording.h"
 #include "core/ast.h"
@@ -79,7 +80,7 @@ static BoxedClass* simpleCallSpeculation(AST_Call* node, CompilerType* rtn_type,
     return predictClassFor(node);
 }
 
-typedef llvm::DenseMap<InternedString, CompilerType*> TypeMap;
+typedef VRegMap<CompilerType*> TypeMap;
 typedef llvm::DenseMap<CFGBlock*, TypeMap> AllTypeMap;
 typedef llvm::DenseMap<AST*, CompilerType*> ExprTypeMap;
 typedef llvm::DenseMap<AST*, BoxedClass*> TypeSpeculations;
@@ -166,10 +167,10 @@ private:
         return rtn;
     }
 
-    void _doSet(InternedString target, CompilerType* t) {
+    void _doSet(int vreg, CompilerType* t) {
         assert(t->isUsable());
         if (t)
-            sym_table[target] = t;
+            sym_table[vreg] = t;
     }
 
     void _doSet(AST_expr* target, CompilerType* t) {
@@ -177,9 +178,16 @@ private:
             case AST_TYPE::Attribute:
                 // doesn't affect types (yet?)
                 break;
-            case AST_TYPE::Name:
-                _doSet(ast_cast<AST_Name>(target)->id, t);
+            case AST_TYPE::Name: {
+                auto name = ast_cast<AST_Name>(target);
+                assert(name->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
+                if (name->lookup_type == ScopeInfo::VarScopeType::FAST
+                    || name->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
+                    _doSet(name->vreg, t);
+                } else
+                    assert(name->vreg == -1);
                 break;
+            }
             case AST_TYPE::Subscript:
                 break;
             case AST_TYPE::Tuple: {
@@ -441,7 +449,7 @@ private:
         }
 
         if (name_scope == ScopeInfo::VarScopeType::FAST || name_scope == ScopeInfo::VarScopeType::CLOSURE) {
-            CompilerType*& t = sym_table[node->id];
+            CompilerType*& t = sym_table[node->vreg];
             if (t == NULL) {
                 // if (VERBOSITY() >= 2) {
                 // printf("%s is undefined!\n", node->id.c_str());
@@ -574,9 +582,16 @@ private:
                 case AST_TYPE::Attribute:
                     getType(ast_cast<AST_Attribute>(target)->value);
                     break;
-                case AST_TYPE::Name:
-                    sym_table.erase(ast_cast<AST_Name>(target)->id);
+                case AST_TYPE::Name: {
+                    auto name = ast_cast<AST_Name>(target);
+                    assert(name->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
+                    if (name->lookup_type == ScopeInfo::VarScopeType::FAST
+                        || name->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
+                        sym_table[name->vreg] = NULL;
+                    } else
+                        assert(name->vreg == -1);
                     break;
+                }
                 default:
                     RELEASE_ASSERT(0, "%d", target->type);
             }
@@ -609,24 +624,9 @@ private:
 
     void visit_global(AST_Global* node) override {}
 
-    // not part of the visitor api:
-    void _visit_alias(AST_alias* node) {
-        InternedString name = node->name;
-        if (node->asname.s().size())
-            name = node->asname;
+    void visit_import(AST_Import* node) override { assert(0 && "this should get removed by cfg"); }
 
-        _doSet(name, UNKNOWN);
-    }
-
-    void visit_import(AST_Import* node) override {
-        for (AST_alias* alias : node->names)
-            _visit_alias(alias);
-    }
-
-    void visit_importfrom(AST_ImportFrom* node) override {
-        for (AST_alias* alias : node->names)
-            _visit_alias(alias);
-    }
+    void visit_importfrom(AST_ImportFrom* node) override { assert(0 && "this should get removed by cfg"); }
 
     void visit_exec(AST_Exec* node) override {
         getType(node->body);
@@ -700,8 +700,10 @@ public:
         return getTypeAtBlockStart(name, block->successors[0]);
     }
     ConcreteCompilerType* getTypeAtBlockStart(InternedString name, CFGBlock* block) override {
+        int vreg = block->cfg->getVRegInfo().getVReg(name);
+
         assert(starting_types.count(block));
-        CompilerType* base = starting_types[block][name];
+        CompilerType* base = starting_types.find(block)->second[vreg];
         ASSERT(base != NULL, "%s %d", name.c_str(), block->idx);
 
         ConcreteCompilerType* rtn = base->getConcreteType();
@@ -713,7 +715,9 @@ public:
     BoxedClass* speculatedExprClass(AST_expr* call) override { return type_speculations[call]; }
 
     static bool merge(CompilerType* lhs, CompilerType*& rhs) {
-        assert(lhs);
+        if (!lhs)
+            return false;
+
         if (rhs == NULL) {
             rhs = lhs;
             return true;
@@ -756,6 +760,11 @@ public:
                                                TypeMap&& initial_types, CFGBlock* initial_block) {
         Timer _t("PropagatingTypeAnalysis::doAnalysis()");
 
+        CFG* cfg = initial_block->cfg;
+        auto&& vreg_info = cfg->getVRegInfo();
+        int num_vregs = vreg_info.getTotalNumOfVRegs();
+        assert(initial_types.numVregs() == num_vregs);
+
         AllTypeMap starting_types;
         ExprTypeMap expr_types;
         TypeSpeculations type_speculations;
@@ -763,7 +772,7 @@ public:
         llvm::SmallPtrSet<CFGBlock*, 32> in_queue;
         std::priority_queue<CFGBlock*, llvm::SmallVector<CFGBlock*, 32>, CFGBlockMinIndex> queue;
 
-        starting_types[initial_block] = std::move(initial_types);
+        starting_types.insert(std::make_pair(initial_block, std::move(initial_types)));
         queue.push(initial_block);
         in_queue.insert(initial_block);
 
@@ -774,41 +783,46 @@ public:
             CFGBlock* block = queue.top();
             queue.pop();
             in_queue.erase(block);
-
+            assert(starting_types.count(block));
 
             if (VERBOSITY("types") >= 3) {
                 printf("processing types for block %d\n", block->idx);
             }
             if (VERBOSITY("types") >= 3) {
                 printf("before:\n");
-                TypeMap& starting = starting_types[block];
+                TypeMap& starting = starting_types.find(block)->second;
                 for (const auto& p : starting) {
-                    ASSERT(p.second, "%s", p.first.c_str());
-                    printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
+                    auto name = vreg_info.getName(p.first);
+                    ASSERT(p.second, "%s", name.c_str());
+                    printf("%s: %s\n", name.c_str(), p.second->debugName().c_str());
                 }
             }
 
-            TypeMap ending = BasicBlockTypePropagator::propagate(block, starting_types[block], expr_types,
+            TypeMap ending = BasicBlockTypePropagator::propagate(block, starting_types.find(block)->second, expr_types,
                                                                  type_speculations, speculation, scope_info);
 
             if (VERBOSITY("types") >= 3) {
                 printf("before (after):\n");
-                TypeMap& starting = starting_types[block];
+                TypeMap& starting = starting_types.find(block)->second;
                 for (const auto& p : starting) {
-                    ASSERT(p.second, "%s", p.first.c_str());
-                    printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
+                    auto name = vreg_info.getName(p.first);
+                    ASSERT(p.second, "%s", name.c_str());
+                    printf("%s: %s\n", name.c_str(), p.second->debugName().c_str());
                 }
                 printf("after:\n");
                 for (const auto& p : ending) {
-                    ASSERT(p.second, "%s", p.first.c_str());
-                    printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
+                    auto name = vreg_info.getName(p.first);
+                    ASSERT(p.second, "%s", name.c_str());
+                    printf("%s: %s\n", name.c_str(), p.second->debugName().c_str());
                 }
             }
 
             for (int i = 0; i < block->successors.size(); i++) {
                 CFGBlock* next_block = block->successors[i];
                 bool first = (starting_types.count(next_block) == 0);
-                bool changed = merge(ending, starting_types[next_block]);
+                if (first)
+                    starting_types.insert(std::make_pair(next_block, TypeMap(num_vregs)));
+                bool changed = merge(ending, starting_types.find(next_block)->second);
                 if ((first || changed) && in_queue.insert(next_block).second) {
                     queue.push(next_block);
                 }
@@ -827,8 +841,9 @@ public:
 
                 const TypeMap& starting = p.second;
                 for (const auto& p : starting) {
-                    ASSERT(p.second, "%s", p.first.c_str());
-                    printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
+                    auto name = vreg_info.getName(p.first);
+                    ASSERT(p.second, "%s", name.c_str());
+                    printf("%s: %s\n", name.c_str(), p.second->debugName().c_str());
                 }
             }
         }
@@ -849,20 +864,29 @@ TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& arg_names, const std::v
     //}
     assert(arg_names.totalParameters() == arg_types.size());
 
-    TypeMap initial_types;
+    TypeMap initial_types(cfg->getVRegInfo().getTotalNumOfVRegs());
     int i = 0;
 
+    auto maybe_add = [&](AST_Name* n) {
+        ScopeInfo::VarScopeType vst = n->lookup_type;
+        assert(vst != ScopeInfo::VarScopeType::UNKNOWN);
+        assert(vst != ScopeInfo::VarScopeType::GLOBAL); // global-and-local error
+        if (vst == ScopeInfo::VarScopeType::NAME)
+            return;
+        initial_types[n->vreg] = unboxedType(arg_types[i]);
+    };
+
     for (; i < arg_names.args.size(); i++) {
-        initial_types[scope_info->internString(arg_names.args[i])] = unboxedType(arg_types[i]);
+        maybe_add(arg_names.arg_names[i]);
     }
 
     if (arg_names.vararg.size()) {
-        initial_types[scope_info->internString(arg_names.vararg)] = unboxedType(arg_types[i]);
+        maybe_add(arg_names.vararg_name);
         i++;
     }
 
     if (arg_names.kwarg.size()) {
-        initial_types[scope_info->internString(arg_names.kwarg)] = unboxedType(arg_types[i]);
+        maybe_add(arg_names.kwarg_name);
         i++;
     }
 
@@ -874,10 +898,19 @@ TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& arg_names, const std::v
 
 TypeAnalysis* doTypeAnalysis(const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
                              TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info) {
-    // if (effort == EffortLevel::INTERPRETED) {
-    // return new NullTypeAnalysis();
-    //}
-    TypeMap initial_types(entry_descriptor->args.begin(), entry_descriptor->args.end());
+    auto cfg = entry_descriptor->md->source->cfg;
+    auto&& vreg_info = cfg->getVRegInfo();
+    TypeMap initial_types(vreg_info.getTotalNumOfVRegs());
+
+    for (auto&& p : entry_descriptor->args) {
+        if (p.first.s()[0] == '!')
+            continue;
+        if (p.first.s() == PASSED_CLOSURE_NAME || p.first.s() == FRAME_INFO_PTR_NAME
+            || p.first.s() == PASSED_GENERATOR_NAME || p.first.s() == CREATED_CLOSURE_NAME)
+            continue;
+        initial_types[vreg_info.getVReg(p.first)] = p.second;
+    }
+
     return PropagatingTypeAnalysis::doAnalysis(speculation, scope_info, std::move(initial_types),
                                                entry_descriptor->backedge->target);
 }

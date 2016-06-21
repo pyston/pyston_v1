@@ -298,7 +298,8 @@ public:
                     && name->lookup_type != ScopeInfo::VarScopeType::NAME) {
                     assert(name->vreg != -1);
                     state[name->vreg] = DefinednessAnalysis::Undefined;
-                }
+                } else
+                    assert(name->vreg == -1);
             } else {
                 // The CFG pass should reduce all deletes to the "basic" deletes on names/attributes/subscripts.
                 // If not, probably the best way to do this would be to just do a full AST traversal
