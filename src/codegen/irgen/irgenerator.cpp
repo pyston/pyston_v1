@@ -2657,12 +2657,13 @@ private:
             // ASSERT(p.first[0] != '!' || isIsDefinedName(p.first), "left a fake variable in the real
             // symbol table? '%s'", p.first.c_str());
 
-            if (!irstate->getLiveness()->isLiveAtEnd(cfg->getVRegInfo().getVReg(p.first), myblock)) {
+            int vreg = cfg->getVRegInfo().getVReg(p.first);
+            if (!irstate->getLiveness()->isLiveAtEnd(vreg, myblock)) {
                 symbol_table.erase(getIsDefinedName(p.first));
                 symbol_table.erase(p.first);
-            } else if (irstate->getPhis()->isRequiredAfter(p.first, myblock)) {
+            } else if (irstate->getPhis()->isRequiredAfter(vreg, myblock)) {
                 assert(scope_info->getScopeTypeOfName(p.first) != ScopeInfo::VarScopeType::GLOBAL);
-                ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(p.first, myblock);
+                ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(vreg, myblock);
                 assert(phi_type->isUsable());
                 // printf("Converting %s from %s to %s\n", p.first.c_str(),
                 // p.second->getType()->debugName().c_str(), phi_type->debugName().c_str());
@@ -2675,7 +2676,7 @@ private:
                     // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't
                     // want
                     // here, but this is just for debugging so I guess let it happen for now:
-                    ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(p.first, myblock);
+                    ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(vreg, myblock);
                     RELEASE_ASSERT(p.second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
                                    p.first.c_str(), ending_type->debugName().c_str(),
                                    p.second->getType()->debugName().c_str());
@@ -2685,13 +2686,12 @@ private:
 
         for (int vreg : irstate->getPhis()->getAllRequiredAfter(myblock)) {
             auto name = irstate->getCFG()->getVRegInfo().getName(vreg);
-            auto it = &name; // hack, remove
             if (VERBOSITY() >= 3)
-                printf("phi will be required for %s\n", it->c_str());
-            assert(scope_info->getScopeTypeOfName(*it) != ScopeInfo::VarScopeType::GLOBAL);
-            CompilerVariable*& cur = symbol_table[*it];
+                printf("phi will be required for %s\n", name.c_str());
+            assert(scope_info->getScopeTypeOfName(name) != ScopeInfo::VarScopeType::GLOBAL);
+            CompilerVariable*& cur = symbol_table[name];
 
-            InternedString defined_name = getIsDefinedName(*it);
+            InternedString defined_name = getIsDefinedName(name);
 
             if (cur != NULL) {
                 // printf("defined on this path; ");
@@ -2699,7 +2699,7 @@ private:
                 ConcreteCompilerVariable* is_defined
                     = static_cast<ConcreteCompilerVariable*>(_popFake(defined_name, true));
 
-                if (irstate->getPhis()->isPotentiallyUndefinedAfter(*it, myblock)) {
+                if (irstate->getPhis()->isPotentiallyUndefinedAfter(vreg, myblock)) {
                     // printf("is potentially undefined later, so marking it defined\n");
                     if (is_defined) {
                         _setFake(defined_name, is_defined);
@@ -2712,7 +2712,7 @@ private:
                 }
             } else {
                 // printf("no st entry, setting undefined\n");
-                ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(*it, myblock);
+                ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(vreg, myblock);
                 assert(phi_type->isUsable());
 
                 // Forward an incref'd None instead of a NULL.
@@ -2769,6 +2769,9 @@ public:
         SymbolTable* st = new SymbolTable(symbol_table);
         ConcreteSymbolTable* phi_st = new ConcreteSymbolTable();
 
+        auto cfg = source->cfg;
+        auto&& vreg_info = cfg->getVRegInfo();
+
         // This should have been consumed:
         assert(incoming_exc_state.empty());
 
@@ -2799,7 +2802,8 @@ public:
         // We have one successor, but they have more than one predecessor.
         // We're going to sort out which symbols need to go in phi_st and which belong inst.
         for (SymbolTable::iterator it = st->begin(); it != st->end();) {
-            if (allowableFakeEndingSymbol(it->first) || irstate->getPhis()->isRequiredAfter(it->first, myblock)) {
+            if (allowableFakeEndingSymbol(it->first)
+                || irstate->getPhis()->isRequiredAfter(cfg->getVRegInfo().getVReg(it->first), myblock)) {
                 // this conversion should have already happened... should refactor this.
                 ConcreteCompilerType* ending_type;
                 if (isIsDefinedName(it->first.s())) {
@@ -2814,7 +2818,7 @@ public:
                 } else if (it->first.s() == FRAME_INFO_PTR_NAME) {
                     ending_type = FRAME_INFO;
                 } else {
-                    ending_type = types->getTypeAtBlockEnd(it->first, myblock);
+                    ending_type = types->getTypeAtBlockEnd(vreg_info.getVReg(it->first), myblock);
                 }
                 assert(ending_type->isUsable());
                 //(*phi_st)[it->first] = it->second->makeConverted(emitter, it->second->getConcreteType());

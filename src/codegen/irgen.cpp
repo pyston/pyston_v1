@@ -286,7 +286,8 @@ static std::vector<std::pair<CFGBlock*, CFGBlock*>> computeBlockTraversalOrder(c
     return rtn;
 }
 
-static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, InternedString name, CFGBlock* block) {
+static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, InternedString name, const VRegInfo& vreg_info,
+                                                 CFGBlock* block) {
     if (isIsDefinedName(name))
         return BOOL;
     else if (name.s() == PASSED_GENERATOR_NAME)
@@ -295,8 +296,11 @@ static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, InternedSt
         return CLOSURE;
     else if (name.s() == CREATED_CLOSURE_NAME)
         return CLOSURE;
-    else
-        return types->getTypeAtBlockStart(name, block);
+    else {
+        // This could crash if we call getTypeAtBlockStart on something that doesn't have a type or vreg.
+        // Luckily it looks like we don't do that.
+        return types->getTypeAtBlockStart(vreg_info.getVReg(name), block);
+    }
 }
 
 static bool shouldPhisOwnThisSym(llvm::StringRef name) {
@@ -362,6 +366,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     assert(phi_analysis);
 
     CFG* cfg = source->cfg;
+    auto&& vreg_info = cfg->getVRegInfo();
 
     if (entry_descriptor != NULL)
         assert(blocks.count(cfg->getStartingBlock()) == 0);
@@ -456,7 +461,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             }
 
             ConcreteCompilerType* phi_type;
-            phi_type = getTypeAtBlockStart(types, p.first, target_block);
+            phi_type = getTypeAtBlockStart(types, p.first, vreg_info, target_block);
 
             irstate->getRefcounts()->setType(from_arg, RefType::BORROWED);
 
@@ -625,7 +630,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 if (p.first.s() == FRAME_INFO_PTR_NAME)
                     continue;
 
-                ConcreteCompilerType* analyzed_type = getTypeAtBlockStart(types, p.first, block);
+                ConcreteCompilerType* analyzed_type = getTypeAtBlockStart(types, p.first, vreg_info, block);
 
                 // printf("For %s, given %s, analyzed for %s\n", p.first.c_str(), p.second->debugName().c_str(),
                 //        analyzed_type->debugName().c_str());
@@ -655,7 +660,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             for (const int vreg : phi_analysis->getAllRequiredFor(block)) {
                 auto s = cfg->getVRegInfo().getName(vreg);
                 names.insert(s);
-                if (phi_analysis->isPotentiallyUndefinedAfter(s, block->predecessors[0])) {
+                if (phi_analysis->isPotentiallyUndefinedAfter(vreg, block->predecessors[0])) {
                     names.insert(getIsDefinedName(s, source->getInternedStrings()));
                 }
             }
@@ -673,7 +678,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
             for (const InternedString& s : names) {
                 // printf("adding guessed phi for %s\n", s.c_str());
-                ConcreteCompilerType* type = getTypeAtBlockStart(types, s, block);
+                ConcreteCompilerType* type = getTypeAtBlockStart(types, s, vreg_info, block);
                 llvm::PHINode* phi
                     = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s.s());
                 if (type->getBoxType() == type) {

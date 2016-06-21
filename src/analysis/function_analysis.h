@@ -163,7 +163,7 @@ public:
 
     void run(VRegMap<DefinitionLevel> initial_map, CFGBlock* initial_block, ScopeInfo* scope_info);
 
-    DefinitionLevel isDefinedAtEnd(InternedString name, CFGBlock* block);
+    DefinitionLevel isDefinedAtEnd(int vreg, CFGBlock* block);
     const VRegSet& getDefinedVregsAtEnd(CFGBlock* block);
 
     friend class PhiAnalysis;
@@ -186,15 +186,15 @@ public:
                 bool initials_need_phis, LivenessAnalysis* liveness, ScopeInfo* scope_info);
 
     // TODO: convert these to taking vregs
-    bool isRequired(InternedString name, CFGBlock* block);
-    bool isRequiredAfter(InternedString name, CFGBlock* block);
+    bool isRequired(int vreg, CFGBlock* block);
+    bool isRequiredAfter(int vreg, CFGBlock* block);
     const VRegSet& getAllRequiredAfter(CFGBlock* block);
     const VRegSet& getAllRequiredFor(CFGBlock* block);
     // TODO: convert these to taking vregs
     // If "name" may be undefined at the beginning of any immediate successor block of "block":
-    bool isPotentiallyUndefinedAfter(InternedString name, CFGBlock* block);
+    bool isPotentiallyUndefinedAfter(int vreg, CFGBlock* block);
     // If "name" may be undefined at the beginning of "block"
-    bool isPotentiallyUndefinedAt(InternedString name, CFGBlock* block);
+    bool isPotentiallyUndefinedAt(int vreg, CFGBlock* block);
 };
 
 std::unique_ptr<LivenessAnalysis> computeLivenessInfo(CFG*);

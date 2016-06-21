@@ -40,20 +40,20 @@ namespace pyston {
 
 class NullTypeAnalysis : public TypeAnalysis {
 public:
-    ConcreteCompilerType* getTypeAtBlockStart(InternedString name, CFGBlock* block) override;
-    ConcreteCompilerType* getTypeAtBlockEnd(InternedString name, CFGBlock* block) override;
+    ConcreteCompilerType* getTypeAtBlockStart(int vreg, CFGBlock* block) override;
+    ConcreteCompilerType* getTypeAtBlockEnd(int vreg, CFGBlock* block) override;
 
     BoxedClass* speculatedExprClass(AST_expr*) override { return NULL; }
     BoxedClass* speculatedExprClass(AST_slice*) override { return NULL; }
 };
 
-ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockStart(InternedString name, CFGBlock* block) {
+ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockStart(int vreg, CFGBlock* block) {
     return UNKNOWN;
 }
 
-ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockEnd(InternedString name, CFGBlock* block) {
+ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockEnd(int vreg, CFGBlock* block) {
     assert(block->successors.size() > 0);
-    return getTypeAtBlockStart(name, block->successors[0]);
+    return getTypeAtBlockStart(vreg, block->successors[0]);
 }
 
 
@@ -695,19 +695,17 @@ private:
           speculation(speculation) {}
 
 public:
-    ConcreteCompilerType* getTypeAtBlockEnd(InternedString name, CFGBlock* block) override {
+    ConcreteCompilerType* getTypeAtBlockEnd(int vreg, CFGBlock* block) override {
         assert(block->successors.size() > 0);
-        return getTypeAtBlockStart(name, block->successors[0]);
+        return getTypeAtBlockStart(vreg, block->successors[0]);
     }
-    ConcreteCompilerType* getTypeAtBlockStart(InternedString name, CFGBlock* block) override {
-        int vreg = block->cfg->getVRegInfo().getVReg(name);
-
+    ConcreteCompilerType* getTypeAtBlockStart(int vreg, CFGBlock* block) override {
         assert(starting_types.count(block));
         CompilerType* base = starting_types.find(block)->second[vreg];
-        ASSERT(base != NULL, "%s %d", name.c_str(), block->idx);
+        ASSERT(base != NULL, "%s %d", block->cfg->getVRegInfo().getName(vreg).c_str(), block->idx);
 
         ConcreteCompilerType* rtn = base->getConcreteType();
-        ASSERT(rtn != NULL, "%s %d", name.c_str(), block->idx);
+        ASSERT(rtn != NULL, "%s %d", block->cfg->getVRegInfo().getName(vreg).c_str(), block->idx);
         return rtn;
     }
 

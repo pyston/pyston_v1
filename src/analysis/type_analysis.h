@@ -39,8 +39,8 @@ public:
 
     virtual ~TypeAnalysis() {}
 
-    virtual ConcreteCompilerType* getTypeAtBlockStart(InternedString name, CFGBlock* block) = 0;
-    virtual ConcreteCompilerType* getTypeAtBlockEnd(InternedString name, CFGBlock* block) = 0;
+    virtual ConcreteCompilerType* getTypeAtBlockStart(int vreg, CFGBlock* block) = 0;
+    virtual ConcreteCompilerType* getTypeAtBlockEnd(int vreg, CFGBlock* block) = 0;
     virtual BoxedClass* speculatedExprClass(AST_expr*) = 0;
     virtual BoxedClass* speculatedExprClass(AST_slice*) = 0;
 };

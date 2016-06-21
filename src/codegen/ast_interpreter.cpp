@@ -722,7 +722,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     for (auto&& sym : getSymVRegMap()) {
         if (!liveness->isLiveAtEnd(sym.second, current_block)) {
             dead_vregs.push_back(sym.second);
-        } else if (phis->isRequiredAfter(sym.first, current_block)) {
+        } else if (phis->isRequiredAfter(sym.second, current_block)) {
             assert(scope_info->getScopeTypeOfName(sym.first) != ScopeInfo::VarScopeType::GLOBAL);
         } else {
         }
@@ -753,7 +753,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
         InternedString name = source_info->cfg->getVRegInfo().getName(vreg);
         Box* val = vregs[vreg];
-        if (phis->isPotentiallyUndefinedAfter(name, current_block)) {
+        if (phis->isPotentiallyUndefinedAfter(vreg, current_block)) {
             bool is_defined = val != NULL;
             // TODO only mangle once
             sorted_symbol_table[getIsDefinedName(name, source_info->getInternedStrings())] = (Box*)is_defined;

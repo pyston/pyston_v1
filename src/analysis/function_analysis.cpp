@@ -415,11 +415,10 @@ void DefinednessAnalysis::run(VRegMap<DefinednessAnalysis::DefinitionLevel> init
     us_definedness.log(_t.end());
 }
 
-DefinednessAnalysis::DefinitionLevel DefinednessAnalysis::isDefinedAtEnd(InternedString name, CFGBlock* block) {
+DefinednessAnalysis::DefinitionLevel DefinednessAnalysis::isDefinedAtEnd(int vreg, CFGBlock* block) {
     assert(defined_at_end.count(block));
     auto&& map = defined_at_end.find(block)->second;
-    auto cfg = block->cfg;
-    return map[cfg->getVRegInfo().getVReg(name)];
+    return map[vreg];
 }
 
 const VRegSet& DefinednessAnalysis::getDefinedVregsAtEnd(CFGBlock* block) {
@@ -488,40 +487,30 @@ const VRegSet& PhiAnalysis::getAllRequiredFor(CFGBlock* block) {
     return required_phis.find(block)->second;
 }
 
-// TODO: switch this to taking a vreg
-bool PhiAnalysis::isRequired(InternedString name, CFGBlock* block) {
-    assert(!startswith(name.s(), "!"));
+bool PhiAnalysis::isRequired(int vreg, CFGBlock* block) {
     assert(required_phis.count(block));
-    return required_phis.find(block)->second[block->cfg->getVRegInfo().getVReg(name)];
+    return required_phis.find(block)->second[vreg];
 }
 
-bool PhiAnalysis::isRequiredAfter(InternedString name, CFGBlock* block) {
-    assert(!startswith(name.s(), "!"));
+bool PhiAnalysis::isRequiredAfter(int vreg, CFGBlock* block) {
     // If there are multiple successors, then none of them are allowed
     // to require any phi nodes
     if (block->successors.size() != 1)
         return false;
 
     // Fall back to the other method:
-    return isRequired(name, block->successors[0]);
+    return isRequired(vreg, block->successors[0]);
 }
 
-bool PhiAnalysis::isPotentiallyUndefinedAfter(InternedString name, CFGBlock* block) {
-    assert(!startswith(name.s(), "!"));
-
+bool PhiAnalysis::isPotentiallyUndefinedAfter(int vreg, CFGBlock* block) {
     for (auto b : block->successors) {
-        if (isPotentiallyUndefinedAt(name, b))
+        if (isPotentiallyUndefinedAt(vreg, b))
             return true;
     }
     return false;
 }
 
-bool PhiAnalysis::isPotentiallyUndefinedAt(InternedString name, CFGBlock* block) {
-    assert(!startswith(name.s(), "!"));
-
-    auto cfg = block->cfg;
-    int vreg = cfg->getVRegInfo().getVReg(name);
-
+bool PhiAnalysis::isPotentiallyUndefinedAt(int vreg, CFGBlock* block) {
     assert(definedness.defined_at_beginning.count(block));
     return definedness.defined_at_beginning.find(block)->second[vreg] != DefinednessAnalysis::Defined;
 }
