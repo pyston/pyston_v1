@@ -32,8 +32,7 @@ PyAPI_FUNC(PyCFunction) PyCFunction_GetFunction(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(BORROWED(PyObject *)) PyCFunction_GetSelf(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyCFunction_GetFlags(PyObject *) PYSTON_NOEXCEPT;
 
-// Pyston change: changed to function calls
-#if 0
+
 /* Macros for direct access to these values. Type checks are *not*
    done, so use with care. */
 #define PyCFunction_GET_FUNCTION(func) \
@@ -42,13 +41,7 @@ PyAPI_FUNC(int) PyCFunction_GetFlags(PyObject *) PYSTON_NOEXCEPT;
 	(((PyCFunctionObject *)func) -> m_self)
 #define PyCFunction_GET_FLAGS(func) \
 	(((PyCFunctionObject *)func) -> m_ml -> ml_flags)
-#endif
-#define PyCFunction_GET_FUNCTION(func) \
-        PyCFunction_GetFunction((PyObject*)(func))
-#define PyCFunction_GET_SELF(func) \
-        PyCFunction_GetSelf((PyObject*)(func))
-#define PyCFunction_GET_FLAGS(func) \
-        PyCFunction_GetFlags((PyObject*)(func))
+
 PyAPI_FUNC(PyObject *) PyCFunction_Call(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
 
 struct PyMethodDef {
