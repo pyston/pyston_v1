@@ -75,6 +75,9 @@ private:
     llvm::Value* globals;
     llvm::Value* vregs;
     llvm::Value* stmt;
+
+    llvm::Value* passed_closure = NULL, * created_closure = NULL, * passed_generator = NULL;
+
     int scratch_size;
 
 public:
@@ -120,6 +123,14 @@ public:
     RefcountTracker* getRefcounts() { return refcount_tracker; }
 
     ParamNames* getParamNames() { return param_names; }
+
+    llvm::Value* getPassedClosure();
+    llvm::Value* getCreatedClosure();
+    llvm::Value* getPassedGenerator();
+
+    void setPassedClosure(llvm::Value*);
+    void setCreatedClosure(llvm::Value*);
+    void setPassedGenerator(llvm::Value*);
 
     // Returns the custom globals, or the module if the globals come from the module.
     llvm::Value* getGlobals();

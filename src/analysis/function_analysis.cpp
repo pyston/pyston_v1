@@ -585,7 +585,7 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor* entry
             continue;
         if (p.first.s() == PASSED_CLOSURE_NAME || p.first.s() == FRAME_INFO_PTR_NAME
             || p.first.s() == PASSED_GENERATOR_NAME || p.first.s() == CREATED_CLOSURE_NAME)
-            continue;
+            assert(0);
         int vreg = cfg->getVRegInfo().getVReg(p.first);
         ASSERT(initial_map[vreg] == DefinednessAnalysis::Undefined, "%s %d", p.first.c_str(), initial_map[vreg]);
         if (potentially_undefined.count(p.first.s()))

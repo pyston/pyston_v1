@@ -68,6 +68,38 @@ IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* s
 IRGenState::~IRGenState() {
 }
 
+llvm::Value* IRGenState::getPassedClosure() {
+    assert(getScopeInfo()->takesClosure());
+    assert(passed_closure);
+    return passed_closure;
+}
+llvm::Value* IRGenState::getCreatedClosure() {
+    assert(getScopeInfo()->createsClosure());
+    assert(created_closure);
+    return created_closure;
+}
+llvm::Value* IRGenState::getPassedGenerator() {
+    assert(source_info->is_generator);
+    assert(passed_generator);
+    return passed_generator;
+}
+
+void IRGenState::setPassedClosure(llvm::Value* v) {
+    assert(getScopeInfo()->takesClosure());
+    assert(!passed_closure);
+    passed_closure = v;
+}
+void IRGenState::setCreatedClosure(llvm::Value* v) {
+    assert(getScopeInfo()->createsClosure());
+    assert(!created_closure);
+    created_closure = v;
+}
+void IRGenState::setPassedGenerator(llvm::Value* v) {
+    assert(source_info->is_generator);
+    assert(!passed_generator);
+    passed_generator = v;
+}
+
 llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
     llvm::BasicBlock& entry_block = getLLVMFunction()->getEntryBlock();
 
@@ -238,6 +270,11 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
             getRefcounts()->setType(this->boxed_locals, RefType::BORROWED);
         }
 
+        if (getScopeInfo()->takesClosure()) {
+            passed_closure = builder.CreateLoad(getPassedClosureGep(builder, frame_info_arg));
+            getRefcounts()->setType(passed_closure, RefType::BORROWED);
+            this->setPassedClosure(passed_closure);
+        }
     } else {
         // The "normal" case
         llvm::AllocaInst* al = builder.CreateAlloca(g.llvm_frame_info_type, NULL, "frame_info");
@@ -1333,8 +1370,8 @@ private:
             // closure = closure->parent;
             // closure->elts[deref_info.offset]
             // Where the parent lookup is done `deref_info.num_parents_from_passed_closure` times
-            CompilerVariable* closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
-            llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
+            llvm::Value* closureValue = irstate->getPassedClosure();
+            assert(closureValue);
             for (int i = 0; i < deref_info.num_parents_from_passed_closure; i++) {
                 closureValue = emitter.getBuilder()->CreateLoad(getClosureParentGep(emitter, closureValue));
                 emitter.setType(closureValue, RefType::BORROWED);
@@ -1543,15 +1580,11 @@ private:
     }
 
     CompilerVariable* evalYield(AST_Yield* node, const UnwindInfo& unw_info) {
-        CompilerVariable* generator = symbol_table[internString(PASSED_GENERATOR_NAME)];
-        assert(generator);
-        ConcreteCompilerVariable* convertedGenerator = generator->makeConverted(emitter, generator->getBoxType());
-
         CompilerVariable* value = node->value ? evalExpr(node->value, unw_info) : emitter.getNone();
         ConcreteCompilerVariable* convertedValue = value->makeConverted(emitter, value->getBoxType());
 
         std::vector<llvm::Value*> args;
-        args.push_back(convertedGenerator->getValue());
+        args.push_back(irstate->getPassedGenerator());
         args.push_back(convertedValue->getValue());
         args.push_back(getConstantInt(0, g.i32)); // the refcounting inserter handles yields specially and adds all
                                                   // owned objects as additional arguments to it
@@ -1594,15 +1627,15 @@ private:
         FunctionMetadata* md = wrapFunction(node, nullptr, node->body, irstate->getSourceInfo());
 
         // TODO duplication with _createFunction:
-        CompilerVariable* created_closure = NULL;
+        llvm::Value* this_closure = NULL;
         if (scope_info->takesClosure()) {
             if (irstate->getScopeInfo()->createsClosure()) {
-                created_closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
+                this_closure = irstate->getCreatedClosure();
             } else {
                 assert(irstate->getScopeInfo()->passesThroughClosure());
-                created_closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
+                this_closure = irstate->getPassedClosure();
             }
-            assert(created_closure);
+            assert(this_closure);
         }
 
         // TODO kind of silly to create the function just to usually-delete it afterwards;
@@ -1610,7 +1643,7 @@ private:
         // but since the classdef can't create its own closure, shouldn't need to explicitly
         // create that scope to pass the closure through.
         assert(irstate->getSourceInfo()->scoping->areGlobalsFromModule());
-        CompilerVariable* func = makeFunction(emitter, md, created_closure, irstate->getGlobalsIfCustom(), {});
+        CompilerVariable* func = makeFunction(emitter, md, this_closure, irstate->getGlobalsIfCustom(), {});
 
         CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(0), {}, NULL);
 
@@ -1643,8 +1676,6 @@ private:
             defaults.push_back(converted);
         }
 
-        CompilerVariable* created_closure = NULL;
-
         bool takes_closure;
         // Optimization: when compiling a module, it's nice to not have to run analyses into the
         // entire module's source code.
@@ -1659,17 +1690,18 @@ private:
 
         bool is_generator = md->source->is_generator;
 
+        llvm::Value* this_closure = NULL;
         if (takes_closure) {
             if (irstate->getScopeInfo()->createsClosure()) {
-                created_closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
+                this_closure = irstate->getCreatedClosure();
             } else {
                 assert(irstate->getScopeInfo()->passesThroughClosure());
-                created_closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
+                this_closure = irstate->getPassedClosure();
             }
-            assert(created_closure);
+            assert(this_closure);
         }
 
-        CompilerVariable* func = makeFunction(emitter, md, created_closure, irstate->getGlobalsIfCustom(), defaults);
+        CompilerVariable* func = makeFunction(emitter, md, this_closure, irstate->getGlobalsIfCustom(), defaults);
 
         return func;
     }
@@ -1959,9 +1991,7 @@ private:
                 size_t offset = irstate->getScopeInfo()->getClosureOffset(name);
 
                 // This is basically `closure->elts[offset] = val;`
-                CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
-                llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
-                llvm::Value* gep = getClosureElementGep(emitter, closureValue, offset);
+                llvm::Value* gep = getClosureElementGep(emitter, irstate->getCreatedClosure(), offset);
                 if (prev) {
                     auto load = emitter.getBuilder()->CreateLoad(gep);
                     emitter.setType(load, RefType::OWNED);
@@ -2313,6 +2343,8 @@ private:
     void doExpr(AST_Expr* node, const UnwindInfo& unw_info) { CompilerVariable* var = evalExpr(node->value, unw_info); }
 
     void doOSRExit(llvm::BasicBlock* normal_target, AST_Jump* osr_key) {
+        RELEASE_ASSERT(0, "I don't think this can get hit any more and it has not been updated");
+#if 0
         llvm::BasicBlock* starting_block = curblock;
         llvm::BasicBlock* onramp = llvm::BasicBlock::Create(g.context, "onramp", irstate->getLLVMFunction());
 
@@ -2468,6 +2500,7 @@ private:
         emitter.getBuilder()->CreateRet(rtn);
 
         emitter.getBuilder()->SetInsertPoint(starting_block);
+#endif
     }
 
     void doJump(AST_Jump* node, const UnwindInfo& unw_info) {
@@ -2631,11 +2664,7 @@ private:
         _doSet(name, var, unw_info);
     }
 
-    bool allowableFakeEndingSymbol(InternedString name) {
-        // TODO this would be a great place to be able to use interned versions of the static names...
-        return isIsDefinedName(name.s()) || name.s() == PASSED_CLOSURE_NAME || name.s() == CREATED_CLOSURE_NAME
-               || name.s() == PASSED_GENERATOR_NAME;
-    }
+    bool allowableFakeEndingSymbol(InternedString name) { return isIsDefinedName(name.s()); }
 
     void endBlock(State new_state) {
         assert(state == RUNNING);
@@ -2743,6 +2772,24 @@ public:
             // nice for debugging though.
             typedef std::pair<InternedString, CompilerVariable*> Entry;
             std::vector<Entry> sorted_symbol_table(symbol_table.begin(), symbol_table.end());
+
+            // TODO: at some point it would be nice to pass these separately
+            auto source = irstate->getSourceInfo();
+            if (source->is_generator)
+                sorted_symbol_table.push_back(
+                    Entry(source->getInternedStrings().get(PASSED_GENERATOR_NAME),
+                          new ConcreteCompilerVariable(GENERATOR, irstate->getPassedGenerator())));
+
+            auto scoping = source->getScopeInfo();
+            if (scoping->takesClosure())
+                sorted_symbol_table.push_back(
+                    Entry(source->getInternedStrings().get(PASSED_CLOSURE_NAME),
+                          new ConcreteCompilerVariable(CLOSURE, irstate->getPassedClosure())));
+            if (scoping->createsClosure())
+                sorted_symbol_table.push_back(
+                    Entry(source->getInternedStrings().get(CREATED_CLOSURE_NAME),
+                          new ConcreteCompilerVariable(CLOSURE, irstate->getCreatedClosure())));
+
             std::sort(sorted_symbol_table.begin(), sorted_symbol_table.end(),
                       [](const Entry& lhs, const Entry& rhs) { return lhs.first < rhs.first; });
             for (const auto& p : sorted_symbol_table) {
@@ -2810,13 +2857,13 @@ public:
                     assert(it->second->getType() == BOOL);
                     ending_type = BOOL;
                 } else if (it->first.s() == PASSED_CLOSURE_NAME) {
-                    ending_type = getPassedClosureType();
+                    RELEASE_ASSERT(0, "");
                 } else if (it->first.s() == CREATED_CLOSURE_NAME) {
-                    ending_type = getCreatedClosureType();
+                    RELEASE_ASSERT(0, "");
                 } else if (it->first.s() == PASSED_GENERATOR_NAME) {
-                    ending_type = GENERATOR;
+                    RELEASE_ASSERT(0, "");
                 } else if (it->first.s() == FRAME_INFO_PTR_NAME) {
-                    ending_type = FRAME_INFO;
+                    RELEASE_ASSERT(0, "");
                 } else {
                     ending_type = types->getTypeAtBlockEnd(vreg_info.getVReg(it->first), myblock);
                 }
@@ -2834,6 +2881,9 @@ public:
     void giveLocalSymbol(InternedString name, CompilerVariable* var) override {
         assert(name.s() != "None");
         assert(name.s() != FRAME_INFO_PTR_NAME);
+        assert(name.s() != CREATED_CLOSURE_NAME);
+        assert(name.s() != PASSED_CLOSURE_NAME);
+        assert(name.s() != PASSED_GENERATOR_NAME);
         ASSERT(irstate->getScopeInfo()->getScopeTypeOfName(name) != ScopeInfo::VarScopeType::GLOBAL, "%s",
                name.c_str());
 
@@ -2854,39 +2904,32 @@ public:
         }
     }
 
-    ConcreteCompilerType* getPassedClosureType() {
-        // TODO could know the exact closure shape
-        return CLOSURE;
-    }
-
-    ConcreteCompilerType* getCreatedClosureType() {
-        // TODO could know the exact closure shape
-        return CLOSURE;
-    }
-
     void doFunctionEntry(const ParamNames& param_names, const std::vector<ConcreteCompilerType*>& arg_types) override {
         assert(param_names.totalParameters() == arg_types.size());
 
         auto scope_info = irstate->getScopeInfo();
 
+        // TODO: move this to irgen.cpp?
 
         llvm::Function::arg_iterator AI = irstate->getLLVMFunction()->arg_begin();
-        llvm::Value* passed_closure = NULL;
-        llvm::Value* generator = NULL;
         llvm::Value* globals = NULL;
 
+        llvm::Value* passed_closure_or_null;
+
         if (scope_info->takesClosure()) {
-            passed_closure = AI;
+            passed_closure_or_null = AI;
+            irstate->setPassedClosure(passed_closure_or_null);
             ++AI;
-            emitter.setType(passed_closure, RefType::BORROWED);
+            emitter.setType(passed_closure_or_null, RefType::BORROWED);
         } else {
-            passed_closure = getNullPtr(g.llvm_closure_type_ptr);
-            emitter.setType(passed_closure, RefType::BORROWED);
+            passed_closure_or_null = getNullPtr(g.llvm_closure_type_ptr);
+            emitter.setType(passed_closure_or_null, RefType::BORROWED);
         }
 
         if (irstate->getSourceInfo()->is_generator) {
-            generator = AI;
-            emitter.setType(generator, RefType::BORROWED);
+            auto passed_generator = AI;
+            irstate->setPassedGenerator(passed_generator);
+            emitter.setType(passed_generator, RefType::BORROWED);
             ++AI;
         }
 
@@ -2900,23 +2943,14 @@ public:
             emitter.setType(globals, RefType::BORROWED);
         }
 
-        irstate->setupFrameInfoVar(passed_closure, globals);
-
-        if (scope_info->takesClosure()) {
-            symbol_table[internString(PASSED_CLOSURE_NAME)]
-                = new ConcreteCompilerVariable(getPassedClosureType(), passed_closure);
-        }
+        irstate->setupFrameInfoVar(passed_closure_or_null, globals);
 
         if (scope_info->createsClosure()) {
-            llvm::Value* new_closure = emitter.getBuilder()->CreateCall2(
-                g.funcs.createClosure, passed_closure, getConstantInt(scope_info->getClosureSize(), g.i64));
-            emitter.setType(new_closure, RefType::OWNED);
-            symbol_table[internString(CREATED_CLOSURE_NAME)]
-                = new ConcreteCompilerVariable(getCreatedClosureType(), new_closure);
+            auto created_closure = emitter.getBuilder()->CreateCall2(
+                g.funcs.createClosure, passed_closure_or_null, getConstantInt(scope_info->getClosureSize(), g.i64));
+            irstate->setCreatedClosure(created_closure);
+            emitter.setType(created_closure, RefType::OWNED);
         }
-
-        if (irstate->getSourceInfo()->is_generator)
-            symbol_table[internString(PASSED_GENERATOR_NAME)] = new ConcreteCompilerVariable(GENERATOR, generator);
 
         std::vector<llvm::Value*> python_parameters;
         for (int i = 0; i < arg_types.size(); i++) {

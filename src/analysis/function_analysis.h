@@ -115,6 +115,14 @@ public:
         v[vreg] = true;
     }
 
+    int numSet() const {
+        int r = 0;
+        for (auto b : v)
+            if (b)
+                r++;
+        return r;
+    }
+
     class iterator {
     public:
         const VRegSet& set;

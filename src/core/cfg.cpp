@@ -517,9 +517,11 @@ private:
         return node;
     }
 
-    void pushJump(CFGBlock* target, bool allow_backedge = false) {
+    void pushJump(CFGBlock* target, bool allow_backedge = false, int lineno = 0) {
         AST_Jump* rtn = new AST_Jump();
         rtn->target = target;
+        rtn->lineno = lineno;
+
         push_back(rtn);
         curblock->connectTo(target, allow_backedge);
         curblock = nullptr;
@@ -2264,7 +2266,7 @@ public:
             curblock->connectTo(end_false);
 
             curblock = end_true;
-            pushJump(loop_block, true);
+            pushJump(loop_block, true, getLastLinenoSub(node->body.back()));
 
             curblock = end_false;
             pushJump(else_block);

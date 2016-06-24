@@ -775,32 +775,12 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
         return nullptr;
     }
 
-    if (generator) {
-        // generated is only borrowed in order to not introduce cycles
-        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_GENERATOR_NAME)] = generator;
-    }
-
-    if (frame_info.passed_closure)
-        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_CLOSURE_NAME)]
-            = incref(frame_info.passed_closure);
-
-    if (created_closure)
-        sorted_symbol_table[source_info->getInternedStrings().get(CREATED_CLOSURE_NAME)] = incref(created_closure);
-
-    sorted_symbol_table[source_info->getInternedStrings().get(FRAME_INFO_PTR_NAME)] = (Box*)&frame_info;
-
     if (found_entry == nullptr) {
         OSREntryDescriptor* entry = OSREntryDescriptor::create(getMD(), node, CXX);
 
         for (auto& it : sorted_symbol_table) {
             if (isIsDefinedName(it.first))
                 entry->args[it.first] = BOOL;
-            else if (it.first.s() == PASSED_GENERATOR_NAME)
-                entry->args[it.first] = GENERATOR;
-            else if (it.first.s() == PASSED_CLOSURE_NAME || it.first.s() == CREATED_CLOSURE_NAME)
-                entry->args[it.first] = CLOSURE;
-            else if (it.first.s() == FRAME_INFO_PTR_NAME)
-                entry->args[it.first] = FRAME_INFO;
             else {
                 assert(it.first.s()[0] != '!');
                 entry->args[it.first] = UNKNOWN;
@@ -821,9 +801,8 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
     CompiledFunction* partial_func = compilePartialFuncInternal(&exit);
 
-    auto arg_tuple = getTupleFromArgsArray(&arg_array[0], arg_array.size());
-    Box* r = partial_func->call(std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
-                                std::get<3>(arg_tuple));
+    // generated is only borrowed in order to not introduce cycles
+    Box* r = partial_func->call_osr(generator, created_closure, &frame_info, &arg_array[0]);
 
     if (partial_func->exception_style == CXX) {
         assert(r);

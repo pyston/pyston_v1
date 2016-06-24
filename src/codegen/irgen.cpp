@@ -290,12 +290,6 @@ static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, InternedSt
                                                  CFGBlock* block) {
     if (isIsDefinedName(name))
         return BOOL;
-    else if (name.s() == PASSED_GENERATOR_NAME)
-        return GENERATOR;
-    else if (name.s() == PASSED_CLOSURE_NAME)
-        return CLOSURE;
-    else if (name.s() == CREATED_CLOSURE_NAME)
-        return CLOSURE;
     else {
         // This could crash if we call getTypeAtBlockStart on something that doesn't have a type or vreg.
         // Luckily it looks like we don't do that.
@@ -306,7 +300,7 @@ static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, InternedSt
 static bool shouldPhisOwnThisSym(llvm::StringRef name) {
     // generating unnecessary increfs to the passed generator would introduce cycles inside the generator
     if (name == PASSED_GENERATOR_NAME)
-        return false;
+        assert(0);
     return true;
 }
 
@@ -384,7 +378,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         llvm_entry_blocks[block] = llvm::BasicBlock::Create(g.context, buf, irstate->getLLVMFunction());
     }
 
-    llvm::Value* osr_frame_info_arg = NULL;
+    llvm::Value* osr_frame_info_arg = NULL, * osr_generator = NULL, * osr_created_closure = NULL;
 
     // the function entry block, where we add the type guards [no guards anymore]
     llvm::BasicBlock* osr_entry_block = NULL;
@@ -415,50 +409,43 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         }
 
         // Handle loading symbols from the passed osr arguments:
+        osr_generator = func_args[0];
+        osr_created_closure = func_args[1];
+        osr_frame_info_arg = func_args[2];
+        llvm::Value* passed_vars = func_args[3];
+        assert(func_args.size() == 4);
+
+        irstate->getRefcounts()->setType(osr_generator, RefType::BORROWED);
+        irstate->getRefcounts()->setType(osr_created_closure, RefType::BORROWED);
+        if (source->is_generator)
+            irstate->setPassedGenerator(osr_generator);
+        if (source->getScopeInfo()->createsClosure())
+            irstate->setCreatedClosure(osr_created_closure);
+
         int arg_num = -1;
         for (const auto& p : entry_descriptor->args) {
             llvm::Value* from_arg;
             arg_num++;
-            if (arg_num < 3) {
-                from_arg = func_args[arg_num];
-#ifndef NDEBUG
-                if (from_arg->getType() != p.second->llvmType()) {
-                    from_arg->getType()->dump();
-                    printf("\n");
-                    p.second->llvmType()->dump();
-                    printf("\n");
-                }
-#endif
-                assert(from_arg->getType() == p.second->llvmType());
-            } else {
-                ASSERT(func_args.size() == 4, "%ld", func_args.size());
-                llvm::Value* ptr = entry_emitter->getBuilder()->CreateConstGEP1_32(func_args[3], arg_num - 3);
-                if (p.second == INT) {
-                    ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.i64->getPointerTo());
-                } else if (p.second == BOOL) {
-                    ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, BOOL->llvmType()->getPointerTo());
-                } else if (p.second == FLOAT) {
-                    ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.double_->getPointerTo());
-                } else if (p.second == GENERATOR) {
-                    ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.llvm_generator_type_ptr->getPointerTo());
-                } else if (p.second == CLOSURE) {
-                    ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.llvm_closure_type_ptr->getPointerTo());
-                } else if (p.second == FRAME_INFO) {
-                    ptr = entry_emitter->getBuilder()->CreateBitCast(
-                        ptr, g.llvm_frame_info_type->getPointerTo()->getPointerTo());
-                } else {
-                    assert(p.second->llvmType() == g.llvm_value_type_ptr);
-                }
-                from_arg = entry_emitter->getBuilder()->CreateLoad(ptr);
-                assert(from_arg->getType() == p.second->llvmType());
-            }
 
-            if (from_arg->getType() == g.llvm_frame_info_type->getPointerTo()) {
-                assert(p.first.s() == FRAME_INFO_PTR_NAME);
-                osr_frame_info_arg = from_arg;
-                // Don't add the frame info to the symbol table since we will store it separately:
-                continue;
+            llvm::Value* ptr = entry_emitter->getBuilder()->CreateConstGEP1_32(passed_vars, arg_num);
+            if (p.second == INT) {
+                ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.i64->getPointerTo());
+            } else if (p.second == BOOL) {
+                ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, BOOL->llvmType()->getPointerTo());
+            } else if (p.second == FLOAT) {
+                ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.double_->getPointerTo());
+            } else if (p.second == GENERATOR) {
+                ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.llvm_generator_type_ptr->getPointerTo());
+            } else if (p.second == CLOSURE) {
+                ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.llvm_closure_type_ptr->getPointerTo());
+            } else if (p.second == FRAME_INFO) {
+                ptr = entry_emitter->getBuilder()->CreateBitCast(
+                    ptr, g.llvm_frame_info_type->getPointerTo()->getPointerTo());
+            } else {
+                assert(p.second->llvmType() == g.llvm_value_type_ptr);
             }
+            from_arg = entry_emitter->getBuilder()->CreateLoad(ptr);
+            assert(from_arg->getType() == p.second->llvmType());
 
             ConcreteCompilerType* phi_type;
             phi_type = getTypeAtBlockStart(types, p.first, vreg_info, target_block);
@@ -663,17 +650,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 if (phi_analysis->isPotentiallyUndefinedAfter(vreg, block->predecessors[0])) {
                     names.insert(getIsDefinedName(s, source->getInternedStrings()));
                 }
-            }
-
-            if (source->getScopeInfo()->createsClosure())
-                names.insert(source->getInternedStrings().get(CREATED_CLOSURE_NAME));
-
-            if (source->getScopeInfo()->takesClosure())
-                names.insert(source->getInternedStrings().get(PASSED_CLOSURE_NAME));
-
-            if (source->is_generator) {
-                assert(0 && "not sure if this is correct");
-                names.insert(source->getInternedStrings().get(PASSED_GENERATOR_NAME));
             }
 
             for (const InternedString& s : names) {
@@ -1062,17 +1038,11 @@ CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames
             llvm_arg_types.push_back(spec->arg_types[i]->llvmType());
         }
     } else {
-        int arg_num = -1;
-        for (const auto& p : entry_descriptor->args) {
-            arg_num++;
-            // printf("Loading %s: %s\n", p.first.c_str(), p.second->debugName().c_str());
-            if (arg_num < 3)
-                llvm_arg_types.push_back(p.second->llvmType());
-            else {
-                llvm_arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
-                break;
-            }
-        }
+        // For simplicity, OSR entries always take all possible arguments:
+        llvm_arg_types.push_back(g.llvm_generator_type_ptr);
+        llvm_arg_types.push_back(g.llvm_closure_type_ptr);
+        llvm_arg_types.push_back(g.llvm_frame_info_type->getPointerTo());
+        llvm_arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
     }
 
     CompiledFunction* cf = new CompiledFunction(NULL, spec, NULL, effort, exception_style, entry_descriptor);

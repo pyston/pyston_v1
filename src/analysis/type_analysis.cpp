@@ -905,7 +905,7 @@ TypeAnalysis* doTypeAnalysis(const OSREntryDescriptor* entry_descriptor, EffortL
             continue;
         if (p.first.s() == PASSED_CLOSURE_NAME || p.first.s() == FRAME_INFO_PTR_NAME
             || p.first.s() == PASSED_GENERATOR_NAME || p.first.s() == CREATED_CLOSURE_NAME)
-            continue;
+            assert(0);
         initial_types[vreg_info.getVReg(p.first)] = p.second;
     }
 
