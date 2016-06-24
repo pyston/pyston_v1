@@ -940,6 +940,8 @@ public:
 
     static void dealloc(PyTupleObject* op) noexcept;
     friend int PyTuple_ClearFreeList() noexcept;
+
+    operator llvm::ArrayRef<Box*>() const { return llvm::ArrayRef<Box*>(this->elts, size()); }
 };
 static_assert(sizeof(BoxedTuple) == sizeof(PyTupleObject), "");
 static_assert(offsetof(BoxedTuple, ob_size) == offsetof(PyTupleObject, ob_size), "");
@@ -1081,7 +1083,7 @@ public:
     BoxedString* name; // __name__ (should be here or in one of the derived classes?)
     Box* doc;          // __doc__
 
-    BoxedFunctionBase(FunctionMetadata* md, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
+    BoxedFunctionBase(FunctionMetadata* md, llvm::ArrayRef<Box*> defaults, BoxedClosure* closure = NULL,
                       Box* globals = NULL, bool can_change_defaults = false);
 
     ParamReceiveSpec getParamspec() {
@@ -1094,7 +1096,7 @@ public:
     HCAttrs attrs;
 
     BoxedFunction(FunctionMetadata* md);
-    BoxedFunction(FunctionMetadata* md, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
+    BoxedFunction(FunctionMetadata* md, llvm::ArrayRef<Box*> defaults, BoxedClosure* closure = NULL,
                   Box* globals = NULL, bool can_change_defaults = false);
 
     DEFAULT_CLASS(function_cls);

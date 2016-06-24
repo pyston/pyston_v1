@@ -72,3 +72,28 @@ for i in xrange(1000):
     if not i % 100:
         foo.func_code, bar.func_code = bar.func_code, foo.func_code
 print s
+
+
+# Copied from https://github.com/networkx/networkx/blob/master/networkx/algorithms/isomorphism/matchhelpers.py
+import types
+def copyfunc(f, name=None):
+    """Returns a deepcopy of a function."""
+    try:
+        # Python <3
+        return types.FunctionType(f.func_code, f.func_globals,
+                                  name or f.__name__, f.func_defaults,
+                                  f.func_closure)
+    except AttributeError:
+        # Python >=3
+        return types.FunctionType(f.__code__, f.__globals__,
+                                  name or f.__name__, f.__defaults__,
+                                  f.__closure__)
+
+def g(x, z=[]):
+    z.append(x)
+    print z
+print g.func_closure
+g2 = copyfunc(g)
+assert g.func_defaults == g2.func_defaults, (g.func_defaults, g2.func_defaults)
+g(1)
+g2(2)
