@@ -1929,7 +1929,7 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
 
             static BoxedString* getattribute_str = getStaticString("__getattribute__");
             if (p->name_strobj == getattribute_str) {
-                if (descr && descr->cls == &PyWrapperDescr_Type
+                if (type->tp_getattr == NULL && descr && descr->cls == &PyWrapperDescr_Type
                     && ((PyWrapperDescrObject*)descr)->d_wrapped == PyObject_GenericGetAttr)
                     descr = NULL;
             }
