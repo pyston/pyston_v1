@@ -292,7 +292,7 @@ Box* Box::hasnextOrNullIC() {
     return this->cls->callHasnextIC(this, true);
 }
 
-extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initializer_list<Box*> defaults,
+extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, llvm::ArrayRef<Box*> defaults,
                                                 BoxedClosure* closure, Box* globals, bool can_change_defaults)
     : weakreflist(NULL),
       md(md),
@@ -349,8 +349,8 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, std::initi
 BoxedFunction::BoxedFunction(FunctionMetadata* md) : BoxedFunction(md, {}) {
 }
 
-BoxedFunction::BoxedFunction(FunctionMetadata* md, std::initializer_list<Box*> defaults, BoxedClosure* closure,
-                             Box* globals, bool can_change_defaults)
+BoxedFunction::BoxedFunction(FunctionMetadata* md, llvm::ArrayRef<Box*> defaults, BoxedClosure* closure, Box* globals,
+                             bool can_change_defaults)
     : BoxedFunctionBase(md, defaults, closure, globals, can_change_defaults) {
 
     // TODO eventually we want this to assert(f->source), I think, but there are still
@@ -1559,6 +1559,84 @@ static int func_set_name(Box* b, Box* v, void*) noexcept {
     func->name = incref(static_cast<BoxedString*>(v));
     Py_XDECREF(old_name);
     return 0;
+}
+
+static Box* function_new(BoxedClass* cls, Box* code, Box* globals, Box** _args) noexcept {
+    RELEASE_ASSERT(cls == function_cls, "");
+
+    Box* name = _args[0];
+    Box* defaults = _args[1];
+    Box* closure = _args[2];
+
+    RELEASE_ASSERT(PyCode_Check(code), "");
+
+    if (name != Py_None && !PyString_Check(name)) {
+        PyErr_SetString(PyExc_TypeError, "arg 3 (name) must be None or string");
+        return NULL;
+    }
+    if (defaults != Py_None && !PyTuple_Check(defaults)) {
+        PyErr_SetString(PyExc_TypeError, "arg 4 (defaults) must be None or tuple");
+        return NULL;
+    }
+    bool hasfree = PyCode_HasFreeVars((PyCodeObject*)code);
+    if (closure->cls != closure_cls) {
+        if (hasfree && closure == Py_None) {
+            PyErr_SetString(PyExc_TypeError, "arg 5 (closure) must be tuple");
+            return NULL;
+        } else if (closure != Py_None) {
+            PyErr_SetString(PyExc_TypeError, "arg 5 (closure) must be None or tuple");
+            return NULL;
+        }
+    }
+
+    RELEASE_ASSERT(!hasfree, "Unimplemented: can't use the function constructor to create functions with closures");
+    assert(closure == None);
+
+// Pyston change: haven't yet implemented closure-appropriateness checking
+#if 0
+    /* check that the closure is well-formed */
+    nclosure = closure == Py_None ? 0 : PyTuple_GET_SIZE(closure);
+    if (nfree != nclosure)
+        return PyErr_Format(PyExc_ValueError,
+                            "%s requires closure of length %zd, not %zd",
+                            PyString_AS_STRING(code->co_name),
+                            nfree, nclosure);
+    if (nclosure) {
+        Py_ssize_t i;
+        for (i = 0; i < nclosure; i++) {
+            PyObject *o = PyTuple_GET_ITEM(closure, i);
+            if (!PyCell_Check(o)) {
+                return PyErr_Format(PyExc_TypeError,
+                    "arg 5 (closure) expected cell, found %s",
+                                    o->ob_type->tp_name);
+            }
+        }
+    }
+#endif
+
+    FunctionMetadata* md = static_cast<BoxedCode*>(code)->f;
+    RELEASE_ASSERT(md->source, "");
+    if (md->source->scoping->areGlobalsFromModule()) {
+        RELEASE_ASSERT(unwrapAttrWrapper(globals) == md->source->parent_module, "");
+        globals = NULL;
+    } else {
+        RELEASE_ASSERT(PyDict_Check(globals) || globals->cls == attrwrapper_cls, "");
+    }
+
+    BoxedFunction* f;
+    try {
+        f = new BoxedFunction(md, *static_cast<BoxedTuple*>(defaults == None ? EmptyTuple : defaults),
+                              closure == None ? NULL : static_cast<BoxedClosure*>(closure),
+                              globals == None ? NULL : globals, true);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+
+    if (name != None)
+        func_set_name(f, name, NULL);
+
+    return f;
 }
 
 static Box* builtin_function_or_method_name(Box* b, void*) noexcept {
@@ -4340,6 +4418,12 @@ void setupRuntime() {
     setupCode();
     setupFrame();
 
+    function_cls->giveAttr(
+        "__new__",
+        new BoxedFunction(
+            FunctionMetadata::create((void*)function_new, UNKNOWN, 6, false, false,
+                                     ParamNames({ "", "code", "globals", "name", "argdefs", "closure" }, "", ""), CAPI),
+            { None, None, None }));
     function_cls->giveAttrBorrowed("__dict__", dict_descr);
     function_cls->giveAttrDescriptor("__name__", func_name, func_set_name);
     function_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)functionRepr, STR, 1)));
@@ -4358,6 +4442,8 @@ void setupRuntime() {
     function_cls->giveAttrDescriptor("func_defaults", function_defaults, function_set_defaults);
     function_cls->giveAttrBorrowed("__defaults__", function_cls->getattr(getStaticString("func_defaults")));
     function_cls->giveAttrBorrowed("func_globals", function_cls->getattr(getStaticString("__globals__")));
+    function_cls->giveAttrMember("__closure__", T_OBJECT, offsetof(BoxedFunction, closure), true);
+    function_cls->giveAttrMember("func_closure", T_OBJECT, offsetof(BoxedFunction, closure), true);
     function_cls->freeze();
     function_cls->tp_descr_get = function_descr_get;
 
