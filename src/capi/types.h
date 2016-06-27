@@ -100,6 +100,7 @@ static_assert(offsetof(BoxedCApiFunction, method_def) == offsetof(PyCFunctionObj
 static_assert(offsetof(BoxedCApiFunction, passthrough) == offsetof(PyCFunctionObject, m_self), "");
 static_assert(offsetof(BoxedCApiFunction, module) == offsetof(PyCFunctionObject, m_module), "");
 
+PyObject* try_3way_to_rich_compare(PyObject* v, PyObject* w, int op) noexcept;
 PyObject* convert_3way_to_object(int op, int c) noexcept;
 int default_3way_compare(PyObject* v, PyObject* w);
 

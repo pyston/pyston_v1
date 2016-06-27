@@ -5963,36 +5963,10 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         return rrtn;
     Py_XDECREF(rrtn); // in case it is NotImplemented
 
-    static BoxedString* cmp_str = getStaticString("__cmp__");
-    lrtn = callattrInternal1<CXX, NOT_REWRITABLE>(lhs, cmp_str, CLASS_ONLY, NULL, ArgPassSpec(1), rhs);
-    AUTO_XDECREF(lrtn);
-    if (lrtn && lrtn != NotImplemented) {
-        return boxBool(convert3wayCompareResultToBool(lrtn, op_type));
-    }
-    rrtn = callattrInternal1<CXX, NOT_REWRITABLE>(rhs, cmp_str, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
-    AUTO_XDECREF(rrtn);
-    if (rrtn && rrtn != NotImplemented) {
-        bool success = false;
-        int reversed_op = getReverseCmpOp(op_type, success);
-        assert(success);
-        return boxBool(convert3wayCompareResultToBool(rrtn, reversed_op));
-    }
-
-    if (op_type == AST_TYPE::Eq)
-        return boxBool(lhs == rhs);
-    if (op_type == AST_TYPE::NotEq)
-        return boxBool(lhs != rhs);
-
-#ifndef NDEBUG
-    if ((lhs->cls == int_cls || lhs->cls == float_cls || lhs->cls == long_cls)
-        && (rhs->cls == int_cls || rhs->cls == float_cls || rhs->cls == long_cls)) {
-        fprintf(stderr, "\n%s %s %s\n", lhs->cls->tp_name, op_name->c_str(), rhs->cls->tp_name);
-        Py_FatalError("missing comparison between these classes");
-    }
-#endif
-
-    int c = default_3way_compare(lhs, rhs);
-    return convert_3way_to_object(cpython_op_type, c);
+    Box* r = try_3way_to_rich_compare(lhs, rhs, cpython_op_type);
+    if (!r)
+        throwCAPIException();
+    return r;
 }
 
 extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {
