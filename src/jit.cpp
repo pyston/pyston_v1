@@ -220,9 +220,7 @@ int handleArg(char code) {
     } else if (code == 'b') {
         USE_REGALLOC_BASIC = false;
     } else if (code == 'x') {
-        ENABLE_PYPA_PARSER = false;
-    } else if (code == 'X') {
-        ENABLE_CPYTHON_PARSER = false;
+        ENABLE_PYPA_PARSER = true;
     } else if (code == 'E') {
         Py_IgnoreEnvironmentFlag = 1;
     } else if (code == 'P') {

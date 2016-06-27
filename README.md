@@ -132,7 +132,7 @@ Pyston-specific flags:
   <dd>Use a stripped stdlib.  When running pyston_dbg, the default is to use a stdlib with full debugging symbols enabled.  Passing -r changes this behavior to load a slimmer, stripped stdlib.</dd>
 
 <dt>-x</dt>
-  <dd>Disable the pypa parser.</dd>
+  <dd>Enable the pypa parser.</dd>
 
 Standard Python flags:
 <dt>-i</dt>

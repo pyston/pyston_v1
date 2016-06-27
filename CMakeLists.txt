@@ -320,9 +320,6 @@ add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYST
 target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m z readline sqlite3 gmp mpfr ssl crypto unwind pypa liblz4 double-conversion util ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES} ${CMAKE_BINARY_DIR}/jemalloc/lib/libjemalloc.a)
 add_dependencies(pyston libjemalloc)
 
-# copy src/codegen/parse_ast.py to the build directory
-add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/src/codegen/parse_ast.py ${CMAKE_BINARY_DIR}/src/codegen/parse_ast.py)
-
 add_custom_target(astcompare COMMAND ${CMAKE_SOURCE_DIR}/tools/astprint_test.sh
                   DEPENDS astprint
                   COMMENT "Running libpypa vs CPython AST result comparison test")
@@ -342,9 +339,9 @@ endmacro()
 
 # tests         testname directory arguments
 add_pyston_test(defaults tests --order-by-mtime -t50)
-add_pyston_test(force_llvm tests -a=-n -a=-X -t90)
+add_pyston_test(force_llvm tests -a=-n -a=-x -t90)
 if(${CMAKE_BUILD_TYPE} STREQUAL "Release")
-  add_pyston_test(max_compilation_tier tests -a=-O -a=-X -t50)
+  add_pyston_test(max_compilation_tier tests -a=-O -a=-x -t50)
 endif()
 add_pyston_test(defaults cpython --exit-code-only --skip-failing -t100)
 add_pyston_test(defaults integration --exit-code-only --skip-failing -t900)

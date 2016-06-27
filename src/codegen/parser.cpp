@@ -998,119 +998,53 @@ AST* readASTMisc(BufferedReader* reader) {
     }
 }
 
-static std::string getParserCommandLine(const char* fn) {
-    llvm::SmallString<128> parse_ast_fn;
-    // TODO supposed to pass argv0, main_addr to this function:
-    parse_ast_fn = llvm::sys::fs::getMainExecutable(NULL, NULL);
-    assert(parse_ast_fn.size() && "could not find the path to the pyston src dir");
-
-    // Start by removing the binary name, because the "pyston" binary will break the logic below
-    llvm::sys::path::remove_filename(parse_ast_fn);
-
-    llvm::sys::path::append(parse_ast_fn, "src/codegen/parse_ast.py");
-
-    // We may be running in an environment where "python" resolves to pyston (ex in
-    // a virtualenv), so try to hard code the path to CPython.
-    // This should probably be a configure-time check?
-    return std::string("/usr/bin/python -S ") + parse_ast_fn.str().str() + " " + fn;
-}
-
 AST_Module* parse_string(const char* code, FutureFlags inherited_flags) {
     inherited_flags &= ~(CO_NESTED | CO_FUTURE_DIVISION);
 
-    if (ENABLE_CPYTHON_PARSER) {
-        PyCompilerFlags cf;
-        cf.cf_flags = inherited_flags;
-        ArenaWrapper arena;
-        assert(arena);
-        const char* fn = "<string>";
-        mod_ty mod = PyParser_ASTFromString(code, fn, Py_file_input, &cf, arena);
-        if (!mod)
-            throwCAPIException();
-        assert(mod->kind != Interactive_kind);
-        auto rtn = static_cast<AST_Module*>(cpythonToPystonAST(mod, fn));
-        return rtn;
-    }
-
-    if (ENABLE_PYPA_PARSER || inherited_flags) {
+    if (ENABLE_PYPA_PARSER) {
         AST_Module* rtn = pypa_parse_string(code, inherited_flags);
         RELEASE_ASSERT(rtn, "unknown parse error (possibly: '%s'?)", strerror(errno));
         return rtn;
     }
-
-    RELEASE_ASSERT(!inherited_flags, "the old cpython parser doesn't support specifying initial future flags");
-
-    int size = strlen(code);
-    char buf[] = "pystontmp_XXXXXX";
-    char* tmpdir = mkdtemp(buf);
-    assert(tmpdir);
-    std::string tmp = std::string(tmpdir) + "/in.py";
-    if (VERBOSITY() >= 3) {
-        printf("writing %d bytes to %s\n", size, tmp.c_str());
-    }
-
-    {
-        FileHandle f(tmp.c_str(), "w");
-        fwrite(code, 1, size, f);
-        fputc('\n', f);
-    }
-
-    AST_Module* m = parse_file(tmp.c_str(), inherited_flags);
-    removeDirectoryIfExists(tmpdir);
-
-    return m;
+    PyCompilerFlags cf;
+    cf.cf_flags = inherited_flags;
+    ArenaWrapper arena;
+    assert(arena);
+    const char* fn = "<string>";
+    mod_ty mod = PyParser_ASTFromString(code, fn, Py_file_input, &cf, arena);
+    if (!mod)
+        throwCAPIException();
+    assert(mod->kind != Interactive_kind);
+    auto rtn = static_cast<AST_Module*>(cpythonToPystonAST(mod, fn));
+    return rtn;
 }
 
 AST_Module* parse_file(const char* fn, FutureFlags inherited_flags) {
     Timer _t("parsing");
-
-    if (ENABLE_CPYTHON_PARSER) {
-        FileHandle fp(fn, "r");
-        PyCompilerFlags cf;
-        cf.cf_flags = inherited_flags;
-        ArenaWrapper arena;
-        assert(arena);
-        mod_ty mod = PyParser_ASTFromFile(fp, fn, Py_file_input, 0, 0, &cf, NULL, arena);
-        if (!mod)
-            throwCAPIException();
-        assert(mod->kind != Interactive_kind);
-        auto rtn = static_cast<AST_Module*>(cpythonToPystonAST(mod, fn));
-        return rtn;
-    }
 
     if (ENABLE_PYPA_PARSER) {
         AST_Module* rtn = pypa_parse(fn, inherited_flags);
         RELEASE_ASSERT(rtn, "unknown parse error (possibly: '%s'?)", strerror(errno));
         return rtn;
     }
-
-    FILE* fp = popen(getParserCommandLine(fn).c_str(), "r");
-
-    BufferedReader* reader = new BufferedReader(fp);
-    AST* rtn = readASTMisc(reader);
-    reader->fill();
-    ASSERT(reader->bytesBuffered() == 0, "%d", reader->bytesBuffered());
-    delete reader;
-
-    int code = pclose(fp);
-    assert(code == 0);
-
-    assert(rtn->type == AST_TYPE::Module);
-
-    long us = _t.end();
-    static StatCounter us_parsing("us_parsing");
-    us_parsing.log(us);
-
-    return ast_cast<AST_Module>(rtn);
+    FileHandle fp(fn, "r");
+    PyCompilerFlags cf;
+    cf.cf_flags = inherited_flags;
+    ArenaWrapper arena;
+    assert(arena);
+    mod_ty mod = PyParser_ASTFromFile(fp, fn, Py_file_input, 0, 0, &cf, NULL, arena);
+    if (!mod)
+        throwCAPIException();
+    assert(mod->kind != Interactive_kind);
+    auto rtn = static_cast<AST_Module*>(cpythonToPystonAST(mod, fn));
+    return rtn;
 }
 
 const char* getMagic() {
-    if (ENABLE_CPYTHON_PARSER)
-        return "a\nCQ";
-    else if (ENABLE_PYPA_PARSER)
+    if (ENABLE_PYPA_PARSER)
         return "a\ncQ";
     else
-        return "a\ncq";
+        return "a\nCQ";
 }
 
 #define MAGIC_STRING_LENGTH 4
@@ -1150,50 +1084,28 @@ static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, A
     file_data.insert(file_data.end(), (char*)&checksum, (char*)&checksum + CHECKSUM_LENGTH);
     checksum = 0;
 
-    if (ENABLE_CPYTHON_PARSER || ENABLE_PYPA_PARSER || inherited_flags) {
-        if (ENABLE_CPYTHON_PARSER) {
-            FileHandle fp(fn, "r");
-            PyCompilerFlags cf;
-            cf.cf_flags = inherited_flags;
-            ArenaWrapper arena;
-            assert(arena);
-            mod_ty mod = PyParser_ASTFromFile(fp, fn, Py_file_input, 0, 0, &cf, NULL, arena);
-            if (!mod)
-                throwCAPIException();
-            assert(mod->kind != Interactive_kind);
-            module = static_cast<AST_Module*>(cpythonToPystonAST(mod, fn));
-        } else {
-            module = pypa_parse(fn, inherited_flags);
-            RELEASE_ASSERT(module, "unknown parse error");
-        }
-
-        if (!cache_fp)
-            return std::vector<char>();
-
-        auto p = serializeAST(module, cache_fp);
-        checksum = p.second;
-        bytes_written += p.first;
+    if (ENABLE_PYPA_PARSER) {
+        module = pypa_parse(fn, inherited_flags);
+        RELEASE_ASSERT(module, "unknown parse error");
     } else {
-        RELEASE_ASSERT(!inherited_flags, "the old cpython parser doesn't support specifying initial future flags");
-        FILE* parser = popen(getParserCommandLine(fn).c_str(), "r");
-        char buf[80];
-        while (true) {
-            int nread = fread(buf, 1, 80, parser);
-            if (nread == 0)
-                break;
-            bytes_written += nread;
-
-            if (cache_fp)
-                fwrite(buf, 1, nread, cache_fp);
-            file_data.insert(file_data.end(), buf, buf + nread);
-
-            for (int i = 0; i < nread; i++) {
-                checksum ^= buf[i];
-            }
-        }
-        int code = pclose(parser);
-        assert(code == 0);
+        FileHandle fp(fn, "r");
+        PyCompilerFlags cf;
+        cf.cf_flags = inherited_flags;
+        ArenaWrapper arena;
+        assert(arena);
+        mod_ty mod = PyParser_ASTFromFile(fp, fn, Py_file_input, 0, 0, &cf, NULL, arena);
+        if (!mod)
+            throwCAPIException();
+        assert(mod->kind != Interactive_kind);
+        module = static_cast<AST_Module*>(cpythonToPystonAST(mod, fn));
     }
+
+    if (!cache_fp)
+        return std::vector<char>();
+
+    auto p = serializeAST(module, cache_fp);
+    checksum = p.second;
+    bytes_written += p.first;
 
     fseek(cache_fp, checksum_start, SEEK_SET);
     if (cache_fp)
