@@ -346,6 +346,7 @@ CompilerVariable* makeFloat(double);
 CompilerVariable* makeUnboxedFloat(IREmitter&, ConcreteCompilerVariable*);
 CompilerVariable* makeUnboxedFloat(IREmitter&, llvm::Value*);
 
+llvm::Value* makeLLVMBool(bool b);
 ConcreteCompilerVariable* makeBool(bool);
 ConcreteCompilerVariable* makeLong(IREmitter&, Box*);
 ConcreteCompilerVariable* makePureImaginary(IREmitter&, Box*);
@@ -372,6 +373,7 @@ CompilerType* makeFuncType(ConcreteCompilerType* rtn_type, const std::vector<Con
 
 ConcreteCompilerVariable* boolFromI1(IREmitter&, llvm::Value*);
 llvm::Value* i1FromBool(IREmitter&, ConcreteCompilerVariable*);
+llvm::Value* i1FromLLVMBool(IREmitter&, llvm::Value*);
 
 template <typename V>
 CompilerVariable* _ValuedCompilerType<V>::getPystonIter(IREmitter& emitter, const OpInfo& info, VAR* var) {

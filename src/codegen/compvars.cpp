@@ -2429,8 +2429,11 @@ public:
     }
 };
 ConcreteCompilerType* BOOL = new BoolType();
+llvm::Value* makeLLVMBool(bool b) {
+    return llvm::ConstantInt::get(BOOL->llvmType(), b, false);
+}
 ConcreteCompilerVariable* makeBool(bool b) {
-    return new ConcreteCompilerVariable(BOOL, llvm::ConstantInt::get(BOOL->llvmType(), b, false));
+    return new ConcreteCompilerVariable(BOOL, makeLLVMBool(b));
 }
 
 ConcreteCompilerVariable* doIs(IREmitter& emitter, CompilerVariable* lhs, CompilerVariable* rhs, bool negate) {
@@ -2855,6 +2858,17 @@ llvm::Value* i1FromBool(IREmitter& emitter, ConcreteCompilerVariable* v) {
         return v2;
     } else {
         return v->getValue();
+    }
+}
+
+llvm::Value* i1FromLLVMBool(IREmitter& emitter, llvm::Value* v) {
+    if (BOOLS_AS_I64) {
+        assert(v->getType() == BOOL->llvmType());
+        assert(BOOL->llvmType() == g.i64);
+        llvm::Value* v2 = emitter.getBuilder()->CreateTrunc(v, g.i1);
+        return v2;
+    } else {
+        return v;
     }
 }
 

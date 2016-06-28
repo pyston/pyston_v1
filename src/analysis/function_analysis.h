@@ -51,12 +51,30 @@ public:
         return v[vreg];
     }
 
+    void clear() {
+        int n = v.size();
+        for (int i = 0; i < n; i++) {
+            v[i] = T();
+        }
+    }
+
+    int numSet() {
+        int n = v.size();
+        int r = 0;
+        for (int i = 0; i < n; i++) {
+            if (v[i] != T())
+                r++;
+        }
+        return r;
+    }
+
     class iterator {
     public:
         const VRegMap<T>& map;
         int i;
         iterator(const VRegMap<T>& map, int i) : map(map), i(i) {}
 
+        // TODO: make this skip unset values?
         iterator& operator++() {
             i++;
             return *this;
@@ -66,6 +84,8 @@ public:
         bool operator!=(const iterator& rhs) const { return !(*this == rhs); }
 
         std::pair<int, const T&> operator*() { return std::pair<int, const T&>(i, map[i]); }
+        int first() const { return i; }
+        const T& second() const { return map[i]; }
     };
 
     int numVregs() const { return v.size(); }

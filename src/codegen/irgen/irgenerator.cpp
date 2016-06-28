@@ -797,6 +797,8 @@ private:
     IREmitterImpl emitter;
     // symbol_table tracks which (non-global) python variables are bound to which CompilerVariables
     SymbolTable symbol_table;
+    DefinednessTable definedness_vars;
+
     std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks;
     CFGBlock* myblock;
     TypeAnalysis* types;
@@ -825,6 +827,8 @@ public:
         : irstate(irstate),
           curblock(entry_blocks[myblock]),
           emitter(irstate, curblock, this),
+          symbol_table(myblock->cfg->getVRegInfo().getTotalNumOfVRegs()),
+          definedness_vars(myblock->cfg->getVRegInfo().getTotalNumOfVRegs()),
           entry_blocks(entry_blocks),
           myblock(myblock),
           types(types),
@@ -889,9 +893,9 @@ private:
         return irstate->getSourceInfo()->getInternedStrings().get(std::forward<T>(s));
     }
 
-    InternedString getIsDefinedName(InternedString name) {
-        return pyston::getIsDefinedName(name, irstate->getSourceInfo()->getInternedStrings());
-    }
+    // InternedString getIsDefinedName(InternedString name) {
+    // return pyston::getIsDefinedName(name, irstate->getSourceInfo()->getInternedStrings());
+    //}
 
     CompilerVariable* evalAttribute(AST_Attribute* node, const UnwindInfo& unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);
@@ -1417,7 +1421,7 @@ private:
             return new ConcreteCompilerVariable(UNKNOWN, r);
         } else {
             // vst is one of {FAST, CLOSURE}
-            if (symbol_table.find(node->id) == symbol_table.end()) {
+            if (!symbol_table[node->vreg]) {
                 // TODO should mark as DEAD here, though we won't end up setting all the names appropriately
                 // state = DEAD;
                 llvm::CallSite call = emitter.createCall(
@@ -1429,24 +1433,22 @@ private:
                 return undefVariable();
             }
 
-            InternedString defined_name = getIsDefinedName(node->id);
-            ConcreteCompilerVariable* is_defined_var
-                = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
+            auto is_defined_var = getDefinedVar(node->vreg, true);
 
             if (is_defined_var) {
                 emitter.createCall(
                     unw_info, g.funcs.assertNameDefined,
-                    { i1FromBool(emitter, is_defined_var), embedRelocatablePtr(node->id.c_str(), g.i8_ptr),
+                    { i1FromLLVMBool(emitter, is_defined_var), embedRelocatablePtr(node->id.c_str(), g.i8_ptr),
                       emitter.setType(embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), RefType::BORROWED),
                       getConstantInt(true, g.i1) });
 
                 // At this point we know the name must be defined (otherwise the assert would have fired):
-                _popFake(defined_name);
+                popDefinedVar(node->vreg);
             }
 
-            CompilerVariable* rtn = symbol_table[node->id];
+            CompilerVariable* rtn = symbol_table[node->vreg];
             if (is_kill)
-                symbol_table.erase(node->id);
+                symbol_table[node->vreg] = NULL;
             return rtn;
         }
     }
@@ -1893,32 +1895,24 @@ private:
         return evalSliceExprPost(node, unw_info, rtn);
     }
 
-    void _setFake(InternedString name, CompilerVariable* val) {
-        assert(name.s()[0] == '!');
-        CompilerVariable*& cur = symbol_table[name];
+    void setDefinedVar(int vreg, llvm::Value* val) {
+        // printf("Setting definedness var for %s\n", name.c_str());
+        assert(val->getType() == BOOL->llvmType());
+        llvm::Value*& cur = definedness_vars[vreg];
         assert(cur == NULL);
         cur = val;
     }
 
-    // whether a Python variable FOO might be undefined or not is determined by whether the corresponding is_defined_FOO
-    // variable is present in our symbol table. If it is, then it *might* be undefined. If it isn't, then it either is
-    // definitely defined, or definitely isn't.
-    //
-    // to check whether a variable is in our symbol table, call _getFake with allow_missing = true and check whether the
-    // result is NULL.
-    CompilerVariable* _getFake(InternedString name, bool allow_missing = false) {
-        assert(name.s()[0] == '!');
-        auto it = symbol_table.find(name);
-        if (it == symbol_table.end()) {
+    llvm::Value* getDefinedVar(int vreg, bool allow_missing = false) {
+        auto r = definedness_vars[vreg];
+        if (!r)
             assert(allow_missing);
-            return NULL;
-        }
-        return it->second;
+        return r;
     }
 
-    CompilerVariable* _popFake(InternedString name, bool allow_missing = false) {
-        CompilerVariable* rtn = _getFake(name, allow_missing);
-        symbol_table.erase(name);
+    llvm::Value* popDefinedVar(int vreg, bool allow_missing = false) {
+        llvm::Value* rtn = getDefinedVar(vreg, allow_missing);
+        definedness_vars[vreg] = NULL;
         if (!allow_missing)
             assert(rtn != NULL);
         return rtn;
@@ -1979,13 +1973,12 @@ private:
         } else {
             // FAST or CLOSURE
 
-            CompilerVariable* prev = symbol_table[name];
-            symbol_table[name] = val;
+            CompilerVariable* prev = symbol_table[vreg];
+            symbol_table[vreg] = val;
 
             // Clear out the is_defined name since it is now definitely defined:
             assert(!isIsDefinedName(name.s()));
-            InternedString defined_name = getIsDefinedName(name);
-            bool maybe_was_undefined = _popFake(defined_name, true);
+            bool maybe_was_undefined = popDefinedVar(vreg, true);
 
             if (vst == ScopeInfo::VarScopeType::CLOSURE) {
                 size_t offset = irstate->getScopeInfo()->getClosureOffset(name);
@@ -2205,15 +2198,14 @@ private:
         // SyntaxError: can not delete variable 'x' referenced in nested scope
         assert(vst == ScopeInfo::VarScopeType::FAST);
 
-        CompilerVariable* prev = symbol_table.count(target->id) ? symbol_table[target->id] : NULL;
+        CompilerVariable* prev = symbol_table[target->vreg];
 
-        InternedString defined_name = getIsDefinedName(target->id);
-        ConcreteCompilerVariable* is_defined_var = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
+        llvm::Value* is_defined_var = getDefinedVar(target->vreg, true);
 
         _setVRegIfUserVisible(target->vreg, []() { return getNullPtr(g.llvm_value_type_ptr); }, prev,
                               (bool)is_defined_var);
 
-        if (symbol_table.count(target->id) == 0) {
+        if (!symbol_table[target->vreg]) {
             llvm::CallSite call = emitter.createCall(
                 unw_info, g.funcs.assertNameDefined,
                 { getConstantInt(0, g.i1), embedConstantPtr(target->id.c_str(), g.i8_ptr),
@@ -2226,13 +2218,13 @@ private:
         if (is_defined_var) {
             emitter.createCall(
                 unw_info, g.funcs.assertNameDefined,
-                { i1FromBool(emitter, is_defined_var), embedConstantPtr(target->id.c_str(), g.i8_ptr),
+                { i1FromLLVMBool(emitter, is_defined_var), embedConstantPtr(target->id.c_str(), g.i8_ptr),
                   emitter.setType(embedRelocatablePtr(NameError, g.llvm_class_type_ptr), RefType::BORROWED),
                   getConstantInt(true /*local_error_msg*/, g.i1) });
-            _popFake(defined_name);
+            popDefinedVar(target->vreg);
         }
 
-        symbol_table.erase(target->id);
+        symbol_table[target->vreg] = NULL;
     }
 
     void doExec(AST_Exec* node, const UnwindInfo& unw_info) {
@@ -2664,7 +2656,7 @@ private:
         _doSet(name, var, unw_info);
     }
 
-    bool allowableFakeEndingSymbol(InternedString name) { return isIsDefinedName(name.s()); }
+    // bool allowableFakeEndingSymbol(InternedString name) { return isIsDefinedName(name.s()); }
 
     void endBlock(State new_state) {
         assert(state == RUNNING);
@@ -2675,40 +2667,37 @@ private:
         auto cfg = source->cfg;
         ScopeInfo* scope_info = irstate->getScopeInfo();
 
-        // Sort the names here to make the process deterministic:
-        std::map<InternedString, CompilerVariable*> sorted_symbol_table(symbol_table.begin(), symbol_table.end());
-        for (const auto& p : sorted_symbol_table) {
-            assert(p.first.s() != FRAME_INFO_PTR_NAME);
-            assert(p.second->getType()->isUsable());
-            if (allowableFakeEndingSymbol(p.first))
+        int num_vregs = symbol_table.numVregs();
+        for (int vreg = 0; vreg < num_vregs; vreg++) {
+            if (!symbol_table[vreg])
                 continue;
 
-            // ASSERT(p.first[0] != '!' || isIsDefinedName(p.first), "left a fake variable in the real
-            // symbol table? '%s'", p.first.c_str());
+            auto val = symbol_table[vreg];
+            assert(val->getType()->isUsable());
 
-            int vreg = cfg->getVRegInfo().getVReg(p.first);
             if (!irstate->getLiveness()->isLiveAtEnd(vreg, myblock)) {
-                symbol_table.erase(getIsDefinedName(p.first));
-                symbol_table.erase(p.first);
+                popDefinedVar(vreg, true);
+                symbol_table[vreg] = NULL;
             } else if (irstate->getPhis()->isRequiredAfter(vreg, myblock)) {
-                assert(scope_info->getScopeTypeOfName(p.first) != ScopeInfo::VarScopeType::GLOBAL);
+                assert(scope_info->getScopeTypeOfName(cfg->getVRegInfo().getName(vreg))
+                       != ScopeInfo::VarScopeType::GLOBAL);
                 ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(vreg, myblock);
                 assert(phi_type->isUsable());
                 // printf("Converting %s from %s to %s\n", p.first.c_str(),
                 // p.second->getType()->debugName().c_str(), phi_type->debugName().c_str());
                 // printf("have to convert %s from %s to %s\n", p.first.c_str(),
                 // p.second->getType()->debugName().c_str(), phi_type->debugName().c_str());
-                ConcreteCompilerVariable* v = p.second->makeConverted(emitter, phi_type);
-                symbol_table[p.first] = v;
+                ConcreteCompilerVariable* v = val->makeConverted(emitter, phi_type);
+                symbol_table[vreg] = v;
             } else {
                 if (myblock->successors.size()) {
                     // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't
                     // want
                     // here, but this is just for debugging so I guess let it happen for now:
                     ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(vreg, myblock);
-                    RELEASE_ASSERT(p.second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
-                                   p.first.c_str(), ending_type->debugName().c_str(),
-                                   p.second->getType()->debugName().c_str());
+                    RELEASE_ASSERT(val->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
+                                   cfg->getVRegInfo().getName(vreg).c_str(), ending_type->debugName().c_str(),
+                                   val->getType()->debugName().c_str());
                 }
             }
         }
@@ -2718,22 +2707,19 @@ private:
             if (VERBOSITY() >= 3)
                 printf("phi will be required for %s\n", name.c_str());
             assert(scope_info->getScopeTypeOfName(name) != ScopeInfo::VarScopeType::GLOBAL);
-            CompilerVariable*& cur = symbol_table[name];
-
-            InternedString defined_name = getIsDefinedName(name);
+            CompilerVariable*& cur = symbol_table[vreg];
 
             if (cur != NULL) {
                 // printf("defined on this path; ");
 
-                ConcreteCompilerVariable* is_defined
-                    = static_cast<ConcreteCompilerVariable*>(_popFake(defined_name, true));
+                llvm::Value* is_defined = popDefinedVar(vreg, true);
 
                 if (irstate->getPhis()->isPotentiallyUndefinedAfter(vreg, myblock)) {
                     // printf("is potentially undefined later, so marking it defined\n");
                     if (is_defined) {
-                        _setFake(defined_name, is_defined);
+                        setDefinedVar(vreg, is_defined);
                     } else {
-                        _setFake(defined_name, makeBool(1));
+                        setDefinedVar(vreg, makeLLVMBool(1));
                     }
                 } else {
                     // printf("is defined in all later paths, so not marking\n");
@@ -2755,7 +2741,7 @@ private:
                 }
 
                 cur = new ConcreteCompilerVariable(phi_type, v);
-                _setFake(defined_name, makeBool(0));
+                setDefinedVar(vreg, makeLLVMBool(0));
             }
         }
 
@@ -2766,12 +2752,18 @@ public:
     void addFrameStackmapArgs(PatchpointInfo* pp, std::vector<llvm::Value*>& stackmap_args) override {
         int initial_args = stackmap_args.size();
 
+        auto&& vregs = irstate->getSourceInfo()->cfg->getVRegInfo();
+
         // For deopts we need to add the compiler created names to the stackmap
         if (ENABLE_FRAME_INTROSPECTION && pp->isDeopt()) {
             // TODO: don't need to use a sorted symbol table if we're explicitly recording the names!
             // nice for debugging though.
             typedef std::pair<InternedString, CompilerVariable*> Entry;
-            std::vector<Entry> sorted_symbol_table(symbol_table.begin(), symbol_table.end());
+            std::vector<Entry> sorted_symbol_table;
+            for (auto&& p : symbol_table) {
+                if (p.second)
+                    sorted_symbol_table.push_back(Entry(vregs.getName(p.first), p.second));
+            }
 
             // TODO: at some point it would be nice to pass these separately
             auto source = irstate->getSourceInfo();
@@ -2814,7 +2806,8 @@ public:
         SourceInfo* source = irstate->getSourceInfo();
 
         SymbolTable* st = new SymbolTable(symbol_table);
-        ConcreteSymbolTable* phi_st = new ConcreteSymbolTable();
+        ConcreteSymbolTable* phi_st = new ConcreteSymbolTable(symbol_table.numVregs());
+        DefinednessTable* def_vars = new DefinednessTable(definedness_vars);
 
         auto cfg = source->cfg;
         auto&& vreg_info = cfg->getVRegInfo();
@@ -2823,17 +2816,19 @@ public:
         assert(incoming_exc_state.empty());
 
         for (auto&& p : symbol_table) {
-            ASSERT(p.second->getType()->isUsable(), "%s", p.first.c_str());
+            if (!p.second)
+                continue;
+            ASSERT(p.second->getType()->isUsable(), "%d", p.first);
         }
 
         if (myblock->successors.size() == 0) {
             st->clear();
             symbol_table.clear();
-            return EndingState(st, phi_st, curblock, outgoing_exc_state);
+            return EndingState(st, phi_st, def_vars, curblock, outgoing_exc_state);
         } else if (myblock->successors.size() > 1) {
             // Since there are no critical edges, all successors come directly from this node,
             // so there won't be any required phis.
-            return EndingState(st, phi_st, curblock, outgoing_exc_state);
+            return EndingState(st, phi_st, def_vars, curblock, outgoing_exc_state);
         }
 
         assert(myblock->successors.size() == 1); // other cases should have been handled
@@ -2843,39 +2838,29 @@ public:
             // If the next block has a single predecessor, don't have to
             // emit any phis.
             // Should probably not emit no-op jumps like this though.
-            return EndingState(st, phi_st, curblock, outgoing_exc_state);
+            return EndingState(st, phi_st, def_vars, curblock, outgoing_exc_state);
         }
 
         // We have one successor, but they have more than one predecessor.
         // We're going to sort out which symbols need to go in phi_st and which belong inst.
-        for (SymbolTable::iterator it = st->begin(); it != st->end();) {
-            if (allowableFakeEndingSymbol(it->first)
-                || irstate->getPhis()->isRequiredAfter(cfg->getVRegInfo().getVReg(it->first), myblock)) {
-                // this conversion should have already happened... should refactor this.
-                ConcreteCompilerType* ending_type;
-                if (isIsDefinedName(it->first.s())) {
-                    assert(it->second->getType() == BOOL);
-                    ending_type = BOOL;
-                } else if (it->first.s() == PASSED_CLOSURE_NAME) {
-                    RELEASE_ASSERT(0, "");
-                } else if (it->first.s() == CREATED_CLOSURE_NAME) {
-                    RELEASE_ASSERT(0, "");
-                } else if (it->first.s() == PASSED_GENERATOR_NAME) {
-                    RELEASE_ASSERT(0, "");
-                } else if (it->first.s() == FRAME_INFO_PTR_NAME) {
-                    RELEASE_ASSERT(0, "");
-                } else {
-                    ending_type = types->getTypeAtBlockEnd(vreg_info.getVReg(it->first), myblock);
-                }
+        for (auto&& p : *st) {
+            if (!p.second)
+                continue;
+            if (/*allowableFakeEndingSymbol(it->first)
+                ||*/ irstate->getPhis()->isRequiredAfter(p.first, myblock)) {
+                ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(p.first, myblock);
                 assert(ending_type->isUsable());
-                //(*phi_st)[it->first] = it->second->makeConverted(emitter, it->second->getConcreteType());
-                (*phi_st)[it->first] = it->second->makeConverted(emitter, ending_type);
-                it = st->erase(it);
-            } else {
-                ++it;
+                //(*phi_st)[p->first] = p->second->makeConverted(emp, p->second->getConcreteType());
+                (*phi_st)[p.first] = p.second->makeConverted(emitter, ending_type);
+                (*st)[p.first] = NULL;
             }
         }
-        return EndingState(st, phi_st, curblock, outgoing_exc_state);
+        return EndingState(st, phi_st, def_vars, curblock, outgoing_exc_state);
+    }
+
+    void giveDefinednessVar(int vreg, llvm::Value* val) override {
+        // printf("Giving definedness var %s\n", irstate->getSourceInfo()->cfg->getVRegInfo().getName(vreg).c_str());
+        setDefinedVar(vreg, val);
     }
 
     void giveLocalSymbol(InternedString name, CompilerVariable* var) override {
@@ -2884,12 +2869,18 @@ public:
         assert(name.s() != CREATED_CLOSURE_NAME);
         assert(name.s() != PASSED_CLOSURE_NAME);
         assert(name.s() != PASSED_GENERATOR_NAME);
+        assert(name.s()[0] != '!');
         ASSERT(irstate->getScopeInfo()->getScopeTypeOfName(name) != ScopeInfo::VarScopeType::GLOBAL, "%s",
                name.c_str());
 
-        ASSERT(var->getType()->isUsable(), "%s", name.c_str());
+        int vreg = irstate->getSourceInfo()->cfg->getVRegInfo().getVReg(name);
+        giveLocalSymbol(vreg, var);
+    }
 
-        CompilerVariable*& cur = symbol_table[name];
+    void giveLocalSymbol(int vreg, CompilerVariable* var) override {
+        assert(var->getType()->isUsable());
+
+        CompilerVariable*& cur = symbol_table[vreg];
         assert(cur == NULL);
         cur = var;
     }
@@ -2898,9 +2889,11 @@ public:
         assert(st);
         DupCache cache;
         for (SymbolTable::iterator it = st->begin(); it != st->end(); ++it) {
+            if (!it.second())
+                continue;
             // printf("Copying in %s, a %s\n", it->first.c_str(), it->second->getType()->debugName().c_str());
-            symbol_table[it->first] = it->second->dup(cache);
-            assert(symbol_table[it->first]->getType()->isUsable());
+            symbol_table[it.first()] = it.second()->dup(cache);
+            assert(symbol_table[it.first()]->getType()->isUsable());
         }
     }
 
@@ -3028,10 +3021,11 @@ public:
     }
 
     void run(const CFGBlock* block) override {
+        auto&& vregs = block->cfg->getVRegInfo();
         if (VERBOSITY("irgenerator") >= 2) { // print starting symbol table
             printf("  %d init:", block->idx);
             for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
-                printf(" %s", it->first.c_str());
+                printf(" %s", vregs.getName(it.first()).c_str());
             printf("\n");
         }
         for (int i = 0; i < block->body.size(); i++) {
@@ -3050,7 +3044,7 @@ public:
         if (VERBOSITY("irgenerator") >= 2) { // print ending symbol table
             printf("  %d fini:", block->idx);
             for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
-                printf(" %s", it->first.c_str());
+                printf(" %s", vregs.getName(it.first()).c_str());
             printf("\n");
         }
     }

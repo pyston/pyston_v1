@@ -297,13 +297,6 @@ static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, InternedSt
     }
 }
 
-static bool shouldPhisOwnThisSym(llvm::StringRef name) {
-    // generating unnecessary increfs to the passed generator would introduce cycles inside the generator
-    if (name == PASSED_GENERATOR_NAME)
-        assert(0);
-    return true;
-}
-
 llvm::Value* handlePotentiallyUndefined(ConcreteCompilerVariable* is_defined_var, llvm::Type* rtn_type,
                                         llvm::BasicBlock*& cur_block, IREmitter& emitter, bool speculate_undefined,
                                         std::function<llvm::Value*(IREmitter&)> when_defined,
@@ -361,6 +354,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
     CFG* cfg = source->cfg;
     auto&& vreg_info = cfg->getVRegInfo();
+    int num_vregs = vreg_info.getTotalNumOfVRegs();
 
     if (entry_descriptor != NULL)
         assert(blocks.count(cfg->getStartingBlock()) == 0);
@@ -383,7 +377,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     // the function entry block, where we add the type guards [no guards anymore]
     llvm::BasicBlock* osr_entry_block = NULL;
     llvm::BasicBlock* osr_unbox_block_end = NULL; // the block after type guards where we up/down-convert things
-    ConcreteSymbolTable* osr_syms = NULL;         // syms after conversion
+    std::unordered_map<InternedString, ConcreteCompilerVariable*>* osr_syms = NULL; // syms after conversion
     if (entry_descriptor != NULL) {
         llvm::BasicBlock* osr_unbox_block = llvm::BasicBlock::Create(g.context, "osr_unbox", irstate->getLLVMFunction(),
                                                                      &irstate->getLLVMFunction()->getEntryBlock());
@@ -391,8 +385,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                                                    &irstate->getLLVMFunction()->getEntryBlock());
         assert(&irstate->getLLVMFunction()->getEntryBlock() == osr_entry_block);
 
-        osr_syms = new ConcreteSymbolTable();
-        SymbolTable* initial_syms = new SymbolTable();
+        osr_syms = new std::unordered_map<InternedString, ConcreteCompilerVariable*>();
+        auto initial_syms = new std::unordered_map<InternedString, CompilerVariable*>();
         // llvm::BranchInst::Create(llvm_entry_blocks[entry_descriptor->backedge->target->idx], entry_block);
 
         llvm::BasicBlock* osr_entry_block_end = osr_entry_block;
@@ -499,10 +493,14 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     ////
     // Main ir generation: go through each basic block in the CFG and emit the code
 
+    // TODO: switch these to unique_ptr
     std::unordered_map<CFGBlock*, SymbolTable*> ending_symbol_tables;
     std::unordered_map<CFGBlock*, ConcreteSymbolTable*> phi_ending_symbol_tables;
-    typedef std::map<InternedString, std::pair<ConcreteCompilerType*, llvm::PHINode*>> PHITable;
+    std::unordered_map<CFGBlock*, DefinednessTable*> definedness_tables;
+    typedef VRegMap<std::pair<ConcreteCompilerType*, llvm::PHINode*>> PHITable;
+    typedef VRegMap<llvm::PHINode*> DefinednessPHITable;
     std::unordered_map<CFGBlock*, PHITable*> created_phis;
+    std::unordered_map<CFGBlock*, DefinednessPHITable*> created_definedness_phis;
     std::unordered_map<CFGBlock*, llvm::SmallVector<IRGenerator::ExceptionState, 2>> incoming_exception_state;
 
     CFGBlock* initial_block = NULL;
@@ -536,8 +534,10 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         llvm::BasicBlock* entry_block_end = llvm_entry_blocks[block];
         std::unique_ptr<IREmitter> emitter(createIREmitter(irstate, entry_block_end));
 
-        PHITable* phis = new PHITable();
+        PHITable* phis = new PHITable(num_vregs);
         created_phis[block] = phis;
+        DefinednessPHITable* definedness_phis = new DefinednessPHITable(num_vregs);
+        created_definedness_phis[block] = definedness_phis;
 
         // Set initial symbol table:
         // If we're in the starting block, no phis or symbol table changes for us.
@@ -612,25 +612,40 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             irstate->setupFrameInfoVarOSR(osr_frame_info_arg);
 
             for (const auto& p : entry_descriptor->args) {
-                // Don't add the frame info to the symbol table since we will store it separately
-                // (we manually added it during the calculation of osr_syms):
-                if (p.first.s() == FRAME_INFO_PTR_NAME)
-                    continue;
+                assert(p.first.s() != FRAME_INFO_PTR_NAME);
+                assert(p.first.s() != PASSED_CLOSURE_NAME);
+                assert(p.first.s() != CREATED_CLOSURE_NAME);
+                assert(p.first.s() != PASSED_GENERATOR_NAME);
 
-                ConcreteCompilerType* analyzed_type = getTypeAtBlockStart(types, p.first, vreg_info, block);
+                if (p.first.s()[0] == '!') {
+                    assert(startswith(p.first.s(), "!is_defined_"));
+                    assert(p.second == BOOL);
 
-                // printf("For %s, given %s, analyzed for %s\n", p.first.c_str(), p.second->debugName().c_str(),
-                //        analyzed_type->debugName().c_str());
+                    auto base_name = source->getInternedStrings().get(p.first.s().substr(12));
 
-                llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(analyzed_type->llvmType(),
-                                                                      block->predecessors.size() + 1, p.first.s());
-                if (analyzed_type->getBoxType() == analyzed_type) {
-                    RefType type = shouldPhisOwnThisSym(p.first.s()) ? RefType::OWNED : RefType::BORROWED;
-                    irstate->getRefcounts()->setType(phi, type);
+                    llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(BOOL->llvmType(),
+                                                                          block->predecessors.size() + 1, p.first.s());
+                    int vreg = vreg_info.getVReg(base_name);
+                    generator->giveDefinednessVar(vreg, phi);
+                    (*definedness_phis)[vreg] = phi;
+                } else {
+                    int vreg = vreg_info.getVReg(p.first);
+
+                    ConcreteCompilerType* analyzed_type = getTypeAtBlockStart(types, p.first, vreg_info, block);
+
+                    // printf("For %s, given %s, analyzed for %s\n", p.first.c_str(), p.second->debugName().c_str(),
+                    //        analyzed_type->debugName().c_str());
+
+                    llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(analyzed_type->llvmType(),
+                                                                          block->predecessors.size() + 1, p.first.s());
+                    if (analyzed_type->getBoxType() == analyzed_type) {
+                        irstate->getRefcounts()->setType(phi, RefType::OWNED);
+                    }
+
+                    ConcreteCompilerVariable* var = new ConcreteCompilerVariable(analyzed_type, phi);
+                    generator->giveLocalSymbol(vreg, var);
+                    (*phis)[vreg] = std::make_pair(analyzed_type, phi);
                 }
-                ConcreteCompilerVariable* var = new ConcreteCompilerVariable(analyzed_type, phi);
-                generator->giveLocalSymbol(p.first, var);
-                (*phis)[p.first] = std::make_pair(analyzed_type, phi);
             }
         } else if (pred == NULL) {
             assert(traversal_order.size() < cfg->blocks.size());
@@ -643,11 +658,15 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             }
 
 
+            RELEASE_ASSERT(0, "Rotted code");
+#if 0
             std::set<InternedString> names;
             for (const int vreg : phi_analysis->getAllRequiredFor(block)) {
                 auto s = cfg->getVRegInfo().getName(vreg);
                 names.insert(s);
+
                 if (phi_analysis->isPotentiallyUndefinedAfter(vreg, block->predecessors[0])) {
+                    assert(0 && "this should go in definedness_names or some such");
                     names.insert(getIsDefinedName(s, source->getInternedStrings()));
                 }
             }
@@ -664,8 +683,11 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 ConcreteCompilerVariable* var = new ConcreteCompilerVariable(type, phi);
                 generator->giveLocalSymbol(s, var);
 
+                assert(s.s()[0] != '!' && "implement me");
+
                 (*phis)[s] = std::make_pair(type, phi);
             }
+#endif
         } else {
             assert(pred);
             assert(blocks.count(pred));
@@ -673,7 +695,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             if (block->predecessors.size() == 1) {
                 // If this block has only one predecessor, it by definition doesn't need any phi nodes.
                 // Assert that the phi_st is empty, and just create the symbol table from the non-phi st:
-                ASSERT(phi_ending_symbol_tables[pred]->size() == 0, "%d %d", block->idx, pred->idx);
+                ASSERT(phi_ending_symbol_tables[pred]->numSet() == 0, "%d %d", block->idx, pred->idx);
                 assert(ending_symbol_tables.count(pred));
 
                 // Filter out any names set by an invoke statement at the end of the previous block, if we're in the
@@ -716,6 +738,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                         assert(asgn->targets.size() == 1);
                         if (asgn->targets[0]->type == AST_TYPE::Name) {
                             InternedString name = ast_cast<AST_Name>(asgn->targets[0])->id;
+                            int vreg = ast_cast<AST_Name>(asgn->targets[0])->vreg;
                             assert(name.c_str()[0] == '#'); // it must be a temporary
                             // You might think I need to check whether `name' is being assigned globally or locally,
                             // since a global assign doesn't affect the symbol table. However, the CFG pass only
@@ -724,14 +747,19 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
                             // TODO: inefficient
                             sym_table = new SymbolTable(*sym_table);
-                            ASSERT(sym_table->count(name), "%d %s\n", block->idx, name.c_str());
-                            sym_table->erase(name);
+                            ASSERT((*sym_table)[vreg] != NULL, "%d %s\n", block->idx, name.c_str());
+                            (*sym_table)[vreg] = NULL;
                             created_new_sym_table = true;
                         }
                     }
                 }
 
                 generator->copySymbolsFrom(sym_table);
+                for (auto&& p : *definedness_tables[pred]) {
+                    if (!p.second)
+                        continue;
+                    generator->giveDefinednessVar(p.first, p.second);
+                }
                 if (created_new_sym_table)
                     delete sym_table;
             } else {
@@ -747,28 +775,34 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // And go through and add phi nodes:
                 ConcreteSymbolTable* pred_st = phi_ending_symbol_tables[pred];
 
-                // We have to sort the phi table by name in order to a get a deterministic ordering for the JIT object
-                // cache.
-                typedef std::pair<InternedString, ConcreteCompilerVariable*> Entry;
-                std::vector<Entry> sorted_pred_st(pred_st->begin(), pred_st->end());
-                std::sort(sorted_pred_st.begin(), sorted_pred_st.end(),
-                          [](const Entry& lhs, const Entry& rhs) { return lhs.first < rhs.first; });
+                for (int vreg = 0; vreg < num_vregs; vreg++) {
+                    ConcreteCompilerVariable* cv = (*pred_st)[vreg];
+                    if (!cv)
+                        continue;
 
-                for (auto& entry : sorted_pred_st) {
-                    InternedString name = entry.first;
-                    ConcreteCompilerVariable* cv = entry.second; // incoming CCV from predecessor block
-                    // printf("block %d: adding phi for %s from pred %d\n", block->idx, name.c_str(), pred->idx);
-                    llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(cv->getType()->llvmType(),
-                                                                          block->predecessors.size(), name.s());
+                    llvm::PHINode* phi
+                        = emitter->getBuilder()->CreatePHI(cv->getType()->llvmType(), block->predecessors.size());
+                    if (VERBOSITY("irgen"))
+                        phi->setName(vreg_info.getName(vreg).s());
+
                     if (cv->getType()->getBoxType() == cv->getType()) {
-                        RefType type = shouldPhisOwnThisSym(name.s()) ? RefType::OWNED : RefType::BORROWED;
-                        irstate->getRefcounts()->setType(phi, type);
+                        irstate->getRefcounts()->setType(phi, RefType::OWNED);
                     }
                     // emitter->getBuilder()->CreateCall(g.funcs.dump, phi);
                     ConcreteCompilerVariable* var = new ConcreteCompilerVariable(cv->getType(), phi);
-                    generator->giveLocalSymbol(name, var);
+                    generator->giveLocalSymbol(vreg, var);
 
-                    (*phis)[name] = std::make_pair(cv->getType(), phi);
+                    (*phis)[vreg] = std::make_pair(cv->getType(), phi);
+                }
+
+                for (auto&& p : *definedness_tables[pred]) {
+                    if (!p.second)
+                        continue;
+                    llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(BOOL->llvmType(), block->predecessors.size());
+                    if (VERBOSITY("irgen"))
+                        phi->setName("!is_defined_" + vreg_info.getName(p.first).s());
+                    generator->giveDefinednessVar(p.first, phi);
+                    (*definedness_phis)[p.first] = phi;
                 }
             }
         }
@@ -794,6 +828,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         const IRGenerator::EndingState& ending_st = generator->getEndingSymbolTable();
         ending_symbol_tables[block] = ending_st.symbol_table;
         phi_ending_symbol_tables[block] = ending_st.phi_symbol_table;
+        definedness_tables[block] = ending_st.definedness_vars;
         llvm_exit_blocks[block] = ending_st.ending_block;
 
         if (ending_st.exception_state.size()) {
@@ -806,7 +841,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         }
 
         if (into_hax.count(block))
-            ASSERT(ending_st.symbol_table->size() == 0, "%d", block->idx);
+            ASSERT(ending_st.symbol_table->numSet() == 0, "%d", block->idx);
     }
 
     ////
@@ -836,22 +871,20 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             // printf("(%d %ld) -> (%d %ld)\n", bpred->idx, phi_ending_symbol_tables[bpred]->size(), b->idx,
             // phis->size());
             ASSERT(sameKeyset(phi_ending_symbol_tables[bpred], phis), "%d->%d", bpred->idx, b->idx);
-            assert(phi_ending_symbol_tables[bpred]->size() == phis->size());
+            assert(phi_ending_symbol_tables[bpred]->numSet() == phis->numSet());
         }
 
         if (this_is_osr_entry) {
-            assert(sameKeyset(osr_syms, phis));
+            int nondefined_syms = 0;
+            for (auto&& p : *osr_syms) {
+                if (p.first.s()[0] != '!')
+                    nondefined_syms++;
+            }
+            assert(nondefined_syms == phis->numSet());
         }
 #endif // end checking phi agreement.
 
-        // Can't always add the phi incoming value right away, since we may have to create more
-        // basic blocks as part of type coercion.
-        // Instead, just make a record of the phi node, value, and the location of the from-BB,
-        // which we won't read until after all new BBs have been added.
-        std::vector<std::tuple<llvm::PHINode*, llvm::Value*, llvm::BasicBlock*&>> phi_args;
-
-        for (auto it = phis->begin(); it != phis->end(); ++it) {
-            llvm::PHINode* llvm_phi = it->second.second;
+        auto handle_phi = [&](llvm::PHINode* llvm_phi, int vreg, CompilerType* phi_type, bool is_defined_name) {
             for (int j = 0; j < b->predecessors.size(); j++) {
                 CFGBlock* bpred = b->predecessors[j];
                 if (blocks.count(bpred) == 0)
@@ -861,34 +894,59 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 if (llvm::isa<llvm::UnreachableInst>(terminator))
                     continue;
 
-                ConcreteCompilerVariable* v = (*phi_ending_symbol_tables[bpred])[it->first];
-                assert(v);
+                llvm::Value* val;
+                CompilerType* this_type;
+                if (!is_defined_name) {
+                    ConcreteCompilerVariable* v = (*phi_ending_symbol_tables[bpred])[vreg];
+                    assert(v);
 
-                // Make sure they all prepared for the same type:
-                ASSERT(it->second.first == v->getType(), "%d %d: %s %s %s", b->idx, bpred->idx, it->first.c_str(),
-                       it->second.first->debugName().c_str(), v->getType()->debugName().c_str());
+                    // Make sure they all prepared for the same type:
+                    ASSERT(phi_type == v->getType(), "%d %d: %d %s %s", b->idx, bpred->idx, vreg,
+                           phi_type->debugName().c_str(), v->getType()->debugName().c_str());
+                    val = v->getValue();
+                    this_type = v->getType();
+                } else {
+                    val = (*definedness_tables[bpred])[vreg];
+                    this_type = BOOL;
+                }
+                assert(val);
+                llvm_phi->addIncoming(val, llvm_exit_blocks[b->predecessors[j]]);
 
-                llvm::Value* val = v->getValue();
-                llvm_phi->addIncoming(v->getValue(), llvm_exit_blocks[b->predecessors[j]]);
-
-                if (v->getType()->getBoxType() == v->getType() && shouldPhisOwnThisSym(it->first.s())) {
+                if (this_type->getBoxType() == this_type) {
                     // llvm::outs() << *v->getValue() << " is getting consumed by phi " << *llvm_phi << '\n';
                     assert(llvm::isa<llvm::BranchInst>(terminator));
-                    irstate->getRefcounts()->refConsumed(v->getValue(), terminator);
+                    irstate->getRefcounts()->refConsumed(val, terminator);
                 }
             }
 
             if (this_is_osr_entry) {
-                ConcreteCompilerVariable* v = (*osr_syms)[it->first];
+                ConcreteCompilerVariable* v;
+                if (!is_defined_name)
+                    v = (*osr_syms)[vreg_info.getName(vreg)];
+                else
+                    v = (*osr_syms)[getIsDefinedName(vreg_info.getName(vreg), source->getInternedStrings())];
                 assert(v);
 
-                ASSERT(it->second.first == v->getType(), "");
+                ASSERT(phi_type == phi_type, "");
                 llvm_phi->addIncoming(v->getValue(), osr_unbox_block_end);
             }
+        };
+
+        for (auto it = phis->begin(); it != phis->end(); ++it) {
+            llvm::PHINode* llvm_phi = it.second().second;
+            if (!llvm_phi)
+                continue;
+
+            handle_phi(llvm_phi, it.first(), it.second().first, false);
         }
-        for (auto t : phi_args) {
-            RELEASE_ASSERT(0, "this hasn't been hit in a very long time -- check refcounting");
-            std::get<0>(t)->addIncoming(std::get<1>(t), std::get<2>(t));
+
+        auto definedness_phis = created_definedness_phis[b];
+        for (auto it = definedness_phis->begin(); it != definedness_phis->end(); ++it) {
+            llvm::PHINode* llvm_phi = it.second();
+            if (!llvm_phi)
+                continue;
+
+            handle_phi(llvm_phi, it.first(), BOOL, true);
         }
     }
 
@@ -898,7 +956,9 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             continue;
 
         delete ending_symbol_tables[b];
+        delete phi_ending_symbol_tables[b];
         delete created_phis[b];
+        delete definedness_tables[b];
     }
 
     if (entry_descriptor) {
@@ -1101,8 +1161,10 @@ CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames
     IRGenState irstate(md, cf, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo, &refcounter);
 
     emitBBs(&irstate, types, entry_descriptor, blocks);
+    assert(!llvm::verifyFunction(*f, &llvm::errs()));
 
     RefcountTracker::addRefcounts(&irstate);
+    assert(!llvm::verifyFunction(*f, &llvm::errs()));
 
     int num_instructions = std::distance(llvm::inst_begin(f), llvm::inst_end(f));
     static StatCounter num_llvm_insts("num_llvm_insts");
