@@ -4353,6 +4353,8 @@ void setupRuntime() {
     type_cls->tp_hash = (hashfunc)_Py_HashPointer;
     type_cls->giveAttrDescriptor("__module__", type_module, type_set_module);
     type_cls->giveAttrMember("__mro__", T_OBJECT, offsetof(BoxedClass, tp_mro));
+    type_cls->giveAttrMember("__basicsize__", T_PYSSIZET, offsetof(BoxedClass, tp_basicsize));
+    type_cls->giveAttrMember("__itemsize__", T_PYSSIZET, offsetof(BoxedClass, tp_itemsize));
     type_cls->giveAttrMember("__flags__", T_LONG, offsetof(BoxedClass, tp_flags));
     type_cls->giveAttr("__subclasses__",
                        new BoxedFunction(FunctionMetadata::create((void*)typeSubclasses, UNKNOWN, 1)));
