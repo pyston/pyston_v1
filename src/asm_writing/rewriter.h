@@ -577,6 +577,9 @@ protected:
     void _callOptimalEncoding(assembler::Register tmp_reg, void* func_addr);
 
     void assertConsistent() {
+
+        if (failed)
+            return;
 #ifndef NDEBUG
         for (RewriterVar& var : vars) {
             for (Location l : var.locations) {
