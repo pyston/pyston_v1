@@ -1004,7 +1004,7 @@ extern "C" int PyObject_Compare(PyObject* v, PyObject* w) noexcept {
    Py_True   if v op w
    Py_False  if not (v op w)
 */
-static PyObject* try_3way_to_rich_compare(PyObject* v, PyObject* w, int op) noexcept {
+/* static */ PyObject* try_3way_to_rich_compare(PyObject* v, PyObject* w, int op) noexcept {
     int c;
 
     c = try_3way_compare(v, w);
