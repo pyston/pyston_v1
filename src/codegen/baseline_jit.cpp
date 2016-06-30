@@ -438,7 +438,9 @@ RewriterVar* JitFragmentWriter::emitGetPystonIter(RewriterVar* v) {
 }
 
 RewriterVar* JitFragmentWriter::emitHasnext(RewriterVar* v) {
-    return call(false, (void*)hasnextHelper, v)->setType(RefType::OWNED);
+    auto rtn = call(false, (void*)hasnextHelper, v)->setType(RefType::BORROWED);
+    var_is_a_python_bool.insert(rtn);
+    return rtn;
 }
 
 RewriterVar* JitFragmentWriter::emitImportFrom(RewriterVar* module, BoxedString* name) {
@@ -460,12 +462,18 @@ RewriterVar* JitFragmentWriter::emitLandingpad() {
 }
 
 RewriterVar* JitFragmentWriter::emitNonzero(RewriterVar* v) {
+    if (var_is_a_python_bool.count(v))
+        return v;
     // nonzeroHelper returns bool
-    return call(false, (void*)nonzeroHelper, v)->setType(RefType::BORROWED);
+    auto rtn = call(false, (void*)nonzeroHelper, v)->setType(RefType::BORROWED);
+    var_is_a_python_bool.insert(rtn);
+    return rtn;
 }
 
 RewriterVar* JitFragmentWriter::emitNotNonzero(RewriterVar* v) {
-    return call(false, (void*)notHelper, v)->setType(RefType::BORROWED);
+    auto rtn = call(false, (void*)notHelper, v)->setType(RefType::BORROWED);
+    var_is_a_python_bool.insert(rtn);
+    return rtn;
 }
 
 RewriterVar* JitFragmentWriter::emitRepr(RewriterVar* v) {
@@ -1002,8 +1010,8 @@ Box* JitFragmentWriter::exceptionMatchesHelper(Box* obj, Box* cls) {
     return boxBool(exceptionMatches(obj, cls));
 }
 
-Box* JitFragmentWriter::hasnextHelper(Box* b) {
-    return boxBool(pyston::hasnext(b));
+BORROWED(Box*) JitFragmentWriter::hasnextHelper(Box* b) {
+    return pyston::hasnext(b) ? Py_True : Py_False;
 }
 
 BORROWED(Box*) JitFragmentWriter::nonzeroHelper(Box* b) {
@@ -1208,7 +1216,6 @@ void JitFragmentWriter::_emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val
         // Hax: override the automatic refcount system
         var->reftype = RefType::BORROWED;
     }
-    assert(var->num_refs_consumed == 0);
 
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {

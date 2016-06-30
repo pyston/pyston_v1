@@ -211,6 +211,7 @@ private:
     // TODO: in the future we could reuse this information between different basic blocks
     llvm::DenseSet<int> known_non_null_vregs;
     std::unique_ptr<ICInfo> ic_info;
+    llvm::SmallPtrSet<RewriterVar*, 4> var_is_a_python_bool;
 
     // Optional points to a CFGBlock and a patch location which should get patched to a direct jump if
     // the specified block gets JITed. The patch location is guaranteed to be at least 'min_patch_size' bytes long.
@@ -333,7 +334,7 @@ private:
     static Box* createSetHelper(uint64_t num, Box** data);
     static Box* createTupleHelper(uint64_t num, Box** data);
     static Box* exceptionMatchesHelper(Box* obj, Box* cls);
-    static Box* hasnextHelper(Box* b);
+    static BORROWED(Box*) hasnextHelper(Box* b);
     static BORROWED(Box*) nonzeroHelper(Box* b);
     static BORROWED(Box*) notHelper(Box* b);
     static Box* runtimeCallHelper(Box* obj, ArgPassSpec argspec, TypeRecorder* type_recorder, Box** args,
