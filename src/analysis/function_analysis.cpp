@@ -397,9 +397,11 @@ void DefinednessAnalysis::run(VRegMap<DefinednessAnalysis::DefinitionLevel> init
 
         for (int vreg = 0; vreg < nvregs; vreg++) {
 #ifndef NDEBUG
-            ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(vreg_info.getName(vreg));
-            ASSERT(vst != ScopeInfo::VarScopeType::GLOBAL && vst != ScopeInfo::VarScopeType::NAME, "%s",
-                   vreg_info.getName(vreg).c_str());
+            if (vreg_info.vregHasName(vreg)) {
+                ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(vreg_info.getName(vreg));
+                ASSERT(vst != ScopeInfo::VarScopeType::GLOBAL && vst != ScopeInfo::VarScopeType::NAME, "%s",
+                       vreg_info.getName(vreg).c_str());
+            }
 #endif
 
             auto status = p.second[vreg];

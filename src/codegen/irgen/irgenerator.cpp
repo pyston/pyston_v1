@@ -2679,8 +2679,9 @@ private:
                 popDefinedVar(vreg, true);
                 symbol_table[vreg] = NULL;
             } else if (irstate->getPhis()->isRequiredAfter(vreg, myblock)) {
-                assert(scope_info->getScopeTypeOfName(cfg->getVRegInfo().getName(vreg))
-                       != ScopeInfo::VarScopeType::GLOBAL);
+                assert(!cfg->getVRegInfo().vregHasName(vreg)
+                       || scope_info->getScopeTypeOfName(cfg->getVRegInfo().getName(vreg))
+                              != ScopeInfo::VarScopeType::GLOBAL);
                 ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(vreg, myblock);
                 assert(phi_type->isUsable());
                 // printf("Converting %s from %s to %s\n", p.first.c_str(),
@@ -3024,8 +3025,12 @@ public:
         auto&& vregs = block->cfg->getVRegInfo();
         if (VERBOSITY("irgenerator") >= 2) { // print starting symbol table
             printf("  %d init:", block->idx);
-            for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
-                printf(" %s", vregs.getName(it.first()).c_str());
+            for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it) {
+                if (vregs.vregHasName(it.first()))
+                    printf(" %s", vregs.getName(it.first()).c_str());
+                else
+                    printf(" <v%d>", it.first());
+            }
             printf("\n");
         }
         for (int i = 0; i < block->body.size(); i++) {
@@ -3044,7 +3049,10 @@ public:
         if (VERBOSITY("irgenerator") >= 2) { // print ending symbol table
             printf("  %d fini:", block->idx);
             for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
-                printf(" %s", vregs.getName(it.first()).c_str());
+                if (vregs.vregHasName(it.first()))
+                    printf(" %s", vregs.getName(it.first()).c_str());
+                else
+                    printf(" <v%d>", it.first());
             printf("\n");
         }
     }

@@ -109,6 +109,7 @@ private:
     llvm::DenseMap<InternedString, DefaultedInt<-1>> sym_vreg_map;
 
     // Reverse map, from vreg->symbol name.
+    // Entries won't exist for all vregs
     std::vector<InternedString> vreg_sym_map;
 
     int num_vregs_cross_block = -1;
@@ -131,9 +132,19 @@ public:
         return it->second;
     }
 
+    // Not all vregs correspond to a name; many are our compiler-generated variables.
+    bool vregHasName(int vreg) const { return vreg < num_vregs_cross_block; }
+
+// XXX temporarily disable vreg reuse, since for the transition we want to make it very
+// easy to convert between vregs and names.
+#define REUSE_VREGS 0
+
     InternedString getName(int vreg) const {
         assert(hasVRegsAssigned());
         assert(vreg >= 0 && vreg < num_vregs);
+#if REUSE_VREGS
+        assert(vregHasName(vreg));
+#endif
         return vreg_sym_map[vreg];
     }
 

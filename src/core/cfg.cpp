@@ -2756,19 +2756,17 @@ public:
         auto it = sym_vreg_map.find(id);
         if (sym_vreg_map.end() == it) {
             ASSERT(next_vreg == sym_vreg_map.size(), "%d %d", next_vreg, sym_vreg_map.size());
-            assert(next_vreg == vreg_sym_map.size());
-
             sym_vreg_map[id] = next_vreg;
-            vreg_sym_map.push_back(id);
+
+            if (!REUSE_VREGS || step == UserVisible || step == CrossBlock) {
+                assert(next_vreg == vreg_sym_map.size());
+                vreg_sym_map.push_back(id);
+            }
             return next_vreg++;
         }
         return it->second;
     }
 };
-
-// XXX temporarily disable vreg reuse, since for the transition we want to make it very
-// easy to convert between vregs and names.
-#define REUSE_VREGS 0
 
 void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* scope_info) {
     assert(!hasVRegsAssigned());
@@ -2813,6 +2811,9 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* s
     sym_vreg_map = std::move(visitor.sym_vreg_map);
     vreg_sym_map = std::move(visitor.vreg_sym_map);
     assert(hasVRegsAssigned());
+#if REUSE_VREGS
+    assert(vreg_sym_map.size() == num_vregs_cross_block);
+#endif
 }
 
 CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamNames& param_names) {
