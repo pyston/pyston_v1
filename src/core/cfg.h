@@ -191,6 +191,124 @@ public:
     void print(llvm::raw_ostream& stream = llvm::outs());
 };
 
+class VRegSet {
+private:
+    // TODO: switch just to a bool*
+    std::vector<bool> v;
+
+public:
+    VRegSet(int num_vregs) : v(num_vregs, false) {}
+
+    // TODO: what is the referenc type here?
+    bool operator[](int vreg) const {
+        assert(vreg >= 0 && vreg < v.size());
+        return v[vreg];
+    }
+    void set(int vreg) {
+        assert(vreg >= 0 && vreg < v.size());
+        v[vreg] = true;
+    }
+
+    int numSet() const {
+        int r = 0;
+        for (auto b : v)
+            if (b)
+                r++;
+        return r;
+    }
+
+    class iterator {
+    public:
+        const VRegSet& set;
+        int i;
+        iterator(const VRegSet& set, int i) : set(set), i(i) {}
+
+        iterator& operator++() {
+            do {
+                i++;
+            } while (i < set.v.size() && !set.v[i]);
+            return *this;
+        }
+
+        bool operator==(const iterator& rhs) const { return i == rhs.i; }
+        bool operator!=(const iterator& rhs) const { return !(*this == rhs); }
+
+        int operator*() { return i; }
+    };
+
+    iterator begin() const {
+        for (int i = 0; i < v.size(); i++) {
+            if (v[i])
+                return iterator(*this, i);
+        }
+        return iterator(*this, this->v.size());
+    }
+
+    iterator end() const { return iterator(*this, this->v.size()); }
+};
+
+template <typename T> class VRegMap {
+private:
+    // TODO: switch just to a T*
+    std::vector<T> v;
+
+public:
+    VRegMap(int num_vregs) : v(num_vregs) {}
+
+    T& operator[](int vreg) {
+        assert(vreg >= 0 && vreg < v.size());
+        return v[vreg];
+    }
+
+    const T& operator[](int vreg) const {
+        assert(vreg >= 0 && vreg < v.size());
+        return v[vreg];
+    }
+
+    void clear() {
+        int n = v.size();
+        for (int i = 0; i < n; i++) {
+            v[i] = T();
+        }
+    }
+
+    int numSet() {
+        int n = v.size();
+        int r = 0;
+        for (int i = 0; i < n; i++) {
+            if (v[i] != T())
+                r++;
+        }
+        return r;
+    }
+
+    class iterator {
+    public:
+        const VRegMap<T>& map;
+        int i;
+        iterator(const VRegMap<T>& map, int i) : map(map), i(i) {}
+
+        // TODO: make this skip unset values?
+        iterator& operator++() {
+            i++;
+            return *this;
+        }
+
+        bool operator==(const iterator& rhs) const { return i == rhs.i; }
+        bool operator!=(const iterator& rhs) const { return !(*this == rhs); }
+
+        std::pair<int, const T&> operator*() { return std::pair<int, const T&>(i, map[i]); }
+        int first() const { return i; }
+        const T& second() const { return map[i]; }
+    };
+
+    int numVregs() const { return v.size(); }
+
+    iterator begin() const { return iterator(*this, 0); }
+
+    iterator end() const { return iterator(*this, this->v.size()); }
+};
+
 class SourceInfo;
 CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamNames& param_names);
 void printCFG(CFG* cfg);

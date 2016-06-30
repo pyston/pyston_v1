@@ -462,12 +462,20 @@ PhiAnalysis::PhiAnalysis(VRegMap<DefinednessAnalysis::DefinitionLevel> initial_m
                 const VRegSet& defined = definedness.getDefinedVregsAtEnd(pred);
                 for (int vreg : defined) {
                     if (!required[vreg] && liveness->isLiveAtEnd(vreg, pred)) {
-                        // printf("%d-%d %s\n", pred->idx, block->idx, s.c_str());
+                        // printf("%d-%d %s\n", pred->idx, block->idx, vreg_info.getName(vreg).c_str());
 
                         required.set(vreg);
                     }
                 }
             }
+        }
+
+        if (VERBOSITY() >= 3) {
+            printf("Phis required at end of %d:", block->idx);
+            for (auto vreg : required) {
+                printf(" %s", vreg_info.getName(vreg).c_str());
+            }
+            printf("\n");
         }
     }
 
@@ -573,22 +581,13 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor* entry
         initial_map[vreg] = DefinednessAnalysis::Undefined;
     }
 
-    llvm::StringSet<> potentially_undefined;
     for (const auto& p : entry_descriptor->args) {
-        if (!startswith(p.first.s(), "!is_defined_"))
+        if (!p.second)
             continue;
-        potentially_undefined.insert(p.first.s().substr(12));
-    }
 
-    for (const auto& p : entry_descriptor->args) {
-        if (p.first.s()[0] == '!')
-            continue;
-        if (p.first.s() == PASSED_CLOSURE_NAME || p.first.s() == FRAME_INFO_PTR_NAME
-            || p.first.s() == PASSED_GENERATOR_NAME || p.first.s() == CREATED_CLOSURE_NAME)
-            assert(0);
-        int vreg = cfg->getVRegInfo().getVReg(p.first);
-        ASSERT(initial_map[vreg] == DefinednessAnalysis::Undefined, "%s %d", p.first.c_str(), initial_map[vreg]);
-        if (potentially_undefined.count(p.first.s()))
+        int vreg = p.first;
+        ASSERT(initial_map[vreg] == DefinednessAnalysis::Undefined, "%d %d", vreg, initial_map[vreg]);
+        if (entry_descriptor->potentially_undefined[vreg])
             initial_map[vreg] = DefinednessAnalysis::PotentiallyDefined;
         else
             initial_map[vreg] = DefinednessAnalysis::Defined;

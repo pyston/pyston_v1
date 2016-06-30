@@ -158,6 +158,7 @@ private:
 
         if (VERBOSITY() >= 3) {
             printf("Type of ");
+            fflush(stdout);
             print_ast(node);
             printf(" is %s\n", rtn->debugName().c_str());
         }
@@ -790,8 +791,9 @@ public:
                 printf("before:\n");
                 TypeMap& starting = starting_types.find(block)->second;
                 for (const auto& p : starting) {
+                    if (!p.second)
+                        continue;
                     auto name = vreg_info.getName(p.first);
-                    ASSERT(p.second, "%s", name.c_str());
                     printf("%s: %s\n", name.c_str(), p.second->debugName().c_str());
                 }
             }
@@ -803,14 +805,16 @@ public:
                 printf("before (after):\n");
                 TypeMap& starting = starting_types.find(block)->second;
                 for (const auto& p : starting) {
+                    if (!p.second)
+                        continue;
                     auto name = vreg_info.getName(p.first);
-                    ASSERT(p.second, "%s", name.c_str());
                     printf("%s: %s\n", name.c_str(), p.second->debugName().c_str());
                 }
                 printf("after:\n");
                 for (const auto& p : ending) {
+                    if (!p.second)
+                        continue;
                     auto name = vreg_info.getName(p.first);
-                    ASSERT(p.second, "%s", name.c_str());
                     printf("%s: %s\n", name.c_str(), p.second->debugName().c_str());
                 }
             }
@@ -839,8 +843,9 @@ public:
 
                 const TypeMap& starting = p.second;
                 for (const auto& p : starting) {
+                    if (!p.second)
+                        continue;
                     auto name = vreg_info.getName(p.first);
-                    ASSERT(p.second, "%s", name.c_str());
                     printf("%s: %s\n", name.c_str(), p.second->debugName().c_str());
                 }
             }
@@ -901,12 +906,7 @@ TypeAnalysis* doTypeAnalysis(const OSREntryDescriptor* entry_descriptor, EffortL
     TypeMap initial_types(vreg_info.getTotalNumOfVRegs());
 
     for (auto&& p : entry_descriptor->args) {
-        if (p.first.s()[0] == '!')
-            continue;
-        if (p.first.s() == PASSED_CLOSURE_NAME || p.first.s() == FRAME_INFO_PTR_NAME
-            || p.first.s() == PASSED_GENERATOR_NAME || p.first.s() == CREATED_CLOSURE_NAME)
-            assert(0);
-        initial_types[vreg_info.getVReg(p.first)] = p.second;
+        initial_types[p.first] = p.second;
     }
 
     return PropagatingTypeAnalysis::doAnalysis(speculation, scope_info, std::move(initial_types),

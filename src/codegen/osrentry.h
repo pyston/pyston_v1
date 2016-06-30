@@ -18,6 +18,7 @@
 #include <map>
 #include <vector>
 
+#include "core/cfg.h"
 #include "core/stringpool.h"
 
 namespace llvm {
@@ -32,7 +33,11 @@ struct StackMap;
 class OSREntryDescriptor {
 private:
     OSREntryDescriptor(FunctionMetadata* md, AST_Jump* backedge, ExceptionStyle exception_style)
-        : md(md), backedge(backedge), exception_style(exception_style) {
+        : md(md),
+          backedge(backedge),
+          exception_style(exception_style),
+          args(md->source->cfg->getVRegInfo().getTotalNumOfVRegs()),
+          potentially_undefined(md->source->cfg->getVRegInfo().getTotalNumOfVRegs()) {
         assert(md);
     }
 
@@ -40,8 +45,9 @@ public:
     FunctionMetadata* md;
     AST_Jump* const backedge;
     ExceptionStyle exception_style;
-    typedef std::map<InternedString, ConcreteCompilerType*> ArgMap;
+    typedef VRegMap<ConcreteCompilerType*> ArgMap;
     ArgMap args;
+    VRegSet potentially_undefined;
 
     static OSREntryDescriptor* create(FunctionMetadata* md, AST_Jump* backedge, ExceptionStyle exception_style) {
         return new OSREntryDescriptor(md, backedge, exception_style);

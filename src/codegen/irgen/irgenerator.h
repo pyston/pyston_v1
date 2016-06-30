@@ -21,7 +21,7 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/IR/Instructions.h"
 
-#include "analysis/function_analysis.h"
+#include "core/cfg.h"
 #include "core/stringpool.h"
 #include "core/types.h"
 

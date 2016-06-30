@@ -739,9 +739,12 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
         found_entry = p.first;
     }
 
-    std::map<InternedString, Box*> sorted_symbol_table;
+    int num_vregs = source_info->cfg->getVRegInfo().getTotalNumOfVRegs();
+    VRegMap<Box*> sorted_symbol_table(num_vregs);
+    VRegSet potentially_undefined(num_vregs);
 
     // TODO: maybe use a different placeholder (=NULL)?
+    // - new issue with that -- we can no longer distinguish NULL from unset-in-sorted_symbol_table
     // Currently we pass None because the LLVM jit will decref this value even though it may not be set.
     static Box* const VAL_UNDEFINED = (Box*)None;
 
@@ -751,16 +754,14 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
         if (!liveness->isLiveAtEnd(vreg, current_block))
             continue;
 
-        InternedString name = source_info->cfg->getVRegInfo().getName(vreg);
         Box* val = vregs[vreg];
         if (phis->isPotentiallyUndefinedAfter(vreg, current_block)) {
+            potentially_undefined.set(vreg);
             bool is_defined = val != NULL;
-            // TODO only mangle once
-            sorted_symbol_table[getIsDefinedName(name, source_info->getInternedStrings())] = (Box*)is_defined;
-            sorted_symbol_table[name] = is_defined ? incref(val) : incref(VAL_UNDEFINED);
+            sorted_symbol_table[vreg] = is_defined ? incref(val) : incref(VAL_UNDEFINED);
         } else {
-            ASSERT(val != NULL, "%s", name.c_str());
-            sorted_symbol_table[name] = incref(val);
+            assert(val != NULL);
+            sorted_symbol_table[vreg] = incref(val);
         }
     }
 
@@ -769,7 +770,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
     // LLVM has a limit on the number of operands a machine instruction can have (~255),
     // in order to not hit the limit with the patchpoints cancel OSR when we have a high number of symbols.
-    if (sorted_symbol_table.size() > 225) {
+    if (sorted_symbol_table.numSet() > 225) {
         static StatCounter times_osr_cancel("num_osr_cancel_too_many_syms");
         times_osr_cancel.log();
         return nullptr;
@@ -778,14 +779,13 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     if (found_entry == nullptr) {
         OSREntryDescriptor* entry = OSREntryDescriptor::create(getMD(), node, CXX);
 
-        for (auto& it : sorted_symbol_table) {
-            if (isIsDefinedName(it.first))
-                entry->args[it.first] = BOOL;
-            else {
-                assert(it.first.s()[0] != '!');
-                entry->args[it.first] = UNKNOWN;
-            }
+        // TODO can we just get rid of this?
+        for (auto&& p : sorted_symbol_table) {
+            if (p.second)
+                entry->args[p.first] = UNKNOWN;
         }
+
+        entry->potentially_undefined = potentially_undefined;
 
         found_entry = entry;
     }
@@ -793,9 +793,14 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     OSRExit exit(found_entry);
 
     std::vector<Box*> arg_array;
-    arg_array.reserve(sorted_symbol_table.size());
-    for (auto& it : sorted_symbol_table) {
-        arg_array.push_back(it.second);
+    arg_array.reserve(sorted_symbol_table.numSet() + potentially_undefined.numSet());
+    for (auto&& p : sorted_symbol_table) {
+        if (p.second)
+            arg_array.push_back(p.second);
+    }
+    for (int vreg : potentially_undefined) {
+        bool is_defined = sorted_symbol_table[vreg] != VAL_UNDEFINED;
+        arg_array.push_back((Box*)is_defined);
     }
 
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
