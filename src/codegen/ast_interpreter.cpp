@@ -406,9 +406,16 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
                     // WARNING: do not put a try catch + rethrow block around this code here.
                     //          it will confuse our unwinder!
                     rtn = interpreter.doOSR(cur_stmt);
+                    Py_CLEAR(v.o);
+
+                    // rtn == NULL when the OSR failed and we have to continue with interpreting
+                    if (rtn)
+                        return rtn;
+                    // if we get here OSR failed, fallthrough to the interpreter loop
+                } else {
+                    Py_XDECREF(v.o);
+                    return rtn;
                 }
-                Py_XDECREF(v.o);
-                return rtn;
             }
         }
 
