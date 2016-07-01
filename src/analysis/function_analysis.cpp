@@ -26,7 +26,6 @@
 #include "analysis/fpc.h"
 #include "analysis/scoping_analysis.h"
 #include "codegen/osrentry.h"
-#include "codegen/irgen/irgenerator.h"
 #include "core/ast.h"
 #include "core/cfg.h"
 #include "core/common.h"
