@@ -135,9 +135,8 @@ public:
     // Not all vregs correspond to a name; many are our compiler-generated variables.
     bool vregHasName(int vreg) const { return vreg < num_vregs_cross_block; }
 
-// XXX temporarily disable vreg reuse, since for the transition we want to make it very
-// easy to convert between vregs and names.
-#define REUSE_VREGS 0
+// Testing flag to turn off the "vreg reuse" optimization.
+#define REUSE_VREGS 1
 
     InternedString getName(int vreg) const {
         assert(hasVRegsAssigned());

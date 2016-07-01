@@ -2755,7 +2755,6 @@ public:
 
         auto it = sym_vreg_map.find(id);
         if (sym_vreg_map.end() == it) {
-            ASSERT(next_vreg == sym_vreg_map.size(), "%d %d", next_vreg, sym_vreg_map.size());
             sym_vreg_map[id] = next_vreg;
 
             if (!REUSE_VREGS || step == UserVisible || step == CrossBlock) {
@@ -2813,6 +2812,8 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* s
     assert(hasVRegsAssigned());
 #if REUSE_VREGS
     assert(vreg_sym_map.size() == num_vregs_cross_block);
+#else
+    assert(vreg_sym_map.size() == num_vregs);
 #endif
 }
 

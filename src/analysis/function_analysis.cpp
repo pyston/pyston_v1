@@ -159,6 +159,12 @@ bool LivenessAnalysis::isLiveAtEnd(int vreg, CFGBlock* block) {
     if (vreg < block->cfg->getVRegInfo().getNumOfUserVisibleVRegs())
         return true;
 
+    // For block-local vregs, this query doesn't really make sense,
+    // since the vreg will be live but that's probably not what we care about.
+    // It's probably safe to return false, but let's just error for now.
+    if (block->cfg->getVRegInfo().isBlockLocalVReg(vreg))
+        return false;
+
     if (block->successors.size() == 0)
         return false;
 
