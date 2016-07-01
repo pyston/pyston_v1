@@ -379,7 +379,7 @@ public:
     // List of metadata objects for ICs inside this compilation
     std::vector<ICInfo*> ics;
 
-    CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
+    CompiledFunction(FunctionMetadata* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
                      ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor);
 
     ConcreteCompilerType* getReturnType();

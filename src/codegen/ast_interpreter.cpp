@@ -172,7 +172,7 @@ public:
     Box** getVRegs() { return vregs; }
     const ScopeInfo* getScopeInfo() { return scope_info; }
 
-    void addSymbol(InternedString name, Box* value, bool allow_duplicates);
+    void addSymbol(int vreg, Box* value, bool allow_duplicates);
     void setGenerator(Box* gen);
     void setPassedClosure(Box* closure);
     void setCreatedClosure(Box* closure);
@@ -182,8 +182,8 @@ public:
     friend struct pyston::ASTInterpreterJitInterface;
 };
 
-void ASTInterpreter::addSymbol(InternedString name, Box* new_value, bool allow_duplicates) {
-    Box*& value = vregs[getVRegInfo().getVReg(name)];
+void ASTInterpreter::addSymbol(int vreg, Box* new_value, bool allow_duplicates) {
+    Box*& value = vregs[vreg];
     Box* old_value = value;
     value = incref(new_value);
     if (allow_duplicates)
@@ -2076,18 +2076,22 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
     ASTInterpreter interpreter(md, vregs, frame_state.frame_info);
 
     for (const auto& p : *frame_state.locals) {
-        assert(p.first->cls == str_cls);
-        auto name = static_cast<BoxedString*>(p.first)->s();
-        if (name == PASSED_GENERATOR_NAME) {
-            interpreter.setGenerator(p.second);
-        } else if (name == PASSED_CLOSURE_NAME) {
-            // this should have already got set because its stored in the frame info
-            assert(p.second == interpreter.getFrameInfo()->passed_closure);
-        } else if (name == CREATED_CLOSURE_NAME) {
-            interpreter.setCreatedClosure(p.second);
+        if (p.first->cls == int_cls) {
+            int vreg = static_cast<BoxedInt*>(p.first)->n;
+            interpreter.addSymbol(vreg, p.second, false);
         } else {
-            InternedString interned = md->source->getInternedStrings().get(name);
-            interpreter.addSymbol(interned, p.second, false);
+            assert(p.first->cls == str_cls);
+            auto name = static_cast<BoxedString*>(p.first)->s();
+            if (name == PASSED_GENERATOR_NAME) {
+                interpreter.setGenerator(p.second);
+            } else if (name == PASSED_CLOSURE_NAME) {
+                // this should have already got set because its stored in the frame info
+                assert(p.second == interpreter.getFrameInfo()->passed_closure);
+            } else if (name == CREATED_CLOSURE_NAME) {
+                interpreter.setCreatedClosure(p.second);
+            } else {
+                RELEASE_ASSERT(0, "");
+            }
         }
     }
 
@@ -2101,7 +2105,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
             assert(asgn->targets[0]->type == AST_TYPE::Name);
             auto name = ast_cast<AST_Name>(asgn->targets[0]);
             assert(name->id.s()[0] == '#');
-            interpreter.addSymbol(name->id, expr_val, true);
+            interpreter.addSymbol(name->vreg, expr_val, true);
             break;
         } else if (enclosing_stmt->type == AST_TYPE::Expr) {
             auto expr = ast_cast<AST_Expr>(enclosing_stmt);

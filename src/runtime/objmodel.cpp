@@ -137,6 +137,8 @@ extern "C" void xdecrefAndRethrow(void* cxa_ptr, int num, ...) {
 }
 
 extern "C" Box* deopt(AST_expr* expr, Box* value) {
+    ASSERT(ENABLE_FRAME_INTROSPECTION, "deopt will not work with frame introspection turned off");
+
     STAT_TIMER(t0, "us_timer_deopt", 10);
 
     static StatCounter num_deopt("num_deopt");

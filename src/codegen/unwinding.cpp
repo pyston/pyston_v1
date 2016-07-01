@@ -329,7 +329,9 @@ public:
         }
     }
 
-    llvm::ArrayRef<StackMap::Record::Location> findLocations(llvm::StringRef name) {
+#if 0
+    //llvm::ArrayRef<StackMap::Record::Location> findLocations(llvm::StringRef name) {
+    llvm::ArrayRef<StackMap::Record::Location> findLocations(const LocationMap::LocationTable& table) {
         assert(id.type == PythonFrameId::COMPILED);
 
         CompiledFunction* cf = getCF();
@@ -338,15 +340,14 @@ public:
         assert(ip > cf->code_start);
         unsigned offset = ip - cf->code_start;
 
-        assert(cf->location_map);
-        const LocationMap::LocationTable& table = cf->location_map->names[name];
-
+        //const LocationMap::LocationTable& table = cf->location_map->names[name];
         auto entry = table.findEntry(offset);
         if (!entry)
             return {};
         assert(entry->locations.size());
         return entry->locations;
     }
+#endif
 
     AST_stmt* getCurrentStatement() {
         assert(getFrameInfo()->stmt);
@@ -870,20 +871,37 @@ DeoptState getDeoptState() {
             // We have to detect + ignore any entries for variables that
             // could have been defined (so they have entries) but aren't (so the
             // entries point to uninitialized memory).
-            std::unordered_set<std::string> is_undefined;
+            std::unordered_set<int> is_undefined;
 
-            for (const auto& p : cf->location_map->names) {
-                if (!startswith(p.first(), "!is_defined_"))
-                    continue;
+            auto readEntry = [&](const LocationMap::LocationTable::LocationEntry* e) {
+                auto locs = e->locations;
 
+                llvm::SmallVector<uint64_t, 1> vals;
+                // printf("%s: %s\n", p.first().c_str(), e.type->debugName().c_str());
+
+                for (auto& loc : locs) {
+                    vals.push_back(frame_iter->readLocation(loc));
+                }
+
+                // this returns an owned reference so we don't incref it
+                Box* v = e->type->deserializeFromFrame(vals);
+                return v;
+            };
+
+            if (auto e = cf->location_map->generator.findEntry(offset))
+                d->d[boxString(PASSED_GENERATOR_NAME)] = readEntry(e);
+            if (auto e = cf->location_map->passed_closure.findEntry(offset))
+                d->d[boxString(PASSED_CLOSURE_NAME)] = readEntry(e);
+            if (auto e = cf->location_map->created_closure.findEntry(offset))
+                d->d[boxString(CREATED_CLOSURE_NAME)] = readEntry(e);
+
+            for (const auto& p : cf->location_map->definedness_vars) {
                 auto e = p.second.findEntry(offset);
                 if (e) {
-                    auto locs = e->locations;
-
-                    assert(locs.size() == 1);
-                    uint64_t v = frame_iter->readLocation(locs[0]);
-                    if ((v & 1) == 0)
-                        is_undefined.insert(p.first().substr(12));
+                    Box* b = readEntry(e);
+                    AUTO_DECREF(b);
+                    if (b == Py_False)
+                        is_undefined.insert(p.first);
                 }
             }
 
@@ -893,40 +911,23 @@ DeoptState getDeoptState() {
             // But deopts are so rare it's not really worth it.
             Box** vregs = frame_iter->getFrameInfo()->vregs;
             for (const auto& p : cf->md->source->cfg->getVRegInfo().getUserVisibleSymVRegMap()) {
-                if (is_undefined.count(p.first.s()))
-                    continue;
+                if (is_undefined.count(p.second))
+                    assert(0);
 
                 Box* v = vregs[p.second];
                 if (!v)
                     continue;
 
-                assert(!d->d.count(p.first.getBox()));
-                d->d[incref(p.first.getBox())] = incref(v);
+                d->d[boxInt(p.second)] = incref(v);
             }
 
-            for (const auto& p : cf->location_map->names) {
-                if (p.first()[0] == '!')
-                    continue;
-
-                if (is_undefined.count(p.first()))
+            for (const auto& p : cf->location_map->vars) {
+                if (is_undefined.count(p.first))
                     continue;
 
                 auto e = p.second.findEntry(offset);
-                if (e) {
-                    auto locs = e->locations;
-
-                    llvm::SmallVector<uint64_t, 1> vals;
-                    // printf("%s: %s\n", p.first().c_str(), e.type->debugName().c_str());
-
-                    for (auto& loc : locs) {
-                        vals.push_back(frame_iter->readLocation(loc));
-                    }
-
-                    // this returns an owned reference so we don't incref it
-                    Box* v = e->type->deserializeFromFrame(vals);
-                    // printf("%s: (pp id %ld) %p\n", p.first().c_str(), e._debug_pp_id, v);
-                    d->d[boxString(p.first())] = v;
-                }
+                if (e)
+                    d->d[boxInt(p.first)] = readEntry(e);
             }
         } else {
             abort();

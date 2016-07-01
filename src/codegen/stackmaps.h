@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 
@@ -101,7 +102,9 @@ public:
         }
     };
 
-    llvm::StringMap<LocationTable> names;
+    llvm::DenseMap<int, LocationTable> vars;
+    LocationTable generator, passed_closure, created_closure;
+    llvm::DenseMap<int, LocationTable> definedness_vars;
 };
 
 StackMap* parseStackMap();

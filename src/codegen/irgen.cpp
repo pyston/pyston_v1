@@ -1100,7 +1100,7 @@ CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames
         llvm_arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
     }
 
-    CompiledFunction* cf = new CompiledFunction(NULL, spec, NULL, effort, exception_style, entry_descriptor);
+    CompiledFunction* cf = new CompiledFunction(md, spec, NULL, effort, exception_style, entry_descriptor);
     setPointersInCodeStorage(&cf->pointers_in_code);
 
     // Make sure that the instruction memory keeps the module object alive.

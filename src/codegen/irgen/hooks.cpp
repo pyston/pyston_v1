@@ -682,10 +682,10 @@ void CompiledFunction::speculationFailed() {
 }
 
 std::unordered_set<CompiledFunction*> all_compiled_functions;
-CompiledFunction::CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
+CompiledFunction::CompiledFunction(FunctionMetadata* md, FunctionSpecialization* spec, void* code, EffortLevel effort,
                                    ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor)
-    : md(NULL),
-      func(func),
+    : md(md),
+      func(NULL),
       effort(effort),
       exception_style(exception_style),
       spec(spec),
@@ -829,6 +829,6 @@ void FunctionMetadata::addVersion(void* f, ConcreteCompilerType* rtn_type,
 #endif
 
     FunctionSpecialization* spec = new FunctionSpecialization(processType(rtn_type), arg_types);
-    addVersion(new CompiledFunction(NULL, spec, f, EffortLevel::MAXIMAL, exception_style, NULL));
+    addVersion(new CompiledFunction(this, spec, f, EffortLevel::MAXIMAL, exception_style, NULL));
 }
 }

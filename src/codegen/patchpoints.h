@@ -96,8 +96,12 @@ public:
 struct PatchpointInfo {
 public:
     struct FrameVarInfo {
-        llvm::StringRef name;
+        int vreg;
         CompilerType* type;
+    };
+    struct FrameInfoDesc {
+        std::vector<FrameVarInfo> vars;
+        llvm::SmallVector<int, 2> potentially_undefined;
     };
 
 private:
@@ -106,9 +110,9 @@ private:
     int num_ic_stackmap_args;
     int num_frame_stackmap_args;
     bool is_frame_info_stackmap;
-
-    std::vector<FrameVarInfo> frame_vars;
     unsigned int id;
+
+    FrameInfoDesc frame_info_desc;
 
     PatchpointInfo(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args)
         : parent_cf(parent_cf),
@@ -125,7 +129,7 @@ public:
     int patchpointSize();
     CompiledFunction* parentFunction() { return parent_cf; }
 
-    const std::vector<FrameVarInfo>& getFrameVars() { return frame_vars; }
+    FrameInfoDesc& getFrameDesc() { return frame_info_desc; }
 
     int scratchStackmapArg() { return 0; }
     int scratchSize() { return isDeopt() ? MAX_FRAME_SPILLS * sizeof(void*) : 96; }
@@ -133,7 +137,11 @@ public:
     bool isFrameInfoStackmap() const { return is_frame_info_stackmap; }
     int numFrameSpillsSupported() const { return isDeopt() ? MAX_FRAME_SPILLS : 0; }
 
-    void addFrameVar(llvm::StringRef name, CompilerType* type);
+    void addFrameVar(int vreg, CompilerType* type) {
+        frame_info_desc.vars.push_back(FrameVarInfo({.vreg = vreg, .type = type }));
+    }
+    void addPotentiallyUndefined(int vreg) { frame_info_desc.potentially_undefined.push_back(vreg); }
+
     void setNumFrameArgs(int num_frame_args) {
         assert(num_frame_stackmap_args == -1);
         num_frame_stackmap_args = num_frame_args;

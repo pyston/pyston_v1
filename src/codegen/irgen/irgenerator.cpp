@@ -62,7 +62,7 @@ IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* s
       stmt(NULL),
       scratch_size(0) {
     assert(cf->func);
-    assert(!cf->md); // in this case don't need to pass in sourceinfo
+    assert(cf->md->source.get() == source_info); // I guess this is duplicate now
 }
 
 IRGenState::~IRGenState() {
@@ -2757,43 +2757,45 @@ public:
 
         // For deopts we need to add the compiler created names to the stackmap
         if (ENABLE_FRAME_INTROSPECTION && pp->isDeopt()) {
-            // TODO: don't need to use a sorted symbol table if we're explicitly recording the names!
-            // nice for debugging though.
-            typedef std::pair<InternedString, CompilerVariable*> Entry;
-            std::vector<Entry> sorted_symbol_table;
-            for (auto&& p : symbol_table) {
-                if (p.second)
-                    sorted_symbol_table.push_back(Entry(vregs.getName(p.first), p.second));
-            }
-
-            // TODO: at some point it would be nice to pass these separately
             auto source = irstate->getSourceInfo();
             if (source->is_generator)
-                sorted_symbol_table.push_back(
-                    Entry(source->getInternedStrings().get(PASSED_GENERATOR_NAME),
-                          new ConcreteCompilerVariable(GENERATOR, irstate->getPassedGenerator())));
+                stackmap_args.push_back(irstate->getPassedGenerator());
 
             auto scoping = source->getScopeInfo();
             if (scoping->takesClosure())
-                sorted_symbol_table.push_back(
-                    Entry(source->getInternedStrings().get(PASSED_CLOSURE_NAME),
-                          new ConcreteCompilerVariable(CLOSURE, irstate->getPassedClosure())));
-            if (scoping->createsClosure())
-                sorted_symbol_table.push_back(
-                    Entry(source->getInternedStrings().get(CREATED_CLOSURE_NAME),
-                          new ConcreteCompilerVariable(CLOSURE, irstate->getCreatedClosure())));
+                stackmap_args.push_back(irstate->getPassedClosure());
 
-            std::sort(sorted_symbol_table.begin(), sorted_symbol_table.end(),
-                      [](const Entry& lhs, const Entry& rhs) { return lhs.first < rhs.first; });
-            for (const auto& p : sorted_symbol_table) {
+            if (scoping->createsClosure())
+                stackmap_args.push_back(irstate->getCreatedClosure());
+
+            typedef std::pair<InternedString, CompilerVariable*> Entry;
+            for (auto&& p : symbol_table) {
+                int vreg = p.first;
+                if (!p.second)
+                    continue;
+
                 // We never have to include non compiler generated vars because the user visible variables are stored
                 // inside the vregs array.
-                if (!p.first.isCompilerCreatedName())
+                if (vregs.isUserVisibleVReg(vreg)) {
+                    assert(!vregs.getName(p.first).isCompilerCreatedName());
                     continue;
+                }
 
                 CompilerVariable* v = p.second;
                 v->serializeToFrame(stackmap_args);
-                pp->addFrameVar(p.first.s(), v->getType());
+                pp->addFrameVar(p.first, v->getType());
+            }
+
+            for (auto&& p : definedness_vars) {
+                if (!p.second)
+                    continue;
+                if (vregs.isUserVisibleVReg(p.first))
+                    continue;
+
+                assert(symbol_table[p.first]);
+
+                stackmap_args.push_back(p.second);
+                pp->addPotentiallyUndefined(p.first);
             }
         }
 
