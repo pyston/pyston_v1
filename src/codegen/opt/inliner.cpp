@@ -249,7 +249,7 @@ public:
                     do_inline = (bool)IC;
                 }
 
-                if (VERBOSITY("irgen.inlining") >= 1) {
+                if (VERBOSITY("irgen.inlining") >= 2) {
                     if (!do_inline)
                         llvm::outs() << "not ";
                     llvm::outs() << "inlining ";
