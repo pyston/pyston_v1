@@ -480,6 +480,34 @@ public:
     const_iterator end() const { return const_iterator(this, size()); }
 };
 
+// TODO: this should be cleaned up and moved to src/core/
+template <typename K, typename V> class SmallOrderedMap {
+private:
+    std::vector<std::pair<K, V>> v;
+
+public:
+    V& operator[](const K& k) {
+        for (auto&& p : v)
+            if (p.first == k)
+                return p.second;
+
+        v.emplace_back(k, V());
+        return v.back().second;
+    }
+
+    size_t size() const { return v.size(); }
+
+    V get(const K& k) const {
+        for (auto&& p : v)
+            if (p.first == k)
+                return p.second;
+        return V();
+    }
+
+    typename decltype(v)::iterator begin() { return v.begin(); }
+    typename decltype(v)::iterator end() { return v.end(); }
+};
+
 // An optimized representation of the graph of llvm::BasicBlock's, since we will be dealing with them a lot.
 struct BBGraph {
 public:
@@ -977,7 +1005,6 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             if (llvm::isa<llvm::PHINode>(&I))
                 continue;
 
-
             // If we are about to insert a CXX fixup, do the increfs after the call, rather than trying to push
             // them before the call and having to insert decrefs on the fixup path.
             if (rt->may_throw.count(&I)) {
@@ -998,18 +1025,28 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     state.ending_refs.erase(v);
             }
 
-            llvm::DenseMap<llvm::Value*, int> num_consumed_by_inst;
-            OrderedMap<llvm::Value*, int> num_times_as_op;
+            SmallOrderedMap<llvm::Value*, int> num_consumed_by_inst;
+            SmallOrderedMap<llvm::Value*, int> num_times_as_op;
 
-            for (auto v : rt->refs_consumed[&I]) {
-                num_consumed_by_inst[v]++;
-                assert(rt->vars.count(v) && rt->vars.lookup(v).reftype != RefType::UNKNOWN);
-                num_times_as_op[v]; // just make sure it appears in there
+            {
+                auto it = rt->refs_consumed.find(&I);
+                if (it != rt->refs_consumed.end()) {
+                    for (auto v : it->second) {
+                        num_consumed_by_inst[v]++;
+                        assert(rt->vars.count(v) && rt->vars.lookup(v).reftype != RefType::UNKNOWN);
+                        num_times_as_op[v]; // just make sure it appears in there
+                    }
+                }
             }
 
-            for (auto v : rt->refs_used[&I]) {
-                assert(rt->vars.lookup(v).reftype != RefType::UNKNOWN);
-                num_times_as_op[v]++;
+            {
+                auto it = rt->refs_used.find(&I);
+                if (it != rt->refs_used.end()) {
+                    for (auto v : it->second) {
+                        assert(rt->vars.lookup(v).reftype != RefType::UNKNOWN);
+                        num_times_as_op[v]++;
+                    }
+                }
             }
 
             for (llvm::Value* op : I.operands()) {
@@ -1024,12 +1061,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             for (auto&& p : num_times_as_op) {
                 auto& op = p.first;
 
-                auto&& it = num_consumed_by_inst.find(op);
-                int num_consumed = 0;
-                if (it != num_consumed_by_inst.end())
-                    num_consumed = it->second;
+                int num_consumed = num_consumed_by_inst.get(op);
 
-                if (num_times_as_op[op] > num_consumed) {
+                if (p.second > num_consumed) {
                     if (rt->vars.lookup(op).reftype == RefType::OWNED) {
                         if (state.ending_refs[op] == 0) {
                             // llvm::outs() << "Last use of " << *op << " is at " << I << "; adding a decref after\n";
@@ -1081,10 +1115,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             for (auto&& p : num_times_as_op) {
                 auto& op = p.first;
 
-                auto&& it = num_consumed_by_inst.find(op);
-                int num_consumed = 0;
-                if (it != num_consumed_by_inst.end())
-                    num_consumed = it->second;
+                int num_consumed = num_consumed_by_inst.get(op);
 
                 if (num_consumed)
                     state.ending_refs[op] += num_consumed;
