@@ -1,4 +1,3 @@
-# expected: fail
 # Python test set -- part 6, built-in types
 
 from test.test_support import run_unittest, have_unicode, run_with_locale, \
