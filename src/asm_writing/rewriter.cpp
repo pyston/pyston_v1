@@ -287,20 +287,20 @@ void RewriterVar::addGuard(uint64_t val) {
     rewriter->addAction([=]() { rewriter->_addGuard(this, val_var); }, { this, val_var }, ActionType::GUARD);
 }
 
-void Rewriter::_slowpathJump(bool condition_eq) {
+void Rewriter::_nextSlotJump(bool condition_eq) {
     // If a jump offset is larger then 0x80 the instruction encoding requires 6bytes instead of 2bytes.
     // This adds up quickly, thats why we will try to find another jump to the slowpath with the same condition with a
     // smaller offset and jump to it / use it as a trampoline.
     // The benchmark show that this increases the performance slightly even though it introduces additional jumps.
-    int& last_jmp_offset = condition_eq ? offset_eq_jmp_slowpath : offset_ne_jmp_slowpath;
+    int& last_jmp_offset = condition_eq ? offset_eq_jmp_next_slot : offset_ne_jmp_next_slot;
     auto condition = condition_eq ? assembler::COND_EQUAL : assembler::COND_NOT_EQUAL;
 
-    assert(assembler->bytesWritten() + assembler->bytesLeft() == rewrite->getSlotSize());
-    if (last_jmp_offset != -1 && assembler->bytesLeft() >= 0x80 && assembler->bytesWritten() - last_jmp_offset < 0x80) {
+    if (last_jmp_offset != -1 && assembler->bytesWritten() - last_jmp_offset < 0x80) {
         assembler->jmp_cond(assembler::JumpDestination::fromStart(last_jmp_offset), condition);
     } else {
         last_jmp_offset = assembler->bytesWritten();
         assembler->jmp_cond(assembler::JumpDestination::fromStart(rewrite->getSlotSize()), condition);
+        next_slot_jmps.emplace_back(last_jmp_offset, assembler->bytesWritten(), condition);
     }
 }
 
@@ -321,7 +321,7 @@ void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
 
     restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
-    _slowpathJump(false /*= not equal jmp */);
+    _nextSlotJump(false /*= not equal jmp */);
 
     var->bumpUse();
     val_constant->bumpUse();
@@ -353,7 +353,7 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
 
     restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
-    _slowpathJump(true /*= equal jmp */);
+    _nextSlotJump(true /*= equal jmp */);
 
     var->bumpUse();
     val_constant->bumpUse();
@@ -405,7 +405,7 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
 
     restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
-    _slowpathJump(negate);
+    _nextSlotJump(negate);
 
     var->bumpUse();
     val_constant->bumpUse();
@@ -1683,7 +1683,7 @@ void Rewriter::commit() {
     }
 #endif
 
-    rewrite->commit(this, std::move(gc_references), std::move(decref_infos));
+    rewrite->commit(this, std::move(gc_references), std::move(decref_infos), next_slot_jmps);
     assert(gc_references.empty());
 
     if (assembler->hasFailed()) {
@@ -1706,12 +1706,13 @@ void Rewriter::commit() {
     ic_rewrites_total_bytes.log(asm_size_bytes);
 }
 
-bool Rewriter::finishAssembly(int continue_offset) {
+bool Rewriter::finishAssembly(int continue_offset, bool& should_fill_with_nops, bool& variable_size_slots) {
     assert(picked_slot);
 
     assembler->jmp(assembler::JumpDestination::fromStart(continue_offset));
 
-    assembler->fillWithNops();
+    should_fill_with_nops = true;
+    variable_size_slots = true;
 
     return !assembler->hasFailed();
 }
@@ -2217,8 +2218,8 @@ Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const L
       marked_inside_ic(false),
       done_guarding(false),
       last_guard_action(-1),
-      offset_eq_jmp_slowpath(-1),
-      offset_ne_jmp_slowpath(-1),
+      offset_eq_jmp_next_slot(-1),
+      offset_ne_jmp_next_slot(-1),
       allocatable_regs(std_allocatable_regs) {
     initPhaseCollecting();
 
@@ -2369,7 +2370,10 @@ Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* deb
     }
 
     log_ic_attempts_started(debug_name);
-    return new Rewriter(ic->startRewrite(debug_name), num_args, ic->getLiveOuts());
+    std::unique_ptr<ICSlotRewrite> slots = ic->startRewrite(debug_name);
+    if (!slots)
+        return NULL;
+    return new Rewriter(std::move(slots), num_args, ic->getLiveOuts());
 }
 
 static const int INITIAL_CALL_SIZE = 13;

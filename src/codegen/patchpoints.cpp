@@ -43,14 +43,13 @@ int ICSetupInfo::totalSize() const {
         // 14 bytes per reg that needs to be spilled
         call_size += 14 * 4;
     }
-    return num_slots * slot_size + call_size;
+    return size + call_size;
 }
 
 static std::vector<std::pair<PatchpointInfo*, void* /* addr of func to call */>> new_patchpoints;
 
-ICSetupInfo* ICSetupInfo::initialize(bool has_return_value, int num_slots, int slot_size, ICType type,
-                                     TypeRecorder* type_recorder) {
-    ICSetupInfo* rtn = new ICSetupInfo(type, num_slots, slot_size, has_return_value, type_recorder);
+ICSetupInfo* ICSetupInfo::initialize(bool has_return_value, int size, ICType type, TypeRecorder* type_recorder) {
+    ICSetupInfo* rtn = new ICSetupInfo(type, size, has_return_value, type_recorder);
 
     // We use size == CALL_ONLY_SIZE to imply that the call isn't patchable
     assert(rtn->totalSize() > CALL_ONLY_SIZE);
@@ -303,7 +302,7 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         auto initialization_info = initializePatchpoint3(slowpath_func, start_addr, end_addr, scratch_rbp_offset,
                                                          scratch_size, std::move(live_outs), frame_remapped);
 
-        ASSERT(initialization_info.slowpath_start - start_addr >= ic->num_slots * ic->slot_size,
+        ASSERT(initialization_info.slowpath_start - start_addr >= ic->size,
                "Used more slowpath space than expected; change ICSetupInfo::totalSize()?");
 
         assert(pp->numICStackmapArgs() == 0); // don't do anything with these for now
@@ -360,72 +359,72 @@ void* PatchpointInfo::getSlowpathAddr(unsigned int pp_id) {
     return new_patchpoints[pp_id].second;
 }
 
-int numSlots(ICInfo* bjit_ic_info, int default_num_slots) {
+int slotSize(ICInfo* bjit_ic_info, int default_size) {
     if (!bjit_ic_info)
-        return default_num_slots;
+        return default_size;
 
-    // this thresholds are chosen by running the benchmarks several times with different settings.
-    int num_slots = std::max(bjit_ic_info->getNumSlots(), default_num_slots);
-    if (bjit_ic_info->isMegamorphic())
-        num_slots *= 3;
-    else if (bjit_ic_info->timesRewritten() > IC_MEGAMORPHIC_THRESHOLD / 2)
-        num_slots += 2;
-    else
-        num_slots = std::min(std::max(bjit_ic_info->timesRewritten(), 1), default_num_slots);
-    return std::min(num_slots, 10);
+    int suggested_size = bjit_ic_info->calculateSuggestedSize();
+    if (suggested_size <= 0)
+        return default_size;
+
+    // round up to make it more likely that we will find a entry in the object cache
+    if (suggested_size & 31)
+        suggested_size += (suggested_size + 32) & 31;
+    return suggested_size;
 }
 
 ICSetupInfo* createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size) {
-    return ICSetupInfo::initialize(has_return_value, 1, size, ICSetupInfo::Generic, type_recorder);
+    return ICSetupInfo::initialize(has_return_value, size, ICSetupInfo::Generic, type_recorder);
 }
 
 ICSetupInfo* createGetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
-    return ICSetupInfo::initialize(true, numSlots(bjit_ic_info, 2), 512, ICSetupInfo::Getattr, type_recorder);
+    return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 1024), ICSetupInfo::Getattr, type_recorder);
 }
 
 ICSetupInfo* createGetitemIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
-    return ICSetupInfo::initialize(true, numSlots(bjit_ic_info, 1), 512, ICSetupInfo::Getitem, type_recorder);
+    return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 512), ICSetupInfo::Getitem, type_recorder);
 }
 
 ICSetupInfo* createSetitemIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 1, 512, ICSetupInfo::Setitem, type_recorder);
+    return ICSetupInfo::initialize(true, 512, ICSetupInfo::Setitem, type_recorder);
 }
 
 ICSetupInfo* createDelitemIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(false, 1, 512, ICSetupInfo::Delitem, type_recorder);
+    return ICSetupInfo::initialize(false, 512, ICSetupInfo::Delitem, type_recorder);
 }
 
 ICSetupInfo* createSetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
-    return ICSetupInfo::initialize(false, numSlots(bjit_ic_info, 2), 512, ICSetupInfo::Setattr, type_recorder);
+    return ICSetupInfo::initialize(false, slotSize(bjit_ic_info, 1024), ICSetupInfo::Setattr, type_recorder);
 }
 
 ICSetupInfo* createDelattrIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(false, 1, 144, ICSetupInfo::Delattr, type_recorder);
+    return ICSetupInfo::initialize(false, 144, ICSetupInfo::Delattr, type_recorder);
 }
 
 ICSetupInfo* createCallsiteIC(TypeRecorder* type_recorder, int num_args, ICInfo* bjit_ic_info) {
-    return ICSetupInfo::initialize(true, numSlots(bjit_ic_info, 4), 640 + 48 * num_args, ICSetupInfo::Callsite,
+
+    return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 4 * (640 + 48 * num_args)), ICSetupInfo::Callsite,
                                    type_recorder);
 }
 
 ICSetupInfo* createGetGlobalIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 1, 128, ICSetupInfo::GetGlobal, type_recorder);
+    return ICSetupInfo::initialize(true, 128, ICSetupInfo::GetGlobal, type_recorder);
 }
 
 ICSetupInfo* createBinexpIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
-    return ICSetupInfo::initialize(true, numSlots(bjit_ic_info, 4), 512, ICSetupInfo::Binexp, type_recorder);
+    return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 2048), ICSetupInfo::Binexp, type_recorder);
 }
 
 ICSetupInfo* createNonzeroIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 2, 512, ICSetupInfo::Nonzero, type_recorder);
+    return ICSetupInfo::initialize(true, 1024, ICSetupInfo::Nonzero, type_recorder);
 }
 
 ICSetupInfo* createHasnextIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 2, 64, ICSetupInfo::Hasnext, type_recorder);
+    return ICSetupInfo::initialize(true, 128, ICSetupInfo::Hasnext, type_recorder);
 }
 
 ICSetupInfo* createDeoptIC() {
-    return ICSetupInfo::initialize(true, 1, 0, ICSetupInfo::Deopt, NULL);
+    return ICSetupInfo::initialize(true, 0, ICSetupInfo::Deopt, NULL);
 }
 
 } // namespace pyston
