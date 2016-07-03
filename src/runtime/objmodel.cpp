@@ -5215,8 +5215,8 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         Box* res = callable(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
         return res;
     } else if (obj->cls == instancemethod_cls) {
-        if (rewrite_args && !rewrite_args->args_guarded)
-            addArgGuards(rewrite_args, argspec, arg1, arg2, arg3, args);
+        // if (rewrite_args && !rewrite_args->args_guarded)
+        //    addArgGuards(rewrite_args, argspec, arg1, arg2, arg3, args);
 
         BoxedInstanceMethod* im = static_cast<BoxedInstanceMethod*>(obj);
 
