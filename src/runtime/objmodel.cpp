@@ -5198,7 +5198,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         }
 
         if (rewrite_args && !rewrite_args->args_guarded) {
-            bool does_not_need_guards = callable == &callFunc<S> && md->always_use_version;
+            bool does_not_need_guards = callable == &callFunc<S> && (md->always_use_version || md->versions.empty());
             if (!does_not_need_guards)
                 addArgGuards(rewrite_args, argspec, arg1, arg2, arg3, args);
         }
