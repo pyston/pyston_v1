@@ -6428,12 +6428,6 @@ extern "C" Box* getitem_capi(Box* target, Box* slice) noexcept {
     return rtn;
 }
 
-static void setitemHelper(Box* target, Box* slice, Box* value) {
-    int ret = target->cls->tp_as_mapping->mp_ass_subscript(target, slice, value);
-    if (ret == -1)
-        throwCAPIException();
-}
-
 // target[slice] = value
 extern "C" void setitem(Box* target, Box* slice, Box* value) {
     STAT_TIMER(t0, "us_timer_slowpath_setitem", 10);
@@ -6456,11 +6450,15 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
             RewriterVar* r_cls = r_obj->getAttr(offsetof(Box, cls));
             RewriterVar* r_m = r_cls->getAttr(offsetof(BoxedClass, tp_as_mapping));
             r_m->addGuardNotEq(0);
-            rewriter->call(true, (void*)setitemHelper, r_obj, r_slice, r_value);
+            r_m->addAttrGuard(offsetof(PyMappingMethods, mp_ass_subscript), (intptr_t)m->mp_ass_subscript);
+            RewriterVar* r_ret = rewriter->call(true, (void*)m->mp_ass_subscript, r_obj, r_slice, r_value);
+            rewriter->checkAndThrowCAPIException(r_ret, -1, assembler::MovType::L);
             rewriter->commit();
         }
 
-        setitemHelper(target, slice, value);
+        int ret = m->mp_ass_subscript(target, slice, value);
+        if (ret == -1)
+            throwCAPIException();
         return;
     }
 
