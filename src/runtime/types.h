@@ -59,6 +59,7 @@ void setupGenerator();
 void setupDescr();
 void setupCode();
 void setupFrame();
+void setupModule();
 
 void setupSys();
 void setupBuiltins();

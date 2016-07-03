@@ -41,3 +41,6 @@
 	path = test/lib/sqlalchemy_0.5
 	url = https://github.com/zzzeek/sqlalchemy
 	ignore = untracked
+[submodule "test/lib/ipython"]
+	path = test/lib/ipython
+	url = https://github.com/ipython/ipython

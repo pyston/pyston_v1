@@ -106,6 +106,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/tuple.cpp
 		runtime/types.cpp
 		runtime/util.cpp
+                runtime/module.cpp
 		)
 
 add_dependencies(PYSTON_OBJECTS copy_stdlib libunwind_patched libunwind pypa ${LLVM_LIBS})

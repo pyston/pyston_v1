@@ -4375,10 +4375,14 @@ void setupRuntime() {
     none_cls->freeze();
     none_cls->tp_repr = none_repr;
 
-    module_cls->giveAttr(
-        "__init__", new BoxedFunction(FunctionMetadata::create((void*)moduleInit, UNKNOWN, 3, false, false), { NULL }));
+    module_cls->giveAttr("__init__",
+                         new BoxedFunction(FunctionMetadata::create((void*)moduleInit, UNKNOWN, 3, false, false,
+                                                                    ParamNames({ "", "name", "doc" }, "", "")),
+                                           { NULL }));
+
     module_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)moduleRepr, STR, 1)));
     module_cls->giveAttrBorrowed("__dict__", dict_descr);
+    module_cls->giveAttrBorrowed("__doc__", None);
     module_cls->freeze();
 
     closure_cls->freeze();
@@ -4412,6 +4416,7 @@ void setupRuntime() {
     setupIter();
     setupClassobj();
     setupSuper();
+    setupModule();
     _PyUnicode_Init();
     unicode_cls->is_constant = true;
     unicode_cls->is_user_defined = false;

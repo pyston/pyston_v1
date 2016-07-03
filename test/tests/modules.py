@@ -20,3 +20,6 @@ print m.__doc__, type(m.__doc__)
 m.__init__("bar", "baz")
 print m.__doc__, type(m.__doc__)
 m.__dict__[u"\u20ac"] = "test"
+# test kwargs
+m.__init__(name="foo", doc="bar")
+print m.__doc__, type(m.__doc__)
