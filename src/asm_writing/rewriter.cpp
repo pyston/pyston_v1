@@ -287,24 +287,29 @@ void RewriterVar::addGuard(uint64_t val) {
     rewriter->addAction([=]() { rewriter->_addGuard(this, val_var); }, { this, val_var }, ActionType::GUARD);
 }
 
-void Rewriter::_nextSlotJump(bool condition_eq) {
+void Rewriter::_nextSlotJump(assembler::ConditionCode condition) {
     // If a jump offset is larger then 0x80 the instruction encoding requires 6bytes instead of 2bytes.
     // This adds up quickly, thats why we will try to find another jump to the slowpath with the same condition with a
     // smaller offset and jump to it / use it as a trampoline.
     // The benchmark show that this increases the performance slightly even though it introduces additional jumps.
-    int& last_jmp_offset = condition_eq ? offset_eq_jmp_next_slot : offset_ne_jmp_next_slot;
-    auto condition = condition_eq ? assembler::COND_EQUAL : assembler::COND_NOT_EQUAL;
+    int last_jmp_offset = -1;
+    for (auto it = next_slot_jmps.rbegin(), it_end = next_slot_jmps.rend(); it != it_end; ++it) {
+        if (std::get<2>(*it) == condition) {
+            last_jmp_offset = std::get<0>(*it);
+            break;
+        }
+    }
 
     if (last_jmp_offset != -1 && assembler->bytesWritten() - last_jmp_offset < 0x80) {
         assembler->jmp_cond(assembler::JumpDestination::fromStart(last_jmp_offset), condition);
     } else {
-        last_jmp_offset = assembler->bytesWritten();
+        int last_jmp_offset = assembler->bytesWritten();
         assembler->jmp_cond(assembler::JumpDestination::fromStart(rewrite->getSlotSize()), condition);
         next_slot_jmps.emplace_back(last_jmp_offset, assembler->bytesWritten(), condition);
     }
 }
 
-void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
+void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant, bool negate) {
     if (LOG_IC_ASSEMBLY)
         assembler->comment("_addGuard");
 
@@ -316,12 +321,15 @@ void Rewriter::_addGuard(RewriterVar* var, RewriterVar* val_constant) {
         assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
         assembler->cmp(var_reg, reg);
     } else {
-        assembler->cmp(var_reg, assembler::Immediate(val));
+        if (val == 0)
+            assembler->test(var_reg, var_reg);
+        else
+            assembler->cmp(var_reg, assembler::Immediate(val));
     }
 
     restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
-    _nextSlotJump(false /*= not equal jmp */);
+    _nextSlotJump(negate ? assembler::COND_EQUAL : assembler::COND_NOT_EQUAL);
 
     var->bumpUse();
     val_constant->bumpUse();
@@ -333,32 +341,24 @@ void RewriterVar::addGuardNotEq(uint64_t val) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     RewriterVar* val_var = rewriter->loadConst(val);
-    rewriter->addAction([=]() { rewriter->_addGuardNotEq(this, val_var); }, { this, val_var }, ActionType::GUARD);
+    rewriter->addAction([=]() { rewriter->_addGuard(this, val_var, true /* negate */); }, { this, val_var },
+                        ActionType::GUARD);
 }
 
-void Rewriter::_addGuardNotEq(RewriterVar* var, RewriterVar* val_constant) {
-    if (LOG_IC_ASSEMBLY)
-        assembler->comment("_addGuardNotEq");
+void RewriterVar::addGuardNotLt0() {
+    rewriter->addAction([=]() {
+        assembler::Register var_reg = this->getInReg();
+        rewriter->assembler->test(var_reg, var_reg);
 
-    assert(val_constant->is_constant);
-    uint64_t val = val_constant->constant_value;
+        rewriter->restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
+        rewriter->assertArgsInPlace();
 
-    assembler::Register var_reg = var->getInReg();
-    if (isLargeConstant(val)) {
-        assembler::Register reg = val_constant->getInReg(Location::any(), true, /* otherThan */ var_reg);
-        assembler->cmp(var_reg, reg);
-    } else {
-        assembler->cmp(var_reg, assembler::Immediate(val));
-    }
+        rewriter->_nextSlotJump(assembler::COND_SIGN);
 
-    restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
-    assertArgsInPlace();
-    _nextSlotJump(true /*= equal jmp */);
+        bumpUse();
+        rewriter->assertConsistent();
 
-    var->bumpUse();
-    val_constant->bumpUse();
-
-    assertConsistent();
+    }, { this }, ActionType::GUARD);
 }
 
 void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
@@ -405,7 +405,7 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_cons
 
     restoreArgs(); // can only do movs, doesn't affect flags, so it's safe
     assertArgsInPlace();
-    _nextSlotJump(negate);
+    _nextSlotJump(negate ? assembler::COND_EQUAL : assembler::COND_NOT_EQUAL);
 
     var->bumpUse();
     val_constant->bumpUse();
@@ -2220,8 +2220,6 @@ Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const L
       marked_inside_ic(false),
       done_guarding(false),
       last_guard_action(-1),
-      offset_eq_jmp_next_slot(-1),
-      offset_ne_jmp_next_slot(-1),
       allocatable_regs(std_allocatable_regs) {
     initPhaseCollecting();
 

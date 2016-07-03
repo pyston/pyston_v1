@@ -777,6 +777,15 @@ Box* instanceGetslice(Box* _inst, Box* i, Box* j) {
     return runtimeCall(getslice_func, ArgPassSpec(2), i, j, NULL, NULL, NULL);
 }
 
+Box* instance_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j) noexcept {
+    try {
+        return instanceGetslice(self, autoDecref(boxInt(i)), autoDecref((boxInt(j))));
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return 0;
+    }
+}
+
 Box* instanceSetslice(Box* _inst, Box* i, Box* j, Box** sequence) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -2005,5 +2014,6 @@ void setupClassobj() {
     instance_cls->tp_as_number->nb_index = instance_index;
     instance_cls->tp_as_number->nb_power = instance_pow;
     instance_cls->tp_as_number->nb_inplace_power = instance_ipow;
+    instance_cls->tp_as_sequence->sq_slice = instance_slice;
 }
 }

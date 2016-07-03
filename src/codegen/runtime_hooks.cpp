@@ -229,6 +229,8 @@ void initGlobalFuncs(GlobalState& g) {
     GET(getiterHelper);
     GET(hasnext);
     GET(apply_slice);
+    GET(applySlice);
+    GET(assignSlice);
 
     GET(unpackIntoArray);
     GET(raiseAttributeError);

@@ -208,6 +208,14 @@ RewriterVar* JitFragmentWriter::emitAugbinop(AST_expr* node, RewriterVar* lhs, R
     return emitPPCall((void*)augbinop, { lhs, rhs, imm(op_type) }, 2 * 320, node).first->setType(RefType::OWNED);
 }
 
+RewriterVar* JitFragmentWriter::emitApplySlice(RewriterVar* target, RewriterVar* lower, RewriterVar* upper) {
+    if (!lower)
+        lower = imm(0ul);
+    if (!upper)
+        upper = imm(0ul);
+    return emitPPCall((void*)applySlice, { target, lower, upper }, 256).first->setType(RefType::OWNED);
+}
+
 RewriterVar* JitFragmentWriter::emitBinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
     return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2 * 240, node).first->setType(RefType::OWNED);
 }
@@ -551,6 +559,15 @@ RewriterVar* JitFragmentWriter::emitYield(RewriterVar* v) {
                    ->setType(RefType::OWNED);
     v->refConsumed();
     return rtn;
+}
+
+void JitFragmentWriter::emitAssignSlice(RewriterVar* target, RewriterVar* lower, RewriterVar* upper,
+                                        RewriterVar* value) {
+    if (!lower)
+        lower = imm(0ul);
+    if (!upper)
+        upper = imm(0ul);
+    emitPPCall((void*)assignSlice, { target, lower, upper, value }, 256).first;
 }
 
 void JitFragmentWriter::emitDelAttr(RewriterVar* target, BoxedString* attr) {

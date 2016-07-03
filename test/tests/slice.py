@@ -101,11 +101,13 @@ sliceable[3:8]
 both[0]
 both[:]
 both[3:8]
+both[slice(3, 8)]
 both[::2] # this should call __getitem__ since __getslice__ doesn't support steps
 
 both[0] = xrange(2)
 both[:] = xrange(2)
 both[3:8] = xrange(2)
+both[slice(3, 8)] = xrange(2)
 both[::2] = xrange(2)
 
 # Should all call getitem as a fallback
@@ -118,6 +120,7 @@ both[1:2:'c']
 del both[0]
 del both[:]
 del both[3:8]
+del both[slice(3, 8)]
 del both [::2]
 
 try:

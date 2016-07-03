@@ -105,6 +105,8 @@ void force() {
     FORCE(getiterHelper);
     FORCE(hasnext);
     FORCE(apply_slice);
+    FORCE(applySlice);
+    FORCE(assignSlice);
 
     FORCE(unpackIntoArray);
     FORCE(raiseAttributeError);

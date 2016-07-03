@@ -147,6 +147,7 @@ public:
 
     void addGuard(uint64_t val);
     void addGuardNotEq(uint64_t val);
+    void addGuardNotLt0();
     void addAttrGuard(int offset, uint64_t val, bool negate = false);
     RewriterVar* getAttr(int offset, Location loc = Location::any(), assembler::MovType type = assembler::MovType::Q);
     // getAttrFloat casts to double (maybe I should make that separate?)
@@ -502,8 +503,6 @@ protected:
     }
 
     int last_guard_action;
-    int offset_eq_jmp_next_slot;
-    int offset_ne_jmp_next_slot;
 
     // keeps track of all jumps to the next slot so we can patch them if the size of the current slot changes
     std::vector<NextSlotJumpInfo> next_slot_jmps;
@@ -540,7 +539,7 @@ protected:
 
     bool finishAssembly(int continue_offset, bool& should_fill_with_nops, bool& variable_size_slots) override;
 
-    void _nextSlotJump(bool condition_eq);
+    void _nextSlotJump(assembler::ConditionCode condition);
     void _trap();
     void _loadConst(RewriterVar* result, int64_t val);
     void _setupCall(bool has_side_effects, llvm::ArrayRef<RewriterVar*> args = {},
@@ -557,8 +556,7 @@ protected:
     void _checkAndThrowCAPIException(RewriterVar* r, int64_t exc_val, assembler::MovType size);
 
     // The public versions of these are in RewriterVar
-    void _addGuard(RewriterVar* var, RewriterVar* val_constant);
-    void _addGuardNotEq(RewriterVar* var, RewriterVar* val_constant);
+    void _addGuard(RewriterVar* var, RewriterVar* val_constant, bool negate = false);
     void _addAttrGuard(RewriterVar* var, int offset, RewriterVar* val_constant, bool negate = false);
     void _getAttr(RewriterVar* result, RewriterVar* var, int offset, Location loc = Location::any(),
                   assembler::MovType type = assembler::MovType::Q);

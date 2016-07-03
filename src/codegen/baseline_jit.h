@@ -239,6 +239,7 @@ public:
     RewriterVar* imm(void* val);
 
     RewriterVar* emitAugbinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type);
+    RewriterVar* emitApplySlice(RewriterVar* target, RewriterVar* lower, RewriterVar* upper);
     RewriterVar* emitBinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type);
     RewriterVar* emitCallattr(AST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
                               const llvm::ArrayRef<RewriterVar*> args, std::vector<BoxedString*>* keyword_names);
@@ -275,6 +276,7 @@ public:
     std::vector<RewriterVar*> emitUnpackIntoArray(RewriterVar* v, uint64_t num);
     RewriterVar* emitYield(RewriterVar* v);
 
+    void emitAssignSlice(RewriterVar* target, RewriterVar* lower, RewriterVar* upper, RewriterVar* value);
     void emitDelAttr(RewriterVar* target, BoxedString* attr);
     void emitDelGlobal(BoxedString* name);
     void emitDelItem(RewriterVar* target, RewriterVar* slice);
