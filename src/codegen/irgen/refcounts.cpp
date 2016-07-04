@@ -480,37 +480,98 @@ public:
     const_iterator end() const { return const_iterator(this, size()); }
 };
 
-static std::vector<llvm::BasicBlock*> computeTraversalOrder(llvm::Function* f) {
-    std::vector<llvm::BasicBlock*> ordering;
-    llvm::DenseSet<llvm::BasicBlock*> added;
-    llvm::DenseMap<llvm::BasicBlock*, int> num_successors_added;
+// TODO: this should be cleaned up and moved to src/core/
+template <typename K, typename V> class SmallOrderedMap {
+private:
+    std::vector<std::pair<K, V>> v;
 
-    for (auto&& BB : *f) {
-        if (llvm::succ_begin(&BB) == llvm::succ_end(&BB)) {
+public:
+    V& operator[](const K& k) {
+        for (auto&& p : v)
+            if (p.first == k)
+                return p.second;
+
+        v.emplace_back(k, V());
+        return v.back().second;
+    }
+
+    size_t size() const { return v.size(); }
+
+    V get(const K& k) const {
+        for (auto&& p : v)
+            if (p.first == k)
+                return p.second;
+        return V();
+    }
+
+    typename decltype(v)::iterator begin() { return v.begin(); }
+    typename decltype(v)::iterator end() { return v.end(); }
+};
+
+// An optimized representation of the graph of llvm::BasicBlock's, since we will be dealing with them a lot.
+struct BBGraph {
+public:
+    llvm::DenseMap<llvm::BasicBlock*, int> bb_idx;
+    std::vector<llvm::BasicBlock*> bbs;
+
+    std::vector<llvm::SmallVector<int, 4>> predecessors;
+    std::vector<llvm::SmallVector<int, 4>> successors;
+
+    explicit BBGraph(llvm::Function* f) : predecessors(f->size()), successors(f->size()) {
+        int num_bb = f->size();
+
+        bbs.reserve(num_bb);
+
+        for (auto&& B : *f) {
+            bb_idx[&B] = bbs.size();
+            bbs.push_back(&B);
+        }
+
+        for (auto&& B : *f) {
+            int idx = bb_idx[&B];
+            for (auto&& PBB : llvm::iterator_range<llvm::pred_iterator>(llvm::pred_begin(&B), llvm::pred_end(&B)))
+                predecessors[idx].push_back(bb_idx[PBB]);
+            for (auto&& SBB : llvm::iterator_range<llvm::succ_iterator>(llvm::succ_begin(&B), llvm::succ_end(&B)))
+                successors[idx].push_back(bb_idx[SBB]);
+        }
+    }
+
+    int numBB() const { return bbs.size(); }
+};
+
+static std::vector<int> computeTraversalOrder(const BBGraph& bbg) {
+    int num_bb = bbg.numBB();
+
+    std::vector<int> ordering;
+    ordering.reserve(num_bb);
+    std::vector<bool> added(num_bb);
+    std::vector<int> num_successors_added(num_bb);
+
+    for (int i = 0; i < num_bb; i++) {
+        if (bbg.successors[i].size() == 0) {
             // llvm::outs() << "Adding " << BB.getName() << " since it is an exit node.\n";
-            ordering.push_back(&BB);
-            added.insert(&BB);
+            ordering.push_back(i);
+            added[i] = true;
         }
     }
 
     int check_predecessors_idx = 0;
-    int num_bb = f->size();
     while (ordering.size() < num_bb) {
         if (check_predecessors_idx < ordering.size()) {
             // Case 1: look for any blocks whose successors have already been traversed.
 
-            llvm::BasicBlock* bb = ordering[check_predecessors_idx];
+            int idx = ordering[check_predecessors_idx];
             check_predecessors_idx++;
 
-            for (auto&& PBB : llvm::iterator_range<llvm::pred_iterator>(llvm::pred_begin(bb), llvm::pred_end(bb))) {
-                if (added.count(PBB))
+            for (int pidx : bbg.predecessors[idx]) {
+                if (added[pidx])
                     continue;
 
-                num_successors_added[PBB]++;
-                int num_successors = std::distance(llvm::succ_begin(PBB), llvm::succ_end(PBB));
-                if (num_successors_added[PBB] == num_successors) {
-                    ordering.push_back(PBB);
-                    added.insert(PBB);
+                num_successors_added[pidx]++;
+                int num_successors = bbg.successors[pidx].size();
+                if (num_successors_added[pidx] == num_successors) {
+                    ordering.push_back(pidx);
+                    added[pidx] = true;
                     // llvm::outs() << "Adding " << PBB->getName() << " since it has all of its successors added.\n";
                 }
             }
@@ -518,41 +579,39 @@ static std::vector<llvm::BasicBlock*> computeTraversalOrder(llvm::Function* f) {
             // Case 2: we hit a cycle.  Try to pick a good node to add.
             // The heuristic here is just to make sure to pick one in 0-successor component of the SCC
 
-            std::vector<std::pair<llvm::BasicBlock*, int>> num_successors;
-            // TODO this could be sped up:
-            for (auto&& BB : *f) {
-                if (!num_successors_added.count(&BB))
+            std::vector<std::pair<int, int>> num_successors;
+            for (int i = 0; i < num_bb; i++) {
+                if (num_successors_added[i] == 0)
                     continue;
-                if (added.count(&BB))
+                if (added[i])
                     continue;
-                num_successors.push_back(std::make_pair(&BB, num_successors_added[&BB]));
+                num_successors.push_back(std::make_pair(i, num_successors_added[i]));
             }
 
-            std::sort(num_successors.begin(), num_successors.end(),
-                      [](const std::pair<llvm::BasicBlock*, int>& p1, const std::pair<llvm::BasicBlock*, int>& p2) {
-                          return p1.second > p2.second;
-                      });
+            std::sort(
+                num_successors.begin(), num_successors.end(),
+                [](const std::pair<int, int>& p1, const std::pair<int, int>& p2) { return p1.second > p2.second; });
 
-            std::deque<llvm::BasicBlock*> visit_queue;
-            llvm::DenseSet<llvm::BasicBlock*> visited;
-            llvm::BasicBlock* best = NULL;
+            std::deque<int> visit_queue;
+            std::vector<bool> visited(num_bb);
+            int best = -1;
 
             for (auto&& p : num_successors) {
-                if (visited.count(p.first))
+                if (visited[p.first])
                     continue;
 
                 best = p.first;
                 visit_queue.push_back(p.first);
-                visited.insert(p.first);
+                visited[p.first] = true;
 
                 while (visit_queue.size()) {
-                    llvm::BasicBlock* bb = visit_queue.front();
+                    int idx = visit_queue.front();
                     visit_queue.pop_front();
 
-                    for (auto&& SBB : llvm::successors(bb)) {
-                        if (!visited.count(SBB)) {
-                            visited.insert(SBB);
-                            visit_queue.push_back(SBB);
+                    for (int sidx : bbg.successors[idx]) {
+                        if (!visited[sidx]) {
+                            visited[sidx] = true;
+                            visit_queue.push_back(sidx);
                         }
                     }
                 }
@@ -561,19 +620,19 @@ static std::vector<llvm::BasicBlock*> computeTraversalOrder(llvm::Function* f) {
 #ifndef NDEBUG
             // This can currently get tripped if we generate an LLVM IR that has an infinite loop in it.
             // This could definitely be supported, but I don't think we should be generating those cases anyway.
-            if (!best) {
-                for (auto& BB : ordering) {
-                    llvm::outs() << "added to " << BB->getName() << '\n';
+            if (best == -1) {
+                for (auto& idx : ordering) {
+                    llvm::outs() << "added to " << bbg.bbs[idx]->getName() << '\n';
                 }
-                for (auto& BB : *f) {
-                    if (added.count(&BB) == 0)
-                        llvm::outs() << "never got to " << BB.getName() << '\n';
+                for (auto& BB : bbg.bbs) {
+                    if (!added[bbg.bb_idx.find(BB)->second])
+                        llvm::outs() << "never got to " << BB->getName() << '\n';
                 }
             }
 #endif
-            assert(best);
+            assert(best != -1);
             ordering.push_back(best);
-            added.insert(best);
+            added[best] = true;
             // llvm::outs() << "Adding " << best->getName() << " since it is the best provisional node.\n";
         }
     }
@@ -585,49 +644,45 @@ static std::vector<llvm::BasicBlock*> computeTraversalOrder(llvm::Function* f) {
 
 class BlockOrderer {
 private:
-    llvm::DenseMap<llvm::BasicBlock*, int> priority; // lower goes first
+    std::vector<int> priority; // lower goes first
 
     struct BlockComparer {
-        bool operator()(std::pair<llvm::BasicBlock*, int> lhs, std::pair<llvm::BasicBlock*, int> rhs) {
+        bool operator()(std::pair<int, int> lhs, std::pair<int, int> rhs) {
             assert(lhs.second != rhs.second);
             return lhs.second > rhs.second;
         }
     };
 
-    llvm::DenseSet<llvm::BasicBlock*> in_queue;
-    std::priority_queue<std::pair<llvm::BasicBlock*, int>, std::vector<std::pair<llvm::BasicBlock*, int>>,
-                        BlockComparer> queue;
+    std::vector<bool> in_queue;
+    std::priority_queue<std::pair<int, int>, std::vector<std::pair<int, int>>, BlockComparer> queue;
 
 public:
-    BlockOrderer(std::vector<llvm::BasicBlock*> order) {
+    BlockOrderer(std::vector<int> order) : priority(order.size()), in_queue(order.size()) {
         for (int i = 0; i < order.size(); i++) {
             // errs() << "DETERMINISM: " << order[i]->getName() << " has priority " << i << '\n';
             priority[order[i]] = i;
         }
     }
 
-    void add(llvm::BasicBlock* b) {
+    void add(int idx) {
         // errs() << "DETERMINISM: adding " << b->getName() << '\n';
-        assert(in_queue.size() == queue.size());
-        if (in_queue.count(b))
+        if (in_queue[idx])
             return;
-        assert(priority.count(b));
-        in_queue.insert(b);
-        queue.push(std::make_pair(b, priority[b]));
+        in_queue[idx] = true;
+        queue.push(std::make_pair(idx, priority[idx]));
     }
 
-    llvm::BasicBlock* pop() {
+    int pop() {
         if (!queue.size()) {
-            assert(!in_queue.size());
-            return NULL;
+            return -1;
         }
 
-        llvm::BasicBlock* b = queue.top().first;
+        int idx = queue.top().first;
         // errs() << "DETERMINISM: popping " << b->getName() << " (priority " << priority[b] << " \n";
         queue.pop();
-        assert(in_queue.count(b));
-        in_queue.erase(b);
-        return b;
+        assert(in_queue[idx]);
+        in_queue[idx] = false;
+        return idx;
     }
 };
 
@@ -649,6 +704,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
     llvm::Function* f = irstate->getLLVMFunction();
     RefcountTracker* rt = irstate->getRefcounts();
+
+    int num_bb = f->size();
+    BBGraph bbg(f);
 
     if (VERBOSITY() >= 2) {
         fprintf(stderr, "Before refcounts:\n");
@@ -750,13 +808,15 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         bool nullable;
         int num_refs;
 
-        // Exactly one of these should be NULL:
+        // Exactly one of these should be non-NULL:
         llvm::Instruction* insertion_inst;
         llvm::BasicBlock* insertion_bb;
         llvm::BasicBlock* insertion_from_bb;
     };
 
     struct RefState {
+        bool been_run = false;
+
         // We do a backwards scan and starting/ending here refers to the scan, not the instruction sequence.
         // So "starting_refs" are the refs that are inherited, ie the refstate at the end of the basic block.
         // "ending_refs" are the refs we calculated, which corresponds to the refstate at the beginning of the block.
@@ -772,11 +832,12 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         };
         llvm::SmallVector<CXXFixup, 4> cxx_fixups;
     };
-    llvm::DenseMap<llvm::BasicBlock*, RefState> states;
 
-    BlockOrderer orderer(computeTraversalOrder(f));
-    for (auto&& BB : *f) {
-        orderer.add(&BB);
+    std::vector<RefState> states(num_bb);
+
+    BlockOrderer orderer(computeTraversalOrder(bbg));
+    for (int i = 0; i < num_bb; i++) {
+        orderer.add(i);
     }
 
     std::vector<llvm::InvokeInst*> invokes;
@@ -798,10 +859,14 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             invokes.push_back(ii);
     }
 
-    while (llvm::BasicBlock* bb = orderer.pop()) {
-        // errs() << "DETERMINISM: Processing " << bb->getName() << '\n';
-        llvm::BasicBlock& BB = *bb;
+    while (true) {
+        int idx = orderer.pop();
+        if (idx == -1)
+            break;
 
+        auto bb = bbg.bbs[idx];
+
+// errs() << "DETERMINISM: Processing " << bb->getName() << '\n';
 #if 0
         llvm::Instruction* term_inst = BB.getTerminator();
         llvm::Instruction* insert_before = term_inst;
@@ -813,11 +878,12 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
         if (VERBOSITY() >= 2) {
             llvm::outs() << '\n';
-            llvm::outs() << "Processing " << BB.getName() << '\n';
+            llvm::outs() << "Processing " << bbg.bbs[idx]->getName() << '\n';
         }
 
-        bool firsttime = (states.count(&BB) == 0);
-        RefState& state = states[&BB];
+        RefState& state = states[idx];
+        bool firsttime = !state.been_run;
+        state.been_run = true;
 
         BlockMap orig_ending_refs = std::move(state.ending_refs);
 
@@ -828,18 +894,18 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         state.cxx_fixups.clear();
 
         // Compute the incoming refstate based on the refstate of any successor nodes
-        llvm::SmallVector<llvm::BasicBlock*, 4> successors;
-        for (auto SBB : llvm::successors(&BB)) {
-            if (states.count(SBB))
-                successors.push_back(SBB);
+        llvm::SmallVector<int, 4> successors;
+        for (auto sidx : bbg.successors[idx]) {
+            if (states[sidx].been_run)
+                successors.push_back(sidx);
         }
         if (successors.size()) {
             std::vector<llvm::Value*> tracked_values;
             llvm::DenseSet<llvm::Value*> in_tracked_values;
-            for (auto SBB : successors) {
+            for (auto sidx : successors) {
                 // errs() << "DETERMINISM: successor " << SBB->getName() << '\n';
-                assert(states.count(SBB));
-                for (auto&& p : states[SBB].ending_refs) {
+                assert(states[sidx].been_run);
+                for (auto&& p : states[sidx].ending_refs) {
                     // errs() << "DETERMINISM: looking at ref " << p.first->getName() << '\n';
                     assert(p.second > 0);
                     if (!in_tracked_values.count(p.first)) {
@@ -849,9 +915,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 }
             }
 
-            llvm::SmallVector<std::pair<BlockMap*, llvm::BasicBlock*>, 4> successor_info;
-            for (auto SBB : successors) {
-                successor_info.emplace_back(&states[SBB].ending_refs, SBB);
+            llvm::SmallVector<std::pair<BlockMap*, int>, 4> successor_info;
+            for (auto sidx : successors) {
+                successor_info.emplace_back(&states[sidx].ending_refs, sidx);
             }
 
             // size_t hash = 0;
@@ -884,12 +950,12 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     if (this_refs > min_refs) {
                         // llvm::outs() << "Going from " << BB.getName() << " to " << SBB->getName() << ", need to add "
                         //<< (this_refs - min_refs) << " refs to " << *v << '\n';
-                        state.increfs.push_back(
-                            RefOp({ v, refstate.nullable, this_refs - min_refs, NULL, s_info.second, bb }));
+                        state.increfs.push_back(RefOp({ v, refstate.nullable, this_refs - min_refs, NULL,
+                                                        bbg.bbs[s_info.second], bbg.bbs[idx] }));
                     } else if (this_refs < min_refs) {
                         assert(refstate.reftype == RefType::OWNED);
-                        state.decrefs.push_back(
-                            RefOp({ v, refstate.nullable, min_refs - this_refs, NULL, s_info.second, bb }));
+                        state.decrefs.push_back(RefOp({ v, refstate.nullable, min_refs - this_refs, NULL,
+                                                        bbg.bbs[s_info.second], bbg.bbs[idx] }));
                     }
                 }
 
@@ -904,7 +970,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         state.ending_refs = state.starting_refs;
 
         // Then, iterate backwards through the instructions in this BB, updating the ref states
-        for (auto& I : llvm::iterator_range<llvm::BasicBlock::reverse_iterator>(BB.rbegin(), BB.rend())) {
+        for (auto& I : llvm::iterator_range<llvm::BasicBlock::reverse_iterator>(bb->rbegin(), bb->rend())) {
             // Phis get special handling:
             // - we only use one of the operands to the phi node (based on the block we came from)
             // - the phi-node-generator is supposed to handle that by putting a refConsumed on the terminator of the
@@ -939,7 +1005,6 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             if (llvm::isa<llvm::PHINode>(&I))
                 continue;
 
-
             // If we are about to insert a CXX fixup, do the increfs after the call, rather than trying to push
             // them before the call and having to insert decrefs on the fixup path.
             if (rt->may_throw.count(&I)) {
@@ -960,18 +1025,28 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                     state.ending_refs.erase(v);
             }
 
-            llvm::DenseMap<llvm::Value*, int> num_consumed_by_inst;
-            OrderedMap<llvm::Value*, int> num_times_as_op;
+            SmallOrderedMap<llvm::Value*, int> num_consumed_by_inst;
+            SmallOrderedMap<llvm::Value*, int> num_times_as_op;
 
-            for (auto v : rt->refs_consumed[&I]) {
-                num_consumed_by_inst[v]++;
-                assert(rt->vars.count(v) && rt->vars.lookup(v).reftype != RefType::UNKNOWN);
-                num_times_as_op[v]; // just make sure it appears in there
+            {
+                auto it = rt->refs_consumed.find(&I);
+                if (it != rt->refs_consumed.end()) {
+                    for (auto v : it->second) {
+                        num_consumed_by_inst[v]++;
+                        assert(rt->vars.count(v) && rt->vars.lookup(v).reftype != RefType::UNKNOWN);
+                        num_times_as_op[v]; // just make sure it appears in there
+                    }
+                }
             }
 
-            for (auto v : rt->refs_used[&I]) {
-                assert(rt->vars.lookup(v).reftype != RefType::UNKNOWN);
-                num_times_as_op[v]++;
+            {
+                auto it = rt->refs_used.find(&I);
+                if (it != rt->refs_used.end()) {
+                    for (auto v : it->second) {
+                        assert(rt->vars.lookup(v).reftype != RefType::UNKNOWN);
+                        num_times_as_op[v]++;
+                    }
+                }
             }
 
             for (llvm::Value* op : I.operands()) {
@@ -986,12 +1061,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             for (auto&& p : num_times_as_op) {
                 auto& op = p.first;
 
-                auto&& it = num_consumed_by_inst.find(op);
-                int num_consumed = 0;
-                if (it != num_consumed_by_inst.end())
-                    num_consumed = it->second;
+                int num_consumed = num_consumed_by_inst.get(op);
 
-                if (num_times_as_op[op] > num_consumed) {
+                if (p.second > num_consumed) {
                     if (rt->vars.lookup(op).reftype == RefType::OWNED) {
                         if (state.ending_refs[op] == 0) {
                             // llvm::outs() << "Last use of " << *op << " is at " << I << "; adding a decref after\n";
@@ -1043,10 +1115,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
             for (auto&& p : num_times_as_op) {
                 auto& op = p.first;
 
-                auto&& it = num_consumed_by_inst.find(op);
-                int num_consumed = 0;
-                if (it != num_consumed_by_inst.end())
-                    num_consumed = it->second;
+                int num_consumed = num_consumed_by_inst.get(op);
 
                 if (num_consumed)
                     state.ending_refs[op] += num_consumed;
@@ -1054,7 +1123,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         }
 
         if (VERBOSITY() >= 2) {
-            llvm::outs() << "End of " << BB.getName() << '\n';
+            llvm::outs() << "End of " << bb->getName() << '\n';
             if (VERBOSITY() >= 3) {
                 for (auto&& p : state.ending_refs) {
                     llvm::outs() << *p.first << ": " << p.second << '\n';
@@ -1067,7 +1136,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         for (InvokeInst* ii : invokes) {
             const auto&& rstate = rt->vars.lookup(ii);
 
-            if (ii->getNormalDest() == &BB) {
+            if (ii->getNormalDest() == bb) {
                 // TODO: duplicated with the non-invoke code
                 int starting_refs = (rstate.reftype == RefType::OWNED ? 1 : 0);
                 if (state.ending_refs[ii] != starting_refs) {
@@ -1091,7 +1160,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         }
 
         // If this is the entry block, finish dealing with the ref state rather than handing off to a predecessor
-        if (&BB == &BB.getParent()->front()) {
+        if (bb == &bb->getParent()->front()) {
             for (auto&& p : state.ending_refs) {
                 assert(p.second);
 
@@ -1113,7 +1182,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
                 assert(rt->vars.lookup(p.first).reftype == RefType::BORROWED);
 
                 state.increfs.push_back(
-                    RefOp({ p.first, rt->vars.lookup(p.first).nullable, p.second, NULL, &BB, NULL }));
+                    RefOp({ p.first, rt->vars.lookup(p.first).nullable, p.second, NULL, bb, NULL }));
             }
             state.ending_refs.clear();
         }
@@ -1121,9 +1190,9 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
         // It is possible that we ended with zero live variables, which due to our skipping of un-run blocks,
         // is not the same thing as an un-run block.  Hence the check of 'firsttime'
         if (firsttime || endingRefsDifferent(orig_ending_refs, state.ending_refs)) {
-            for (auto&& SBB : llvm::predecessors(&BB)) {
+            for (auto sidx : bbg.predecessors[idx]) {
                 // llvm::outs() << "reconsidering: " << SBB->getName() << '\n';
-                orderer.add(SBB);
+                orderer.add(sidx);
             }
         }
 
@@ -1134,16 +1203,10 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
     ASSERT(states.size() == f->size(), "We didn't process all nodes...");
 
-    // Note: we iterate over the basicblocks in the order they appear in the llvm function;
-    // iterating over states directly is nondeterministic.
-    std::vector<llvm::BasicBlock*> basic_blocks;
-    for (auto&& BB : *f)
-        basic_blocks.push_back(&BB);
-
     // First, find all insertion points.  This may change the CFG by breaking critical edges.
     InsertionCache insertion_pts;
-    for (auto bb : basic_blocks) {
-        auto&& state = states[bb];
+    for (int idx = 0; idx < num_bb; idx++) {
+        auto&& state = states[idx];
         for (auto& op : state.increfs) {
             auto insertion_pt = op.insertion_inst;
             if (!insertion_pt)
@@ -1158,8 +1221,8 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
 
     // Then use the insertion points (it's the same code but this time it will hit the cache).
     // This may change the CFG by adding decref's
-    for (auto bb : basic_blocks) {
-        auto&& state = states[bb];
+    for (int idx = 0; idx < num_bb; idx++) {
+        auto&& state = states[idx];
         for (auto& op : state.increfs) {
             assert(rt->vars.count(op.operand));
             auto insertion_pt = op.insertion_inst;
@@ -1185,7 +1248,7 @@ void RefcountTracker::addRefcounts(IRGenState* irstate) {
     // tp_traverse.
     // we have to create a new call instruction because we can't add arguments to an existing call instruction
     for (auto&& old_yield : yields) {
-        auto&& state = states[old_yield->getParent()];
+        auto&& state = states[bbg.bb_idx[old_yield->getParent()]];
         assert(old_yield->getNumArgOperands() == 3);
         llvm::Value* yield_value = old_yield->getArgOperand(1);
 
