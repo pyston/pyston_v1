@@ -4210,25 +4210,6 @@ Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNa
         memset(oargs, 0, sizeof(Box*) * (num_output_args - 3));
     }
 
-    // Clear any increfs we did for when we throw an exception:
-    int positional_to_positional = std::min(argspec.num_args, paramspec.num_args);
-    auto clear_refs = [&]() {
-        switch (positional_to_positional) {
-            case 0:
-                Py_XDECREF(oarg1);
-            case 1:
-                Py_XDECREF(oarg2);
-            case 2:
-                Py_XDECREF(oarg3);
-            default:
-                for (int i = std::max(positional_to_positional - 3, 0); i < num_output_args - 3; i++) {
-                    Py_XDECREF(oargs[i]);
-                }
-        }
-    };
-    ExceptionCleanup<decltype(clear_refs)> cleanup(
-        clear_refs); // I feel like there should be some way to automatically infer the decltype
-
     static StatCounter slowpath_rearrangeargs_slowpath("slowpath_rearrangeargs_slowpath");
     slowpath_rearrangeargs_slowpath.log();
 
@@ -4276,6 +4257,8 @@ Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNa
         varargs_size = PySequence_Fast_GET_SIZE(varargs);
     }
 
+    int positional_to_positional = std::min(argspec.num_args, paramspec.num_args);
+
     ////
     // First, match up positional parameters to positional/varargs:
     for (int i = 0; i < positional_to_positional; i++) {
@@ -4285,8 +4268,28 @@ Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNa
     int varargs_to_positional = std::min((int)varargs_size, paramspec.num_args - positional_to_positional);
     for (int i = 0; i < varargs_to_positional; i++) {
         assert(!rewrite_args && "would need to be handled here");
-        getArg(i + positional_to_positional, oarg1, oarg2, oarg3, oargs) = incref(PySequence_Fast_GET_ITEM(varargs, i));
+        getArg(i + positional_to_positional, oarg1, oarg2, oarg3, oargs) = PySequence_Fast_GET_ITEM(varargs, i);
     }
+
+    // Clear any increfs we did for when we throw an exception:
+    auto clear_refs = [&]() {
+        switch (positional_to_positional + varargs_to_positional) {
+            case 0:
+                Py_XDECREF(oarg1);
+            case 1:
+                Py_XDECREF(oarg2);
+            case 2:
+                Py_XDECREF(oarg3);
+            default:
+                for (int i = std::max(positional_to_positional + varargs_to_positional - 3, 0); i < num_output_args - 3;
+                     i++) {
+                    Py_XDECREF(oargs[i]);
+                }
+        }
+    };
+
+    ExceptionCleanup<decltype(clear_refs)> cleanup(
+        clear_refs); // I feel like there should be some way to automatically infer the decltype
 
     llvm::SmallVector<bool, 8> params_filled(num_output_args);
     for (int i = 0; i < positional_to_positional + varargs_to_positional; i++) {

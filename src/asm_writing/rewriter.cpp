@@ -448,8 +448,10 @@ void Rewriter::_getAttr(RewriterVar* result, RewriterVar* ptr, int offset, Locat
 
     ptr->bumpUseEarlyIfPossible();
 
-    assembler::Register newvar_reg = result->initializeInReg(dest);
-    assembler->mov_generic(assembler::Indirect(ptr_reg, offset), newvar_reg, type);
+    if (!failed) {
+        assembler::Register newvar_reg = result->initializeInReg(dest);
+        assembler->mov_generic(assembler::Indirect(ptr_reg, offset), newvar_reg, type);
+    }
 
     result->releaseIfNoUses();
 
@@ -2172,7 +2174,7 @@ assembler::Register RewriterVar::initializeInReg(Location l) {
 
     // Add this to vars_by_locations
     RewriterVar*& var = rewriter->vars_by_location[l];
-    assert(!var);
+    assert(!var || rewriter->failed);
     var = this;
 
     // Add the location to this
