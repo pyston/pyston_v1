@@ -253,15 +253,23 @@ void FrameInfo::disableDeinit(FrameInfo* replacement_frame) {
     assert(isDisabledFrame());
 }
 
-extern "C" void deinitFrameMaybe(FrameInfo* frame_info) {
+extern "C" void deinitFrameMaybe(FrameInfo* frame_info) noexcept {
     // Note: this has to match FrameInfo::disableDeinit
     if (!frame_info->isDisabledFrame())
         deinitFrame(frame_info);
 }
 
-extern "C" void deinitFrame(FrameInfo* frame_info) {
+extern "C" void deinitFrame(FrameInfo* frame_info) noexcept {
     // This can fire if we have a call to deinitFrame() that should be to deinitFrameMaybe() instead
     assert(!frame_info->isDisabledFrame());
+
+    Box* err_type, *err_value, *err_tb;
+    bool restore_exc = cur_thread_state.curexc_type != NULL;
+    if (restore_exc) {
+        // preserve the existing exception
+        PyErr_Fetch(&err_type, &err_value, &err_tb);
+        PyErr_Clear();
+    }
 
     assert(cur_thread_state.frame_info == frame_info);
     cur_thread_state.frame_info = frame_info->back;
@@ -288,6 +296,10 @@ extern "C" void deinitFrame(FrameInfo* frame_info) {
     }
 
     Py_CLEAR(frame_info->globals);
+
+    assert(!PyErr_Occurred());
+    if (restore_exc)
+        PyErr_Restore(err_type, err_value, err_tb);
 }
 
 int frameinfo_traverse(FrameInfo* frame_info, visitproc visit, void* arg) noexcept {
