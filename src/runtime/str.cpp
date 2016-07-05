@@ -423,12 +423,6 @@ extern "C" void _Py_ReleaseInternedStrings() noexcept {
     interned_strings.clear();
 }
 
-extern "C" int _PyString_CheckInterned(PyObject* p) noexcept {
-    RELEASE_ASSERT(PyString_Check(p), "");
-    BoxedString* s = (BoxedString*)p;
-    return s->interned_state;
-}
-
 /* Format codes
  * F_LJUST      '-'
  * F_SIGN       '+'

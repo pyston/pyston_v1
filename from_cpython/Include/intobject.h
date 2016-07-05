@@ -55,9 +55,7 @@ PyAPI_FUNC(unsigned PY_LONG_LONG) PyInt_AsUnsignedLongLongMask(PyObject *) PYSTO
 PyAPI_FUNC(long) PyInt_GetMax(void) PYSTON_NOEXCEPT;
 
 /* Macro, trading safety for speed */
-// Pyston changes: these aren't direct macros any more [they potentially could be though]
-#define PyInt_AS_LONG(op) PyInt_AsLong((PyObject*)op)
-//#define PyInt_AS_LONG(op) (((PyIntObject *)(op))->ob_ival)
+#define PyInt_AS_LONG(op) (((PyIntObject *)(op))->ob_ival)
 
 /* These aren't really part of the Int object, but they're handy; the protos
  * are necessary for systems that need the magic of PyAPI_FUNC and that want

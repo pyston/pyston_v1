@@ -93,21 +93,16 @@ PyAPI_FUNC(void) _Py_ReleaseInternedStrings(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(char) PyString_GetItem(PyObject *, Py_ssize_t) PYSTON_NOEXCEPT;
 
 /* Use only if you know it's a string */
-// Pyston changes: these aren't direct macros any more [they potentially could be though]
-//#define PyString_CHECK_INTERNED(op) (((PyStringObject *)(op))->ob_sstate)
-PyAPI_FUNC(int) _PyString_CheckInterned(PyObject *) PYSTON_NOEXCEPT;
-#define PyString_CHECK_INTERNED(op) _PyString_CheckInterned((PyObject*)op)
+#define PyString_CHECK_INTERNED(op) (((PyStringObject *)(op))->ob_sstate)
 
 /* Macro, trading safety for speed */
-// Pyston changes: these aren't direct macros any more [they potentially could be though]
-#define PyString_AS_STRING(op) PyString_AsString((PyObject*)op)
 // Note: there are buggy extension modules (unicodedata.c) that rely on the fact that
 // PyString_GET_SIZE does *not* have the same behavior as PyString_Size.  In particular,
 // you can get away with calling PyString_GET_SIZE on a unicode object and getting the
 // length of the unicode string, not the length of the bytes it encodes to in the default
 // encoding.
 // So, set up a different function for those callers to use.
-//#define PyString_AS_STRING(op) (((PyStringObject *)(op))->ob_sval)
+#define PyString_AS_STRING(op) (((PyStringObject *)(op))->ob_sval)
 #define PyString_GET_SIZE(op)  Py_SIZE(op)
 
 /* _PyString_Join(sep, x) is like sep.join(x).  sep must be PyStringObject*,
