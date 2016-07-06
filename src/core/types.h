@@ -347,7 +347,7 @@ public:
 
     // The function pointer to the generated code.  For convenience, it can be accessed
     // as one of many different types.
-    // TODO: we instead make these functions that make sure that the function actually
+    // TODO: we instead make these accessor-functions that make sure that the code actually
     // matches the C signature that we would return.
     union {
         Box* (*call)(Box*, Box*, Box*, Box**);

@@ -58,7 +58,7 @@ class PhiAnalysis;
 
 class DefinednessAnalysis {
 public:
-    enum DefinitionLevel {
+    enum DefinitionLevel : char {
         Unknown,
         Undefined,
         PotentiallyDefined,
@@ -96,12 +96,10 @@ public:
     PhiAnalysis(VRegMap<DefinednessAnalysis::DefinitionLevel> initial_map, CFGBlock* initial_block,
                 bool initials_need_phis, LivenessAnalysis* liveness, ScopeInfo* scope_info);
 
-    // TODO: convert these to taking vregs
     bool isRequired(int vreg, CFGBlock* block);
     bool isRequiredAfter(int vreg, CFGBlock* block);
     const VRegSet& getAllRequiredAfter(CFGBlock* block);
     const VRegSet& getAllRequiredFor(CFGBlock* block);
-    // TODO: convert these to taking vregs
     // If "name" may be undefined at the beginning of any immediate successor block of "block":
     bool isPotentiallyUndefinedAfter(int vreg, CFGBlock* block);
     // If "name" may be undefined at the beginning of "block"

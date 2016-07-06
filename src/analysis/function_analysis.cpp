@@ -36,7 +36,7 @@ namespace pyston {
 class LivenessBBVisitor : public NoopASTVisitor {
 private:
     struct Status {
-        enum Usage {
+        enum Usage : char {
             NONE,
             USED,
             DEFINED,
@@ -231,10 +231,6 @@ public:
         return DefinednessAnalysis::PotentiallyDefined;
     }
     virtual void processBB(Map& starting, CFGBlock* block) const;
-    virtual DefinitionLevel mergeBlank(DefinitionLevel into) const {
-        assert(into != DefinednessAnalysis::Undefined);
-        return DefinednessAnalysis::PotentiallyDefined;
-    }
 };
 
 class DefinednessVisitor : public ASTVisitor {

@@ -203,7 +203,7 @@ public:
 
 class VRegSet {
 private:
-    // TODO: switch just to a bool*
+    // TODO: switch just to a bool*?
     std::vector<bool> v;
 
 public:
@@ -259,7 +259,7 @@ public:
 
 template <typename T> class VRegMap {
 private:
-    // TODO: switch just to a T*
+    // TODO: switch just to a T*?
     std::vector<T> v;
 
 public:
