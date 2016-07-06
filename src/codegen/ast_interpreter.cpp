@@ -781,8 +781,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
         // TODO can we just get rid of this?
         for (auto&& p : sorted_symbol_table) {
-            if (p.second)
-                entry->args[p.first] = UNKNOWN;
+            entry->args[p.first] = UNKNOWN;
         }
 
         entry->potentially_undefined = potentially_undefined;
@@ -795,8 +794,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     std::vector<Box*> arg_array;
     arg_array.reserve(sorted_symbol_table.numSet() + potentially_undefined.numSet());
     for (auto&& p : sorted_symbol_table) {
-        if (p.second)
-            arg_array.push_back(p.second);
+        arg_array.push_back(p.second);
     }
     for (int vreg : potentially_undefined) {
         bool is_defined = sorted_symbol_table[vreg] != VAL_UNDEFINED;

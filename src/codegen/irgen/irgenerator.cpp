@@ -2771,8 +2771,6 @@ public:
             typedef std::pair<InternedString, CompilerVariable*> Entry;
             for (auto&& p : symbol_table) {
                 int vreg = p.first;
-                if (!p.second)
-                    continue;
 
                 // We never have to include non compiler generated vars because the user visible variables are stored
                 // inside the vregs array.
@@ -2787,8 +2785,6 @@ public:
             }
 
             for (auto&& p : definedness_vars) {
-                if (!p.second)
-                    continue;
                 if (vregs.isUserVisibleVReg(p.first))
                     continue;
 
@@ -2819,8 +2815,6 @@ public:
         assert(incoming_exc_state.empty());
 
         for (auto&& p : symbol_table) {
-            if (!p.second)
-                continue;
             ASSERT(p.second->getType()->isUsable(), "%d", p.first);
         }
 
@@ -2847,8 +2841,6 @@ public:
         // We have one successor, but they have more than one predecessor.
         // We're going to sort out which symbols need to go in phi_st and which belong inst.
         for (auto&& p : *st) {
-            if (!p.second)
-                continue;
             if (/*allowableFakeEndingSymbol(it->first)
                 ||*/ irstate->getPhis()->isRequiredAfter(p.first, myblock)) {
                 ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(p.first, myblock);
@@ -2892,8 +2884,6 @@ public:
         assert(st);
         DupCache cache;
         for (SymbolTable::iterator it = st->begin(); it != st->end(); ++it) {
-            if (!it.second())
-                continue;
             // printf("Copying in %s, a %s\n", it->first.c_str(), it->second->getType()->debugName().c_str());
             symbol_table[it.first()] = it.second()->dup(cache);
             assert(symbol_table[it.first()]->getType()->isUsable());

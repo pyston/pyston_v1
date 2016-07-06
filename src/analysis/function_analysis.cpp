@@ -585,9 +585,6 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor* entry
     }
 
     for (const auto& p : entry_descriptor->args) {
-        if (!p.second)
-            continue;
-
         int vreg = p.first;
         ASSERT(initial_map[vreg] == DefinednessAnalysis::Undefined, "%d %d", vreg, initial_map[vreg]);
         if (entry_descriptor->potentially_undefined[vreg])

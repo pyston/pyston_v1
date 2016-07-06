@@ -791,8 +791,6 @@ public:
                 printf("before:\n");
                 TypeMap& starting = starting_types.find(block)->second;
                 for (const auto& p : starting) {
-                    if (!p.second)
-                        continue;
                     auto name = vreg_info.getName(p.first);
                     printf("%s: %s\n", name.c_str(), p.second->debugName().c_str());
                 }
@@ -805,15 +803,11 @@ public:
                 printf("before (after):\n");
                 TypeMap& starting = starting_types.find(block)->second;
                 for (const auto& p : starting) {
-                    if (!p.second)
-                        continue;
                     auto name = vreg_info.getName(p.first);
                     printf("%s: %s\n", name.c_str(), p.second->debugName().c_str());
                 }
                 printf("after:\n");
                 for (const auto& p : ending) {
-                    if (!p.second)
-                        continue;
                     auto name = vreg_info.getName(p.first);
                     printf("%s: %s\n", name.c_str(), p.second->debugName().c_str());
                 }
@@ -843,8 +837,6 @@ public:
 
                 const TypeMap& starting = p.second;
                 for (const auto& p : starting) {
-                    if (!p.second)
-                        continue;
                     auto name = vreg_info.getName(p.first);
                     printf("%s: %s\n", name.c_str(), p.second->debugName().c_str());
                 }

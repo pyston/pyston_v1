@@ -96,10 +96,10 @@ void computeFixedPoint(typename BBAnalyzer<T>::Map&& initial_map, CFGBlock* init
 
             Map& next = it->second;
             // merge ending->next
-            for (const auto& p : ending) {
-                T& next_elt = next[p.first];
+            for (int vreg = 0; vreg < num_vregs; vreg++) {
+                T& next_elt = next[vreg];
 
-                T new_elt = analyzer.merge(p.second, next_elt);
+                T new_elt = analyzer.merge(ending[vreg], next_elt);
 
                 if (next_elt != new_elt) {
                     next_elt = new_elt;

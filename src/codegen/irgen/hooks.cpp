@@ -261,8 +261,6 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
 
         if (entry_descriptor && VERBOSITY("irgen") >= 2) {
             for (const auto& p : entry_descriptor->args) {
-                if (!p.second)
-                    continue;
                 ss << p.first << ": " << p.second->debugName() << '\n';
             }
         }

@@ -413,9 +413,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
         int arg_num = -1;
         for (const auto& p : entry_descriptor->args) {
-            if (!p.second)
-                continue;
-
             llvm::Value* from_arg;
             arg_num++;
 
@@ -489,8 +486,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         unbox_emitter->getBuilder()->CreateBr(llvm_entry_blocks[entry_descriptor->backedge->target]);
 
         for (const auto& p : initial_syms) {
-            if (p.second)
-                delete p.second;
+            delete p.second;
         }
     }
 
@@ -627,9 +623,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 (*definedness_phis)[vreg] = phi;
             }
             for (const auto& p : entry_descriptor->args) {
-                if (!p.second)
-                    continue;
-
                 int vreg = p.first;
 
                 ConcreteCompilerType* analyzed_type = getTypeAtBlockStart(types, p.first, block);
@@ -756,8 +749,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
                 generator->copySymbolsFrom(sym_table);
                 for (auto&& p : *definedness_tables[pred]) {
-                    if (!p.second)
-                        continue;
                     generator->giveDefinednessVar(p.first, p.second);
                 }
                 if (created_new_sym_table)
@@ -796,8 +787,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 }
 
                 for (auto&& p : *definedness_tables[pred]) {
-                    if (!p.second)
-                        continue;
                     llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(BOOL->llvmType(), block->predecessors.size());
                     if (VERBOSITY("irgen"))
                         phi->setName("!is_defined_" + vreg_info.getName(p.first).s());
@@ -930,8 +919,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
         for (auto it = phis->begin(); it != phis->end(); ++it) {
             llvm::PHINode* llvm_phi = it.second().second;
-            if (!llvm_phi)
-                continue;
 
             handle_phi(llvm_phi, it.first(), it.second().first, false);
         }
@@ -939,8 +926,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         auto definedness_phis = created_definedness_phis[b];
         for (auto it = definedness_phis->begin(); it != definedness_phis->end(); ++it) {
             llvm::PHINode* llvm_phi = it.second();
-            if (!llvm_phi)
-                continue;
 
             handle_phi(llvm_phi, it.first(), BOOL, true);
         }

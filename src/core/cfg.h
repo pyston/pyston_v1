@@ -257,6 +257,14 @@ public:
     iterator end() const { return iterator(*this, this->v.size()); }
 };
 
+// VRegMap: A compact way of representing a value per vreg.
+//
+// One thing to note is that every vreg will get a value by default
+// (the default value of T()), and fetching an unset vreg will return
+// that value.
+//
+// Iterating will skip over these values though.  If you want to see them,
+// you can iterate from 0 to numVregs().
 template <typename T> class VRegMap {
 private:
     // TODO: switch just to a T*?
@@ -300,7 +308,9 @@ public:
 
         // TODO: make this skip unset values?
         iterator& operator++() {
-            i++;
+            do {
+                i++;
+            } while (i < map.numVregs() && map[i] == T());
             return *this;
         }
 
@@ -314,7 +324,11 @@ public:
 
     int numVregs() const { return v.size(); }
 
-    iterator begin() const { return iterator(*this, 0); }
+    iterator begin() const {
+        iterator it = iterator(*this, -1);
+        ++it;
+        return it;
+    }
 
     iterator end() const { return iterator(*this, this->v.size()); }
 };
