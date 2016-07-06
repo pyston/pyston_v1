@@ -75,8 +75,10 @@ void ICInvalidator::invalidateAll() {
 
 void ICSlotInfo::clear() {
     ic->clear(this);
-    decref_infos.clear();
     used = false;
+
+    if (num_inside == 0)
+        decref_infos.clear();
 }
 
 std::unique_ptr<ICSlotRewrite> ICSlotRewrite::create(ICInfo* ic, const char* debug_name) {
@@ -132,6 +134,9 @@ void ICSlotRewrite::commit(CommitHook* hook, std::vector<void*> gc_references,
             Py_DECREF(p);
         return;
     }
+
+    // I think this can happen if another thread enters the IC?
+    RELEASE_ASSERT(ic_entry->num_inside == 1, "picked IC slot is somehow used again");
 
     auto ic = getICInfo();
     uint8_t* slot_start = getSlotStart();
