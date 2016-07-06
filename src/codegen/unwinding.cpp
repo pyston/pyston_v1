@@ -329,26 +329,6 @@ public:
         }
     }
 
-#if 0
-    //llvm::ArrayRef<StackMap::Record::Location> findLocations(llvm::StringRef name) {
-    llvm::ArrayRef<StackMap::Record::Location> findLocations(const LocationMap::LocationTable& table) {
-        assert(id.type == PythonFrameId::COMPILED);
-
-        CompiledFunction* cf = getCF();
-        uint64_t ip = getId().ip;
-
-        assert(ip > cf->code_start);
-        unsigned offset = ip - cf->code_start;
-
-        //const LocationMap::LocationTable& table = cf->location_map->names[name];
-        auto entry = table.findEntry(offset);
-        if (!entry)
-            return {};
-        assert(entry->locations.size());
-        return entry->locations;
-    }
-#endif
-
     AST_stmt* getCurrentStatement() {
         assert(getFrameInfo()->stmt);
         return getFrameInfo()->stmt;

@@ -46,7 +46,6 @@ class UnwindInfo;
 
 typedef VRegMap<CompilerVariable*> SymbolTable;
 typedef VRegMap<llvm::Value*> DefinednessTable;
-typedef VRegMap<CompilerVariable*> SortedSymbolTable;
 typedef VRegMap<ConcreteCompilerVariable*> ConcreteSymbolTable;
 
 extern const std::string CREATED_CLOSURE_NAME;
