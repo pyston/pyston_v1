@@ -232,6 +232,9 @@ private:
         CFGBlock* exc_dest;
         // variable names to store the exception (type, value, traceback) in
         InternedString exc_type_name, exc_value_name, exc_traceback_name;
+
+        // Similar to did_why: says whether the block might have been jumped-to
+        bool maybe_taken;
     };
 
     // ---------- Member fields ----------
@@ -1576,6 +1579,7 @@ public:
             curblock->connectTo(exc_dest);
 
         ExcBlockInfo& exc_info = exc_handlers.back();
+        exc_info.maybe_taken = true;
 
         curblock = exc_dest;
         // TODO: need to clear some temporaries here
@@ -2341,7 +2345,7 @@ public:
         InternedString exc_type_name = nodeName("type");
         InternedString exc_value_name = nodeName("value");
         InternedString exc_traceback_name = nodeName("traceback");
-        exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name });
+        exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name, false });
 
         for (AST_stmt* subnode : node->body) {
             subnode->accept(this);
@@ -2464,7 +2468,7 @@ public:
         InternedString exc_value_name = nodeName("value");
         InternedString exc_traceback_name = nodeName("traceback");
         InternedString exc_why_name = nodeName("why");
-        exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name });
+        exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name, false });
 
         CFGBlock* finally_block = cfg->addDeferredBlock();
         pushFinallyContinuation(finally_block, exc_why_name);
@@ -2475,6 +2479,7 @@ public:
                 break;
         }
 
+        bool maybe_exception = exc_handlers.back().maybe_taken;
         exc_handlers.pop_back();
 
         int did_why = continuations.back().did_why; // bad to just reach in like this
@@ -2512,15 +2517,17 @@ public:
                 exitFinallyIf(node, Why::BREAK, exc_why_name);
             if (did_why & (1 << Why::CONTINUE))
                 exitFinallyIf(node, Why::CONTINUE, exc_why_name);
+            if (maybe_exception) {
+                CFGBlock* reraise = cfg->addDeferredBlock();
+                CFGBlock* noexc = makeFinallyCont(Why::EXCEPTION, makeLoad(exc_why_name, node, true), reraise);
 
-            CFGBlock* reraise = cfg->addDeferredBlock();
-            CFGBlock* noexc = makeFinallyCont(Why::EXCEPTION, makeLoad(exc_why_name, node, true), reraise);
+                cfg->placeBlock(reraise);
+                curblock = reraise;
+                pushReraise(getLastLinenoSub(node->finalbody.back()), exc_type_name, exc_value_name,
+                            exc_traceback_name);
 
-            cfg->placeBlock(reraise);
-            curblock = reraise;
-            pushReraise(getLastLinenoSub(node->finalbody.back()), exc_type_name, exc_value_name, exc_traceback_name);
-
-            curblock = noexc;
+                curblock = noexc;
+            }
         }
 
         return true;
@@ -2585,7 +2592,7 @@ public:
 
         CFGBlock* exc_block = cfg->addDeferredBlock();
         exc_block->info = "with_exc";
-        exc_handlers.push_back({ exc_block, exc_type_name, exc_value_name, exc_traceback_name });
+        exc_handlers.push_back({ exc_block, exc_type_name, exc_value_name, exc_traceback_name, false });
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);

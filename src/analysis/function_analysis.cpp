@@ -158,11 +158,10 @@ bool LivenessAnalysis::isLiveAtEnd(int vreg, CFGBlock* block) {
     if (vreg < block->cfg->getVRegInfo().getNumOfUserVisibleVRegs())
         return true;
 
-    // For block-local vregs, this query doesn't really make sense,
-    // since the vreg will be live but that's probably not what we care about.
-    // It's probably safe to return false, but let's just error for now.
+#ifndef NDEBUG
     if (block->cfg->getVRegInfo().isBlockLocalVReg(vreg))
         return false;
+#endif
 
     if (block->successors.size() == 0)
         return false;
@@ -204,6 +203,14 @@ bool LivenessAnalysis::isLiveAtEnd(int vreg, CFGBlock* block) {
         // Note: this one gets counted as part of us_compiling_irgen as well:
         static StatCounter us_liveness("us_compiling_analysis_liveness");
         us_liveness.log(_t.end());
+    }
+
+    // For block-local vregs, this query doesn't really make sense,
+    // since the vreg will be live but that's probably not what we care about.
+    // It's probably safe to return false, but let's just error for now.
+    if (block->cfg->getVRegInfo().isBlockLocalVReg(vreg)) {
+        ASSERT(!result_cache[vreg][block], "%d in %d", vreg, block->idx);
+        return false;
     }
 
     return result_cache[vreg][block];
