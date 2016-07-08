@@ -137,8 +137,10 @@ extern "C" PyCodeObject* PyCode_New(int argcount, int nlocals, int stacksize, in
     is_dummy = is_dummy && code == EmptyString && lnotab == EmptyString;
     for (auto&& var : { consts, names, varnames, freevars, cellvars })
         is_dummy = is_dummy && var == EmptyTuple;
-    RELEASE_ASSERT(is_dummy, "not implemented");
-    // ok this is an empty/dummy code object
+    // The follwing variables are not implemented but we allow them because there is currently
+    // no way for code to retrieve them.
+    auto temp_allowed = argcount || argcount || flags || varnames != EmptyTuple;
+    RELEASE_ASSERT(is_dummy || temp_allowed, "not implemented");
 
     RELEASE_ASSERT(PyString_Check(filename), "");
     RELEASE_ASSERT(PyString_Check(name), "");
