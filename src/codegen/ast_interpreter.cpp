@@ -554,12 +554,27 @@ void ASTInterpreter::doStore(AST_expr* node, STOLEN(Value) value) {
         Value target = visit_expr(subscript->value);
         AUTO_DECREF(target.o);
 
-        Value slice = visit_slice(subscript->slice);
-        AUTO_DECREF(slice.o);
+        bool is_slice = (subscript->slice->type == AST_TYPE::Slice) && (((AST_Slice*)subscript->slice)->step == NULL);
+        if (is_slice) {
+            AST_Slice* slice = (AST_Slice*)subscript->slice;
+            Value lower = slice->lower ? visit_expr(slice->lower) : Value();
+            AUTO_XDECREF(lower.o);
+            Value upper = slice->upper ? visit_expr(slice->upper) : Value();
+            AUTO_XDECREF(upper.o);
+            assert(slice->step == NULL);
 
-        if (jit)
-            jit->emitSetItem(target, slice, value);
-        setitem(target.o, slice.o, value.o);
+            if (jit)
+                jit->emitAssignSlice(target, lower, upper, value);
+            assignSlice(target.o, lower.o, upper.o, value.o);
+        } else {
+            Value slice = visit_slice(subscript->slice);
+
+            AUTO_DECREF(slice.o);
+
+            if (jit)
+                jit->emitSetItem(target, slice, value);
+            setitem(target.o, slice.o, value.o);
+        }
     } else {
         RELEASE_ASSERT(0, "not implemented");
     }
@@ -1306,11 +1321,26 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                 AST_Subscript* sub = (AST_Subscript*)target_;
                 Value value = visit_expr(sub->value);
                 AUTO_DECREF(value.o);
-                Value slice = visit_slice(sub->slice);
-                AUTO_DECREF(slice.o);
-                if (jit)
-                    jit->emitDelItem(value, slice);
-                delitem(value.o, slice.o);
+
+                bool is_slice = (sub->slice->type == AST_TYPE::Slice) && (((AST_Slice*)sub->slice)->step == NULL);
+                if (is_slice) {
+                    AST_Slice* slice = (AST_Slice*)sub->slice;
+                    Value lower = slice->lower ? visit_expr(slice->lower) : Value();
+                    AUTO_XDECREF(lower.o);
+                    Value upper = slice->upper ? visit_expr(slice->upper) : Value();
+                    AUTO_XDECREF(upper.o);
+                    assert(slice->step == NULL);
+
+                    if (jit)
+                        jit->emitAssignSlice(value, lower, upper, jit->imm(0ul));
+                    assignSlice(value.o, lower.o, upper.o, NULL);
+                } else {
+                    Value slice = visit_slice(sub->slice);
+                    AUTO_DECREF(slice.o);
+                    if (jit)
+                        jit->emitDelItem(value, slice);
+                    delitem(value.o, slice.o);
+                }
                 break;
             }
             case AST_TYPE::Attribute: {
@@ -1722,10 +1752,31 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
 Value ASTInterpreter::visit_subscript(AST_Subscript* node) {
     Value value = visit_expr(node->value);
     AUTO_DECREF(value.o);
-    Value slice = visit_slice(node->slice);
-    AUTO_DECREF(slice.o);
 
-    return Value(getitem(value.o, slice.o), jit ? jit->emitGetItem(node, value, slice) : NULL);
+    bool is_slice = (node->slice->type == AST_TYPE::Slice) && (((AST_Slice*)node->slice)->step == NULL);
+    if (is_slice) {
+        AST_Slice* slice = (AST_Slice*)node->slice;
+        Value lower = slice->lower ? visit_expr(slice->lower) : Value();
+        AUTO_XDECREF(lower.o);
+        Value upper = slice->upper ? visit_expr(slice->upper) : Value();
+        AUTO_XDECREF(upper.o);
+        assert(slice->step == NULL);
+
+        Value v;
+        if (jit)
+            v.var = jit->emitApplySlice(value, lower, upper);
+        v.o = applySlice(value.o, lower.o, upper.o);
+        return v;
+    } else {
+        Value slice = visit_slice(node->slice);
+        AUTO_DECREF(slice.o);
+
+        Value v;
+        if (jit)
+            v.var = jit->emitGetItem(node, value, slice);
+        v.o = getitem(value.o, slice.o);
+        return v;
+    }
 }
 
 Value ASTInterpreter::visit_list(AST_List* node) {

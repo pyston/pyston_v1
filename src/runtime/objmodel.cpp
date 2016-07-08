@@ -6075,13 +6075,8 @@ static Box* callItemAttr(Box* target, BoxedString* item_str, Box* item, Box* val
 
     if (rewrite_args) {
         CallattrRewriteArgs crewrite_args(rewrite_args);
-        Box* r;
-        if (value)
-            r = callattrInternal2<S, REWRITABLE>(target, item_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(2), item,
-                                                 value);
-        else
-            r = callattrInternal1<S, REWRITABLE>(target, item_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(1), item);
-
+        Box* r = callattrInternal2<S, REWRITABLE>(target, item_str, CLASS_ONLY, &crewrite_args,
+                                                  ArgPassSpec(value ? 2 : 1), item, value);
         if (crewrite_args.isSuccessful()) {
             rewrite_args->out_success = true;
             if (r || PyErr_Occurred())
@@ -6092,171 +6087,286 @@ static Box* callItemAttr(Box* target, BoxedString* item_str, Box* item, Box* val
         }
         return r;
     } else {
-        if (value)
-            return callattrInternal2<S, NOT_REWRITABLE>(target, item_str, CLASS_ONLY, NULL, ArgPassSpec(2), item,
-                                                        value);
-        else
-            return callattrInternal1<S, NOT_REWRITABLE>(target, item_str, CLASS_ONLY, NULL, ArgPassSpec(1), item);
+        return callattrInternal2<S, NOT_REWRITABLE>(target, item_str, CLASS_ONLY, NULL, ArgPassSpec(value ? 2 : 1),
+                                                    item, value);
     }
 }
 
 #define ISINDEX(x) ((x) == NULL || PyInt_Check(x) || PyLong_Check(x) || PyIndex_Check(x))
 
-extern "C" PyObject* apply_slice(PyObject* u, PyObject* v, PyObject* w) noexcept /* return u[v:w] */
-{
-    // TODO: add rewriting here
+static int64_t isSliceIndexHelper(Box* a, Box* b) {
+    return ISINDEX(a) && ISINDEX(b);
+}
 
-    PyTypeObject* tp = u->cls;
-    PySequenceMethods* sq = tp->tp_as_sequence;
+template <ExceptionStyle S> static Box* applySliceHelper(Box* u, Box* a, Box* b) noexcept(S == CAPI) {
+    Py_ssize_t ilow = 0, ihigh = PY_SSIZE_T_MAX;
+    if (!_PyEval_SliceIndex(a, &ilow)) {
+        if (S == CXX)
+            throwCAPIException();
+        return NULL;
+    }
+    if (!_PyEval_SliceIndex(b, &ihigh)) {
+        if (S == CXX)
+            throwCAPIException();
+        return NULL;
+    }
 
-    if (sq && sq->sq_slice && ISINDEX(v) && ISINDEX(w)) {
-        Py_ssize_t ilow = 0, ihigh = PY_SSIZE_T_MAX;
-        if (!_PyEval_SliceIndex(v, &ilow))
-            return NULL;
-        if (!_PyEval_SliceIndex(w, &ihigh))
-            return NULL;
-        return PySequence_GetSlice(u, ilow, ihigh);
+    PySequenceMethods* sq = u->cls->tp_as_sequence;
+    if (ilow < 0 || ihigh < 0) {
+        if (sq->sq_length) {
+            Py_ssize_t l = (*sq->sq_length)(u);
+            if (l < 0) {
+                if (S == CXX)
+                    throwCAPIException();
+                return NULL;
+            }
+            if (ilow < 0)
+                ilow += l;
+            if (ihigh < 0)
+                ihigh += l;
+        }
+    }
+    Box* rtn = sq->sq_slice(u, ilow, ihigh);
+    if (S == CXX && !rtn)
+        throwCAPIException();
+    return rtn;
+}
+
+template <ExceptionStyle S> static int assignSliceHelper(Box* u, Box* a, Box* b, Box* x) noexcept(S == CAPI) {
+    Py_ssize_t ilow = 0, ihigh = PY_SSIZE_T_MAX;
+    if (!_PyEval_SliceIndex(a, &ilow)) {
+        if (S == CXX)
+            throwCAPIException();
+        return -1;
+    }
+    if (!_PyEval_SliceIndex(b, &ihigh)) {
+        if (S == CXX)
+            throwCAPIException();
+        return -1;
+    }
+
+    PySequenceMethods* sq = u->cls->tp_as_sequence;
+    if (ilow < 0 || ihigh < 0) {
+        if (sq->sq_length) {
+            Py_ssize_t l = (*sq->sq_length)(u);
+            if (l < 0) {
+                if (S == CXX)
+                    throwCAPIException();
+                return -1;
+            }
+            if (ilow < 0)
+                ilow += l;
+            if (ihigh < 0)
+                ihigh += l;
+        }
+    }
+
+    int rtn = sq->sq_ass_slice(u, ilow, ihigh, x);
+    if (S == CXX && rtn == -1)
+        throwCAPIException();
+    return rtn;
+}
+
+static std::pair<RewriterVar*, RewriterVar*> extractIntSliceStartStop(std::unique_ptr<Rewriter>& rewriter,
+                                                                      PyObject* start, PyObject* stop,
+                                                                      RewriterVar* r_start, RewriterVar* r_stop) {
+    RewriterVar* r_start_int = NULL;
+    RewriterVar* r_stop_int = NULL;
+    if (start) {
+        r_start->addGuardNotEq(0);
+        r_start->addAttrGuard(offsetof(Box, cls), (uint64_t)int_cls);
+        r_start_int = r_start->getAttr(offsetof(BoxedInt, n));
+        r_start_int->addGuardNotLt0();
+    } else {
+        r_start->addGuard(0);
+        r_start_int = rewriter->loadConst(0);
+    }
+    if (stop) {
+        r_stop->addGuardNotEq(0);
+        r_stop->addAttrGuard(offsetof(Box, cls), (uint64_t)int_cls);
+        r_stop_int = r_stop->getAttr(offsetof(BoxedInt, n));
+        r_stop_int->addGuardNotLt0();
+    } else {
+        r_stop->addGuard(0);
+        r_stop_int = rewriter->loadConst(PY_SSIZE_T_MAX);
+    }
+    return std::make_pair(r_start_int, r_stop_int);
+}
+
+/* return u[v:w] */
+template <ExceptionStyle S>
+PyObject* applySliceIntern(PyObject* u, PyObject* v, PyObject* w,
+                           std::unique_ptr<Rewriter>& rewriter) noexcept(S == CAPI) {
+    RewriterVar* r_obj = NULL, * r_start = NULL, * r_stop = NULL, * r_cls = NULL, * r_sq = NULL;
+    if (rewriter) {
+        r_obj = rewriter->getArg(0);
+        r_start = rewriter->getArg(1);
+        r_stop = rewriter->getArg(2);
+
+        r_cls = r_obj->getAttr(offsetof(Box, cls));
+        r_sq = r_cls->getAttr(offsetof(BoxedClass, tp_as_sequence));
+    }
+
+    PySequenceMethods* sq = u->cls->tp_as_sequence;
+    if (sq && sq->sq_slice && isSliceIndexHelper(v, w)) {
+        // call __getslice__
+        if (rewriter) {
+            r_sq->addGuardNotEq(0);
+            r_sq->addAttrGuard(offsetof(PySequenceMethods, sq_slice), (intptr_t)sq->sq_slice);
+
+            // handle int >= 0 and null because it is so frequent
+            if ((!v || (v->cls == int_cls && (PyInt_AS_LONG(v) >= 0)))
+                && (!w || (w->cls == int_cls && (PyInt_AS_LONG(w) >= 0)))) {
+                RewriterVar* r_start_int = NULL;
+                RewriterVar* r_stop_int = NULL;
+                std::tie(r_start_int, r_stop_int) = extractIntSliceStartStop(rewriter, v, w, r_start, r_stop);
+                RewriterVar* r_rtn = rewriter->call(true, (void*)sq->sq_slice, r_obj, r_start_int, r_stop_int)
+                                         ->setType(RefType::OWNED);
+                if (S == CXX)
+                    rewriter->checkAndThrowCAPIException(r_rtn);
+                rewriter->commitReturning(r_rtn);
+            } else {
+                RewriterVar* r_guard = rewriter->call(false, (void*)isSliceIndexHelper, r_start, r_stop);
+                r_guard->addGuardNotEq(0);
+
+                RewriterVar* r_rtn = rewriter->call(true, (void*)&applySliceHelper<S>, r_obj, r_start, r_stop)
+                                         ->setType(RefType::OWNED);
+                rewriter->commitReturning(r_rtn);
+            }
+        }
+        return applySliceHelper<S>(u, v, w);
+    }
+
+    // call __getitem__
+    if (rewriter && (!sq || !sq->sq_slice)) {
+        // rewrite getitem
+        if (sq) {
+            r_sq->addGuardNotEq(0);
+            r_sq->addAttrGuard(offsetof(PySequenceMethods, sq_slice), 0);
+        } else
+            r_sq->addGuard(0);
+
+        RewriterVar* r_slice = rewriter->call(false, (void*)PySlice_New, r_start, r_stop, rewriter->loadConst(0ul))
+                                   ->setType(RefType::OWNED);
+        Box* slice = PySlice_New(v, w, NULL);
+        AUTO_DECREF(slice);
+
+        GetitemRewriteArgs rewrite_args(rewriter.get(), r_obj, r_slice, rewriter->getReturnDestination());
+        Box* rtn = getitemInternal<S>(u, slice, &rewrite_args);
+
+        if (!rewrite_args.out_success) {
+            rewriter.reset(NULL);
+        } else if (rtn) {
+            rewriter->commitReturning(rewrite_args.out_rtn);
+        }
+        return rtn;
     } else {
         PyObject* slice = PySlice_New(v, w, NULL);
         if (slice != NULL) {
             PyObject* res = PyObject_GetItem(u, slice);
             Py_DECREF(slice);
+            if (S == CXX && !res)
+                throwCAPIException();
             return res;
-        } else
+        } else {
+            if (S == CXX)
+                throwCAPIException();
             return NULL;
+        }
     }
 }
 
-// This function decides whether to call the slice operator (e.g. __getslice__)
-// or the item operator (__getitem__).
-template <ExceptionStyle S, Rewritable rewritable>
-static Box* callItemOrSliceAttr(Box* target, BoxedString* item_str, BoxedString* slice_str, Box* slice, Box* value,
-                                CallRewriteArgs* rewrite_args) noexcept(S == CAPI) {
-    if (rewritable == NOT_REWRITABLE) {
-        assert(!rewrite_args);
-        rewrite_args = NULL;
-    }
+extern "C" PyObject* apply_slice(PyObject* u, PyObject* v, PyObject* w) noexcept {
+    std::unique_ptr<Rewriter> rewriter(
+        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "apply_slice"));
 
-    // This function contains a lot of logic for deciding between whether to call
-    // the slice operator or the item operator, so we can match CPython's behavior
-    // on custom classes that define those operators. However, for builtin types,
-    // we know we can call either and the behavior will be the same. Adding all those
-    // guards are unnecessary and bad for performance.
-    //
-    // Also, for special slicing logic (e.g. open slice ranges [:]), the builtin types
-    // have C-implemented functions that already handle all the edge cases, so we don't
-    // need to have a slowpath for them here.
-    if (target->cls == list_cls || target->cls == str_cls || target->cls == unicode_cls) {
-        if (rewrite_args) {
-            rewrite_args->obj->addAttrGuard(offsetof(Box, cls), (uint64_t)target->cls);
-        }
-        return callItemAttr<S, rewritable>(target, item_str, slice, value, rewrite_args);
-    }
+    return applySliceIntern<CAPI>(u, v, w, rewriter);
+}
 
-    // Guard on the type of the object (need to have the slice operator attribute to call it).
-    bool has_slice_attr = false;
-    if (rewrite_args) {
-        RewriterVar* target_cls = rewrite_args->obj->getAttr(offsetof(Box, cls));
-        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, target_cls, Location::any());
-        has_slice_attr = (bool)typeLookup(target->cls, slice_str, &grewrite_args);
-        if (!grewrite_args.isSuccessful()) {
-            rewrite_args = NULL;
-        } else {
-            RewriterVar* rtn;
-            ReturnConvention return_convention;
-            std::tie(rtn, return_convention) = grewrite_args.getReturn();
-            if (return_convention != ReturnConvention::HAS_RETURN && return_convention != ReturnConvention::NO_RETURN)
-                rewrite_args = NULL;
+extern "C" PyObject* applySlice(PyObject* u, PyObject* v, PyObject* w) {
+    std::unique_ptr<Rewriter> rewriter(
+        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "apply_slice"));
 
-            if (rewrite_args)
-                assert(has_slice_attr == (return_convention == ReturnConvention::HAS_RETURN));
-        }
-    } else {
-        has_slice_attr = (bool)typeLookup(target->cls, slice_str);
-    }
+    return applySliceIntern<CXX>(u, v, w, rewriter);
+}
 
-    if (!has_slice_attr) {
-        return callItemAttr<S, rewritable>(target, item_str, slice, value, rewrite_args);
-    }
+/* u[v:w] = x */
+template <ExceptionStyle S>
+int assignSliceInternal(PyObject* u, PyObject* v, PyObject* w, PyObject* x,
+                        std::unique_ptr<Rewriter>& rewriter) noexcept(S == CAPI) {
+    PySequenceMethods* sq = u->cls->tp_as_sequence;
+    if (sq && sq->sq_ass_slice && isSliceIndexHelper(v, w)) {
+        // call __setslice__ / __delslice__
+        if (rewriter) {
+            RewriterVar* r_obj = rewriter->getArg(0);
+            RewriterVar* r_start = rewriter->getArg(1);
+            RewriterVar* r_stop = rewriter->getArg(2);
+            RewriterVar* r_value = rewriter->getArg(3);
 
-    // Need a slice object to use the slice operators.
-    if (rewrite_args) {
-        rewrite_args->arg1->addAttrGuard(offsetof(Box, cls), (uint64_t)slice->cls);
-    }
-    if (slice->cls != slice_cls) {
-        return callItemAttr<S, rewritable>(target, item_str, slice, value, rewrite_args);
-    }
+            RewriterVar* r_cls = r_obj->getAttr(offsetof(Box, cls));
+            RewriterVar* r_sq = r_cls->getAttr(offsetof(BoxedClass, tp_as_sequence));
+            r_sq->addGuardNotEq(0);
+            r_sq->addAttrGuard(offsetof(PySequenceMethods, sq_ass_slice), (intptr_t)sq->sq_ass_slice);
 
-    BoxedSlice* bslice = (BoxedSlice*)slice;
+            // handle int >= 0 and null because it is so frequent
+            if ((!v || (v->cls == int_cls && (PyInt_AS_LONG(v) >= 0)))
+                && (!w || (w->cls == int_cls && (PyInt_AS_LONG(w) >= 0)))) {
+                RewriterVar* r_start_int = NULL;
+                RewriterVar* r_stop_int = NULL;
+                std::tie(r_start_int, r_stop_int) = extractIntSliceStartStop(rewriter, v, w, r_start, r_stop);
+                RewriterVar* r_rtn
+                    = rewriter->call(true, (void*)sq->sq_ass_slice, r_obj, r_start_int, r_stop_int, r_value);
+                if (S == CXX) {
+                    rewriter->checkAndThrowCAPIException(r_rtn, -1, assembler::MovType::L);
+                    rewriter->commit();
+                } else
+                    rewriter->commitReturningNonPython(r_rtn);
+            } else {
+                RewriterVar* r_guard = rewriter->call(false, (void*)isSliceIndexHelper, r_start, r_stop);
+                r_guard->addGuardNotEq(0);
 
-    // If we use slice notation with a step parameter (e.g. o[1:10:2]), the slice operator
-    // functions don't support that, so fallback to the item operator functions.
-    if (bslice->step->cls != none_cls) {
-        if (rewrite_args) {
-            rewrite_args->arg1->getAttr(offsetof(BoxedSlice, step))
-                ->addAttrGuard(offsetof(Box, cls), (uint64_t)none_cls, /*negate=*/true);
-        }
-
-        return callItemAttr<S, rewritable>(target, item_str, slice, value, rewrite_args);
-    } else {
-        rewrite_args = NULL;
-        REWRITE_ABORTED("");
-
-        // If the slice cannot be used as integer slices, also fall back to the get operator.
-        // We could optimize further here by having a version of isSliceIndex that
-        // creates guards, but it would only affect some rare edge cases.
-        if (!isSliceIndex(bslice->start) || !isSliceIndex(bslice->stop)) {
-            return callItemAttr<S, NOT_REWRITABLE>(target, item_str, slice, value, rewrite_args);
-        }
-
-        // If we don't specify the start/stop (e.g. o[:]), the slice operator functions
-        // CPython seems to use 0 and sys.maxint as the default values.
-        int64_t start = 0, stop = PyInt_GetMax();
-        if (S == CAPI) {
-            if (bslice->start != None)
-                if (!_PyEval_SliceIndex(bslice->start, &start))
-                    return NULL;
-            if (bslice->stop != None)
-                if (!_PyEval_SliceIndex(bslice->stop, &stop))
-                    return NULL;
-        } else {
-            sliceIndex(bslice->start, &start);
-            sliceIndex(bslice->stop, &stop);
-        }
-
-        adjustNegativeIndicesOnObject(target, &start, &stop);
-        if (PyErr_Occurred())
-            throwCAPIException();
-
-        Box* boxedStart = boxInt(start);
-        Box* boxedStop = boxInt(stop);
-        AUTO_DECREF(boxedStart);
-        AUTO_DECREF(boxedStop);
-
-        if (rewrite_args) {
-            CallattrRewriteArgs crewrite_args(rewrite_args);
-            Box* r;
-            if (value)
-                r = callattrInternal3<S, REWRITABLE>(target, slice_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(3),
-                                                     boxedStart, boxedStop, value);
-            else
-                r = callattrInternal2<S, REWRITABLE>(target, slice_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(2),
-                                                     boxedStart, boxedStop);
-
-            if (crewrite_args.isSuccessful()) {
-                rewrite_args->out_success = true;
-                rewrite_args->out_rtn = crewrite_args.getReturn(ReturnConvention::HAS_RETURN);
+                RewriterVar* r_rtn
+                    = rewriter->call(true, (void*)&assignSliceHelper<S>, r_obj, r_start, r_stop, r_value);
+                if (S == CAPI)
+                    rewriter->commitReturningNonPython(r_rtn);
+                else
+                    rewriter->commit();
             }
-            return r;
-        } else {
-            if (value)
-                return callattrInternal3<S, NOT_REWRITABLE>(target, slice_str, CLASS_ONLY, NULL, ArgPassSpec(3),
-                                                            boxedStart, boxedStop, value);
-            else
-                return callattrInternal2<S, NOT_REWRITABLE>(target, slice_str, CLASS_ONLY, NULL, ArgPassSpec(2),
-                                                            boxedStart, boxedStop);
         }
+        return assignSliceHelper<S>(u, v, w, x);
     }
+
+    // call __setitem__ / __delitem__
+    PyObject* slice = PySlice_New(v, w, NULL);
+    if (slice != NULL) {
+        int res;
+        if (x != NULL)
+            res = PyObject_SetItem(u, slice, x);
+        else
+            res = PyObject_DelItem(u, slice);
+        Py_DECREF(slice);
+        if (S == CXX && res == -1)
+            throwCAPIException();
+        return res;
+    } else {
+        if (S == CXX)
+            throwCAPIException();
+        return -1;
+    }
+}
+
+extern "C" int assign_slice(PyObject* u, PyObject* v, PyObject* w, PyObject* x) noexcept {
+    std::unique_ptr<Rewriter> rewriter(
+        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 4, "assign_slice"));
+
+    return assignSliceInternal<CAPI>(u, v, w, x, rewriter);
+}
+
+extern "C" void assignSlice(PyObject* u, PyObject* v, PyObject* w, PyObject* x) {
+    std::unique_ptr<Rewriter> rewriter(
+        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 4, "assign_slice"));
+
+    assignSliceInternal<CXX>(u, v, w, x, rewriter);
 }
 
 template <ExceptionStyle S, Rewritable rewritable>
@@ -6303,7 +6413,6 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
     }
 
     static BoxedString* getitem_str = getStaticString("__getitem__");
-    static BoxedString* getslice_str = getStaticString("__getslice__");
 
     Box* rtn;
     try {
@@ -6311,7 +6420,7 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
             CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->target, rewrite_args->destination);
             crewrite_args.arg1 = rewrite_args->slice;
 
-            rtn = callItemOrSliceAttr<S, REWRITABLE>(target, getitem_str, getslice_str, slice, NULL, &crewrite_args);
+            rtn = callItemAttr<S, REWRITABLE>(target, getitem_str, slice, NULL, &crewrite_args);
 
             if (!crewrite_args.out_success) {
                 rewrite_args = NULL;
@@ -6319,7 +6428,7 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
                 rewrite_args->out_rtn = crewrite_args.out_rtn;
             }
         } else {
-            rtn = callItemOrSliceAttr<S, NOT_REWRITABLE>(target, getitem_str, getslice_str, slice, NULL, NULL);
+            rtn = callItemAttr<S, NOT_REWRITABLE>(target, getitem_str, slice, NULL, NULL);
         }
     } catch (ExcInfo e) {
         if (S == CAPI) {
@@ -6358,13 +6467,13 @@ Box* getitemInternal(Box* target, Box* slice, GetitemRewriteArgs* rewrite_args) 
     return rtn;
 }
 // Force instantiation of the template
-template Box* getitemInternal<CAPI, REWRITABLE>(Box*, Box*, GetitemRewriteArgs*);
+template Box* getitemInternal<CAPI, REWRITABLE>(Box*, Box*, GetitemRewriteArgs*) noexcept;
 template Box* getitemInternal<CXX, REWRITABLE>(Box*, Box*, GetitemRewriteArgs*);
-template Box* getitemInternal<CAPI, NOT_REWRITABLE>(Box*, Box*, GetitemRewriteArgs*);
+template Box* getitemInternal<CAPI, NOT_REWRITABLE>(Box*, Box*, GetitemRewriteArgs*) noexcept;
 template Box* getitemInternal<CXX, NOT_REWRITABLE>(Box*, Box*, GetitemRewriteArgs*);
 
 // target[slice]
-extern "C" Box* getitem(Box* target, Box* slice) {
+template <ExceptionStyle S> static Box* getitemEntry(Box* target, Box* slice, void* return_addr) noexcept(S == CAPI) {
     STAT_TIMER(t0, "us_timer_slowpath_getitem", 10);
 
     // This possibly could just be represented as a single callattr; the only tricky part
@@ -6374,49 +6483,14 @@ extern "C" Box* getitem(Box* target, Box* slice) {
     static StatCounter slowpath_getitem("slowpath_getitem");
     slowpath_getitem.log();
 
-    std::unique_ptr<Rewriter> rewriter(
-        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getitem"));
+    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(return_addr, 2, "getitem"));
 
     Box* rtn;
     if (rewriter.get()) {
         GetitemRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1),
                                         rewriter->getReturnDestination());
 
-        rtn = getitemInternal<CXX>(target, slice, &rewrite_args);
-
-        if (!rewrite_args.out_success) {
-            rewriter.reset(NULL);
-        } else {
-            rewriter->commitReturning(rewrite_args.out_rtn);
-        }
-    } else {
-        rtn = getitemInternal<CXX>(target, slice);
-    }
-    assert(rtn);
-
-    return rtn;
-}
-
-// target[slice]
-extern "C" Box* getitem_capi(Box* target, Box* slice) noexcept {
-    STAT_TIMER(t0, "us_timer_slowpath_getitem", 10);
-
-    // This possibly could just be represented as a single callattr; the only tricky part
-    // are the error messages.
-    // Ex "(1)[1]" and "(1).__getitem__(1)" give different error messages.
-
-    static StatCounter slowpath_getitem("slowpath_getitem");
-    slowpath_getitem.log();
-
-    std::unique_ptr<Rewriter> rewriter(
-        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getitem"));
-
-    Box* rtn;
-    if (rewriter.get()) {
-        GetitemRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1),
-                                        rewriter->getReturnDestination());
-
-        rtn = getitemInternal<CAPI>(target, slice, &rewrite_args);
+        rtn = getitemInternal<S, REWRITABLE>(target, slice, &rewrite_args);
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
@@ -6424,16 +6498,18 @@ extern "C" Box* getitem_capi(Box* target, Box* slice) noexcept {
             rewriter->commitReturning(rewrite_args.out_rtn);
         }
     } else {
-        rtn = getitemInternal<CAPI>(target, slice);
+        rtn = getitemInternal<S>(target, slice);
     }
 
     return rtn;
 }
 
-static void setitemHelper(Box* target, Box* slice, Box* value) {
-    int ret = target->cls->tp_as_mapping->mp_ass_subscript(target, slice, value);
-    if (ret == -1)
-        throwCAPIException();
+extern "C" Box* getitem(Box* target, Box* slice) {
+    return getitemEntry<CXX>(target, slice, __builtin_extract_return_addr(__builtin_return_address(0)));
+}
+
+extern "C" Box* getitem_capi(Box* target, Box* slice) noexcept {
+    return getitemEntry<CAPI>(target, slice, __builtin_extract_return_addr(__builtin_return_address(0)));
 }
 
 // target[slice] = value
@@ -6447,7 +6523,6 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setitem"));
 
     static BoxedString* setitem_str = getStaticString("__setitem__");
-    static BoxedString* setslice_str = getStaticString("__setslice__");
 
     auto&& m = target->cls->tp_as_mapping;
     if (m && m->mp_ass_subscript && m->mp_ass_subscript != slot_mp_ass_subscript) {
@@ -6458,11 +6533,15 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
             RewriterVar* r_cls = r_obj->getAttr(offsetof(Box, cls));
             RewriterVar* r_m = r_cls->getAttr(offsetof(BoxedClass, tp_as_mapping));
             r_m->addGuardNotEq(0);
-            rewriter->call(true, (void*)setitemHelper, r_obj, r_slice, r_value);
+            r_m->addAttrGuard(offsetof(PyMappingMethods, mp_ass_subscript), (intptr_t)m->mp_ass_subscript);
+            RewriterVar* r_ret = rewriter->call(true, (void*)m->mp_ass_subscript, r_obj, r_slice, r_value);
+            rewriter->checkAndThrowCAPIException(r_ret, -1, assembler::MovType::L);
             rewriter->commit();
         }
 
-        setitemHelper(target, slice, value);
+        int ret = m->mp_ass_subscript(target, slice, value);
+        if (ret == -1)
+            throwCAPIException();
         return;
     }
 
@@ -6472,13 +6551,13 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
         rewrite_args.arg1 = rewriter->getArg(1);
         rewrite_args.arg2 = rewriter->getArg(2);
 
-        rtn = callItemOrSliceAttr<CXX, REWRITABLE>(target, setitem_str, setslice_str, slice, value, &rewrite_args);
+        rtn = callItemAttr<CXX, REWRITABLE>(target, setitem_str, slice, value, &rewrite_args);
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         }
     } else {
-        rtn = callItemOrSliceAttr<CXX, NOT_REWRITABLE>(target, setitem_str, setslice_str, slice, value, NULL);
+        rtn = callItemAttr<CXX, NOT_REWRITABLE>(target, setitem_str, slice, value, NULL);
     }
 
     if (rtn == NULL) {
@@ -6501,20 +6580,18 @@ extern "C" void delitem(Box* target, Box* slice) {
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "delitem"));
 
     static BoxedString* delitem_str = getStaticString("__delitem__");
-    static BoxedString* delslice_str = getStaticString("__delslice__");
-
     Box* rtn;
     if (rewriter.get()) {
         CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
         rewrite_args.arg1 = rewriter->getArg(1);
 
-        rtn = callItemOrSliceAttr<CXX, REWRITABLE>(target, delitem_str, delslice_str, slice, NULL, &rewrite_args);
+        rtn = callItemAttr<CXX, REWRITABLE>(target, delitem_str, slice, NULL, &rewrite_args);
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         }
     } else {
-        rtn = callItemOrSliceAttr<CXX, NOT_REWRITABLE>(target, delitem_str, delslice_str, slice, NULL, NULL);
+        rtn = callItemAttr<CXX, NOT_REWRITABLE>(target, delitem_str, slice, NULL, NULL);
     }
 
     if (rtn == NULL) {

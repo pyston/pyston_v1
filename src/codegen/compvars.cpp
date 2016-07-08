@@ -331,6 +331,9 @@ public:
 
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                               CompilerVariable* slice) override {
+        ExceptionStyle target_exception_style = info.preferredExceptionStyle();
+        bool do_patchpoint = ENABLE_ICGETITEMS;
+
         if (slice->getType() == UNBOXED_SLICE) {
             UnboxedSlice slice_val = extractSlice(slice);
 
@@ -340,31 +343,37 @@ public:
                     = var->getType()->getattrType(attr, true)->callType(ArgPassSpec(1), { SLICE }, NULL);
                 assert(return_type->getConcreteType() == return_type);
 
-                if (return_type != UNDEF) {
-                    llvm::Value* cstart, *cstop;
-                    cstart = slice_val.start ? slice_val.start->makeConverted(emitter, UNKNOWN)->getValue()
-                                             : emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED);
-                    cstop = slice_val.stop ? slice_val.stop->makeConverted(emitter, UNKNOWN)->getValue()
-                                           : emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED);
-
-                    llvm::Value* r = emitter.createCall3(info.unw_info, g.funcs.apply_slice, var->getValue(), cstart,
-                                                         cstop, CAPI, getNullPtr(g.llvm_value_type_ptr));
-                    emitter.setType(r, RefType::OWNED);
+                llvm::Value* cstart, *cstop;
+                cstart = slice_val.start ? slice_val.start->makeConverted(emitter, UNKNOWN)->getValue()
+                                         : emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED);
+                cstop = slice_val.stop ? slice_val.stop->makeConverted(emitter, UNKNOWN)->getValue()
+                                       : emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED);
+                llvm::Value* r = NULL;
+                if (do_patchpoint) {
+                    ICSetupInfo* pp = createGetitemIC(info.getTypeRecorder(), info.getBJitICInfo());
+                    llvm::Instruction* uncasted = emitter.createIC(
+                        pp, (void*)(target_exception_style == CAPI ? pyston::apply_slice : pyston::applySlice),
+                        { var->getValue(), cstart, cstop }, info.unw_info, target_exception_style,
+                        getNullPtr(g.llvm_value_type_ptr));
+                    r = createAfter<llvm::IntToPtrInst>(uncasted, uncasted, g.llvm_value_type_ptr, "");
+                } else {
+                    r = emitter.createCall3(
+                        info.unw_info, target_exception_style == CAPI ? g.funcs.apply_slice : g.funcs.applySlice,
+                        var->getValue(), cstart, cstop, target_exception_style, getNullPtr(g.llvm_value_type_ptr));
+                }
+                emitter.setType(r, RefType::OWNED);
+                if (target_exception_style == CAPI)
                     emitter.setNullable(r, true);
 
+                if (return_type != UNDEF)
                     return new ConcreteCompilerVariable(static_cast<ConcreteCompilerType*>(return_type), r);
-                } else {
-                    // TODO: we could directly emit an exception if we know getitem is undefined but for now let it just
-                    // call the normal getitem which will raise the exception
-                }
+                return new ConcreteCompilerVariable(UNKNOWN, r);
             }
         }
 
         ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
 
-        ExceptionStyle target_exception_style = info.preferredExceptionStyle();
 
-        bool do_patchpoint = ENABLE_ICGETITEMS;
         llvm::Value* rtn;
         if (do_patchpoint) {
             ICSetupInfo* pp = createGetitemIC(info.getTypeRecorder(), info.getBJitICInfo());

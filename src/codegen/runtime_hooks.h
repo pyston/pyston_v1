@@ -39,7 +39,7 @@ struct GlobalFuncs {
     llvm::Value* getattr, *getattr_capi, *setattr, *delattr, *delitem, *delGlobal, *nonzero, *binop, *compare,
         *augbinop, *unboxedLen, *getitem, *getitem_capi, *getclsattr, *getGlobal, *setitem, *unaryop, *import,
         *importFrom, *importStar, *repr, *exceptionMatches, *yield_capi, *getiterHelper, *hasnext, *setGlobal,
-        *apply_slice;
+        *apply_slice, *applySlice, *assignSlice;
 
     llvm::Value* unpackIntoArray, *raiseAttributeError, *raiseAttributeErrorStr, *raiseAttributeErrorCapi,
         *raiseAttributeErrorStrCapi, *raiseNotIterableError, *raiseIndexErrorStr, *raiseIndexErrorStrCapi,

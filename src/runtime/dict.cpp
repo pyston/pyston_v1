@@ -377,13 +377,13 @@ extern "C" BORROWED(PyObject*) PyDict_GetItem(PyObject* dict, PyObject* key) noe
         /* preserve the existing exception */
         PyObject* err_type, *err_value, *err_tb;
         PyErr_Fetch(&err_type, &err_value, &err_tb);
-        Box* b = getitemInternal<CAPI>(dict, key);
+        Box* b = PyObject_GetItem(dict, key);
         /* ignore errors */
         PyErr_Restore(err_type, err_value, err_tb);
         Py_XDECREF(b);
         return b;
     } else {
-        Box* b = getitemInternal<CAPI>(dict, key);
+        Box* b = PyObject_GetItem(dict, key);
         if (b == NULL)
             PyErr_Clear();
         else
@@ -514,13 +514,7 @@ extern "C" int PyDict_DelItem(PyObject* op, PyObject* key) noexcept {
     }
 
     ASSERT(op->cls == attrwrapper_cls, "%s", getTypeName(op));
-    try {
-        delitem(op, key);
-        return 0;
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return -1;
-    }
+    return PyObject_DelItem(op, key);
 }
 
 extern "C" int PyDict_DelItemString(PyObject* v, const char* key) noexcept {

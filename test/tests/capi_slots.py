@@ -242,3 +242,12 @@ class C(object):
 c = C()
 proxy = weakref.proxy(c)
 print isinstance(proxy, C)
+
+# test if __setslice__ is prioritised over mp_ass_subscript
+class D(slots_test.SlotsTesterMap):
+    def __setslice__(self, *args):
+        print "setslice", args
+d = D(1)
+for i in xrange(10):
+    print i
+    d[1:2] = 1

@@ -1547,7 +1547,6 @@ private:
     CompilerVariable* evalSubscript(AST_Subscript* node, const UnwindInfo& unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);
         CompilerVariable* slice = evalSlice(node->slice, unw_info);
-
         CompilerVariable* rtn = value->getitem(emitter, getOpInfoForNode(node, unw_info), slice);
         return rtn;
     }
@@ -2015,31 +2014,59 @@ private:
         t->setattr(emitter, getEmptyOpInfo(unw_info), target->attr.getBox(), val);
     }
 
-    void _doSetitem(AST_Subscript* target, CompilerVariable* val, const UnwindInfo& unw_info) {
-        CompilerVariable* tget = evalExpr(target->value, unw_info);
-        CompilerVariable* slice = evalSlice(target->slice, unw_info);
+    void _assignSlice(llvm::Value* target, llvm::Value* value, const UnboxedSlice& slice_val,
+                      const UnwindInfo& unw_info) {
+        llvm::Value* cstart, *cstop;
+        cstart = slice_val.start ? slice_val.start->makeConverted(emitter, UNKNOWN)->getValue()
+                                 : emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED);
+        cstop = slice_val.stop ? slice_val.stop->makeConverted(emitter, UNKNOWN)->getValue()
+                               : emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED);
 
-        ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
-        ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
-
-        ConcreteCompilerVariable* converted_val = val->makeConverted(emitter, val->getBoxType());
-
-        // TODO add a CompilerVariable::setattr, which can (similar to getitem)
-        // statically-resolve the function if possible, and only fall back to
-        // patchpoints if it couldn't.
         bool do_patchpoint = ENABLE_ICSETITEMS;
         if (do_patchpoint) {
             ICSetupInfo* pp = createSetitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
-            llvm_args.push_back(converted_target->getValue());
-            llvm_args.push_back(converted_slice->getValue());
-            llvm_args.push_back(converted_val->getValue());
+            llvm_args.push_back(target);
+            llvm_args.push_back(cstart);
+            llvm_args.push_back(cstop);
+            llvm_args.push_back(value);
 
-            emitter.createIC(pp, (void*)pyston::setitem, llvm_args, unw_info);
+            emitter.createIC(pp, (void*)pyston::assignSlice, llvm_args, unw_info);
         } else {
-            emitter.createCall3(unw_info, g.funcs.setitem, converted_target->getValue(), converted_slice->getValue(),
-                                converted_val->getValue());
+            emitter.createCall(unw_info, g.funcs.assignSlice, { target, cstart, cstop, value });
+        }
+    }
+
+    void _doSetitem(AST_Subscript* target, CompilerVariable* val, const UnwindInfo& unw_info) {
+        CompilerVariable* tget = evalExpr(target->value, unw_info);
+
+        CompilerVariable* slice = evalSlice(target->slice, unw_info);
+        ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
+        ConcreteCompilerVariable* converted_val = val->makeConverted(emitter, val->getBoxType());
+
+        if (slice->getType() == UNBOXED_SLICE && !extractSlice(slice).step) {
+            _assignSlice(converted_target->getValue(), converted_val->getValue(), extractSlice(slice), unw_info);
+        } else {
+            ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
+
+            // TODO add a CompilerVariable::setattr, which can (similar to getitem)
+            // statically-resolve the function if possible, and only fall back to
+            // patchpoints if it couldn't.
+            bool do_patchpoint = ENABLE_ICSETITEMS;
+            if (do_patchpoint) {
+                ICSetupInfo* pp = createSetitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
+
+                std::vector<llvm::Value*> llvm_args;
+                llvm_args.push_back(converted_target->getValue());
+                llvm_args.push_back(converted_slice->getValue());
+                llvm_args.push_back(converted_val->getValue());
+
+                emitter.createIC(pp, (void*)pyston::setitem, llvm_args, unw_info);
+            } else {
+                emitter.createCall3(unw_info, g.funcs.setitem, converted_target->getValue(),
+                                    converted_slice->getValue(), converted_val->getValue());
+            }
         }
     }
 
@@ -2148,19 +2175,27 @@ private:
         CompilerVariable* slice = evalSlice(target->slice, unw_info);
 
         ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
-        ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
 
-        bool do_patchpoint = ENABLE_ICDELITEMS;
-        if (do_patchpoint) {
-            ICSetupInfo* pp = createDelitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
-
-            std::vector<llvm::Value*> llvm_args;
-            llvm_args.push_back(converted_target->getValue());
-            llvm_args.push_back(converted_slice->getValue());
-
-            emitter.createIC(pp, (void*)pyston::delitem, llvm_args, unw_info);
+        if (slice->getType() == UNBOXED_SLICE && !extractSlice(slice).step) {
+            _assignSlice(converted_target->getValue(),
+                         emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED), extractSlice(slice),
+                         unw_info);
         } else {
-            emitter.createCall2(unw_info, g.funcs.delitem, converted_target->getValue(), converted_slice->getValue());
+            ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
+
+            bool do_patchpoint = ENABLE_ICDELITEMS;
+            if (do_patchpoint) {
+                ICSetupInfo* pp = createDelitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
+
+                std::vector<llvm::Value*> llvm_args;
+                llvm_args.push_back(converted_target->getValue());
+                llvm_args.push_back(converted_slice->getValue());
+
+                emitter.createIC(pp, (void*)pyston::delitem, llvm_args, unw_info);
+            } else {
+                emitter.createCall2(unw_info, g.funcs.delitem, converted_target->getValue(),
+                                    converted_slice->getValue());
+            }
         }
     }
 
