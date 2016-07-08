@@ -21,6 +21,7 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/IR/Instructions.h"
 
+#include "core/cfg.h"
 #include "core/stringpool.h"
 #include "core/types.h"
 
@@ -43,9 +44,9 @@ class TypeAnalysis;
 class RefcountTracker;
 class UnwindInfo;
 
-typedef std::unordered_map<InternedString, CompilerVariable*> SymbolTable;
-typedef std::map<InternedString, CompilerVariable*> SortedSymbolTable;
-typedef std::unordered_map<InternedString, ConcreteCompilerVariable*> ConcreteSymbolTable;
+typedef VRegMap<CompilerVariable*> SymbolTable;
+typedef VRegMap<llvm::Value*> DefinednessTable;
+typedef VRegMap<ConcreteCompilerVariable*> ConcreteSymbolTable;
 
 extern const std::string CREATED_CLOSURE_NAME;
 extern const std::string PASSED_CLOSURE_NAME;
@@ -75,12 +76,17 @@ private:
     llvm::Value* globals;
     llvm::Value* vregs;
     llvm::Value* stmt;
+
+    llvm::Value* passed_closure = NULL, * created_closure = NULL, * passed_generator = NULL;
+
     int scratch_size;
 
 public:
     IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<PhiAnalysis> phis,
                ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info, RefcountTracker* refcount_tracker);
     ~IRGenState();
+
+    CFG* getCFG() { return getSourceInfo()->cfg; }
 
     CompiledFunction* getCurFunction() { return cf; }
     FunctionMetadata* getMD() { return md; }
@@ -119,6 +125,14 @@ public:
 
     ParamNames* getParamNames() { return param_names; }
 
+    llvm::Value* getPassedClosure();
+    llvm::Value* getCreatedClosure();
+    llvm::Value* getPassedGenerator();
+
+    void setPassedClosure(llvm::Value*);
+    void setCreatedClosure(llvm::Value*);
+    void setPassedGenerator(llvm::Value*);
+
     // Returns the custom globals, or the module if the globals come from the module.
     llvm::Value* getGlobals();
     // Returns the custom globals, or null if the globals come from the module.
@@ -140,15 +154,20 @@ public:
         // symbol_table records which Python variables are bound to what CompilerVariables at the end of this block.
         // phi_symbol_table records the ones that will need to be `phi'd.
         // both only record non-globals.
+
+        // TODO: switch these to unique_ptr's
         SymbolTable* symbol_table;
         ConcreteSymbolTable* phi_symbol_table;
+        DefinednessTable* definedness_vars;
         llvm::BasicBlock* ending_block;
         llvm::SmallVector<ExceptionState, 2> exception_state;
 
-        EndingState(SymbolTable* symbol_table, ConcreteSymbolTable* phi_symbol_table, llvm::BasicBlock* ending_block,
+        EndingState(SymbolTable* symbol_table, ConcreteSymbolTable* phi_symbol_table,
+                    DefinednessTable* definedness_vars, llvm::BasicBlock* ending_block,
                     llvm::ArrayRef<ExceptionState> exception_state)
             : symbol_table(symbol_table),
               phi_symbol_table(phi_symbol_table),
+              definedness_vars(definedness_vars),
               ending_block(ending_block),
               exception_state(exception_state.begin(), exception_state.end()) {}
     };
@@ -159,6 +178,8 @@ public:
         = 0;
 
     virtual void giveLocalSymbol(InternedString name, CompilerVariable* var) = 0;
+    virtual void giveLocalSymbol(int vreg, CompilerVariable* var) = 0;
+    virtual void giveDefinednessVar(int vreg, llvm::Value* val) = 0;
     virtual void copySymbolsFrom(SymbolTable* st) = 0;
     virtual void run(const CFGBlock* block) = 0; // primary entry point
     virtual EndingState getEndingSymbolTable() = 0;

@@ -77,13 +77,13 @@ ParamNames::ParamNames(AST* ast, InternedStringPool& pool)
             }
         }
 
-        vararg = arguments->vararg.s();
-        if (vararg.size())
-            vararg_name = new AST_Name(pool.get(vararg), AST_TYPE::Param, arguments->lineno, arguments->col_offset);
+        vararg_name = arguments->vararg;
+        if (vararg_name)
+            vararg = vararg_name->id.s();
 
-        kwarg = arguments->kwarg.s();
-        if (kwarg.size())
-            kwarg_name = new AST_Name(pool.get(kwarg), AST_TYPE::Param, arguments->lineno, arguments->col_offset);
+        kwarg_name = arguments->kwarg;
+        if (kwarg_name)
+            kwarg = kwarg_name->id.s();
     } else {
         RELEASE_ASSERT(0, "%d", ast->type);
     }
@@ -261,7 +261,7 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
 
         if (entry_descriptor && VERBOSITY("irgen") >= 2) {
             for (const auto& p : entry_descriptor->args) {
-                ss << p.first.s() << ": " << p.second->debugName() << '\n';
+                ss << p.first << ": " << p.second->debugName() << '\n';
             }
         }
 
@@ -680,10 +680,10 @@ void CompiledFunction::speculationFailed() {
 }
 
 std::unordered_set<CompiledFunction*> all_compiled_functions;
-CompiledFunction::CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
+CompiledFunction::CompiledFunction(FunctionMetadata* md, FunctionSpecialization* spec, void* code, EffortLevel effort,
                                    ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor)
-    : md(NULL),
-      func(func),
+    : md(md),
+      func(NULL),
       effort(effort),
       exception_style(exception_style),
       spec(spec),
@@ -827,6 +827,6 @@ void FunctionMetadata::addVersion(void* f, ConcreteCompilerType* rtn_type,
 #endif
 
     FunctionSpecialization* spec = new FunctionSpecialization(processType(rtn_type), arg_types);
-    addVersion(new CompiledFunction(NULL, spec, f, EffortLevel::MAXIMAL, exception_style, NULL));
+    addVersion(new CompiledFunction(this, spec, f, EffortLevel::MAXIMAL, exception_style, NULL));
 }
 }

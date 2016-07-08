@@ -316,6 +316,7 @@ class BoxedGenerator;
 class ICInfo;
 class LocationMap;
 class JitCodeBlock;
+class FrameInfo;
 
 extern std::vector<Box*> constants;
 extern std::vector<Box*> late_constants; // constants that should be freed after normal constants
@@ -346,6 +347,8 @@ public:
 
     // The function pointer to the generated code.  For convenience, it can be accessed
     // as one of many different types.
+    // TODO: we instead make these accessor-functions that make sure that the code actually
+    // matches the C signature that we would return.
     union {
         Box* (*call)(Box*, Box*, Box*, Box**);
         Box* (*closure_call)(BoxedClosure*, Box*, Box*, Box*, Box**);
@@ -354,6 +357,7 @@ public:
         Box* (*call1)(Box*, Box*, Box*, Box*, Box**);
         Box* (*call2)(Box*, Box*, Box*, Box*, Box*, Box**);
         Box* (*call3)(Box*, Box*, Box*, Box*, Box*, Box*, Box**);
+        Box* (*call_osr)(BoxedGenerator*, BoxedClosure*, FrameInfo*, Box**);
         void* code;
         uintptr_t code_start;
     };
@@ -375,7 +379,7 @@ public:
     // List of metadata objects for ICs inside this compilation
     std::vector<ICInfo*> ics;
 
-    CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
+    CompiledFunction(FunctionMetadata* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
                      ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor);
 
     ConcreteCompilerType* getReturnType();

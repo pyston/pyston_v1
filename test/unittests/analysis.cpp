@@ -46,13 +46,14 @@ TEST_F(AnalysisTest, augassign) {
     ParamNames param_names(si->ast, si->getInternedStrings());
     CFG* cfg = computeCFG(si, func->body, param_names);
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
+    auto&& vregs = cfg->getVRegInfo();
 
     //cfg->print();
 
     for (CFGBlock* block : cfg->blocks) {
         //printf("%d\n", block->idx);
         if (block->body.back()->type != AST_TYPE::Return)
-            ASSERT_TRUE(liveness->isLiveAtEnd(module->interned_strings->get("a"), block));
+            ASSERT_TRUE(liveness->isLiveAtEnd(vregs.getVReg(module->interned_strings->get("a")), block));
     }
 
     std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(ParamNames(func, si->getInternedStrings()), cfg, liveness.get(), scope_info);
@@ -76,9 +77,12 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     FunctionMetadata* clfunc = new FunctionMetadata(0, false, false, std::move(si));
 
     CFG* cfg = computeCFG(clfunc->source.get(), func->body, clfunc->param_names);
+    clfunc->source->cfg = cfg;
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
 
     // cfg->print();
+
+    auto&& vregs = cfg->getVRegInfo();
 
     InternedString i_str = module->interned_strings->get("i");
     InternedString idi_str = module->interned_strings->get("!is_defined_i");
@@ -95,11 +99,14 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     std::unique_ptr<PhiAnalysis> phis;
 
     if (is_osr) {
+        int vreg = vregs.getVReg(i_str);
         OSREntryDescriptor* entry_descriptor = OSREntryDescriptor::create(clfunc, backedge, CXX);
-        entry_descriptor->args[i_str] = NULL;
+        // need to set it to non-null
+        ConcreteCompilerType* fake_type = (ConcreteCompilerType*)1;
+        entry_descriptor->args[vreg] = fake_type;
         if (i_maybe_undefined)
-            entry_descriptor->args[idi_str] = NULL;
-        entry_descriptor->args[iter_str] = NULL;
+            entry_descriptor->potentially_undefined.set(vreg);
+        entry_descriptor->args[vregs.getVReg(iter_str)] = fake_type;
         phis = computeRequiredPhis(entry_descriptor, liveness.get(), scope_info);
     } else {
         phis = computeRequiredPhis(ParamNames(func, clfunc->source->getInternedStrings()), cfg, liveness.get(), scope_info);
@@ -110,15 +117,14 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     // into the BB which the analysis might not otherwise track.
 
     auto required_phis = phis->getAllRequiredFor(backedge->target);
-    EXPECT_EQ(1, required_phis.count(i_str));
-    EXPECT_EQ(0, required_phis.count(idi_str));
-    EXPECT_EQ(1, required_phis.count(iter_str));
-    EXPECT_EQ(2, required_phis.size());
+    EXPECT_EQ(1, required_phis[vregs.getVReg(i_str)]);
+    EXPECT_EQ(1, required_phis[vregs.getVReg(iter_str)]);
+    EXPECT_EQ(2, required_phis.numSet());
 
-    EXPECT_EQ(!is_osr || i_maybe_undefined, phis->isPotentiallyUndefinedAt(i_str, backedge->target));
-    EXPECT_FALSE(phis->isPotentiallyUndefinedAt(iter_str, backedge->target));
-    EXPECT_EQ(!is_osr || i_maybe_undefined, phis->isPotentiallyUndefinedAfter(i_str, loop_backedge));
-    EXPECT_FALSE(phis->isPotentiallyUndefinedAfter(iter_str, loop_backedge));
+    EXPECT_EQ(!is_osr || i_maybe_undefined, phis->isPotentiallyUndefinedAt(vregs.getVReg(i_str), backedge->target));
+    EXPECT_FALSE(phis->isPotentiallyUndefinedAt(vregs.getVReg(iter_str), backedge->target));
+    EXPECT_EQ(!is_osr || i_maybe_undefined, phis->isPotentiallyUndefinedAfter(vregs.getVReg(i_str), loop_backedge));
+    EXPECT_FALSE(phis->isPotentiallyUndefinedAfter(vregs.getVReg(iter_str), loop_backedge));
 
     // Now, let's verify that we don't need a phi after the loop
 
@@ -127,9 +133,9 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     ASSERT_EQ(2, if_join->predecessors.size());
 
     if (is_osr)
-        EXPECT_EQ(0, phis->getAllRequiredFor(if_join).size());
+        EXPECT_EQ(0, phis->getAllRequiredFor(if_join).numSet());
     else
-        EXPECT_EQ(1, phis->getAllRequiredFor(if_join).size());
+        EXPECT_EQ(1, phis->getAllRequiredFor(if_join).numSet());
 }
 
 TEST_F(AnalysisTest, osr_initial) {

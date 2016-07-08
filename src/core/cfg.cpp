@@ -232,6 +232,9 @@ private:
         CFGBlock* exc_dest;
         // variable names to store the exception (type, value, traceback) in
         InternedString exc_type_name, exc_value_name, exc_traceback_name;
+
+        // Similar to did_why: says whether the block might have been jumped-to
+        bool maybe_taken;
     };
 
     // ---------- Member fields ----------
@@ -517,9 +520,11 @@ private:
         return node;
     }
 
-    void pushJump(CFGBlock* target, bool allow_backedge = false) {
+    void pushJump(CFGBlock* target, bool allow_backedge = false, int lineno = 0) {
         AST_Jump* rtn = new AST_Jump();
         rtn->target = target;
+        rtn->lineno = lineno;
+
         push_back(rtn);
         curblock->connectTo(target, allow_backedge);
         curblock = nullptr;
@@ -1007,8 +1012,8 @@ private:
         InternedString func_name = internString("<comprehension>");
         func->name = func_name;
         func->args = new AST_arguments();
-        func->args->vararg = internString("");
-        func->args->kwarg = internString("");
+        func->args->vararg = NULL;
+        func->args->kwarg = NULL;
         scoping_analysis->registerScopeReplacement(node, func); // critical bit
         return new AST_MakeFunction(func);
     }
@@ -1574,6 +1579,7 @@ public:
             curblock->connectTo(exc_dest);
 
         ExcBlockInfo& exc_info = exc_handlers.back();
+        exc_info.maybe_taken = true;
 
         curblock = exc_dest;
         // TODO: need to clear some temporaries here
@@ -1613,7 +1619,6 @@ public:
 
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeClass(def));
-        // is this name mangling correct?
         pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, 0, true));
 
         return true;
@@ -1635,7 +1640,6 @@ public:
 
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeFunction(def));
-        // is this name mangling correct?
         pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, node->col_offset, true));
 
         return true;
@@ -2266,7 +2270,7 @@ public:
             curblock->connectTo(end_false);
 
             curblock = end_true;
-            pushJump(loop_block, true);
+            pushJump(loop_block, true, getLastLinenoSub(node->body.back()));
 
             curblock = end_false;
             pushJump(else_block);
@@ -2341,7 +2345,7 @@ public:
         InternedString exc_type_name = nodeName("type");
         InternedString exc_value_name = nodeName("value");
         InternedString exc_traceback_name = nodeName("traceback");
-        exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name });
+        exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name, false });
 
         for (AST_stmt* subnode : node->body) {
             subnode->accept(this);
@@ -2464,7 +2468,7 @@ public:
         InternedString exc_value_name = nodeName("value");
         InternedString exc_traceback_name = nodeName("traceback");
         InternedString exc_why_name = nodeName("why");
-        exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name });
+        exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name, false });
 
         CFGBlock* finally_block = cfg->addDeferredBlock();
         pushFinallyContinuation(finally_block, exc_why_name);
@@ -2475,6 +2479,7 @@ public:
                 break;
         }
 
+        bool maybe_exception = exc_handlers.back().maybe_taken;
         exc_handlers.pop_back();
 
         int did_why = continuations.back().did_why; // bad to just reach in like this
@@ -2512,15 +2517,17 @@ public:
                 exitFinallyIf(node, Why::BREAK, exc_why_name);
             if (did_why & (1 << Why::CONTINUE))
                 exitFinallyIf(node, Why::CONTINUE, exc_why_name);
+            if (maybe_exception) {
+                CFGBlock* reraise = cfg->addDeferredBlock();
+                CFGBlock* noexc = makeFinallyCont(Why::EXCEPTION, makeLoad(exc_why_name, node, true), reraise);
 
-            CFGBlock* reraise = cfg->addDeferredBlock();
-            CFGBlock* noexc = makeFinallyCont(Why::EXCEPTION, makeLoad(exc_why_name, node, true), reraise);
+                cfg->placeBlock(reraise);
+                curblock = reraise;
+                pushReraise(getLastLinenoSub(node->finalbody.back()), exc_type_name, exc_value_name,
+                            exc_traceback_name);
 
-            cfg->placeBlock(reraise);
-            curblock = reraise;
-            pushReraise(getLastLinenoSub(node->finalbody.back()), exc_type_name, exc_value_name, exc_traceback_name);
-
-            curblock = noexc;
+                curblock = noexc;
+            }
         }
 
         return true;
@@ -2585,7 +2592,7 @@ public:
 
         CFGBlock* exc_block = cfg->addDeferredBlock();
         exc_block->info = "with_exc";
-        exc_handlers.push_back({ exc_block, exc_type_name, exc_value_name, exc_traceback_name });
+        exc_handlers.push_back({ exc_block, exc_type_name, exc_value_name, exc_traceback_name, false });
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
@@ -2679,12 +2686,15 @@ public:
     ScopeInfo* scope_info;
     CFGBlock* current_block;
     int next_vreg;
-    llvm::DenseMap<InternedString, int> sym_vreg_map;
+    llvm::DenseMap<InternedString, DefaultedInt<-1>> sym_vreg_map;
     llvm::DenseMap<InternedString, std::unordered_set<CFGBlock*>> sym_blocks_map;
+    std::vector<InternedString> vreg_sym_map;
 
     enum Step { TrackBlockUsage = 0, UserVisible, CrossBlock, SingleBlockUse } step;
 
     AssignVRegsVisitor(ScopeInfo* scope_info) : scope_info(scope_info), current_block(0), next_vreg(0) {}
+
+    bool visit_alias(AST_alias* node) override { RELEASE_ASSERT(0, "these should be removed by the cfg"); }
 
     bool visit_arguments(AST_arguments* node) override {
         for (AST_expr* d : node->defaults)
@@ -2748,9 +2758,16 @@ public:
     }
 
     int assignVReg(InternedString id) {
+        assert(id.s().size());
+
         auto it = sym_vreg_map.find(id);
         if (sym_vreg_map.end() == it) {
             sym_vreg_map[id] = next_vreg;
+
+            if (!REUSE_VREGS || step == UserVisible || step == CrossBlock) {
+                assert(next_vreg == vreg_sym_map.size());
+                vreg_sym_map.push_back(id);
+            }
             return next_vreg++;
         }
         return it->second;
@@ -2768,8 +2785,10 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* s
         for (CFGBlock* b : cfg->blocks) {
             visitor.current_block = b;
 
+#if REUSE_VREGS
             if (step == AssignVRegsVisitor::SingleBlockUse)
                 visitor.next_vreg = num_vregs_cross_block;
+#endif
 
             if (b == cfg->getStartingBlock()) {
                 for (auto* name : param_names.arg_names) {
@@ -2796,7 +2815,13 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* s
             num_vregs = num_vregs_cross_block = visitor.next_vreg;
     }
     sym_vreg_map = std::move(visitor.sym_vreg_map);
+    vreg_sym_map = std::move(visitor.vreg_sym_map);
     assert(hasVRegsAssigned());
+#if REUSE_VREGS
+    assert(vreg_sym_map.size() == num_vregs_cross_block);
+#else
+    assert(vreg_sym_map.size() == num_vregs);
+#endif
 }
 
 CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamNames& param_names) {

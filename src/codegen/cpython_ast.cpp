@@ -97,26 +97,32 @@ public:
         return pool->get(static_cast<BoxedString*>(ident)->s());
     }
 
+    AST_Name* convertToName(identifier ident) {
+        if (!ident)
+            return NULL;
+        return new AST_Name(convert(ident), AST_TYPE::Store, -1, -1);
+    }
+
     AST_arguments* convert(arguments_ty ident, AST* parent) {
         auto r = new AST_arguments();
 
         convertAll<expr_ty>(ident->args, r->args);
         convertAll<expr_ty>(ident->defaults, r->defaults);
-        r->vararg = convert(ident->vararg);
-        r->kwarg = convert(ident->kwarg);
+        r->vararg = convertToName(ident->vararg);
+        r->kwarg = convertToName(ident->kwarg);
 
-        if ((!r->vararg.s().empty()) && (!r->kwarg.s().empty()) && (r->vararg == r->kwarg)) {
+        if (r->vararg && r->kwarg && (r->vararg->id == r->kwarg->id)) {
             char buf[1024];
-            snprintf(buf, sizeof(buf), "duplicate argument '%s' in function definition", r->vararg.c_str());
+            snprintf(buf, sizeof(buf), "duplicate argument '%s' in function definition", r->vararg->id.c_str());
             raiseSyntaxError(buf, parent->lineno, parent->col_offset, fn, "", true);
         }
 
         std::set<InternedString> seen;
-        if (!r->vararg.s().empty()) {
-            seen.insert(r->vararg);
+        if (r->vararg) {
+            seen.insert(r->vararg->id);
         }
-        if (!r->kwarg.s().empty()) {
-            seen.insert(r->kwarg);
+        if (r->kwarg) {
+            seen.insert(r->kwarg->id);
         }
         checkDuplicateArgs(parent, r->args, &seen);
 

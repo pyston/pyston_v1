@@ -256,6 +256,10 @@ void AST_arguments::accept(ASTVisitor* v) {
 
     visitVector(defaults, v);
     visitVector(args, v);
+    if (kwarg)
+        kwarg->accept(v);
+    if (vararg)
+        vararg->accept(v);
 }
 
 void AST_Assert::accept(ASTVisitor* v) {

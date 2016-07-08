@@ -218,9 +218,9 @@ AST_arguments* read_arguments(BufferedReader* reader) {
     readExprVector(rtn->args, reader);
     rtn->col_offset = -1;
     readExprVector(rtn->defaults, reader);
-    rtn->kwarg = reader->readAndInternString();
+    rtn->kwarg = ast_cast<AST_Name>(readASTExpr(reader));
     rtn->lineno = -1;
-    rtn->vararg = reader->readAndInternString();
+    rtn->vararg = ast_cast<AST_Name>(readASTExpr(reader));
     return rtn;
 }
 
@@ -1042,9 +1042,9 @@ AST_Module* parse_file(const char* fn, FutureFlags inherited_flags) {
 
 const char* getMagic() {
     if (ENABLE_PYPA_PARSER)
-        return "a\ncQ";
+        return "a\ncR";
     else
-        return "a\nCQ";
+        return "a\nCR";
 }
 
 #define MAGIC_STRING_LENGTH 4

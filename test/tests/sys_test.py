@@ -1,7 +1,8 @@
 import sys
 import os.path
 
-print sys.excepthook, sys.displayhook
+assert callable(sys.excepthook)
+print sys.displayhook
 print sys.version[:3]
 print os.path.exists(sys.executable)
 print sys.copyright[-200:]

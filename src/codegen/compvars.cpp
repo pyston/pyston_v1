@@ -821,19 +821,15 @@ ConcreteCompilerVariable* UnknownType::hasnext(IREmitter& emitter, const OpInfo&
     return boolFromI1(emitter, rtn_val);
 }
 
-CompilerVariable* makeFunction(IREmitter& emitter, FunctionMetadata* f, CompilerVariable* closure, llvm::Value* globals,
+CompilerVariable* makeFunction(IREmitter& emitter, FunctionMetadata* f, llvm::Value* closure, llvm::Value* globals,
                                const std::vector<ConcreteCompilerVariable*>& defaults) {
     // Unlike the FunctionMetadata*, which can be shared between recompilations, the Box* around it
     // should be created anew every time the functiondef is encountered
 
-    llvm::Value* closure_v;
     ConcreteCompilerVariable* convertedClosure = NULL;
-    if (closure) {
-        convertedClosure = closure->makeConverted(emitter, closure->getConcreteType());
-        closure_v = convertedClosure->getValue();
-    } else {
-        closure_v = getNullPtr(g.llvm_closure_type_ptr);
-        emitter.setType(closure_v, RefType::BORROWED);
+    if (!closure) {
+        closure = getNullPtr(g.llvm_closure_type_ptr);
+        emitter.setType(closure, RefType::BORROWED);
     }
 
     llvm::SmallVector<llvm::Value*, 4> array_passed_args;
@@ -860,8 +856,8 @@ CompilerVariable* makeFunction(IREmitter& emitter, FunctionMetadata* f, Compiler
     // emitter.createCall().
     llvm::Instruction* boxed = emitter.getBuilder()->CreateCall(
         g.funcs.createFunctionFromMetadata,
-        std::vector<llvm::Value*>{ embedRelocatablePtr(f, g.llvm_functionmetadata_type_ptr), closure_v, globals,
-                                   scratch, getConstantInt(defaults.size(), g.i64) });
+        std::vector<llvm::Value*>{ embedRelocatablePtr(f, g.llvm_functionmetadata_type_ptr), closure, globals, scratch,
+                                   getConstantInt(defaults.size(), g.i64) });
     emitter.setType(boxed, RefType::OWNED);
 
     // The refcounter needs to know that this call "uses" the arguments that got passed via scratch.
@@ -2433,8 +2429,11 @@ public:
     }
 };
 ConcreteCompilerType* BOOL = new BoolType();
+llvm::Value* makeLLVMBool(bool b) {
+    return llvm::ConstantInt::get(BOOL->llvmType(), b, false);
+}
 ConcreteCompilerVariable* makeBool(bool b) {
-    return new ConcreteCompilerVariable(BOOL, llvm::ConstantInt::get(BOOL->llvmType(), b, false));
+    return new ConcreteCompilerVariable(BOOL, makeLLVMBool(b));
 }
 
 ConcreteCompilerVariable* doIs(IREmitter& emitter, CompilerVariable* lhs, CompilerVariable* rhs, bool negate) {
@@ -2859,6 +2858,17 @@ llvm::Value* i1FromBool(IREmitter& emitter, ConcreteCompilerVariable* v) {
         return v2;
     } else {
         return v->getValue();
+    }
+}
+
+llvm::Value* i1FromLLVMBool(IREmitter& emitter, llvm::Value* v) {
+    if (BOOLS_AS_I64) {
+        assert(v->getType() == BOOL->llvmType());
+        assert(BOOL->llvmType() == g.i64);
+        llvm::Value* v2 = emitter.getBuilder()->CreateTrunc(v, g.i1);
+        return v2;
+    } else {
+        return v;
     }
 }
 

@@ -337,7 +337,7 @@ STDOBJECT_SRCS := \
 	iterobject.c \
 	bufferobject.c \
 	cobject.c \
-	dictproxy.c \
+	descrobject.c \
 	$(EXTRA_STDOBJECT_SRCS)
 
 STDPYTHON_SRCS := \

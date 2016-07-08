@@ -20,6 +20,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 
+#include "core/cfg.h"
 #include "core/stringpool.h"
 #include "core/types.h"
 
@@ -41,7 +42,7 @@ private:
     typedef llvm::DenseMap<CFGBlock*, std::unique_ptr<LivenessBBVisitor>> LivenessCacheMap;
     LivenessCacheMap liveness_cache;
 
-    llvm::DenseMap<InternedString, llvm::DenseMap<CFGBlock*, bool>> result_cache;
+    VRegMap<llvm::DenseMap<CFGBlock*, bool>> result_cache;
 
 public:
     LivenessAnalysis(CFG* cfg);
@@ -50,60 +51,59 @@ public:
     // we don't keep track of node->parent_block relationships, so you have to pass both:
     bool isKill(AST_Name* node, CFGBlock* parent_block);
 
-    bool isLiveAtEnd(InternedString name, CFGBlock* block);
+    bool isLiveAtEnd(int vreg, CFGBlock* block);
 };
 
 class PhiAnalysis;
 
 class DefinednessAnalysis {
 public:
-    enum DefinitionLevel {
+    enum DefinitionLevel : char {
+        Unknown,
         Undefined,
         PotentiallyDefined,
         Defined,
     };
-    typedef llvm::DenseSet<InternedString> RequiredSet;
 
 private:
-    llvm::DenseMap<CFGBlock*, llvm::DenseMap<InternedString, DefinitionLevel>> defined_at_beginning, defined_at_end;
-    llvm::DenseMap<CFGBlock*, RequiredSet> defined_at_end_sets;
+    llvm::DenseMap<CFGBlock*, VRegMap<DefinitionLevel>> defined_at_beginning, defined_at_end;
+    llvm::DenseMap<CFGBlock*, VRegSet> defined_at_end_sets;
 
 public:
     DefinednessAnalysis() {}
 
-    void run(llvm::DenseMap<InternedString, DefinitionLevel> initial_map, CFGBlock* initial_block,
-             ScopeInfo* scope_info);
+    void run(VRegMap<DefinitionLevel> initial_map, CFGBlock* initial_block, ScopeInfo* scope_info);
 
-    DefinitionLevel isDefinedAtEnd(InternedString name, CFGBlock* block);
-    const RequiredSet& getDefinedNamesAtEnd(CFGBlock* block);
+    DefinitionLevel isDefinedAtEnd(int vreg, CFGBlock* block);
+    const VRegSet& getDefinedVregsAtEnd(CFGBlock* block);
 
     friend class PhiAnalysis;
 };
 
 class PhiAnalysis {
 public:
-    typedef llvm::DenseSet<InternedString> RequiredSet;
-
     DefinednessAnalysis definedness;
+
+    VRegSet empty_set;
 
 private:
     LivenessAnalysis* liveness;
-    llvm::DenseMap<CFGBlock*, RequiredSet> required_phis;
+    llvm::DenseMap<CFGBlock*, VRegSet> required_phis;
 
 public:
     // Initials_need_phis specifies that initial_map should count as an additional entry point
     // that may require phis.
-    PhiAnalysis(llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map,
-                CFGBlock* initial_block, bool initials_need_phis, LivenessAnalysis* liveness, ScopeInfo* scope_info);
+    PhiAnalysis(VRegMap<DefinednessAnalysis::DefinitionLevel> initial_map, CFGBlock* initial_block,
+                bool initials_need_phis, LivenessAnalysis* liveness, ScopeInfo* scope_info);
 
-    bool isRequired(InternedString name, CFGBlock* block);
-    bool isRequiredAfter(InternedString name, CFGBlock* block);
-    const RequiredSet& getAllRequiredAfter(CFGBlock* block);
-    const RequiredSet& getAllRequiredFor(CFGBlock* block);
+    bool isRequired(int vreg, CFGBlock* block);
+    bool isRequiredAfter(int vreg, CFGBlock* block);
+    const VRegSet& getAllRequiredAfter(CFGBlock* block);
+    const VRegSet& getAllRequiredFor(CFGBlock* block);
     // If "name" may be undefined at the beginning of any immediate successor block of "block":
-    bool isPotentiallyUndefinedAfter(InternedString name, CFGBlock* block);
+    bool isPotentiallyUndefinedAfter(int vreg, CFGBlock* block);
     // If "name" may be undefined at the beginning of "block"
-    bool isPotentiallyUndefinedAt(InternedString name, CFGBlock* block);
+    bool isPotentiallyUndefinedAt(int vreg, CFGBlock* block);
 };
 
 std::unique_ptr<LivenessAnalysis> computeLivenessInfo(CFG*);

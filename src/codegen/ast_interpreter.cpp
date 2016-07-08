@@ -155,7 +155,7 @@ public:
     ~ASTInterpreter() { Py_XDECREF(this->created_closure); }
 
     const VRegInfo& getVRegInfo() const { return source_info->cfg->getVRegInfo(); }
-    const llvm::DenseMap<InternedString, int>& getSymVRegMap() const {
+    const llvm::DenseMap<InternedString, DefaultedInt<-1>>& getSymVRegMap() const {
         return source_info->cfg->getVRegInfo().getSymVRegMap();
     }
 
@@ -172,7 +172,7 @@ public:
     Box** getVRegs() { return vregs; }
     const ScopeInfo* getScopeInfo() { return scope_info; }
 
-    void addSymbol(InternedString name, Box* value, bool allow_duplicates);
+    void addSymbol(int vreg, Box* value, bool allow_duplicates);
     void setGenerator(Box* gen);
     void setPassedClosure(Box* closure);
     void setCreatedClosure(Box* closure);
@@ -182,8 +182,8 @@ public:
     friend struct pyston::ASTInterpreterJitInterface;
 };
 
-void ASTInterpreter::addSymbol(InternedString name, Box* new_value, bool allow_duplicates) {
-    Box*& value = vregs[getVRegInfo().getVReg(name)];
+void ASTInterpreter::addSymbol(int vreg, Box* new_value, bool allow_duplicates) {
+    Box*& value = vregs[vreg];
     Box* old_value = value;
     value = incref(new_value);
     if (allow_duplicates)
@@ -478,7 +478,7 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
         if (jit) {
             bool is_live = true;
             if (!closure)
-                is_live = source_info->getLiveness()->isLiveAtEnd(name, current_block);
+                is_live = source_info->getLiveness()->isLiveAtEnd(node->vreg, current_block);
             if (is_live)
                 jit->emitSetLocal(name, node->vreg, closure, value);
             else
@@ -720,9 +720,9 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
     llvm::SmallVector<int, 16> dead_vregs;
     for (auto&& sym : getSymVRegMap()) {
-        if (!liveness->isLiveAtEnd(sym.first, current_block)) {
+        if (!liveness->isLiveAtEnd(sym.second, current_block)) {
             dead_vregs.push_back(sym.second);
-        } else if (phis->isRequiredAfter(sym.first, current_block)) {
+        } else if (phis->isRequiredAfter(sym.second, current_block)) {
             assert(scope_info->getScopeTypeOfName(sym.first) != ScopeInfo::VarScopeType::GLOBAL);
         } else {
         }
@@ -739,25 +739,29 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
         found_entry = p.first;
     }
 
-    std::map<InternedString, Box*> sorted_symbol_table;
+    int num_vregs = source_info->cfg->getVRegInfo().getTotalNumOfVRegs();
+    VRegMap<Box*> sorted_symbol_table(num_vregs);
+    VRegSet potentially_undefined(num_vregs);
 
     // TODO: maybe use a different placeholder (=NULL)?
+    // - new issue with that -- we can no longer distinguish NULL from unset-in-sorted_symbol_table
     // Currently we pass None because the LLVM jit will decref this value even though it may not be set.
     static Box* const VAL_UNDEFINED = (Box*)None;
 
-    for (auto& name : phis->definedness.getDefinedNamesAtEnd(current_block)) {
-        Box* val = vregs[getVRegInfo().getVReg(name)];
-        if (!liveness->isLiveAtEnd(name, current_block))
+    const VRegSet& defined = phis->definedness.getDefinedVregsAtEnd(current_block);
+    for (int vreg : defined) {
+
+        if (!liveness->isLiveAtEnd(vreg, current_block))
             continue;
 
-        if (phis->isPotentiallyUndefinedAfter(name, current_block)) {
+        Box* val = vregs[vreg];
+        if (phis->isPotentiallyUndefinedAfter(vreg, current_block)) {
+            potentially_undefined.set(vreg);
             bool is_defined = val != NULL;
-            // TODO only mangle once
-            sorted_symbol_table[getIsDefinedName(name, source_info->getInternedStrings())] = (Box*)is_defined;
-            sorted_symbol_table[name] = is_defined ? incref(val) : incref(VAL_UNDEFINED);
+            sorted_symbol_table[vreg] = is_defined ? incref(val) : incref(VAL_UNDEFINED);
         } else {
-            ASSERT(val != NULL, "%s", name.c_str());
-            sorted_symbol_table[name] = incref(val);
+            assert(val != NULL);
+            sorted_symbol_table[vreg] = incref(val);
         }
     }
 
@@ -766,43 +770,21 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
 
     // LLVM has a limit on the number of operands a machine instruction can have (~255),
     // in order to not hit the limit with the patchpoints cancel OSR when we have a high number of symbols.
-    if (sorted_symbol_table.size() > 225) {
+    if (sorted_symbol_table.numSet() > 225) {
         static StatCounter times_osr_cancel("num_osr_cancel_too_many_syms");
         times_osr_cancel.log();
         return nullptr;
     }
 
-    if (generator) {
-        // generated is only borrowed in order to not introduce cycles
-        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_GENERATOR_NAME)] = generator;
-    }
-
-    if (frame_info.passed_closure)
-        sorted_symbol_table[source_info->getInternedStrings().get(PASSED_CLOSURE_NAME)]
-            = incref(frame_info.passed_closure);
-
-    if (created_closure)
-        sorted_symbol_table[source_info->getInternedStrings().get(CREATED_CLOSURE_NAME)] = incref(created_closure);
-
-    sorted_symbol_table[source_info->getInternedStrings().get(FRAME_INFO_PTR_NAME)] = (Box*)&frame_info;
-
     if (found_entry == nullptr) {
         OSREntryDescriptor* entry = OSREntryDescriptor::create(getMD(), node, CXX);
 
-        for (auto& it : sorted_symbol_table) {
-            if (isIsDefinedName(it.first))
-                entry->args[it.first] = BOOL;
-            else if (it.first.s() == PASSED_GENERATOR_NAME)
-                entry->args[it.first] = GENERATOR;
-            else if (it.first.s() == PASSED_CLOSURE_NAME || it.first.s() == CREATED_CLOSURE_NAME)
-                entry->args[it.first] = CLOSURE;
-            else if (it.first.s() == FRAME_INFO_PTR_NAME)
-                entry->args[it.first] = FRAME_INFO;
-            else {
-                assert(it.first.s()[0] != '!');
-                entry->args[it.first] = UNKNOWN;
-            }
+        // TODO can we just get rid of this?
+        for (auto&& p : sorted_symbol_table) {
+            entry->args[p.first] = UNKNOWN;
         }
+
+        entry->potentially_undefined = potentially_undefined;
 
         found_entry = entry;
     }
@@ -810,17 +792,20 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     OSRExit exit(found_entry);
 
     std::vector<Box*> arg_array;
-    arg_array.reserve(sorted_symbol_table.size());
-    for (auto& it : sorted_symbol_table) {
-        arg_array.push_back(it.second);
+    arg_array.reserve(sorted_symbol_table.numSet() + potentially_undefined.numSet());
+    for (auto&& p : sorted_symbol_table) {
+        arg_array.push_back(p.second);
+    }
+    for (int vreg : potentially_undefined) {
+        bool is_defined = sorted_symbol_table[vreg] != VAL_UNDEFINED;
+        arg_array.push_back((Box*)is_defined);
     }
 
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
     CompiledFunction* partial_func = compilePartialFuncInternal(&exit);
 
-    auto arg_tuple = getTupleFromArgsArray(&arg_array[0], arg_array.size());
-    Box* r = partial_func->call(std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
-                                std::get<3>(arg_tuple));
+    // generated is only borrowed in order to not introduce cycles
+    Box* r = partial_func->call_osr(generator, created_closure, &frame_info, &arg_array[0]);
 
     if (partial_func->exception_style == CXX) {
         assert(r);
@@ -1687,8 +1672,10 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
                 bool is_live = true;
                 if (node->is_kill) {
                     is_live = false;
-                } else if (node->lookup_type == ScopeInfo::VarScopeType::FAST)
-                    is_live = source_info->getLiveness()->isLiveAtEnd(node->id, current_block);
+                } else if (node->lookup_type == ScopeInfo::VarScopeType::FAST) {
+                    assert(node->vreg != -1);
+                    is_live = source_info->getLiveness()->isLiveAtEnd(node->vreg, current_block);
+                }
 
                 if (is_live) {
                     assert(!node->is_kill);
@@ -2087,18 +2074,22 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
     ASTInterpreter interpreter(md, vregs, frame_state.frame_info);
 
     for (const auto& p : *frame_state.locals) {
-        assert(p.first->cls == str_cls);
-        auto name = static_cast<BoxedString*>(p.first)->s();
-        if (name == PASSED_GENERATOR_NAME) {
-            interpreter.setGenerator(p.second);
-        } else if (name == PASSED_CLOSURE_NAME) {
-            // this should have already got set because its stored in the frame info
-            assert(p.second == interpreter.getFrameInfo()->passed_closure);
-        } else if (name == CREATED_CLOSURE_NAME) {
-            interpreter.setCreatedClosure(p.second);
+        if (p.first->cls == int_cls) {
+            int vreg = static_cast<BoxedInt*>(p.first)->n;
+            interpreter.addSymbol(vreg, p.second, false);
         } else {
-            InternedString interned = md->source->getInternedStrings().get(name);
-            interpreter.addSymbol(interned, p.second, false);
+            assert(p.first->cls == str_cls);
+            auto name = static_cast<BoxedString*>(p.first)->s();
+            if (name == PASSED_GENERATOR_NAME) {
+                interpreter.setGenerator(p.second);
+            } else if (name == PASSED_CLOSURE_NAME) {
+                // this should have already got set because its stored in the frame info
+                assert(p.second == interpreter.getFrameInfo()->passed_closure);
+            } else if (name == CREATED_CLOSURE_NAME) {
+                interpreter.setCreatedClosure(p.second);
+            } else {
+                RELEASE_ASSERT(0, "");
+            }
         }
     }
 
@@ -2112,7 +2103,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
             assert(asgn->targets[0]->type == AST_TYPE::Name);
             auto name = ast_cast<AST_Name>(asgn->targets[0]);
             assert(name->id.s()[0] == '#');
-            interpreter.addSymbol(name->id, expr_val, true);
+            interpreter.addSymbol(name->vreg, expr_val, true);
             break;
         } else if (enclosing_stmt->type == AST_TYPE::Expr) {
             auto expr = ast_cast<AST_Expr>(enclosing_stmt);

@@ -176,8 +176,8 @@ private:
     virtual bool visit_arguments(AST_arguments* node) {
         writeExprVector(node->args);
         writeExprVector(node->defaults);
-        writeString(node->kwarg);
-        writeString(node->vararg);
+        writeExpr(node->kwarg);
+        writeExpr(node->vararg);
         return true;
     }
     virtual bool visit_assert(AST_Assert* node) {

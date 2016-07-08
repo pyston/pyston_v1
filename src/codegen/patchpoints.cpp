@@ -30,10 +30,6 @@
 
 namespace pyston {
 
-void PatchpointInfo::addFrameVar(llvm::StringRef name, CompilerType* type) {
-    frame_vars.push_back(FrameVarInfo({.name = name, .type = type }));
-}
-
 int ICSetupInfo::totalSize() const {
     if (isDeopt())
         return DEOPT_CALL_ONLY_SIZE;
@@ -74,30 +70,46 @@ bool StackMap::Record::Location::operator==(const StackMap::Record::Location& rh
 }
 
 void PatchpointInfo::parseLocationMap(StackMap::Record* r, LocationMap* map) {
+    if (!this->isDeopt())
+        return;
+
     assert(r->locations.size() == totalStackmapArgs());
 
     int cur_arg = frameStackmapArgsStart();
 
     // printf("parsing pp %ld:\n", reinterpret_cast<int64_t>(this));
 
-    for (FrameVarInfo& frame_var : frame_vars) {
-        int num_args = frame_var.type->numFrameArgs();
+    auto parse_type = [&](CompilerType* type) {
+        int num_args = type->numFrameArgs();
 
         llvm::SmallVector<StackMap::Record::Location, 1> locations;
         locations.append(r->locations.data() + cur_arg, r->locations.data() + cur_arg + num_args);
-
-        // printf("%s %d %d\n", frame_var.name.c_str(), r->locations[cur_arg].type, r->locations[cur_arg].regnum);
-
-        map->names[frame_var.name].locations.push_back(
-            LocationMap::LocationTable::LocationEntry({._debug_pp_id = (uint64_t) this,
-                                                       .offset = r->offset,
-                                                       .length = patchpointSize(),
-                                                       .type = frame_var.type,
-                                                       .locations = std::move(locations) }));
-
         cur_arg += num_args;
+
+        return LocationMap::LocationTable::LocationEntry({._debug_pp_id = (uint64_t) this,
+                                                          .offset = r->offset,
+                                                          .length = patchpointSize(),
+                                                          .type = type,
+                                                          .locations = std::move(locations) });
+    };
+
+    auto&& source = parentFunction()->md->source;
+    if (source->is_generator)
+        map->generator.locations.push_back(parse_type(GENERATOR));
+    if (source->getScopeInfo()->takesClosure())
+        map->passed_closure.locations.push_back(parse_type(CLOSURE));
+    if (source->getScopeInfo()->createsClosure())
+        map->created_closure.locations.push_back(parse_type(CLOSURE));
+
+    for (FrameVarInfo& frame_var : frame_info_desc.vars) {
+        map->vars[frame_var.vreg].locations.push_back(parse_type(frame_var.type));
     }
-    assert(cur_arg - frameStackmapArgsStart() == numFrameStackmapArgs());
+    for (int vreg : frame_info_desc.potentially_undefined) {
+        map->definedness_vars[vreg].locations.push_back(parse_type(BOOL));
+    }
+
+    ASSERT(cur_arg - frameStackmapArgsStart() == numFrameStackmapArgs(), "%d %d %d", cur_arg, frameStackmapArgsStart(),
+           numFrameStackmapArgs());
 }
 
 static int extractScratchOffset(PatchpointInfo* pp, StackMap::Record* r) {
