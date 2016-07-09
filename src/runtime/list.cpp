@@ -397,7 +397,9 @@ int list_ass_ext_slice(BoxedList* self, PyObject* item, PyObject* value) {
         return -1;
     }
 
-    RELEASE_ASSERT(step != 1, "should have handled this elsewhere");
+    if (step == 1) {
+        return list_ass_slice((PyListObject*)self, start, stop, value);
+    }
 
     /* Make sure s[5:2] = [..] inserts at the right place:
        before 5, not before 2. */
@@ -514,6 +516,23 @@ int list_ass_ext_slice(BoxedList* self, PyObject* item, PyObject* value) {
         Py_DECREF(seq);
 
         return 0;
+    }
+}
+
+int list_ass_subscript(BoxedList* self, PyObject* slice, PyObject* value) {
+    assert(PyList_Check(self));
+    if (PyIndex_Check(slice)) {
+        Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
+        if (i == -1 && PyErr_Occurred())
+            return -1;
+        if (i < 0)
+            i += PyList_GET_SIZE(self);
+        return list_ass_item((PyListObject*)self, i, value);
+    } else if (slice->cls == slice_cls) {
+        return list_ass_ext_slice(self, slice, value);
+    } else {
+        PyErr_Format(PyExc_TypeError, "list indices must be integers, not %.200s", slice->cls->tp_name);
+        return -1;
     }
 }
 
@@ -1532,6 +1551,10 @@ void setupList() {
     list_iterator_cls->tpp_hasnext = listiterHasnextUnboxed;
     list_iterator_cls->tp_iternext = listiter_next;
     list_iterator_cls->tp_iter = PyObject_SelfIter;
+
+    list_cls->tp_as_mapping->mp_length = (lenfunc)list_length;
+    list_cls->tp_as_mapping->mp_subscript = (binaryfunc)listGetitem<CAPI>;
+    list_cls->tp_as_mapping->mp_ass_subscript = (objobjargproc)list_ass_subscript;
 
     list_reverse_iterator_cls->giveAttr("__name__", boxString("listreverseiterator"));
 
