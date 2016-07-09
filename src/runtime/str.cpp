@@ -2987,6 +2987,9 @@ void setupStr() {
     str_cls->tp_as_sequence->sq_repeat = (ssizeargfunc)string_repeat;
     str_cls->tp_as_sequence->sq_slice = str_slice;
 
+    str_cls->tp_as_mapping->mp_length = (lenfunc)str_length;
+    str_cls->tp_as_mapping->mp_subscript = (binaryfunc)strGetitem<CAPI>;
+
     str_cls->tp_new = (newfunc)strNewPacked;
 
     basestring_cls->giveAttr("__doc__",
