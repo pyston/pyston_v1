@@ -123,7 +123,8 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     g.func_addr_registry.registerFunction(unique_name, code, code_size, NULL);
 }
 
-std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, int patch_jump_offset) {
+std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, int patch_jump_offset,
+                                                             llvm::DenseSet<int> known_non_null_vregs) {
     if (is_currently_writing || blocks_aborted.count(block))
         return std::unique_ptr<JitFragmentWriter>();
 
@@ -142,8 +143,9 @@ std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, in
                                                std::vector<Location>(), bjit_allocatable_regs));
     std::unique_ptr<ICSlotRewrite> rewrite = ic_info->startRewrite("");
 
-    return std::unique_ptr<JitFragmentWriter>(new JitFragmentWriter(
-        block, std::move(ic_info), std::move(rewrite), fragment_offset, patch_jump_offset, a.getStartAddr(), *this));
+    return std::unique_ptr<JitFragmentWriter>(
+        new JitFragmentWriter(block, std::move(ic_info), std::move(rewrite), fragment_offset, patch_jump_offset,
+                              a.getStartAddr(), *this, std::move(known_non_null_vregs)));
 }
 
 void JitCodeBlock::fragmentAbort(bool not_enough_space) {
@@ -164,7 +166,8 @@ void JitCodeBlock::fragmentFinished(int bytes_written, int num_bytes_overlapping
 
 JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic_info,
                                      std::unique_ptr<ICSlotRewrite> rewrite, int code_offset, int num_bytes_overlapping,
-                                     void* entry_code, JitCodeBlock& code_block)
+                                     void* entry_code, JitCodeBlock& code_block,
+                                     llvm::DenseSet<int> known_non_null_vregs)
     : Rewriter(std::move(rewrite), 0, {}, /* needs_invalidation_support = */ false),
       block(block),
       code_offset(code_offset),
@@ -173,6 +176,7 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
       entry_code(entry_code),
       code_block(code_block),
       interp(0),
+      known_non_null_vregs(std::move(known_non_null_vregs)),
       ic_info(std::move(ic_info)) {
 
     added_changing_action = true;
@@ -766,14 +770,14 @@ void JitFragmentWriter::abortCompilation() {
     abort();
 }
 
-int JitFragmentWriter::finishCompilation() {
+std::pair<int, llvm::DenseSet<int>> JitFragmentWriter::finishCompilation() {
     RELEASE_ASSERT(!assembler->hasFailed(), "");
 
     commit();
     if (failed) {
         blocks_aborted.insert(block);
         code_block.fragmentAbort(false);
-        return 0;
+        return std::make_pair(0, llvm::DenseSet<int>());
     }
 
     if (assembler->hasFailed()) {
@@ -792,7 +796,7 @@ int JitFragmentWriter::finishCompilation() {
             // block for the next attempt.
             code_block.fragmentAbort(true /* not_enough_space */);
         }
-        return 0;
+        return std::make_pair(0, llvm::DenseSet<int>());
     }
 
     block->code = (void*)((uint64_t)entry_code + code_offset);
@@ -865,7 +869,7 @@ int JitFragmentWriter::finishCompilation() {
     registerGCTrackedICInfo(ic_info.release());
 #endif
 
-    return exit_info.num_bytes;
+    return std::make_pair(exit_info.num_bytes, std::move(known_non_null_vregs));
 }
 
 bool JitFragmentWriter::finishAssembly(int continue_offset, bool& should_fill_with_nops, bool& variable_size_slots) {

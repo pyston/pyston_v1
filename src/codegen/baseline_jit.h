@@ -181,7 +181,8 @@ private:
 public:
     JitCodeBlock(llvm::StringRef name);
 
-    std::unique_ptr<JitFragmentWriter> newFragment(CFGBlock* block, int patch_jump_offset = 0);
+    std::unique_ptr<JitFragmentWriter> newFragment(CFGBlock* block, int patch_jump_offset,
+                                                   llvm::DenseSet<int> known_non_null_vregs);
     bool shouldCreateNewBlock() const { return asm_failed || a.bytesLeft() < 128; }
     void fragmentAbort(bool not_enough_space);
     void fragmentFinished(int bytes_witten, int num_bytes_overlapping, void* next_fragment_start, ICInfo& ic_info);
@@ -216,7 +217,6 @@ private:
     RewriterVar* vregs_array;
     llvm::DenseMap<InternedString, RewriterVar*> local_syms;
     // keeps track which non block local vregs are known to have a non NULL value
-    // TODO: in the future we could reuse this information between different basic blocks
     llvm::DenseSet<int> known_non_null_vregs;
     std::unique_ptr<ICInfo> ic_info;
     llvm::SmallPtrSet<RewriterVar*, 4> var_is_a_python_bool;
@@ -241,7 +241,8 @@ private:
 
 public:
     JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic_info, std::unique_ptr<ICSlotRewrite> rewrite,
-                      int code_offset, int num_bytes_overlapping, void* entry_code, JitCodeBlock& code_block);
+                      int code_offset, int num_bytes_overlapping, void* entry_code, JitCodeBlock& code_block,
+                      llvm::DenseSet<int> known_non_null_vregs);
 
     RewriterVar* getInterp();
     RewriterVar* imm(uint64_t val);
@@ -311,7 +312,8 @@ public:
     void emitUncacheExcInfo();
 
     void abortCompilation();
-    int finishCompilation();
+    // returns pair of the number of bytes for the overwriteable jump and known non null vregs at end of current block
+    std::pair<int, llvm::DenseSet<int>> finishCompilation();
 
     bool finishAssembly(int continue_offset, bool& should_fill_with_nops, bool& variable_size_slots) override;
 
