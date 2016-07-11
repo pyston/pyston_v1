@@ -811,6 +811,9 @@ void setupTuple() {
     tuple_cls->tp_as_sequence->sq_contains = (objobjproc)tuplecontains;
     tuple_cls->tp_iter = tupleIter;
 
+    tuple_cls->tp_as_mapping->mp_length = (lenfunc)tuplelength;
+    tuple_cls->tp_as_mapping->mp_subscript = (binaryfunc)tupleGetitem<CAPI>;
+
     FunctionMetadata* hasnext = FunctionMetadata::create((void*)tupleiterHasnextUnboxed, BOOL, 1);
     hasnext->addVersion((void*)tupleiterHasnext, BOXED_BOOL);
     tuple_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
