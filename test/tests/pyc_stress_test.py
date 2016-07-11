@@ -8,7 +8,7 @@ import multiprocessing
 def worker():
     global done
 
-    for i in xrange(1000):
+    for i in xrange(100):
         del sys.modules["pyc_import_target"]
         import pyc_import_target
 
@@ -30,10 +30,10 @@ idx = 0
 while l:
     p = l.pop()
     while p.is_alive():
-        for i in xrange(100):
+        for i in xrange(10):
             if os.path.exists(path):
                 os.remove(path)
-        for i in xrange(100):
+        for i in xrange(10):
             if os.path.exists(path):
                 with open(path, "rw+") as f:
                     f.write(chr(i) * 100)
