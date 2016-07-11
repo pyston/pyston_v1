@@ -502,7 +502,8 @@ static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
     if (globals->cls == attrwrapper_cls)
         globals = unwrapAttrWrapper(globals);
 
-    assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
+    RELEASE_ASSERT(globals && (globals->cls == module_cls || globals->cls == dict_cls), "Unspported globals type: %s",
+                   globals ? globals->cls->tp_name : "NULL");
 
     if (globals) {
         // From CPython (they set it to be f->f_builtins):

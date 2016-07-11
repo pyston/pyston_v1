@@ -1932,7 +1932,8 @@ static PyObject* builtin_execfile(PyObject* self, PyObject* args) noexcept {
     if (PyErr_WarnPy3k("execfile() not supported in 3.x; use exec()", 1) < 0)
         return NULL;
 
-    if (!PyArg_ParseTuple(args, "s|O!O:execfile", &filename, &PyDict_Type, &globals, &locals))
+    // Pyston change: allow attrwrappers here
+    if (!PyArg_ParseTuple(args, "s|OO:execfile", &filename, &globals, &locals))
         return NULL;
     if (locals != Py_None && !PyMapping_Check(locals)) {
         PyErr_SetString(PyExc_TypeError, "locals must be a mapping");
@@ -1944,6 +1945,11 @@ static PyObject* builtin_execfile(PyObject* self, PyObject* args) noexcept {
             locals = PyEval_GetLocals();
     } else if (locals == Py_None)
         locals = globals;
+
+    if (!PyDict_CheckExact(globals) && globals->cls != attrwrapper_cls) {
+        PyErr_Format(TypeError, "execfile() globals must be dict, not %s", globals->cls->tp_name);
+        return NULL;
+    }
 
     if (PyDict_GetItemString(globals, "__builtins__") == NULL) {
         if (PyDict_SetItemString(globals, "__builtins__", PyEval_GetBuiltins()) != 0)
