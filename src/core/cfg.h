@@ -29,6 +29,8 @@
 
 #include <vector>
 
+#include "llvm/ADT/BitVector.h"
+
 #include "core/ast.h"
 #include "core/common.h"
 #include "core/stringpool.h"
@@ -203,8 +205,7 @@ public:
 
 class VRegSet {
 private:
-    // TODO: switch just to a bool*?
-    std::vector<bool> v;
+    llvm::BitVector v;
 
 public:
     VRegSet(int num_vregs) : v(num_vregs, false) {}
@@ -219,13 +220,7 @@ public:
         v[vreg] = true;
     }
 
-    int numSet() const {
-        int r = 0;
-        for (auto b : v)
-            if (b)
-                r++;
-        return r;
-    }
+    int numSet() const { return v.count(); }
 
     class iterator {
     public:
@@ -234,9 +229,7 @@ public:
         iterator(const VRegSet& set, int i) : set(set), i(i) {}
 
         iterator& operator++() {
-            do {
-                i++;
-            } while (i < set.v.size() && !set.v[i]);
+            i = set.v.find_next(i);
             return *this;
         }
 
@@ -246,15 +239,8 @@ public:
         int operator*() { return i; }
     };
 
-    iterator begin() const {
-        for (int i = 0; i < v.size(); i++) {
-            if (v[i])
-                return iterator(*this, i);
-        }
-        return iterator(*this, this->v.size());
-    }
-
-    iterator end() const { return iterator(*this, this->v.size()); }
+    iterator begin() const { return iterator(*this, v.find_first()); }
+    iterator end() const { return iterator(*this, -1); }
 };
 
 // VRegMap: A compact way of representing a value per vreg.
