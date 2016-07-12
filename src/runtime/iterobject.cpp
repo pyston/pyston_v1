@@ -48,6 +48,19 @@ static Box* seqiterHasnext_capi(Box* s) noexcept {
         Py_RETURN_FALSE;
     }
 
+    if (self->len != -1) {
+        if (self->idx >= self->len)
+            Py_RETURN_FALSE;
+        assert(!self->next);
+        if (self->b->cls == str_cls)
+            self->next = incref(characters[static_cast<BoxedString*>(self->b)->s()[self->idx] & UCHAR_MAX]);
+        else
+            self->next = PySequence_GetItem(self->b, self->idx);
+        assert(self->next);
+        self->idx++;
+        Py_RETURN_TRUE;
+    }
+
     Box* next = PySequence_GetItem(self->b, self->idx);
     if (!next) {
         if (PyErr_ExceptionMatches(IndexError) || PyErr_ExceptionMatches(StopIteration)) {
@@ -199,7 +212,7 @@ void setupIter() {
 
     seqiter_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)seqiterNext, UNKNOWN, 1)));
     seqiter_cls->giveAttr("__hasnext__",
-                          new BoxedFunction(FunctionMetadata::create((void*)seqiterHasnext, BOXED_BOOL, 1)));
+                          new BoxedFunction(FunctionMetadata::create((void*)seqiterHasnext_capi, BOXED_BOOL, 1, ParamNames::empty(), CAPI)));
     seqiter_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)seqiterIter, UNKNOWN, 1)));
 
     seqiter_cls->freeze();

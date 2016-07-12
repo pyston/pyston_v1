@@ -682,6 +682,7 @@ extern HiddenClass* root_hcls;
 struct SetattrRewriteArgs;
 struct GetattrRewriteArgs;
 struct DelattrRewriteArgs;
+struct UnaryopRewriteArgs;
 
 // Helper function around PyString_InternFromString:
 BoxedString* internStringImmortal(llvm::StringRef s) noexcept;

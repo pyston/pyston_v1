@@ -3466,7 +3466,7 @@ extern "C" BoxedInt* hash(Box* obj) {
 }
 
 template <ExceptionStyle S, Rewritable rewritable>
-BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI) {
+BoxedInt* lenInternal(Box* obj, UnaryopRewriteArgs* rewrite_args) noexcept(S == CAPI) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -3594,10 +3594,10 @@ BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI
 }
 
 // force template instantiation:
-template BoxedInt* lenInternal<CAPI, REWRITABLE>(Box*, LenRewriteArgs*);
-template BoxedInt* lenInternal<CXX, REWRITABLE>(Box*, LenRewriteArgs*);
-template BoxedInt* lenInternal<CAPI, NOT_REWRITABLE>(Box*, LenRewriteArgs*);
-template BoxedInt* lenInternal<CXX, NOT_REWRITABLE>(Box*, LenRewriteArgs*);
+template BoxedInt* lenInternal<CAPI, REWRITABLE>(Box*, UnaryopRewriteArgs*);
+template BoxedInt* lenInternal<CXX, REWRITABLE>(Box*, UnaryopRewriteArgs*);
+template BoxedInt* lenInternal<CAPI, NOT_REWRITABLE>(Box*, UnaryopRewriteArgs*);
+template BoxedInt* lenInternal<CXX, NOT_REWRITABLE>(Box*, UnaryopRewriteArgs*);
 
 Box* lenCallInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                      Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
@@ -3605,7 +3605,7 @@ Box* lenCallInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, Arg
         return callFunc<CXX>(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 
     if (rewrite_args) {
-        LenRewriteArgs lrewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
+        UnaryopRewriteArgs lrewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
         Box* rtn = lenInternal<CXX, REWRITABLE>(arg1, &lrewrite_args);
         if (!lrewrite_args.out_success) {
             rewrite_args = 0;
@@ -3640,7 +3640,7 @@ extern "C" i64 unboxedLen(Box* obj) {
     RewriterVar* r_boxed = NULL;
     if (rewriter.get()) {
         // rewriter->trap();
-        LenRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
+        UnaryopRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
         lobj = lenInternal<CXX, REWRITABLE>(obj, &rewrite_args);
 
         if (!rewrite_args.out_success) {
@@ -6804,14 +6804,50 @@ extern "C" Box* getPystonIter(Box* o) {
     return r;
 }
 
-extern "C" Box* getiterHelper(Box* o) {
-    if (PySequence_Check(o))
+extern "C" Box* getiterHelperInternal(Box* o, UnaryopRewriteArgs* rewrite_args) {
+    if (rewrite_args)
+        assert(o->cls->is_constant);
+
+    if (PySequence_Check(o)) {
+        class Helper {
+        public:
+            static Box* call(Box* o) { return new BoxedSeqIter(o, 0); }
+        };
+
+        if (rewrite_args) {
+            rewrite_args->out_rtn
+                = rewrite_args->rewriter->call(false, (void*)&Helper::call, rewrite_args->obj)->setType(RefType::OWNED);
+            rewrite_args->out_success = true;
+        }
         return new BoxedSeqIter(o, 0);
+    }
+
     raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
 }
 
+extern "C" Box* getiterHelper(Box* o) {
+    std::unique_ptr<Rewriter> rewriter(nullptr);
+
+    if (o->cls->is_constant)
+        rewriter.reset(
+            Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 1, "getPystonIter"));
+
+    if (rewriter.get()) {
+        UnaryopRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->setType(RefType::BORROWED),
+                                        rewriter->getReturnDestination());
+
+        Box* r = getiterHelperInternal(o, &rewrite_args);
+        if (rewrite_args.out_success) {
+            RewriterVar* r_rtn = rewrite_args.out_rtn;
+            rewriter->commitReturning(r_rtn);
+        }
+        return r;
+    } else {
+        return getiterHelperInternal(o, NULL);
+    }
+}
+
 Box* getiter(Box* o) {
-    // TODO add rewriting to this?  probably want to try to avoid this path though
     BoxedClass* type = o->cls;
     Box* r = NULL;
     if (PyType_HasFeature(type, Py_TPFLAGS_HAVE_ITER) && type->tp_iter != slot_tp_iter && type->tp_iter) {
@@ -6828,7 +6864,7 @@ Box* getiter(Box* o) {
         }
         return r;
     }
-    return getiterHelper(o);
+    return getiterHelperInternal(o, NULL);
 }
 
 void assertValidSlotIdentifier(Box* s) {
