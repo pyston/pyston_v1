@@ -526,13 +526,12 @@ void Assembler::movsd(Indirect src, XMMRegister dest) {
     int dest_idx = dest.regnum;
 
     if (src_idx >= 8) {
-        trap();
-        rex |= REX_R;
+        rex |= REX_B;
         src_idx -= 8;
     }
     if (dest_idx >= 8) {
         trap();
-        rex |= REX_B;
+        rex |= REX_R;
         dest_idx -= 8;
     }
 
