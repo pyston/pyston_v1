@@ -1700,8 +1700,10 @@ public:
                         l = r + 1;
                         continue;
                     }
-                    pushAssign(tmpname, new AST_Attribute(makeLoad(tmpname, node, true), AST_TYPE::Load,
-                                                          internString(a->name.s().substr(l, r - l))));
+                    auto attr = new AST_Attribute(makeLoad(tmpname, node, true), AST_TYPE::Load,
+                                                  internString(a->name.s().substr(l, r - l)));
+                    attr->lineno = import->lineno;
+                    pushAssign(tmpname, attr);
                     l = r + 1;
                 } while (l < a->name.s().size());
                 pushAssign(a->asname, makeLoad(tmpname, node, true));

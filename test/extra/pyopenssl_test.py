@@ -20,8 +20,9 @@ subprocess.check_call(["sed", "-i", 's/\\(def test_digest.*\\)/\\1\\n        ret
 
 # This particular test is bad; it fails if run close to a second-boundary
 # https://github.com/pyca/pyopenssl/issues/266
-subprocess.check_call(["sed", "-i", 's/\\(def test_export_test.*\\)/\\1\\n        return/',
+subprocess.check_call(["sed", "-i", 's/\\(def test_export_text.*\\)/\\1\\n        return/',
     os.path.join(PYOPENSSL_DIR, "test", "test_crypto.py")])
+print os.path.join(PYOPENSSL_DIR, "test", "test_crypto.py")
 
 expected = [{'ran': 438}]
 run_test([NOSETESTS_EXE], cwd=PYOPENSSL_DIR, expected=expected)

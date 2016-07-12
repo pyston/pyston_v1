@@ -77,6 +77,10 @@ llvm::Value* RefcountTracker::setType(llvm::Value* v, RefType reftype) {
 
     assert(var.reftype == reftype || var.reftype == RefType::UNKNOWN);
     var.reftype = reftype;
+
+    if (llvm::isa<ConstantPointerNull>(v))
+        var.nullable = true;
+
     return v;
 }
 
