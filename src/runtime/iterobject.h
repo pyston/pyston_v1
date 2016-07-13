@@ -43,6 +43,8 @@ public:
 
         if (b->cls == str_cls) {
             len = static_cast<BoxedString*>(b)->size();
+        } else if (b->cls == unicode_cls) {
+            len = reinterpret_cast<PyUnicodeObject*>(b)->length;
         } else {
             len = -1;
         }
