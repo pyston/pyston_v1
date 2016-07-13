@@ -425,8 +425,10 @@ extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyOb
         return 0;
     }
 
-    *pkey = (*it)->first.value;
-    *pvalue = (*it)->second;
+    if (pkey)
+        *pkey = (*it)->first.value;
+    if (pvalue)
+        *pvalue = (*it)->second;
 
     ++(*it);
 
