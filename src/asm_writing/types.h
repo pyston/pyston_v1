@@ -48,6 +48,7 @@ struct Register {
 
     void dump() const;
 
+    int getDwarfId() const;
     static Register fromDwarf(int dwarf_regnum);
 
     static constexpr int numRegs() { return 16; }

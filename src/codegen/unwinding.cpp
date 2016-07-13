@@ -574,7 +574,7 @@ public:
                             assert(l.stack_second_offset % 8 == 0);
                             b = b_ptr[l.stack_second_offset / 8];
                         } else if (l.type == Location::Register) {
-                            b = (Box*)get_cursor_reg(cursor, l.regnum);
+                            b = (Box*)get_cursor_reg(cursor, l.asRegister().getDwarfId());
                         } else {
                             RELEASE_ASSERT(0, "not implemented");
                         }

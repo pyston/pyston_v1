@@ -57,7 +57,41 @@ const int dwarf_to_gp[] = {
 Register Register::fromDwarf(int dwarf_regnum) {
     assert(dwarf_regnum >= 0 && dwarf_regnum <= 16);
 
-    return Register(dwarf_to_gp[dwarf_regnum]);
+    Register reg(dwarf_to_gp[dwarf_regnum]);
+    assert(reg.getDwarfId() == dwarf_regnum);
+    return reg;
+}
+
+int Register::getDwarfId() const {
+    switch (regnum) {
+        case RAX.regnum:
+            return 0;
+        case RDX.regnum:
+            return 1;
+        case RCX.regnum:
+            return 2;
+        case RBX.regnum:
+            return 3;
+        case RSI.regnum:
+            return 4;
+        case RDI.regnum:
+            return 5;
+        case RBP.regnum:
+            return 6;
+        case RSP.regnum:
+            return 7;
+        case R8.regnum:
+        case R9.regnum:
+        case R10.regnum:
+        case R11.regnum:
+        case R12.regnum:
+        case R13.regnum:
+        case R14.regnum:
+        case R15.regnum:
+            return regnum;
+        default:
+            RELEASE_ASSERT(0, "not implemented");
+    };
 }
 
 GenericRegister GenericRegister::fromDwarf(int dwarf_regnum) {
