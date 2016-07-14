@@ -438,8 +438,13 @@ public:
         // var has no __iter__()
         // TODO: we could create a patchpoint if this turns out to be hot
         emitter.setCurrentBasicBlock(bb_no_iter);
-        llvm::Value* value_no_iter = emitter.createCall(info.unw_info, g.funcs.getiterHelper, var->getValue());
+
+        ICSetupInfo* pp2 = createGenericIC(info.getTypeRecorder(), true, 128);
+        llvm::Instruction* value_no_iter
+            = emitter.createIC(pp2, (void*)getiterHelper, { var->getValue() }, info.unw_info);
+        value_no_iter = createAfter<llvm::IntToPtrInst>(value_no_iter, value_no_iter, g.llvm_value_type_ptr, "");
         emitter.setType(value_no_iter, RefType::OWNED);
+
         llvm::BasicBlock* value_no_iter_bb = emitter.currentBasicBlock();
         auto no_iter_terminator = emitter.getBuilder()->CreateBr(bb_join);
 
@@ -1987,7 +1992,7 @@ public:
         CompilerVariable* called_constant = tryCallattrConstant(emitter, info, var, attr, flags.cls_only, flags.argspec,
                                                                 args, keyword_names, no_attribute_ptr, exception_style);
 
-        if (no_attribute)
+        if (flags.null_on_nonexistent && no_attribute)
             return new ConcreteCompilerVariable(UNKNOWN, getNullPtr(g.llvm_value_type_ptr));
 
         if (called_constant)

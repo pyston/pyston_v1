@@ -221,3 +221,6 @@ class D(str):
     pass
 
 print(D('abc').__rmod__('%s'))
+
+# Real code needs str to not have an iter!
+print hasattr("", "__iter__")

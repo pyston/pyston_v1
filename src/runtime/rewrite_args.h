@@ -194,7 +194,7 @@ struct DelattrRewriteArgs {
     DelattrRewriteArgs(Rewriter* rewriter, RewriterVar* obj) : rewriter(rewriter), obj(obj), out_success(false) {}
 };
 
-struct LenRewriteArgs {
+struct UnaryopRewriteArgs {
     Rewriter* rewriter;
     RewriterVar* obj;
     Location destination;
@@ -202,7 +202,7 @@ struct LenRewriteArgs {
     bool out_success;
     RewriterVar* out_rtn;
 
-    LenRewriteArgs(Rewriter* rewriter, RewriterVar* obj, Location destination)
+    UnaryopRewriteArgs(Rewriter* rewriter, RewriterVar* obj, Location destination)
         : rewriter(rewriter), obj(obj), destination(destination), out_success(false), out_rtn(NULL) {}
 };
 

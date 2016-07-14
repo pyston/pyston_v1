@@ -33,9 +33,24 @@ public:
     int64_t idx;
     Box* next;
 
-    BoxedSeqIter(Box* b, int64_t start) : b(b), idx(start), next(NULL) { Py_INCREF(b); }
+    // Pyston change:
+    // For types that allow it, this class will do the more efficient length-based
+    // iteration, storing the length here.  Otherwise len is -1.
+    int64_t len;
 
-    DEFAULT_CLASS(seqiter_cls);
+    BoxedSeqIter(Box* b, int64_t start) : b(b), idx(start), next(NULL) {
+        Py_INCREF(b);
+
+        if (b->cls == str_cls) {
+            len = static_cast<BoxedString*>(b)->size();
+        } else if (b->cls == unicode_cls) {
+            len = reinterpret_cast<PyUnicodeObject*>(b)->length;
+        } else {
+            len = -1;
+        }
+    }
+
+    DEFAULT_CLASS_SIMPLE(seqiter_cls, true);
 
     static void dealloc(BoxedSeqIter* o) noexcept {
         PyObject_GC_UnTrack(o);

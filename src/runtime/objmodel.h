@@ -110,7 +110,7 @@ extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure, size_t size
 
 Box* getiter(Box* o);
 extern "C" Box* getPystonIter(Box* o);
-extern "C" Box* getiterHelper(Box* o);
+extern "C" Box* getiterHelper(Box* o) __attribute__((noinline));
 extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) __attribute__((noinline));
 
 struct SetattrRewriteArgs;
@@ -133,9 +133,8 @@ template <ExceptionStyle S> inline Box* getitemInternal(Box* target, Box* slice)
     return getitemInternal<S, NOT_REWRITABLE>(target, slice, NULL);
 }
 
-struct LenRewriteArgs;
 template <ExceptionStyle S, Rewritable rewritable>
-BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) noexcept(S == CAPI);
+BoxedInt* lenInternal(Box* obj, UnaryopRewriteArgs* rewrite_args) noexcept(S == CAPI);
 Box* lenCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                      Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names);
 

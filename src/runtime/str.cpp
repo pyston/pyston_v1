@@ -2406,75 +2406,6 @@ extern "C" Box* strGetslice(BoxedString* self, Box* boxedStart, Box* boxedStop) 
     return _strSlice(self, start, stop, 1, stop - start);
 }
 
-
-// TODO it looks like strings don't have their own iterators, but instead
-// rely on the sequence iteration protocol.
-// Should probably implement that, and maybe once that's implemented get
-// rid of the striterator class?
-BoxedClass* str_iterator_cls = NULL;
-
-class BoxedStringIterator : public Box {
-public:
-    BoxedString* s;
-    std::string::const_iterator it, end;
-
-    BoxedStringIterator(BoxedString* s) : s(s), it(s->s().begin()), end(s->s().end()) { Py_INCREF(s); }
-
-    DEFAULT_CLASS(str_iterator_cls);
-
-    static llvm_compat_bool hasnextUnboxed(BoxedStringIterator* self) {
-        assert(self->cls == str_iterator_cls);
-        return self->it != self->end;
-    }
-
-    static Box* hasnext(BoxedStringIterator* self) {
-        assert(self->cls == str_iterator_cls);
-        return boxBool(self->it != self->end);
-    }
-
-    static Box* iter(BoxedStringIterator* self) {
-        assert(self->cls == str_iterator_cls);
-        return incref(self);
-    }
-
-    static Box* next(BoxedStringIterator* self) {
-        assert(self->cls == str_iterator_cls);
-        if (!hasnextUnboxed(self))
-            raiseExcHelper(StopIteration, (const char*)nullptr);
-
-        char c = *self->it;
-        ++self->it;
-        return incref(characters[c & UCHAR_MAX]);
-    }
-
-    static Box* next_capi(Box* _self) noexcept {
-        assert(_self->cls == str_iterator_cls);
-        auto self = (BoxedStringIterator*)_self;
-        if (!hasnextUnboxed(self))
-            return NULL;
-
-        char c = *self->it;
-        ++self->it;
-        return incref(characters[c & UCHAR_MAX]);
-    }
-
-    static void dealloc(BoxedStringIterator* o) noexcept {
-        PyObject_GC_UnTrack(o);
-        Py_DECREF(o->s);
-        o->cls->tp_free(o);
-    }
-
-    static int traverse(BoxedStringIterator* self, visitproc visit, void* arg) noexcept {
-        Py_VISIT(self->s);
-        return 0;
-    }
-};
-
-Box* strIter(BoxedString* self) noexcept {
-    assert(PyString_Check(self));
-    return new BoxedStringIterator(self);
-}
-
 extern "C" PyObject* PyString_FromString(const char* s) noexcept {
     return boxString(s);
 }
@@ -2860,20 +2791,6 @@ void setupStr() {
 
     assert(str_cls->tp_basicsize == PyStringObject_SIZE);
 
-    str_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedStringIterator), false, "striterator",
-                                          false, (destructor)BoxedStringIterator::dealloc, NULL, true,
-                                          (traverseproc)BoxedStringIterator::traverse, NOCLEAR);
-    str_iterator_cls->giveAttr(
-        "__hasnext__", new BoxedFunction(FunctionMetadata::create((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
-    str_iterator_cls->giveAttr(
-        "__iter__", new BoxedFunction(FunctionMetadata::create((void*)BoxedStringIterator::iter, UNKNOWN, 1)));
-    str_iterator_cls->giveAttr("next",
-                               new BoxedFunction(FunctionMetadata::create((void*)BoxedStringIterator::next, STR, 1)));
-    str_iterator_cls->freeze();
-    str_iterator_cls->tpp_hasnext = (BoxedClass::pyston_inquiry)BoxedStringIterator::hasnextUnboxed;
-    str_iterator_cls->tp_iternext = BoxedStringIterator::next_capi;
-    str_iterator_cls->tp_iter = PyObject_SelfIter;
-
     str_cls->tp_as_buffer = &string_as_buffer;
 
     str_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)string_getnewargs, UNKNOWN, 1,
@@ -2953,9 +2870,6 @@ void setupStr() {
 
     str_cls->giveAttr("__getslice__", new BoxedFunction(FunctionMetadata::create((void*)strGetslice, STR, 3)));
 
-    str_cls->giveAttr("__iter__",
-                      new BoxedFunction(FunctionMetadata::create((void*)strIter, typeFromClass(str_iterator_cls), 1)));
-
     add_methods(str_cls, string_methods);
 
     auto str_new = FunctionMetadata::create((void*)strNew<CXX>, UNKNOWN, 2, false, false,
@@ -2978,7 +2892,6 @@ void setupStr() {
     str_cls->tp_repr = str_repr;
     str_cls->tp_str = str_str;
     str_cls->tp_print = string_print;
-    str_cls->tp_iter = (decltype(str_cls->tp_iter))strIter;
     str_cls->tp_hash = (hashfunc)str_hash;
     str_cls->tp_as_sequence->sq_concat = (binaryfunc)strAdd<CAPI>;
     str_cls->tp_as_sequence->sq_contains = (objobjproc)string_contains;

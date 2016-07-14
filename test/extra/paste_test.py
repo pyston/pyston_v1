@@ -36,7 +36,7 @@ print ">> "
 # - no sys.settrace 
 # - no shiftjis encoding
 # - slightly different error messages
-expected = [{"failed" : 22, "passed" : 112}]
+expected = [{"failed" : 21, "passed" : 113}]
 run_test([PYTEST_EXE], cwd=PASTE_TEST_DIR, expected=expected)
 
 
