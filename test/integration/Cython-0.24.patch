@@ -1,0 +1,274 @@
+diff --git a/Cython/Utility/Builtins.c b/Cython/Utility/Builtins.c
+index dd4c40b..8161702 100644
+--- a/Cython/Utility/Builtins.c
++++ b/Cython/Utility/Builtins.c
+@@ -115,7 +115,7 @@ static PyObject* __Pyx_PyExec3(PyObject* o, PyObject* globals, PyObject* locals)
+     }
+ 
+     if (PyCode_Check(o)) {
+-        if (PyCode_GetNumFree((PyCodeObject *)o) > 0) {
++        if (PyCode_HasFreeVars((PyCodeObject *)o) > 0) {
+             PyErr_SetString(PyExc_TypeError,
+                 "code object passed to exec() may not contain free variables");
+             goto bad;
+diff --git a/Cython/Utility/Coroutine.c b/Cython/Utility/Coroutine.c
+index db7d95b..3513d5f 100644
+--- a/Cython/Utility/Coroutine.c
++++ b/Cython/Utility/Coroutine.c
+@@ -476,7 +476,7 @@ PyObject *__Pyx_Coroutine_SendEx(__pyx_CoroutineObject *self, PyObject *value) {
+ 
+     __Pyx_PyThreadState_assign
+     if (value) {
+-#if CYTHON_COMPILING_IN_PYPY
++#if CYTHON_COMPILING_IN_PYPY || CYTHON_COMPILING_IN_PYSTON
+         // FIXME: what to do in PyPy?
+ #else
+         // Generators always return to their most recent caller, not
+@@ -503,7 +503,7 @@ PyObject *__Pyx_Coroutine_SendEx(__pyx_CoroutineObject *self, PyObject *value) {
+     if (retval) {
+         __Pyx_ExceptionSwap(&self->exc_type, &self->exc_value,
+                             &self->exc_traceback);
+-#if CYTHON_COMPILING_IN_PYPY
++#if CYTHON_COMPILING_IN_PYPY || CYTHON_COMPILING_IN_PYSTON
+         // FIXME: what to do in PyPy?
+ #else
+         // Don't keep the reference to f_back any longer than necessary.  It
+@@ -1400,7 +1400,7 @@ static void __Pyx__ReturnWithStopIteration(PyObject* value); /*proto*/
+ 
+ static void __Pyx__ReturnWithStopIteration(PyObject* value) {
+     PyObject *exc, *args;
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+     __Pyx_PyThreadState_declare
+     if ((PY_VERSION_HEX >= 0x03030000 && PY_VERSION_HEX < 0x030500B1) || PyTuple_Check(value)) {
+         args = PyTuple_New(1);
+diff --git a/Cython/Utility/Exceptions.c b/Cython/Utility/Exceptions.c
+index d1aceb3..48812bb 100644
+--- a/Cython/Utility/Exceptions.c
++++ b/Cython/Utility/Exceptions.c
+@@ -9,7 +9,7 @@
+ /////////////// PyThreadStateGet.proto ///////////////
+ //@substitute: naming
+ 
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+ #define __Pyx_PyThreadState_declare  PyThreadState *$local_tstate_cname;
+ #define __Pyx_PyThreadState_assign  $local_tstate_cname = PyThreadState_GET();
+ #else
+@@ -21,7 +21,7 @@
+ /////////////// PyErrExceptionMatches.proto ///////////////
+ //@substitute: naming
+ 
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+ #define __Pyx_PyErr_ExceptionMatches(err) __Pyx_PyErr_ExceptionMatchesInState($local_tstate_cname, err)
+ static CYTHON_INLINE int __Pyx_PyErr_ExceptionMatchesInState(PyThreadState* tstate, PyObject* err);
+ #else
+@@ -30,7 +30,7 @@ static CYTHON_INLINE int __Pyx_PyErr_ExceptionMatchesInState(PyThreadState* tsta
+ 
+ /////////////// PyErrExceptionMatches ///////////////
+ 
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+ static CYTHON_INLINE int __Pyx_PyErr_ExceptionMatchesInState(PyThreadState* tstate, PyObject* err) {
+     PyObject *exc_type = tstate->curexc_type;
+     if (exc_type == err) return 1;
+@@ -43,7 +43,7 @@ static CYTHON_INLINE int __Pyx_PyErr_ExceptionMatchesInState(PyThreadState* tsta
+ //@substitute: naming
+ //@requires: PyThreadStateGet
+ 
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+ #define __Pyx_ErrRestoreWithState(type, value, tb)  __Pyx_ErrRestoreInState(PyThreadState_GET(), type, value, tb)
+ #define __Pyx_ErrFetchWithState(type, value, tb)    __Pyx_ErrFetchInState(PyThreadState_GET(), type, value, tb)
+ #define __Pyx_ErrRestore(type, value, tb)  __Pyx_ErrRestoreInState($local_tstate_cname, type, value, tb)
+@@ -60,7 +60,7 @@ static CYTHON_INLINE void __Pyx_ErrFetchInState(PyThreadState *tstate, PyObject
+ 
+ /////////////// PyErrFetchRestore ///////////////
+ 
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+ static CYTHON_INLINE void __Pyx_ErrRestoreInState(PyThreadState *tstate, PyObject *type, PyObject *value, PyObject *tb) {
+     PyObject *tmp_type, *tmp_value, *tmp_tb;
+     tmp_type = tstate->curexc_type;
+@@ -285,7 +285,7 @@ bad:
+ //@substitute: naming
+ //@requires: PyThreadStateGet
+ 
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+ #define __Pyx_GetException(type, value, tb)  __Pyx__GetException($local_tstate_cname, type, value, tb)
+ static int __Pyx__GetException(PyThreadState *tstate, PyObject **type, PyObject **value, PyObject **tb); /*proto*/
+ #else
+@@ -294,13 +294,13 @@ static int __Pyx_GetException(PyObject **type, PyObject **value, PyObject **tb);
+ 
+ /////////////// GetException ///////////////
+ 
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+ static int __Pyx__GetException(PyThreadState *tstate, PyObject **type, PyObject **value, PyObject **tb) {
+ #else
+ static int __Pyx_GetException(PyObject **type, PyObject **value, PyObject **tb) {
+ #endif
+     PyObject *local_type, *local_value, *local_tb;
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+     PyObject *tmp_type, *tmp_value, *tmp_tb;
+     local_type = tstate->curexc_type;
+     local_value = tstate->curexc_value;
+@@ -312,7 +312,7 @@ static int __Pyx_GetException(PyObject **type, PyObject **value, PyObject **tb)
+     PyErr_Fetch(&local_type, &local_value, &local_tb);
+ #endif
+     PyErr_NormalizeException(&local_type, &local_value, &local_tb);
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+     if (unlikely(tstate->curexc_type))
+ #else
+     if (unlikely(PyErr_Occurred()))
+@@ -332,7 +332,7 @@ static int __Pyx_GetException(PyObject **type, PyObject **value, PyObject **tb)
+     *type = local_type;
+     *value = local_value;
+     *tb = local_tb;
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+     tmp_type = tstate->exc_type;
+     tmp_value = tstate->exc_value;
+     tmp_tb = tstate->exc_traceback;
+@@ -366,7 +366,7 @@ static CYTHON_INLINE void __Pyx_ReraiseException(void); /*proto*/
+ 
+ static CYTHON_INLINE void __Pyx_ReraiseException(void) {
+     PyObject *type = NULL, *value = NULL, *tb = NULL;
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+     PyThreadState *tstate = PyThreadState_GET();
+     type = tstate->exc_type;
+     value = tstate->exc_value;
+@@ -398,7 +398,7 @@ static CYTHON_INLINE void __Pyx_ReraiseException(void) {
+ //@substitute: naming
+ //@requires: PyThreadStateGet
+ 
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+ #define __Pyx_ExceptionSave(type, value, tb)  __Pyx__ExceptionSave($local_tstate_cname, type, value, tb)
+ static CYTHON_INLINE void __Pyx__ExceptionSave(PyThreadState *tstate, PyObject **type, PyObject **value, PyObject **tb); /*proto*/
+ #define __Pyx_ExceptionReset(type, value, tb)  __Pyx__ExceptionReset($local_tstate_cname, type, value, tb)
+@@ -412,7 +412,7 @@ static CYTHON_INLINE void __Pyx__ExceptionReset(PyThreadState *tstate, PyObject
+ 
+ /////////////// SaveResetException ///////////////
+ 
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+ static CYTHON_INLINE void __Pyx__ExceptionSave(PyThreadState *tstate, PyObject **type, PyObject **value, PyObject **tb) {
+     *type = tstate->exc_type;
+     *value = tstate->exc_value;
+@@ -440,7 +440,7 @@ static CYTHON_INLINE void __Pyx__ExceptionReset(PyThreadState *tstate, PyObject
+ //@substitute: naming
+ //@requires: PyThreadStateGet
+ 
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+ #define __Pyx_ExceptionSwap(type, value, tb)  __Pyx__ExceptionSwap($local_tstate_cname, type, value, tb)
+ static CYTHON_INLINE void __Pyx__ExceptionSwap(PyThreadState *tstate, PyObject **type, PyObject **value, PyObject **tb); /*proto*/
+ #else
+@@ -449,7 +449,7 @@ static CYTHON_INLINE void __Pyx_ExceptionSwap(PyObject **type, PyObject **value,
+ 
+ /////////////// SwapException ///////////////
+ 
+-#if CYTHON_COMPILING_IN_CPYTHON
++#if CYTHON_COMPILING_IN_CPYTHON && !CYTHON_COMPILING_IN_PYSTON
+ static CYTHON_INLINE void __Pyx__ExceptionSwap(PyThreadState *tstate, PyObject **type, PyObject **value, PyObject **tb) {
+     PyObject *tmp_type, *tmp_value, *tmp_tb;
+     tmp_type = tstate->exc_type;
+@@ -615,7 +615,7 @@ static void __Pyx_AddTraceback(const char *funcname, int c_line,
+         0                    /*PyObject *locals*/
+     );
+     if (!py_frame) goto bad;
+-    py_frame->f_lineno = py_line;
++    PyFrame_SetLineNumber(py_frame, py_line);
+     PyTraceBack_Here(py_frame);
+ bad:
+     Py_XDECREF(py_code);
+diff --git a/Cython/Utility/ModuleSetupCode.c b/Cython/Utility/ModuleSetupCode.c
+index ad04117..5c394f2 100644
+--- a/Cython/Utility/ModuleSetupCode.c
++++ b/Cython/Utility/ModuleSetupCode.c
+@@ -32,15 +32,77 @@
+   #define Py_HUGE_VAL HUGE_VAL
+ #endif
+ 
+-#ifdef PYPY_VERSION
++// This is coiped from https://github.com/Nexedi/pycapicompat
++// Which defined extra CAPI functions for compatibility between various C-based Python implementations
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#if !defined(PYSTON_VERSION) && !defined(PYPY_VERSION)
++# define CPYTHON_VERSION    PY_VERSION
++#endif
++
++#ifdef CPYTHON_VERSION
++#include <frameobject.h>
++
++// PyCode. Check whether there are free variables
++static inline int PyCode_HasFreeVars(PyCodeObject *co) {
++    return PyCode_GetNumFree(co) > 0 ? 1 : 0;
++}
++
++// PyFrame. Set frame line number
++static inline void
++PyFrame_SetLineNumber(PyFrameObject *f, int lineno) {
++    f->f_lineno = lineno;
++}
++
++#elif defined(PYSTON_VERSION)
++
++// PyCode_HasFreeVars(co)               provided out of the box
++// PyFrame_SetLineNumber(f, lineno)     provided out of the box : 0; }
++
++#elif defined(PYPY_VERSION)
++
++// PyCode. Check whether there are free variables
++// TODO: need to test it on PyPy
++static inline int PyCode_HasFreeVars(PyCodeObject *co) {
++    return PyCode_GetNumFree(co) > 0 ? 1 : 0;
++}
++
++// PyFrame. Set frame line number
++// TODO: need to test it on PyPy
++static inline void
++PyFrame_SetLineNumber(PyFrameObject *f, int lineno) {
++    f->f_lineno = lineno;
++}
++
++#endif
++
++#ifdef __cplusplus
++}
++#endif
++
++// Because Pyston is more like CPython. Most of Cython code under CPython directive could also work for
++// Pyston. So if Cython work under Pyston, set CYTHON_COMPILING_IN_CPYTHON too.
++// But there still have exceptions. So set CYTHON_COMPILING_IN_PYSTON for the places that Pyston can not
++// use the code for CPython.
++#if defined(PYSTON_VERSION)
++  #define CYTHON_COMPILING_IN_PYPY 0
++  #define CYTHON_COMPILING_IN_CPYTHON 1
++  #define CYTHON_COMPILING_IN_PYSTON 1
++#elif defined(PYPY_VERSION)
+   #define CYTHON_COMPILING_IN_PYPY 1
+   #define CYTHON_COMPILING_IN_CPYTHON 0
++  #define CYTHON_COMPILING_IN_PYSTON 0
+ #else
+   #define CYTHON_COMPILING_IN_PYPY 0
+   #define CYTHON_COMPILING_IN_CPYTHON 1
++  #define CYTHON_COMPILING_IN_PYSTON 0
+ #endif
+ 
+-#if !defined(CYTHON_USE_PYLONG_INTERNALS) && CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x02070000
++
++#if !defined(CYTHON_USE_PYLONG_INTERNALS) && CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x02070000 && !CYTHON_COMPILING_IN_PYSTON
++// Pyston not use CPython PyLong implementation
+   #define CYTHON_USE_PYLONG_INTERNALS 1
+ #endif
+ #if CYTHON_USE_PYLONG_INTERNALS

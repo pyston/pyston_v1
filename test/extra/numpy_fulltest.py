@@ -22,18 +22,17 @@ test_helper.create_virtenv(ENV_NAME, DEPENDENCIES)
 SRC_DIR = ENV_NAME
 ENV_DIR = os.path.abspath(ENV_NAME)
 PYTHON_EXE = os.path.abspath(ENV_NAME + "/bin/python")
-CYTHON_DIR = os.path.abspath(os.path.join(SRC_DIR, "cython-0.22"))
+CYTHON_DIR = os.path.abspath(os.path.join(SRC_DIR, "cython"))
 NUMPY_DIR = os.path.abspath(os.path.join(SRC_DIR, "numpy"))
 
 print_progress_header("Setting up Cython...")
 if not os.path.exists(CYTHON_DIR):
 
-    url = "https://github.com/cython/cython/archive/0.22.tar.gz"
-    subprocess.check_call(["wget", url, "-O", "Cython-0.22.tar.gz"], cwd=SRC_DIR)
-    subprocess.check_call(["tar", "-zxf", "Cython-0.22.tar.gz"], cwd=SRC_DIR)
+    url = "https://github.com/cython/cython"
+    subprocess.check_call(["git", "clone", "--depth", "1", "--branch", "0.24", url], cwd=SRC_DIR)
 
     if USE_CUSTOM_PATCHES:
-        PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "../integration/Cython-0.22.patch"))
+        PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "../integration/Cython-0.24.patch"))
         subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=CYTHON_DIR)
         print ">>> Applied Cython patch"
 

@@ -5,20 +5,20 @@ from test_helper import create_virtenv, run_test
 
 ENV_NAME = "lxml_test_env_" + os.path.basename(sys.executable)
 SRC_DIR = os.path.abspath(os.path.join(ENV_NAME, "src"))
+CYTHON_DIR = os.path.abspath(os.path.join(SRC_DIR, "cython"))
 PYTHON_EXE = os.path.abspath(os.path.join(ENV_NAME, "bin", "python"))
 
 def install_and_test_lxml():
     shutil.rmtree(SRC_DIR, ignore_errors=True)
     os.makedirs(SRC_DIR)
 
-    url = "https://github.com/cython/cython/archive/0.22.tar.gz"
-    subprocess.check_call(["wget", url, "-O", "Cython-0.22.tar.gz"], cwd=SRC_DIR)
-    subprocess.check_call(["tar", "-zxf", "Cython-0.22.tar.gz"], cwd=SRC_DIR)
+    url = "https://github.com/cython/cython"
+    subprocess.check_call(["git", "clone", "--depth", "1", "--branch", "0.24", url], cwd=SRC_DIR)
 
-    CYTHON_DIR = os.path.abspath(os.path.join(SRC_DIR, "cython-0.22"))
-    PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "integration", "Cython-0.22.patch"))
+    PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "../integration/Cython-0.24.patch"))
     subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=CYTHON_DIR)
-    print "Applied Cython patch"
+    print ">>> Applied Cython patch"
+
     subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=CYTHON_DIR)
     subprocess.check_call([PYTHON_EXE, "-c", "import Cython"], cwd=CYTHON_DIR)
 
@@ -33,7 +33,7 @@ def install_and_test_lxml():
 
     subprocess.check_call([PYTHON_EXE, "setup.py", "build_ext", "-i", "--with-cython"], cwd=LXML_DIR)
  
-    expected = [{'ran': 1381, 'failures': 1}]
+    expected = [{'ran': 1381}]
     run_test([PYTHON_EXE, "test.py"], cwd=LXML_DIR, expected=expected)
     
 create_virtenv(ENV_NAME, None, force_create = True)
