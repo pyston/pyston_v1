@@ -1,0 +1,17 @@
+--- src/formencode/formencode/validators.py.orig	2016-07-14 17:02:54.061523151 +0000
++++ src/formencode/formencode/validators.py	2016-07-14 17:03:55.577523151 +0000
+@@ -1394,14 +1394,10 @@
+         'http://google.com'
+         >>> u.to_python('google.com')
+         Traceback (most recent call last):
+             ...
+         Invalid: You must start your URL with http://, https://, etc
+-        >>> u.to_python('http://www.formencode.org/does/not/exist/page.html')
+-        Traceback (most recent call last):
+-            ...
+-        Invalid: The server responded that the page could not be found
+         >>> u.to_python('http://this.domain.does.not.exist.example.org/test.html')
+         ... # doctest: +ELLIPSIS
+         Traceback (most recent call last):
+             ...
+         Invalid: An error occured when trying to connect to the server: ...
