@@ -15,7 +15,7 @@ RUN set -x \
 
 ENV PATH /pyston_env/bin/:$PATH
 
-RUN pip install https://github.com/dropbox/pyston/releases/download/${PYSTON_TAG}/Cython-0.22-pyston.tar.gz
+RUN pip install https://github.com/dropbox/pyston/releases/download/${PYSTON_TAG}/Cython-0.24-pyston.tar.gz
 
 RUN echo "source /pyston_env/bin/activate" >> /root/.bashrc
 
