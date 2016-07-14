@@ -646,10 +646,9 @@ void Rewriter::_cmp(RewriterVar* result, RewriterVar* v1, AST_TYPE::AST_TYPE cmp
     v1->bumpUseEarlyIfPossible();
     v2->bumpUseEarlyIfPossible();
 
-    // sete and setne has special register requirements (can't use r8-r15)
-    const assembler::Register valid_registers[] = {
-        assembler::RAX, assembler::RCX, assembler::RDX, assembler::RSI, assembler::RDI,
-    };
+    // sete and setne has special register requirements
+    auto set_inst_valid_registers = assembler::RAX | assembler::RBX | assembler::RCX | assembler::RDX;
+    auto valid_registers = set_inst_valid_registers & allocatable_regs;
     assembler::Register newvar_reg = allocReg(dest, Location::any(), valid_registers);
     result->initializeInReg(newvar_reg);
     assembler->cmp(v1_reg, v2_reg);
@@ -849,6 +848,9 @@ assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_
     Location l(*locations.begin());
 
     assembler::Register reg = rewriter->allocReg(dest, otherThan);
+    if (rewriter->failed)
+        return reg;
+
     assert(rewriter->vars_by_location.count(reg) == 0);
 
     if (l.type == Location::Scratch || l.type == Location::Stack) {
@@ -1979,9 +1981,10 @@ void Rewriter::spillRegister(assembler::Register reg, Location preserve) {
     }
 
     // First, try to spill into a callee-save register:
-    for (assembler::Register new_reg : allocatable_regs) {
-        if (!new_reg.isCalleeSave())
-            continue;
+    auto callee_save_allocatable_regs = allocatable_regs & assembler::RegisterSet::getCalleeSave();
+    for (assembler::Register new_reg : callee_save_allocatable_regs) {
+        assert(new_reg.isCalleeSave());
+
         if (vars_by_location.count(new_reg))
             continue;
         if (Location(new_reg) == preserve)
@@ -2023,8 +2026,7 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
     return allocReg(dest, otherThan, allocatable_regs);
 }
 
-assembler::Register Rewriter::allocReg(Location dest, Location otherThan,
-                                       llvm::ArrayRef<assembler::Register> valid_registers) {
+assembler::Register Rewriter::allocReg(Location dest, Location otherThan, assembler::RegisterSet valid_registers) {
     assertPhaseEmitting();
 
     if (dest.type == Location::AnyReg) {
@@ -2063,7 +2065,7 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan,
         assert(failed || vars_by_location.count(best_reg) == 0);
         return best_reg;
     } else if (dest.type == Location::Register) {
-        assert(std::find(valid_registers.begin(), valid_registers.end(), dest.asRegister()) != valid_registers.end());
+        assert(valid_registers.isInside(dest.asRegister()));
         assembler::Register reg(dest.regnum);
 
         if (vars_by_location.count(reg)) {
@@ -2220,7 +2222,7 @@ Rewriter::Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const L
       marked_inside_ic(false),
       done_guarding(false),
       last_guard_action(-1),
-      allocatable_regs(std_allocatable_regs) {
+      allocatable_regs(this->rewrite->getICInfo()->getAllocatableRegs()) {
     initPhaseCollecting();
 
     finished = false;

@@ -94,6 +94,7 @@ private:
     TypeRecorder* const type_recorder;
     int retry_in, retry_backoff;
     int times_rewritten;
+    assembler::RegisterSet allocatable_registers;
 
     DecrefInfo slowpath_decref_info;
     // This is a vector of locations which always need to get decrefed inside this IC.
@@ -107,7 +108,8 @@ private:
 public:
     ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int size,
            llvm::CallingConv::ID calling_conv, LiveOutSet live_outs, assembler::GenericRegister return_register,
-           TypeRecorder* type_recorder, std::vector<Location> ic_global_decref_locations);
+           TypeRecorder* type_recorder, std::vector<Location> ic_global_decref_locations,
+           assembler::RegisterSet allocatable_registers = assembler::RegisterSet::stdAllocatable());
     ~ICInfo();
     void* const start_addr, *const slowpath_rtn_addr, *const continue_addr;
 
@@ -132,6 +134,8 @@ public:
     int percentMegamorphic() const { return times_rewritten * 100 / IC_MEGAMORPHIC_THRESHOLD; }
     int percentBackedoff() const { return retry_backoff; }
     int timesRewritten() const { return times_rewritten; }
+
+    assembler::RegisterSet getAllocatableRegs() const { return allocatable_registers; }
 
     friend class ICSlotRewrite;
 

@@ -43,6 +43,8 @@ static llvm::DenseMap<CFGBlock*, std::vector<void*>> block_patch_locations;
 //   asm volatile ("" ::: "r14");
 //   asm volatile ("" ::: "r13");
 //   asm volatile ("" ::: "r12");
+//   asm volatile ("" ::: "rbx");
+//   asm volatile ("" ::: "rbp");
 //   char scratch[256+16];
 //   foo(scratch);
 // }
@@ -50,15 +52,16 @@ static llvm::DenseMap<CFGBlock*, std::vector<void*>> block_patch_locations;
 // It omits the frame pointer but saves r12, r13, r14 and r15
 // use 'objdump -s -j .eh_frame <obj.file>' to dump it
 const unsigned char eh_info[]
-    = { 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x7a, 0x52, 0x00, 0x01, 0x78, 0x10, 0x01,
-        0x1b, 0x0c, 0x07, 0x08, 0x90, 0x01, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x00, 0x42, 0x0e, 0x10, 0x42, 0x0e, 0x18, 0x42,
-        0x0e, 0x20, 0x42, 0x0e, 0x28, 0x47, 0x0e, 0xc0, 0x02, 0x8c, 0x05, 0x8d, 0x04, 0x8e, 0x03, 0x8f,
-        0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    = { 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x7a, 0x52, 0x00, 0x01, 0x78, 0x10, 0x01, 0x1b,
+        0x0c, 0x07, 0x08, 0x90, 0x01, 0x00, 0x00, 0x34, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x41, 0x0e, 0x10, 0x42, 0x0e, 0x18, 0x42, 0x0e, 0x20, 0x42,
+        0x0e, 0x28, 0x42, 0x0e, 0x30, 0x41, 0x0e, 0x38, 0x47, 0x0e, 0xd0, 0x02, 0x83, 0x07, 0x8c, 0x06, 0x8d,
+        0x05, 0x8e, 0x04, 0x8f, 0x03, 0x86, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 static_assert(JitCodeBlock::num_stack_args == 2, "have to update EH table!");
 static_assert(JitCodeBlock::scratch_size == 256, "have to update EH table!");
 
 constexpr int code_size = JitCodeBlock::memory_size - sizeof(eh_info);
+constexpr assembler::RegisterSet JitCodeBlock::additional_regs;
 
 JitCodeBlock::MemoryManager::MemoryManager() {
     int protection = PROT_READ | PROT_WRITE | PROT_EXEC;
@@ -86,10 +89,12 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     uint8_t* code = a.curInstPointer();
 
     // emit prolog
+    a.push(assembler::RBP);
     a.push(assembler::R15);
     a.push(assembler::R14);
     a.push(assembler::R13);
     a.push(assembler::R12);
+    a.push(assembler::RBX);
     static_assert(sp_adjustment % 16 == 8, "stack isn't aligned");
     a.sub(assembler::Immediate(sp_adjustment), assembler::RSP);
     a.mov(assembler::RDI, assembler::R13);                                // interpreter pointer
@@ -118,7 +123,8 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     g.func_addr_registry.registerFunction(unique_name, code, code_size, NULL);
 }
 
-std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, int patch_jump_offset) {
+std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, int patch_jump_offset,
+                                                             llvm::DenseSet<int> known_non_null_vregs) {
     if (is_currently_writing || blocks_aborted.count(block))
         return std::unique_ptr<JitFragmentWriter>();
 
@@ -131,13 +137,15 @@ std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, in
     void* fragment_start = a.curInstPointer() - patch_jump_offset;
     long fragment_offset = a.bytesWritten() - patch_jump_offset;
     long bytes_left = a.bytesLeft() + patch_jump_offset;
+    constexpr assembler::RegisterSet bjit_allocatable_regs = assembler::RegisterSet::stdAllocatable() | additional_regs;
     std::unique_ptr<ICInfo> ic_info(new ICInfo(fragment_start, nullptr, nullptr, stack_info, bytes_left,
                                                llvm::CallingConv::C, live_outs, assembler::RAX, 0,
-                                               std::vector<Location>()));
+                                               std::vector<Location>(), bjit_allocatable_regs));
     std::unique_ptr<ICSlotRewrite> rewrite = ic_info->startRewrite("");
 
-    return std::unique_ptr<JitFragmentWriter>(new JitFragmentWriter(
-        block, std::move(ic_info), std::move(rewrite), fragment_offset, patch_jump_offset, a.getStartAddr(), *this));
+    return std::unique_ptr<JitFragmentWriter>(
+        new JitFragmentWriter(block, std::move(ic_info), std::move(rewrite), fragment_offset, patch_jump_offset,
+                              a.getStartAddr(), *this, std::move(known_non_null_vregs)));
 }
 
 void JitCodeBlock::fragmentAbort(bool not_enough_space) {
@@ -156,16 +164,10 @@ void JitCodeBlock::fragmentFinished(int bytes_written, int num_bytes_overlapping
     ic_info.appendDecrefInfosTo(decref_infos);
 }
 
-static const assembler::Register bjit_allocatable_regs[]
-    = { assembler::RAX, assembler::RCX, assembler::RDX,
-        // no RSP
-        // no RBP
-        assembler::RDI, assembler::RSI, assembler::R8,  assembler::R9,
-        assembler::R10, assembler::R11, assembler::R12, assembler::R15 };
-
 JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic_info,
                                      std::unique_ptr<ICSlotRewrite> rewrite, int code_offset, int num_bytes_overlapping,
-                                     void* entry_code, JitCodeBlock& code_block)
+                                     void* entry_code, JitCodeBlock& code_block,
+                                     llvm::DenseSet<int> known_non_null_vregs)
     : Rewriter(std::move(rewrite), 0, {}, /* needs_invalidation_support = */ false),
       block(block),
       code_offset(code_offset),
@@ -174,8 +176,8 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
       entry_code(entry_code),
       code_block(code_block),
       interp(0),
+      known_non_null_vregs(std::move(known_non_null_vregs)),
       ic_info(std::move(ic_info)) {
-    allocatable_regs = bjit_allocatable_regs;
 
     added_changing_action = true;
 
@@ -438,7 +440,9 @@ RewriterVar* JitFragmentWriter::emitGetPystonIter(RewriterVar* v) {
 }
 
 RewriterVar* JitFragmentWriter::emitHasnext(RewriterVar* v) {
-    return call(false, (void*)hasnextHelper, v)->setType(RefType::OWNED);
+    auto rtn = call(false, (void*)hasnextHelper, v)->setType(RefType::BORROWED);
+    var_is_a_python_bool.insert(rtn);
+    return rtn;
 }
 
 RewriterVar* JitFragmentWriter::emitImportFrom(RewriterVar* module, BoxedString* name) {
@@ -460,12 +464,18 @@ RewriterVar* JitFragmentWriter::emitLandingpad() {
 }
 
 RewriterVar* JitFragmentWriter::emitNonzero(RewriterVar* v) {
+    if (var_is_a_python_bool.count(v))
+        return v;
     // nonzeroHelper returns bool
-    return call(false, (void*)nonzeroHelper, v)->setType(RefType::BORROWED);
+    auto rtn = call(false, (void*)nonzeroHelper, v)->setType(RefType::BORROWED);
+    var_is_a_python_bool.insert(rtn);
+    return rtn;
 }
 
 RewriterVar* JitFragmentWriter::emitNotNonzero(RewriterVar* v) {
-    return call(false, (void*)notHelper, v)->setType(RefType::BORROWED);
+    auto rtn = call(false, (void*)notHelper, v)->setType(RefType::BORROWED);
+    var_is_a_python_bool.insert(rtn);
+    return rtn;
 }
 
 RewriterVar* JitFragmentWriter::emitRepr(RewriterVar* v) {
@@ -760,14 +770,14 @@ void JitFragmentWriter::abortCompilation() {
     abort();
 }
 
-int JitFragmentWriter::finishCompilation() {
+std::pair<int, llvm::DenseSet<int>> JitFragmentWriter::finishCompilation() {
     RELEASE_ASSERT(!assembler->hasFailed(), "");
 
     commit();
     if (failed) {
         blocks_aborted.insert(block);
         code_block.fragmentAbort(false);
-        return 0;
+        return std::make_pair(0, llvm::DenseSet<int>());
     }
 
     if (assembler->hasFailed()) {
@@ -786,7 +796,7 @@ int JitFragmentWriter::finishCompilation() {
             // block for the next attempt.
             code_block.fragmentAbort(true /* not_enough_space */);
         }
-        return 0;
+        return std::make_pair(0, llvm::DenseSet<int>());
     }
 
     block->code = (void*)((uint64_t)entry_code + code_offset);
@@ -859,7 +869,7 @@ int JitFragmentWriter::finishCompilation() {
     registerGCTrackedICInfo(ic_info.release());
 #endif
 
-    return exit_info.num_bytes;
+    return std::make_pair(exit_info.num_bytes, std::move(known_non_null_vregs));
 }
 
 bool JitFragmentWriter::finishAssembly(int continue_offset, bool& should_fill_with_nops, bool& variable_size_slots) {
@@ -1002,8 +1012,8 @@ Box* JitFragmentWriter::exceptionMatchesHelper(Box* obj, Box* cls) {
     return boxBool(exceptionMatches(obj, cls));
 }
 
-Box* JitFragmentWriter::hasnextHelper(Box* b) {
-    return boxBool(pyston::hasnext(b));
+BORROWED(Box*) JitFragmentWriter::hasnextHelper(Box* b) {
+    return pyston::hasnext(b) ? Py_True : Py_False;
 }
 
 BORROWED(Box*) JitFragmentWriter::nonzeroHelper(Box* b) {
@@ -1054,10 +1064,12 @@ void JitFragmentWriter::_emitJump(CFGBlock* b, RewriterVar* block_next, ExitInfo
         exit_info.exit_start = assembler->curInstPointer();
         block_next->getInReg(assembler::RAX, true);
         assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
+        assembler->pop(assembler::RBX);
         assembler->pop(assembler::R12);
         assembler->pop(assembler::R13);
         assembler->pop(assembler::R14);
         assembler->pop(assembler::R15);
+        assembler->pop(assembler::RBP);
         assembler->retq();
 
         // make sure we have at least 'min_patch_size' of bytes available.
@@ -1089,10 +1101,12 @@ void JitFragmentWriter::_emitOSRPoint() {
         assembler->clear_reg(assembler::RAX); // = next block to execute
         assembler->mov(assembler::Immediate(ASTInterpreterJitInterface::osr_dummy_value), assembler::RDX);
         assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
+        assembler->pop(assembler::RBX);
         assembler->pop(assembler::R12);
         assembler->pop(assembler::R13);
         assembler->pop(assembler::R14);
         assembler->pop(assembler::R15);
+        assembler->pop(assembler::RBP);
         assembler->retq();
     }
     interp->bumpUse();
@@ -1126,7 +1140,14 @@ void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::
     uint8_t* pp_end = rewrite->getSlotStart() + assembler->bytesWritten();
     assert(assembler->hasFailed() || (pp_start + pp_size + call_size == pp_end));
 
-    std::unique_ptr<ICSetupInfo> setup_info(ICSetupInfo::initialize(true, pp_size, ICSetupInfo::Generic, NULL));
+    assembler::RegisterSet regs = assembler::RegisterSet::stdAllocatable();
+    for (assembler::Register reg : JitCodeBlock::additional_regs) {
+        if (vars_by_location.count(reg) == 0)
+            regs |= assembler::RegisterSet(reg);
+    }
+
+    std::unique_ptr<ICSetupInfo> setup_info(ICSetupInfo::initialize(true, pp_size, ICSetupInfo::Generic, NULL, regs));
+
 
     // calculate available scratch space
     int pp_scratch_size = 0;
@@ -1182,10 +1203,12 @@ void JitFragmentWriter::_emitReturn(RewriterVar* return_val) {
     return_val->getInReg(assembler::RDX, true);
     assembler->clear_reg(assembler::RAX);
     assembler->add(assembler::Immediate(JitCodeBlock::sp_adjustment), assembler::RSP);
+    assembler->pop(assembler::RBX);
     assembler->pop(assembler::R12);
     assembler->pop(assembler::R13);
     assembler->pop(assembler::R14);
     assembler->pop(assembler::R15);
+    assembler->pop(assembler::RBP);
     assembler->retq();
     return_val->bumpUse();
 }
@@ -1208,7 +1231,6 @@ void JitFragmentWriter::_emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val
         // Hax: override the automatic refcount system
         var->reftype = RefType::BORROWED;
     }
-    assert(var->num_refs_consumed == 0);
 
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {

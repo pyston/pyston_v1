@@ -57,7 +57,41 @@ const int dwarf_to_gp[] = {
 Register Register::fromDwarf(int dwarf_regnum) {
     assert(dwarf_regnum >= 0 && dwarf_regnum <= 16);
 
-    return Register(dwarf_to_gp[dwarf_regnum]);
+    Register reg(dwarf_to_gp[dwarf_regnum]);
+    assert(reg.getDwarfId() == dwarf_regnum);
+    return reg;
+}
+
+int Register::getDwarfId() const {
+    switch (regnum) {
+        case RAX.regnum:
+            return 0;
+        case RDX.regnum:
+            return 1;
+        case RCX.regnum:
+            return 2;
+        case RBX.regnum:
+            return 3;
+        case RSI.regnum:
+            return 4;
+        case RDI.regnum:
+            return 5;
+        case RBP.regnum:
+            return 6;
+        case RSP.regnum:
+            return 7;
+        case R8.regnum:
+        case R9.regnum:
+        case R10.regnum:
+        case R11.regnum:
+        case R12.regnum:
+        case R13.regnum:
+        case R14.regnum:
+        case R15.regnum:
+            return regnum;
+        default:
+            RELEASE_ASSERT(0, "not implemented");
+    };
 }
 
 GenericRegister GenericRegister::fromDwarf(int dwarf_regnum) {
@@ -441,7 +475,7 @@ void Assembler::mov_generic(Indirect src, Register dest, MovType type) {
     bool needssib = (src_idx == 0b100);
 
     int mode;
-    if (src.offset == 0)
+    if (src.offset == 0 && src.base != RBP)
         mode = 0b00;
     else if (-0x80 <= src.offset && src.offset < 0x80)
         mode = 0b01;
@@ -526,13 +560,12 @@ void Assembler::movsd(Indirect src, XMMRegister dest) {
     int dest_idx = dest.regnum;
 
     if (src_idx >= 8) {
-        trap();
-        rex |= REX_R;
+        rex |= REX_B;
         src_idx -= 8;
     }
     if (dest_idx >= 8) {
         trap();
-        rex |= REX_B;
+        rex |= REX_R;
         dest_idx -= 8;
     }
 
@@ -545,7 +578,7 @@ void Assembler::movsd(Indirect src, XMMRegister dest) {
     bool needssib = (src_idx == 0b100);
 
     int mode;
-    if (src.offset == 0)
+    if (src.offset == 0 && src.base != RBP)
         mode = 0b00;
     else if (-0x80 <= src.offset && src.offset < 0x80)
         mode = 0b01;
@@ -589,7 +622,7 @@ void Assembler::movss(Indirect src, XMMRegister dest) {
     bool needssib = (src_idx == 0b100);
 
     int mode;
-    if (src.offset == 0)
+    if (src.offset == 0 && src.base != RBP)
         mode = 0b00;
     else if (-0x80 <= src.offset && src.offset < 0x80)
         mode = 0b01;
@@ -695,7 +728,7 @@ void Assembler::incl(Indirect mem) {
     emitByte(0xff);
 
     assert(-0x80 <= mem.offset && mem.offset < 0x80);
-    if (mem.offset == 0) {
+    if (mem.offset == 0 && mem.base != RBP) {
         emitModRM(0b00, 0, src_idx);
         if (needssib)
             emitSIB(0b00, 0b100, src_idx);
@@ -723,7 +756,7 @@ void Assembler::decl(Indirect mem) {
     emitByte(0xff);
 
     assert(-0x80 <= mem.offset && mem.offset < 0x80);
-    if (mem.offset == 0) {
+    if (mem.offset == 0 && mem.base != RBP) {
         emitModRM(0b00, 1, src_idx);
     } else {
         emitModRM(0b01, 1, src_idx);
@@ -762,7 +795,7 @@ void Assembler::incq(Indirect mem) {
     emitByte(0xff);
 
     assert(-0x80 <= mem.offset && mem.offset < 0x80);
-    if (mem.offset == 0) {
+    if (mem.offset == 0 && mem.base != RBP) {
         emitModRM(0b00, 0, src_idx);
         if (needssib)
             emitSIB(0b00, 0b100, src_idx);
@@ -790,7 +823,7 @@ void Assembler::decq(Indirect mem) {
     emitByte(0xff);
 
     assert(-0x80 <= mem.offset && mem.offset < 0x80);
-    if (mem.offset == 0) {
+    if (mem.offset == 0 && mem.base != RBP) {
         emitModRM(0b00, 1, src_idx);
     } else {
         emitModRM(0b01, 1, src_idx);
@@ -844,7 +877,7 @@ void Assembler::callq(Indirect mem) {
     emitByte(0xff);
 
     assert(-0x80 <= mem.offset && mem.offset < 0x80);
-    if (mem.offset == 0) {
+    if (mem.offset == 0 && mem.base != RBP) {
         emitModRM(0b00, 2, src_idx);
     } else {
         emitModRM(0b01, 2, src_idx);
@@ -903,7 +936,7 @@ void Assembler::cmp(Indirect mem, Immediate imm, MovType type) {
         emitRex(rex);
     emitByte(0x81);
 
-    if (mem.offset == 0) {
+    if (mem.offset == 0 && mem.base != RBP) {
         emitModRM(0b00, 7, src_idx);
         if (needssib)
             emitSIB(0b00, 0b100, src_idx);
@@ -940,17 +973,25 @@ void Assembler::cmp(Indirect mem, Register reg) {
     assert(mem_idx >= 0 && mem_idx < 8);
     assert(reg_idx >= 0 && reg_idx < 8);
 
+    bool needssib = (mem_idx == 0b100);
+
     emitRex(rex);
     emitByte(0x3B);
 
-    if (mem.offset == 0) {
+    if (mem.offset == 0 && mem.base != RBP) {
         emitModRM(0b00, reg_idx, mem_idx);
+        if (needssib)
+            emitSIB(0b00, 0b100, mem_idx);
     } else if (-0x80 <= mem.offset && mem.offset < 0x80) {
         emitModRM(0b01, reg_idx, mem_idx);
+        if (needssib)
+            emitSIB(0b00, 0b100, mem_idx);
         emitByte(mem.offset);
     } else {
         assert(fitsInto<int32_t>(mem.offset));
         emitModRM(0b10, reg_idx, mem_idx);
+        if (needssib)
+            emitSIB(0b00, 0b100, mem_idx);
         emitInt(mem.offset, 4);
     }
 }
@@ -1059,7 +1100,7 @@ void Assembler::jmp(Indirect dest) {
 
     assert(reg_idx >= 0 && reg_idx < 8 && "not yet implemented");
     emitByte(0xFF);
-    if (dest.offset == 0) {
+    if (dest.offset == 0 && dest.base != RBP) {
         emitModRM(0b00, 0b100, reg_idx);
     } else if (-0x80 <= dest.offset && dest.offset < 0x80) {
         emitModRM(0b01, 0b100, reg_idx);

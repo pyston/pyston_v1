@@ -20,6 +20,7 @@
 
 #include "llvm/IR/CallingConv.h"
 
+#include "asm_writing/types.h"
 #include "codegen/stackmaps.h"
 #include "core/common.h"
 
@@ -64,14 +65,20 @@ public:
     };
 
 private:
-    ICSetupInfo(ICType type, int size, bool has_return_value, TypeRecorder* type_recorder)
-        : type(type), size(size), has_return_value(has_return_value), type_recorder(type_recorder) {}
+    ICSetupInfo(ICType type, int size, bool has_return_value, TypeRecorder* type_recorder,
+                assembler::RegisterSet allocatable_regs)
+        : type(type),
+          size(size),
+          has_return_value(has_return_value),
+          type_recorder(type_recorder),
+          allocatable_regs(allocatable_regs) {}
 
 public:
     const ICType type;
     const int size;
     const bool has_return_value;
     TypeRecorder* const type_recorder;
+    assembler::RegisterSet allocatable_regs;
 
     int totalSize() const;
     bool hasReturnValue() const { return has_return_value; }
@@ -90,7 +97,8 @@ public:
         return llvm::CallingConv::C;
     }
 
-    static ICSetupInfo* initialize(bool has_return_value, int size, ICType type, TypeRecorder* type_recorder);
+    static ICSetupInfo* initialize(bool has_return_value, int size, ICType type, TypeRecorder* type_recorder,
+                                   assembler::RegisterSet allocatable_regs = assembler::RegisterSet::stdAllocatable());
 };
 
 struct PatchpointInfo {

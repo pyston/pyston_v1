@@ -128,7 +128,8 @@ private:
     Value visit_langPrimitive(AST_LangPrimitive* node);
 
     // for doc on 'exit_offset' have a look at JitFragmentWriter::num_bytes_exit and num_bytes_overlapping
-    void startJITing(CFGBlock* block, int exit_offset = 0);
+    void startJITing(CFGBlock* block, int exit_offset = 0,
+                     llvm::DenseSet<int> known_non_null_vregs = llvm::DenseSet<int>());
     void abortJITing();
     void finishJITing(CFGBlock* continue_block = NULL);
     Box* execJITedBlock(CFGBlock* b);
@@ -293,7 +294,7 @@ void ASTInterpreter::initArguments(BoxedClosure* _closure, BoxedGenerator* _gene
     assert(i == param_names.totalParameters());
 }
 
-void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset) {
+void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset, llvm::DenseSet<int> known_non_null_vregs) {
     assert(ENABLE_BASELINEJIT);
     assert(!jit);
 
@@ -308,7 +309,18 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset) {
         exit_offset = 0;
     }
 
-    jit = code_block->newFragment(block, exit_offset);
+    // small optimization: we know that the passed arguments in the entry block are non zero
+    if (block == block->cfg->getStartingBlock() && block->predecessors.empty()) {
+        auto param_names = getMD()->param_names;
+        for (auto&& arg : param_names.arg_names) {
+            known_non_null_vregs.insert(arg->vreg);
+        }
+        if (param_names.vararg_name)
+            known_non_null_vregs.insert(param_names.vararg_name->vreg);
+        if (param_names.kwarg_name)
+            known_non_null_vregs.insert(param_names.kwarg_name->vreg);
+    }
+    jit = code_block->newFragment(block, exit_offset, std::move(known_non_null_vregs));
 }
 
 void ASTInterpreter::abortJITing() {
@@ -323,10 +335,20 @@ void ASTInterpreter::abortJITing() {
 void ASTInterpreter::finishJITing(CFGBlock* continue_block) {
     if (!jit)
         return;
-    int exit_offset = jit->finishCompilation();
+
+    int exit_offset = 0;
+    llvm::DenseSet<int> known_non_null;
+    std::tie(exit_offset, known_non_null) = jit->finishCompilation();
     jit.reset();
-    if (continue_block && !continue_block->code)
-        startJITing(continue_block, exit_offset);
+    if (continue_block && !continue_block->code) {
+        // check if we can reuse the known non null vreg set
+        if (continue_block->predecessors.size() == 1)
+            assert(current_block == continue_block->predecessors[0]);
+        else
+            known_non_null.clear();
+
+        startJITing(continue_block, exit_offset, std::move(known_non_null));
+    }
 }
 
 Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {

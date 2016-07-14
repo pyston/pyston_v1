@@ -44,8 +44,10 @@ int ICSetupInfo::totalSize() const {
 
 static std::vector<std::pair<PatchpointInfo*, void* /* addr of func to call */>> new_patchpoints;
 
-ICSetupInfo* ICSetupInfo::initialize(bool has_return_value, int size, ICType type, TypeRecorder* type_recorder) {
-    ICSetupInfo* rtn = new ICSetupInfo(type, size, has_return_value, type_recorder);
+ICSetupInfo* ICSetupInfo::initialize(bool has_return_value, int size, ICType type, TypeRecorder* type_recorder,
+                                     assembler::RegisterSet allocatable_regs) {
+    ICSetupInfo* rtn = new ICSetupInfo(type, size, has_return_value, type_recorder, allocatable_regs);
+
 
     // We use size == CALL_ONLY_SIZE to imply that the call isn't patchable
     assert(rtn->totalSize() > CALL_ONLY_SIZE);
