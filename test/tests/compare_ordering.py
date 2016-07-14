@@ -1,4 +1,3 @@
-# expected: fail
 # - we have an extra evaluation of __nonzero__ at the end
 
 class A(object):

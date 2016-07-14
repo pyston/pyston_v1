@@ -942,7 +942,10 @@ private:
 
                 pushAssign(name, val);
 
-                // TODO: this branch is unused for the last comparison
+                if (i == node->ops.size() - 1) {
+                    continue;
+                }
+
                 AST_Branch* br = new AST_Branch();
                 br->test = callNonzero(makeLoad(name, node));
                 push_back(br);
