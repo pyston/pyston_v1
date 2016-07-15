@@ -698,12 +698,7 @@ extern "C" Box* listDelitem(BoxedList* self, Box* slice) {
     return rtn;
 }
 
-extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
-    if (idx->cls != int_cls) {
-        raiseExcHelper(TypeError, "an integer is required");
-    }
-
-    int64_t n = static_cast<BoxedInt*>(idx)->n;
+extern "C" void listInsertInternal(BoxedList* self, int64_t n, Box* v) {
     if (n < 0)
         n = self->size + n;
 
@@ -721,6 +716,15 @@ extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
         Py_INCREF(v);
         self->elts->elts[n] = v;
     }
+}
+
+extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
+    if (idx->cls != int_cls) {
+        raiseExcHelper(TypeError, "an integer is required");
+    }
+
+    int64_t n = static_cast<BoxedInt*>(idx)->n;
+    listInsertInternal(self, n, v);
 
     Py_RETURN_NONE;
 }
@@ -735,7 +739,7 @@ extern "C" int PyList_Insert(PyObject* op, Py_ssize_t where, PyObject* newitem) 
             PyErr_BadInternalCall();
             return -1;
         }
-        listInsert((BoxedList*)op, boxInt(where), newitem);
+        listInsertInternal((BoxedList*)op, where, newitem);
         return 0;
     } catch (ExcInfo e) {
         setCAPIException(e);

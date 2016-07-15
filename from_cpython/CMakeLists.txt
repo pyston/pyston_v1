@@ -20,6 +20,7 @@ add_custom_target(copy_stdlib ALL DEPENDS ${STDLIB_TARGETS})
 
 # compile specified files in from_cpython/Modules
 file(GLOB_RECURSE STDMODULE_SRCS Modules
+    _bisectmodule.c
     _codecsmodule.c
     _collectionsmodule.c
     _csv.c

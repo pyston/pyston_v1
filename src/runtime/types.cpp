@@ -51,6 +51,7 @@
 #include "runtime/super.h"
 #include "runtime/util.h"
 
+extern "C" void init_bisect();
 extern "C" void initerrno();
 extern "C" void init_sha();
 extern "C" void init_sha256();
@@ -4085,6 +4086,7 @@ extern "C" {
 struct _inittab _PyImport_Inittab[] = { { "array", initarray },
                                         { "_ast", init_ast },
                                         { "binascii", initbinascii },
+                                        { "_bisect", init_bisect },
                                         { "_codecs", init_codecs },
                                         { "_collections", init_collections },
                                         { "cStringIO", initcStringIO },
