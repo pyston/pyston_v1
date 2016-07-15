@@ -108,5 +108,6 @@ void setupBool() {
     bool_cls->freeze();
     bool_cls->tp_hash = (hashfunc)bool_hash;
     bool_cls->tp_repr = boolRepr<CAPI>;
+    bool_as_number.nb_int = int_cls->tp_as_number->nb_int;
 }
 }

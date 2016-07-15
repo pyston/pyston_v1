@@ -792,7 +792,7 @@ template <ExceptionStyle S> Box* floatRepr(BoxedFloat* self) noexcept(S == CAPI)
     return callCAPIFromStyle<S>(float_str_or_repr, self->d, 0, 'r');
 }
 
-Box* floatToInt(BoxedFloat* self) {
+Box* float_to_int(BoxedFloat* self) noexcept {
     double wholepart; /* integral portion of x, rounded toward 0 */
 
     (void)modf(self->d, &wholepart);
@@ -823,14 +823,14 @@ Box* floatTrunc(BoxedFloat* self) {
         raiseExcHelper(TypeError, "descriptor '__trunc__' requires a 'float' object but received a '%s'",
                        getTypeName(self));
 
-    return floatToInt(self);
+    return float_to_int(self);
 }
 
 Box* floatInt(BoxedFloat* self) {
     if (!PyFloat_Check(self))
         raiseExcHelper(TypeError, "descriptor '__int__' requires a 'float' object but received a '%s'",
                        getTypeName(self));
-    return floatToInt(self);
+    return float_to_int(self);
 }
 
 Box* floatLong(BoxedFloat* self) {
@@ -1021,9 +1021,11 @@ void setupFloat() {
 
     _PyFloat_Init();
 
-    float_cls->tp_as_number->nb_power = float_pow;
     float_cls->tp_new = (newfunc)floatNewPacked;
     float_cls->tp_repr = (reprfunc)floatRepr<CAPI>;
     float_cls->tp_str = (reprfunc)floatStr<CAPI>;
+    float_cls->tp_richcompare = float_richcompare;
+    float_cls->tp_as_number->nb_int = (unaryfunc)float_to_int;
+    float_cls->tp_as_number->nb_power = float_pow;
 }
 }
