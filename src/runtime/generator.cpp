@@ -84,7 +84,7 @@ Context* getReturnContextForGeneratorFrame(void* frame_addr) {
     return generator->returnContext;
 }
 
-void generatorEntry(BoxedGenerator* g) {
+void generatorEntry(BoxedGenerator* g) noexcept {
     {
         assert(g->cls == generator_cls);
         assert(g->function->cls == function_cls);
@@ -92,7 +92,7 @@ void generatorEntry(BoxedGenerator* g) {
         assert(g->returnValue == Py_None);
         Py_CLEAR(g->returnValue);
 
-        try {
+        {
             RegisterHelper context_registerer(g, __builtin_frame_address(0));
 
             g->top_caller_frame_info = (FrameInfo*)cur_thread_state.frame_info;
@@ -103,13 +103,16 @@ void generatorEntry(BoxedGenerator* g) {
             // KEEP_ALIVE(func);
 
             Box** args = g->args ? &g->args->elts[0] : nullptr;
-            auto r = callCLFunc<ExceptionStyle::CXX, NOT_REWRITABLE>(func->md, nullptr, func->md->numReceivedArgs(),
-                                                                     func->closure, g, func->globals, g->arg1, g->arg2,
-                                                                     g->arg3, args);
-            Py_DECREF(r);
-        } catch (ExcInfo e) {
-            // unhandled exception: propagate the exception to the caller
-            g->exception = e;
+            auto r = callCLFunc<ExceptionStyle::CAPI, NOT_REWRITABLE>(func->md, nullptr, func->md->numReceivedArgs(),
+                                                                      func->closure, g, func->globals, g->arg1, g->arg2,
+                                                                      g->arg3, args);
+            if (r)
+                Py_DECREF(r);
+            else {
+                // unhandled exception: propagate the exception to the caller
+                PyErr_Fetch(&g->exception.type, &g->exception.value, &g->exception.traceback);
+                PyErr_Clear();
+            }
         }
 
         // we returned from the body of the generator. next/send/throw will notify the caller
@@ -254,7 +257,8 @@ template <ExceptionStyle S> static Box* generatorSend(Box* s, Box* v) noexcept(S
     return rtn;
 }
 
-Box* generatorThrow(Box* s, BoxedClass* exc_cls, Box* exc_val = nullptr, Box** args = nullptr) {
+template <ExceptionStyle S>
+Box* generatorThrow(Box* s, BoxedClass* exc_cls, Box* exc_val = nullptr, Box** args = nullptr) noexcept(S == CAPI) {
     assert(s->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
 
@@ -262,22 +266,32 @@ Box* generatorThrow(Box* s, BoxedClass* exc_cls, Box* exc_val = nullptr, Box** a
         Py_FatalError(".throw called on generator last advanced with __hasnext__");
 
     Box* exc_tb = args ? args[0] : nullptr;
-    if (exc_tb && exc_tb != Py_None && !PyTraceBack_Check(exc_tb))
+    if (exc_tb && exc_tb != Py_None && !PyTraceBack_Check(exc_tb)) {
+        if (S == CAPI) {
+            PyErr_SetString(TypeError, "throw() third argument must be a traceback object");
+            return NULL;
+        }
         raiseExcHelper(TypeError, "throw() third argument must be a traceback object");
+    }
     if (!exc_val)
         exc_val = Py_None;
     if (!exc_tb)
         exc_tb = Py_None;
 
     ExcInfo exc_info = excInfoForRaise(incref(exc_cls), incref(exc_val), incref(exc_tb));
-    if (self->entryExited)
+    if (self->entryExited) {
+        if (S == CAPI) {
+            setCAPIException(exc_info);
+            return NULL;
+        }
         throw exc_info;
+    }
 
     self->exception = exc_info;
-    return generatorSend<CXX>(self, Py_None);
+    return generatorSend<S>(self, Py_None);
 }
 
-Box* generatorClose(Box* s) {
+template <ExceptionStyle S> Box* generatorClose(Box* s) noexcept(S == CAPI) {
     assert(s->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
 
@@ -285,15 +299,28 @@ Box* generatorClose(Box* s) {
     if (self->entryExited)
         return incref(Py_None);
 
-    try {
-        autoDecref(generatorThrow(self, GeneratorExit, nullptr, nullptr));
-        raiseExcHelper(RuntimeError, "generator ignored GeneratorExit");
-    } catch (ExcInfo e) {
-        if (e.matches(StopIteration) || e.matches(GeneratorExit)) {
-            e.clear();
+    if (S == CAPI) {
+        Box* rtn = generatorThrow<S>(self, GeneratorExit, nullptr, nullptr);
+        if (rtn) {
+            PyErr_SetString(RuntimeError, "generator ignored GeneratorExit");
+            return NULL;
+        }
+        if (PyErr_ExceptionMatches(PyExc_StopIteration) || PyErr_ExceptionMatches(PyExc_GeneratorExit)) {
+            PyErr_Clear();
             return incref(Py_None);
         }
-        throw e;
+        return NULL;
+    } else {
+        try {
+            autoDecref(generatorThrow<S>(self, GeneratorExit, nullptr, nullptr));
+            raiseExcHelper(RuntimeError, "generator ignored GeneratorExit");
+        } catch (ExcInfo e) {
+            if (e.matches(StopIteration) || e.matches(GeneratorExit)) {
+                e.clear();
+                return incref(Py_None);
+            }
+            throw e;
+        }
     }
     assert(0); // unreachable
 }
@@ -329,24 +356,9 @@ Box* generatorHasnext(Box* s) {
     return boxBool(generatorHasnextUnboxed(s));
 }
 
-extern "C" Box* yield_capi(BoxedGenerator* obj, STOLEN(Box*) value, int num_live_values, ...) noexcept {
-    try {
-        Box** live_values = (Box**)alloca(sizeof(Box*) * num_live_values);
-        va_list ap;
-        va_start(ap, num_live_values);
-        for (int i = 0; i < num_live_values; ++i) {
-            live_values[i] = va_arg(ap, Box*);
-        }
-        va_end(ap);
-
-        return yield(obj, value, llvm::makeArrayRef(live_values, num_live_values));
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
-}
-
-extern "C" Box* yield(BoxedGenerator* obj, STOLEN(Box*) value, llvm::ArrayRef<Box*> live_values) {
+template <ExceptionStyle S>
+static Box* yieldInternal(BoxedGenerator* obj, STOLEN(Box*) value,
+                          llvm::ArrayRef<Box*> live_values) noexcept(S == CAPI) {
     STAT_TIMER(t0, "us_timer_generator_switching", 0);
 
     assert(obj->cls == generator_cls);
@@ -384,12 +396,32 @@ extern "C" Box* yield(BoxedGenerator* obj, STOLEN(Box*) value, llvm::ArrayRef<Bo
         ExcInfo e = self->exception;
         self->exception = ExcInfo(NULL, NULL, NULL);
         Py_CLEAR(self->returnValue);
+        if (S == CAPI) {
+            setCAPIException(e);
+            return NULL;
+        }
         throw e;
     }
 
     Box* r = self->returnValue;
     self->returnValue = NULL;
     return r;
+}
+
+extern "C" Box* yield_capi(BoxedGenerator* obj, STOLEN(Box*) value, int num_live_values, ...) noexcept {
+    Box** live_values = (Box**)alloca(sizeof(Box*) * num_live_values);
+    va_list ap;
+    va_start(ap, num_live_values);
+    for (int i = 0; i < num_live_values; ++i) {
+        live_values[i] = va_arg(ap, Box*);
+    }
+    va_end(ap);
+
+    return yieldInternal<CAPI>(obj, value, llvm::makeArrayRef(live_values, num_live_values));
+}
+
+extern "C" Box* yield(BoxedGenerator* obj, STOLEN(Box*) value, llvm::ArrayRef<Box*> live_values) {
+    return yieldInternal<CXX>(obj, value, live_values);
 }
 
 extern "C" BoxedGenerator* createGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args) {
@@ -531,15 +563,6 @@ extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {
 #endif
 }
 
-static PyObject* generator_close(PyGenObject* gen, PyObject* args) noexcept {
-    try {
-        return generatorClose((Box*)gen);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
-}
-
 static void generator_del(PyObject* self) noexcept {
     PyObject* res;
     PyObject* error_type, *error_value, *error_traceback;
@@ -560,7 +583,7 @@ static void generator_del(PyObject* self) noexcept {
 
     // Pyston change:
     // res = gen_close(gen, NULL);
-    res = generator_close((PyGenObject*)gen, NULL);
+    res = generatorClose<CAPI>((Box*)gen);
 
     if (res == NULL)
         PyErr_WriteUnraisable(self);
@@ -693,7 +716,9 @@ void setupGenerator() {
     generator_cls->giveAttr(
         "__iter__", new BoxedFunction(FunctionMetadata::create((void*)generatorIter, typeFromClass(generator_cls), 1)));
 
-    generator_cls->giveAttr("close", new BoxedFunction(FunctionMetadata::create((void*)generatorClose, UNKNOWN, 1)));
+    auto generator_close = FunctionMetadata::create((void*)generatorClose<CXX>, UNKNOWN, 1);
+    generator_close->addVersion((void*)generatorClose<CAPI>, UNKNOWN, CAPI);
+    generator_cls->giveAttr("close", new BoxedFunction(generator_close));
 
     auto generator_next = FunctionMetadata::create((void*)generatorNext<CXX>, UNKNOWN, 1, ParamNames::empty(), CXX);
     generator_next->addVersion((void*)generatorNext<CAPI>, UNKNOWN, CAPI);
@@ -703,15 +728,20 @@ void setupGenerator() {
     hasnext->addVersion((void*)generatorHasnext, BOXED_BOOL);
     generator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
 
-    generator_cls->giveAttr("send", new BoxedFunction(FunctionMetadata::create((void*)generatorSend<CXX>, UNKNOWN, 2)));
-    auto gthrow
-        = new BoxedFunction(FunctionMetadata::create((void*)generatorThrow, UNKNOWN, 4, false, false), { NULL, NULL });
-    generator_cls->giveAttr("throw", gthrow);
+    auto generator_send = FunctionMetadata::create((void*)generatorSend<CXX>, UNKNOWN, 2);
+    generator_send->addVersion((void*)generatorSend<CAPI>, UNKNOWN, CAPI);
+    generator_cls->giveAttr("send", new BoxedFunction(generator_send));
+
+    auto generator_throw = FunctionMetadata::create((void*)generatorThrow<CXX>, UNKNOWN, 4, false, false);
+    generator_throw->addVersion((void*)generatorThrow<CAPI>, UNKNOWN, CAPI);
+    generator_cls->giveAttr("throw", new BoxedFunction(generator_throw, { NULL, NULL }));
 
     generator_cls->giveAttrDescriptor("__name__", generator_name, NULL);
 
     generator_cls->freeze();
     generator_cls->tp_iter = PyObject_SelfIter;
     generator_cls->tp_del = generator_del; // don't do giveAttr("__del__") because it should not be visible from python
+    generator_cls->tpp_hasnext = generatorHasnextUnboxed;
+    generator_cls->tp_iternext = generatorNext<CAPI>;
 }
 }
