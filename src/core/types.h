@@ -95,19 +95,22 @@ public:
     ExceptionSwitchable() : capi_val(), cxx_val() {}
     ExceptionSwitchable(T capi_val, T cxx_val) : capi_val(std::move(capi_val)), cxx_val(std::move(cxx_val)) {}
 
-    template <ExceptionStyle S> T get() {
+    template <ExceptionStyle S> T& get() {
         if (S == CAPI)
             return capi_val;
         else
             return cxx_val;
     }
 
-    T get(ExceptionStyle S) {
+    T& get(ExceptionStyle S) {
         if (S == CAPI)
             return capi_val;
         else
             return cxx_val;
     }
+
+    bool empty() const { return !capi_val && !cxx_val; }
+    void clear() { *this = ExceptionSwitchable<T>(); }
 };
 
 template <typename R, typename... Args>
@@ -470,7 +473,8 @@ public:
 
     FunctionList
         versions; // any compiled versions along with their type parameters; in order from most preferred to least
-    CompiledFunction* always_use_version; // if this version is set, always use it (for unboxed cases)
+    ExceptionSwitchable<CompiledFunction*>
+        always_use_version; // if this version is set, always use it (for unboxed cases)
     std::unordered_map<const OSREntryDescriptor*, CompiledFunction*> osr_versions;
 
     // Profiling counter:
