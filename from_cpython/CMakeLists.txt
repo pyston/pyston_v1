@@ -179,14 +179,15 @@ add_custom_command(OUTPUT ${STDMODULES}
                        Modules/pyexpat.c
                        Modules/future_builtins.c
                        Modules/_elementtree.c
-		       Modules/bz2module.c
-		       Modules/grpmodule.c
-		       Modules/readline.c
-		       Modules/termios.c
-		       Modules/_cursesmodule.c
-		       Modules/mmapmodule.c
-		       Modules/_localemodule.c
-		       Modules/cPickle.c
+                       Modules/_tkinter.c
+                       Modules/bz2module.c
+                       Modules/grpmodule.c
+                       Modules/readline.c
+                       Modules/termios.c
+                       Modules/_cursesmodule.c
+                       Modules/mmapmodule.c
+                       Modules/_localemodule.c
+                       Modules/cPickle.c
                        Modules/parsermodule.c
                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 add_custom_target(sharedmods ALL DEPENDS ${CMAKE_BINARY_DIR}/from_cpython/Lib/_multiprocessing.pyston.so)

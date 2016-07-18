@@ -53,9 +53,13 @@ addons:
     - python-dev
     - texlive-extra-utils
     - libcurl4-openssl-dev
-    - libxml2-dev 
+    - libxml2-dev
     - libxslt1-dev
     - libssl-dev
+    - libtk8.5
+    - libtcl8.5
+    - tcl8.5-dev
+    - tk8.5-dev
     - swig
 
 before_install:

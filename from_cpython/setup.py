@@ -165,6 +165,25 @@ def parser_ext():
             "Modules/parsermodule.c",
             ]))
 
+
+@unique
+def tkinkter_ext():
+    ext = Extension("_tkinter", sources=['Modules/_tkinter.c',
+                                         'Modules/tkappinit.c'],
+                    define_macros=[('WITH_APPINIT', 1)])
+
+    # Hack: Just hardcode the includes dir and tcl/tk lib dir like our cffi ext.
+    # May want something more robust later.
+    tcl_inc = ['/usr/include/tcl']
+    tcl_lib = "tcl8.5"
+    tk_lib = "tk8.5"
+
+    ext.include_dirs.extend(tcl_inc)
+    ext.libraries.append(tcl_lib)
+    ext.libraries.append(tk_lib)
+
+    return ext
+
 ext_modules = [future_builtins_ext(),
                multiprocessing_ext(),
                pyexpat_ext(),
@@ -180,7 +199,8 @@ ext_modules = [future_builtins_ext(),
                mmap_ext(),
                locale_ext(),
                cPickle_ext(),
-               parser_ext()
+               parser_ext(),
+               tkinkter_ext()
                ]
 
 
