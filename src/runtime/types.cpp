@@ -229,15 +229,30 @@ Box* BoxedClass::callReprIC(Box* obj) {
     assert(obj->cls == this);
 
     auto ic = repr_ic.get();
-    if (!ic) {
+    if (unlikely(!ic)) {
         ic = new CallattrIC();
         repr_ic.reset(ic);
     }
 
     static BoxedString* repr_str = getStaticString("__repr__");
-    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
+    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
     return ic->call(obj, repr_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
+
+Box* BoxedClass::callStrIC(Box* obj) {
+    assert(obj->cls == this);
+
+    auto ic = str_ic.get();
+    if (unlikely(!ic)) {
+        ic = new CallattrIC();
+        str_ic.reset(ic);
+    }
+
+    static BoxedString* str_str = getStaticString("__str__");
+    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
+    return ic->call(obj, str_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
+}
+
 
 Box* BoxedClass::callIterIC(Box* obj) {
     assert(obj->cls == this);
@@ -269,8 +284,14 @@ Box* Box::reprIC() {
     return this->cls->callReprIC(this);
 }
 
+Box* Box::strIC() {
+    return this->cls->callStrIC(this);
+}
+
 BoxedString* Box::reprICAsString() {
     Box* r = this->reprIC();
+    if (!r)
+        raiseAttributeError(this, "__repr__");
 
     if (isSubclass(r->cls, unicode_cls)) {
         r = PyUnicode_AsASCIIString(autoDecref(r));
@@ -3083,7 +3104,7 @@ static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) 
 }
 
 static Box* type_name(Box* b, void*) noexcept;
-Box* objectRepr(Box* self) {
+Box* object_repr(Box* self) noexcept {
     BoxedClass* type = self->cls;
     DecrefHandle<Box, true> mod(NULL);
 
@@ -3098,12 +3119,12 @@ Box* objectRepr(Box* self) {
 }
 
 static Box* object_str(Box* obj) noexcept {
-    try {
-        return obj->reprIC();
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
+    unaryfunc f;
+
+    f = Py_TYPE(obj)->tp_repr;
+    if (f == NULL)
+        f = object_repr;
+    return f(obj);
 }
 
 Box* objectHash(Box* obj) {
@@ -4336,8 +4357,8 @@ void setupRuntime() {
     SET = typeFromClass(set_cls);
     FROZENSET = typeFromClass(frozenset_cls);
 
-    object_cls->giveAttr("__repr__",
-                         new BoxedFunction(FunctionMetadata::create((void*)objectRepr, UNKNOWN, 1, false, false)));
+    object_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)object_repr, UNKNOWN, 1, false,
+                                                                                false, ParamNames::empty(), CAPI)));
     object_cls->giveAttr("__subclasshook__",
                          boxInstanceMethod(object_cls, autoDecref(new BoxedFunction(FunctionMetadata::create(
                                                            (void*)objectSubclasshook, UNKNOWN, 2))),
