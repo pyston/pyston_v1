@@ -295,7 +295,7 @@ Box* complexRTruediv(BoxedComplex* lhs, Box* _rhs) {
     if (!PyComplex_Check(lhs))
         raiseExcHelper(TypeError, "descriptor '__rtruediv__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
-    if (_rhs == None)
+    if (_rhs == Py_None)
         return incref(NotImplemented);
 
     Box* rhs = toComplex(_rhs);
@@ -350,7 +350,7 @@ Box* complexRPow(BoxedComplex* lhs, Box* _rhs) {
 
     BoxedComplex* rhs_complex = static_cast<BoxedComplex*>(rhs);
 
-    return complexPow(rhs_complex, lhs, None);
+    return complexPow(rhs_complex, lhs, Py_None);
 }
 
 Box* complexHash(BoxedComplex* self) {
@@ -529,7 +529,7 @@ Box* complexDivmod(BoxedComplex* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__divmod__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (rhs == None)
+    if (rhs == Py_None)
         return incref(NotImplemented);
 
     return complexDivmodComplex(lhs, rhs);
@@ -540,7 +540,7 @@ Box* complexRDivmod(BoxedComplex* lhs, Box* _rhs) {
         raiseExcHelper(TypeError, "descriptor '__rdivmod__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (_rhs == None)
+    if (_rhs == Py_None)
         return incref(NotImplemented);
 
     Box* rhs = toComplex(_rhs);
@@ -584,7 +584,7 @@ Box* complexMod(BoxedComplex* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__mod__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (rhs == None)
+    if (rhs == Py_None)
         return incref(NotImplemented);
 
     return complexModComplex(lhs, rhs);
@@ -595,7 +595,7 @@ Box* complexRMod(BoxedComplex* lhs, Box* _rhs) {
         raiseExcHelper(TypeError, "descriptor '__rmod__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (_rhs == None)
+    if (_rhs == Py_None)
         return incref(NotImplemented);
 
     Box* rhs = toComplex(_rhs);
@@ -614,7 +614,7 @@ extern "C" Box* complexFloordiv(BoxedComplex* lhs, Box* _rhs) {
         raiseExcHelper(TypeError, "descriptor '__floordiv__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (_rhs == None)
+    if (_rhs == Py_None)
         return incref(NotImplemented);
 
     Box* rhs = toComplex(_rhs);
@@ -636,7 +636,7 @@ Box* complexRFloordiv(BoxedComplex* lhs, Box* _rhs) {
         raiseExcHelper(TypeError, "descriptor '__rfloordiv__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
 
-    if (_rhs == None)
+    if (_rhs == Py_None)
         return incref(NotImplemented);
 
     Box* rhs = toComplex(_rhs);
@@ -773,7 +773,8 @@ void setupComplex() {
     complex_cls->giveAttr("__rsub__", new BoxedFunction(FunctionMetadata::create((void*)complexRSub, UNKNOWN, 2)));
     complex_cls->giveAttr("__rdiv__", new BoxedFunction(FunctionMetadata::create((void*)complexRDiv, UNKNOWN, 2)));
     complex_cls->giveAttr(
-        "__pow__", new BoxedFunction(FunctionMetadata::create((void*)complexPow, UNKNOWN, 3, false, false), { None }));
+        "__pow__",
+        new BoxedFunction(FunctionMetadata::create((void*)complexPow, UNKNOWN, 3, false, false), { Py_None }));
     complex_cls->giveAttr("__rpow__", new BoxedFunction(FunctionMetadata::create((void*)complexRPow, UNKNOWN, 2)));
 
     complex_cls->giveAttr("__mod__", new BoxedFunction(FunctionMetadata::create((void*)complexMod, UNKNOWN, 2)));

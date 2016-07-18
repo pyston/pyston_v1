@@ -123,7 +123,7 @@ public:
 
         if (!f->_back) {
             if (!f->frame_info->back)
-                f->_back = incref(None);
+                f->_back = incref(Py_None);
             else
                 f->_back = incref(BoxedFrame::boxFrame(f->frame_info->back));
         }

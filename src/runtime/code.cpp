@@ -218,7 +218,7 @@ void setupCode() {
         = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedCode), false, "code", false,
                              (destructor)BoxedCode::dealloc, NULL, true, (traverseproc)BoxedCode::traverse, NOCLEAR);
 
-    code_cls->giveAttrBorrowed("__new__", None); // Hacky way of preventing users from instantiating this
+    code_cls->giveAttrBorrowed("__new__", Py_None); // Hacky way of preventing users from instantiating this
 
     code_cls->giveAttrDescriptor("co_name", BoxedCode::co_name, NULL);
     code_cls->giveAttrDescriptor("co_filename", BoxedCode::co_filename, NULL);

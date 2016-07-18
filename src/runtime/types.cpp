@@ -342,7 +342,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, llvm::Arra
         this->doc = md->source->getDocString();
     } else {
         this->modname = PyString_InternFromString("__builtin__");
-        this->doc = incref(None);
+        this->doc = incref(Py_None);
     }
 }
 
@@ -366,7 +366,7 @@ BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(FunctionMetadata* md,
     : BoxedBuiltinFunctionOrMethod(md, name, {}) {
 
     Py_DECREF(this->doc);
-    this->doc = doc ? boxString(doc) : incref(None);
+    this->doc = doc ? boxString(doc) : incref(Py_None);
 }
 
 BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(FunctionMetadata* md, const char* name,
@@ -378,7 +378,7 @@ BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(FunctionMetadata* md,
     assert(!this->name);
     this->name = static_cast<BoxedString*>(boxString(name));
     Py_DECREF(this->doc);
-    this->doc = doc ? boxString(doc) : incref(None);
+    this->doc = doc ? boxString(doc) : incref(Py_None);
 }
 
 static void functionDtor(Box* b) {
@@ -679,7 +679,7 @@ Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
 // For use on __init__ return values
 static Box* assertInitNone(STOLEN(Box*) rtn, STOLEN(Box*) obj) {
     AUTO_DECREF(rtn);
-    if (rtn != None) {
+    if (rtn != Py_None) {
         Py_DECREF(obj);
         raiseExcHelper(TypeError, "__init__() should return None, not '%s'", getTypeName(rtn));
     }
@@ -919,7 +919,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         // Special-case functions to allow them to still rewrite:
         if (new_attr->cls != function_cls) {
             try {
-                Box* descr_r = processDescriptorOrNull(new_attr, None, cls);
+                Box* descr_r = processDescriptorOrNull(new_attr, Py_None, cls);
                 // TODO do we need to guard here on the class of new_attr (or that it's a class that can't change
                 // classes?)
                 if (descr_r) {
@@ -938,7 +938,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
         new_attr = incref(typeLookup(cls, new_str));
         try {
             if (new_attr->cls != function_cls) // optimization
-                new_attr = processDescriptor(new_attr, None, cls);
+                new_attr = processDescriptor(new_attr, Py_None, cls);
         } catch (ExcInfo e) {
             if (S == CAPI) {
                 setCAPIException(e);
@@ -1279,7 +1279,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             assert(initrtn);
 
             if (S == CAPI) {
-                if (initrtn != None) {
+                if (initrtn != Py_None) {
                     Py_DECREF(made);
                     PyErr_Format(TypeError, "__init__() should return None, not '%s'", getTypeName(initrtn));
                     Py_DECREF(initrtn);
@@ -1512,7 +1512,7 @@ extern "C" BoxedString* functionRepr(BoxedFunction* v) {
 static Box* functionGet(BoxedFunction* self, Box* inst, Box* owner) {
     RELEASE_ASSERT(self->cls == function_cls, "");
 
-    if (inst == None)
+    if (inst == Py_None)
         inst = NULL;
     return new BoxedInstanceMethod(inst, self, owner);
 }
@@ -1520,7 +1520,7 @@ static Box* functionGet(BoxedFunction* self, Box* inst, Box* owner) {
 static Box* function_descr_get(Box* self, Box* inst, Box* owner) noexcept {
     RELEASE_ASSERT(self->cls == function_cls, "");
 
-    if (inst == None)
+    if (inst == Py_None)
         inst = NULL;
     return new BoxedInstanceMethod(inst, self, owner);
 }
@@ -1590,7 +1590,7 @@ static Box* function_new(BoxedClass* cls, Box* code, Box* globals, Box** _args) 
     }
 
     RELEASE_ASSERT(!hasfree, "Unimplemented: can't use the function constructor to create functions with closures");
-    assert(closure == None);
+    assert(closure == Py_None);
 
 // Pyston change: haven't yet implemented closure-appropriateness checking
 #if 0
@@ -1625,15 +1625,15 @@ static Box* function_new(BoxedClass* cls, Box* code, Box* globals, Box** _args) 
 
     BoxedFunction* f;
     try {
-        f = new BoxedFunction(md, *static_cast<BoxedTuple*>(defaults == None ? EmptyTuple : defaults),
-                              closure == None ? NULL : static_cast<BoxedClosure*>(closure),
-                              globals == None ? NULL : globals, true);
+        f = new BoxedFunction(md, *static_cast<BoxedTuple*>(defaults == Py_None ? EmptyTuple : defaults),
+                              closure == Py_None ? NULL : static_cast<BoxedClosure*>(closure),
+                              globals == Py_None ? NULL : globals, true);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
     }
 
-    if (name != None)
+    if (name != Py_None)
         func_set_name(f, name, NULL);
 
     return f;
@@ -1687,7 +1687,7 @@ static Box* function_defaults(Box* self, void*) noexcept {
     assert(self->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
     if (!func->defaults)
-        return incref(None);
+        return incref(Py_None);
     for (auto e : *func->defaults) {
         RELEASE_ASSERT(e, "this function's defaults should not be available");
     }
@@ -1725,7 +1725,7 @@ static int function_set_defaults(Box* b, Box* v, void*) noexcept {
     // user code, then it could call something that changes its own defaults, and all of a sudden
     // one of its arguments gets deallocated from under it.
 
-    if (v == None)
+    if (v == Py_None)
         v = NULL;
     else if (v && !PyTuple_Check(v)) {
         PyErr_Format(TypeError, "__defaults__ must be set to a tuple object");
@@ -1746,7 +1746,7 @@ static Box* functionNonzero(BoxedFunction* self) {
 }
 
 extern "C" {
-Box* None = NULL;
+Box* Py_None = NULL;
 Box* NotImplemented = NULL;
 Box* repr_obj = NULL;
 Box* len_obj = NULL;
@@ -1783,7 +1783,7 @@ extern "C" Box* sliceNew(Box* cls, Box* start, Box* stop, Box** args) {
     Box* step = args[0];
 
     if (stop == NULL)
-        return createSlice(None, start, None);
+        return createSlice(Py_None, start, Py_None);
     return createSlice(start, stop, step);
 }
 
@@ -1805,7 +1805,7 @@ Box* instancemethodGet(BoxedInstanceMethod* self, Box* obj, Box* type) {
         return incref(self);
     }
 
-    if (obj == None)
+    if (obj == Py_None)
         obj = NULL;
 
     return new BoxedInstanceMethod(obj, self->func, self->im_class);
@@ -2176,7 +2176,7 @@ Box* moduleInit(BoxedModule* self, Box* name, Box* doc) {
     RELEASE_ASSERT(name->cls == str_cls, "");
     RELEASE_ASSERT(!doc || doc->cls == str_cls || doc->cls == unicode_cls, "");
 
-    doc = doc ? doc : None;
+    doc = doc ? doc : Py_None;
 
     HCAttrs* attrs = self->getHCAttrsPtr();
 
@@ -2364,7 +2364,7 @@ public:
             } else {
                 res = AttrWrapper::setitem((Box*)mp, v, w);
             }
-            assert(res == None);
+            assert(res == Py_None);
             Py_DECREF(res);
         } catch (ExcInfo e) {
             setCAPIException(e);
@@ -2695,7 +2695,7 @@ public:
             static BoxedString* clear_str = getStaticString("clear");
             auto rtn = callattrInternal<CXX, NOT_REWRITABLE>(self->getDictBacking(), clear_str, LookupScope::CLASS_ONLY,
                                                              NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-            assert(rtn == None);
+            assert(rtn == Py_None);
             Py_DECREF(rtn);
             return;
         }
@@ -3106,7 +3106,7 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value) {
 
     BoxedString* attr_str = static_cast<BoxedString*>(attr);
     setattrGeneric<NOT_REWRITABLE>(obj, attr_str, value, NULL);
-    return incref(None);
+    return incref(Py_None);
 }
 
 Box* objectSubclasshook(Box* cls, Box* a) {
@@ -4135,9 +4135,9 @@ void setupRuntime() {
 
     none_cls = new (0)
         BoxedClass(object_cls, 0, 0, sizeof(Box), false, "NoneType", false, NULL, NULL, /* is_gc */ false);
-    None = new (none_cls) Box();
-    constants.push_back(None);
-    assert(None->cls);
+    Py_None = new (none_cls) Box();
+    constants.push_back(Py_None);
+    assert(Py_None->cls);
 
     // You can't actually have an instance of basestring
     basestring_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(Box), false, "basestring", true, NULL, NULL, false);
@@ -4159,8 +4159,8 @@ void setupRuntime() {
     str_cls->giveAttr("__base__", basestring_cls);
     Py_INCREF(object_cls);
     none_cls->giveAttr("__base__", object_cls);
-    Py_INCREF(None);
-    object_cls->giveAttr("__base__", None);
+    Py_INCREF(Py_None);
+    object_cls->giveAttr("__base__", Py_None);
 
     // Not sure why CPython defines sizeof(PyTupleObject) to include one element,
     // but we copy that, which means we have to subtract that extra pointer to get the tp_basicsize:
@@ -4369,7 +4369,7 @@ void setupRuntime() {
 
     none_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)none_repr, STR, 1)));
     none_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)noneNonzero, BOXED_BOOL, 1)));
-    none_cls->giveAttrBorrowed("__doc__", None);
+    none_cls->giveAttrBorrowed("__doc__", Py_None);
     none_cls->tp_hash = (hashfunc)_Py_HashPointer;
     none_cls->tp_new = NULL; // don't allow creating instances
     none_cls->freeze();
@@ -4425,7 +4425,7 @@ void setupRuntime() {
         new BoxedFunction(
             FunctionMetadata::create((void*)function_new, UNKNOWN, 6, false, false,
                                      ParamNames({ "", "code", "globals", "name", "argdefs", "closure" }, "", ""), CAPI),
-            { None, None, None }));
+            { Py_None, Py_None, Py_None }));
     function_cls->giveAttrBorrowed("__dict__", dict_descr);
     function_cls->giveAttrDescriptor("__name__", func_name, func_set_name);
     function_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)functionRepr, STR, 1)));
@@ -4483,7 +4483,7 @@ void setupRuntime() {
 
     slice_cls->giveAttr(
         "__new__",
-        new BoxedFunction(FunctionMetadata::create((void*)sliceNew, UNKNOWN, 4, false, false), { NULL, None }));
+        new BoxedFunction(FunctionMetadata::create((void*)sliceNew, UNKNOWN, 4, false, false), { NULL, Py_None }));
     slice_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)sliceRepr, STR, 1)));
     slice_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)sliceHash, UNKNOWN, 1)));
     slice_cls->giveAttr("indices", new BoxedFunction(FunctionMetadata::create((void*)sliceIndices, BOXED_TUPLE, 2)));
@@ -4511,7 +4511,7 @@ void setupRuntime() {
                               new BoxedFunction(FunctionMetadata::create((void*)AttrWrapper::setdefault, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr(
         "get",
-        new BoxedFunction(FunctionMetadata::create((void*)AttrWrapper::get, UNKNOWN, 3, false, false), { None }));
+        new BoxedFunction(FunctionMetadata::create((void*)AttrWrapper::get, UNKNOWN, 3, false, false), { Py_None }));
     attrwrapper_cls->giveAttr("__str__",
                               new BoxedFunction(FunctionMetadata::create((void*)AttrWrapper::str, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr(

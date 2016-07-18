@@ -1451,7 +1451,7 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     FunctionMetadata* md = new FunctionMetadata(3, false, false);
     md->addVersion(float_func, UNKNOWN, v_lfu);
     md->addVersion(long_func, UNKNOWN, v_uuu);
-    long_cls->giveAttr(name, new BoxedFunction(md, { None }));
+    long_cls->giveAttr(name, new BoxedFunction(md, { Py_None }));
 }
 
 extern "C" Box* longPowFloat(BoxedLong* lhs, BoxedFloat* rhs) {
@@ -1463,7 +1463,7 @@ extern "C" Box* longPowFloat(BoxedLong* lhs, BoxedFloat* rhs) {
 
 Box* longPowLong(BoxedLong* lhs, Box* _rhs, Box* _mod) {
     BoxedLong* mod_long = nullptr;
-    if (_mod != None) {
+    if (_mod != Py_None) {
         Box* mod = convertToLong(_mod);
 
         if (mod == NotImplemented)
@@ -1482,7 +1482,7 @@ Box* longPowLong(BoxedLong* lhs, Box* _rhs, Box* _mod) {
 
     rhs_long = static_cast<BoxedLong*>(rhs);
 
-    if (_mod != None) {
+    if (_mod != Py_None) {
         if (mpz_sgn(rhs_long->n) < 0)
             raiseExcHelper(TypeError, "pow() 2nd argument "
                                       "cannot be negative when 3rd argument specified");
@@ -1501,7 +1501,7 @@ Box* longPowLong(BoxedLong* lhs, Box* _rhs, Box* _mod) {
     BoxedLong* r = new BoxedLong();
     mpz_init(r->n);
 
-    if (_mod != None) {
+    if (_mod != Py_None) {
         mpz_powm(r->n, lhs->n, rhs_long->n, mod_long->n);
         if (mpz_sgn(r->n) == 0)
             return r;
@@ -1700,7 +1700,8 @@ void setupLong() {
 
     _addFuncPow("__pow__", UNKNOWN, (void*)longPowFloat, (void*)longPow);
     long_cls->giveAttr(
-        "__rpow__", new BoxedFunction(FunctionMetadata::create((void*)longRPow, UNKNOWN, 3, false, false), { None }));
+        "__rpow__",
+        new BoxedFunction(FunctionMetadata::create((void*)longRPow, UNKNOWN, 3, false, false), { Py_None }));
     auto long_new = FunctionMetadata::create((void*)longNew<CXX>, UNKNOWN, 3, false, false,
                                              ParamNames({ "", "x", "base" }, "", ""), CXX);
     long_new->addVersion((void*)longNew<CAPI>, UNKNOWN, CAPI);

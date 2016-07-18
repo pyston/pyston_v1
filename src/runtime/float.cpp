@@ -550,14 +550,14 @@ extern "C" Box* floatPow(BoxedFloat* lhs, Box* rhs, Box* mod) {
     return res;
 }
 
-extern "C" Box* floatPowFloat(BoxedFloat* lhs, BoxedFloat* rhs, Box* mod = None) {
+extern "C" Box* floatPowFloat(BoxedFloat* lhs, BoxedFloat* rhs, Box* mod = Py_None) {
     // TODO to specialize this, need to account for all the special cases in float_pow
     assert(PyFloat_Check(lhs));
     assert(PyFloat_Check(rhs));
     return floatPow(lhs, rhs, mod);
 }
 
-extern "C" Box* floatPowInt(BoxedFloat* lhs, BoxedInt* rhs, Box* mod = None) {
+extern "C" Box* floatPowInt(BoxedFloat* lhs, BoxedInt* rhs, Box* mod = Py_None) {
     // TODO to specialize this, need to account for all the special cases in float_pow
     assert(PyFloat_Check(lhs));
     assert(PyInt_Check(rhs));
@@ -569,7 +569,7 @@ Box* floatRPow(BoxedFloat* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__rpow__' requires a 'float' object but received a '%s'",
                        getTypeName(lhs));
 
-    Box* res = float_pow(rhs, lhs, None);
+    Box* res = float_pow(rhs, lhs, Py_None);
     if (!res) {
         throwCAPIException();
     }
@@ -894,7 +894,7 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     md->addVersion(float_func, rtn_type, v_ffu);
     md->addVersion(int_func, rtn_type, v_fiu);
     md->addVersion(boxed_func, UNKNOWN, v_fuu);
-    float_cls->giveAttr(name, new BoxedFunction(md, { None }));
+    float_cls->giveAttr(name, new BoxedFunction(md, { Py_None }));
 }
 
 static Box* float_conjugate(Box* b, void*) noexcept {

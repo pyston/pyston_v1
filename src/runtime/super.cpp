@@ -133,7 +133,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
                     res = tmp;
                 }
 #endif
-                return processDescriptor(res, (s->obj == s->obj_type ? None : s->obj), s->obj_type);
+                return processDescriptor(res, (s->obj == s->obj_type ? Py_None : s->obj), s->obj_type);
             }
         }
     }
@@ -195,7 +195,7 @@ template <ExceptionStyle S>
 static PyObject* superGet(PyObject* _self, PyObject* obj, PyObject* type) noexcept(S == CAPI) {
     BoxedSuper* self = static_cast<BoxedSuper*>(_self);
 
-    if (obj == NULL || obj == None || self->obj != NULL) {
+    if (obj == NULL || obj == Py_None || self->obj != NULL) {
         /* Not binding to an object, or already bound */
         return incref(self);
     }
@@ -222,7 +222,7 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
     BoxedClass* type = static_cast<BoxedClass*>(_type);
 
     BoxedClass* obj_type = NULL;
-    if (obj == None)
+    if (obj == Py_None)
         obj = NULL;
     if (obj != NULL) {
         obj_type = superCheck<CXX>(type, obj);
@@ -244,7 +244,7 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
     Py_XDECREF(old_obj);
     Py_XDECREF(old_obj_type);
 
-    return incref(None);
+    return incref(Py_None);
 }
 
 void setupSuper() {

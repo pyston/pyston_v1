@@ -103,7 +103,7 @@ extern "C" Box* listNonzero(BoxedList* self) {
 }
 
 extern "C" Box* listPop(BoxedList* self, Box* idx) {
-    if (idx == None) {
+    if (idx == Py_None) {
         if (self->size == 0) {
             raiseExcHelper(IndexError, "pop from empty list");
         }
@@ -858,7 +858,7 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
 
 Box* listExtend(BoxedList* self, Box* _rhs) {
     autoDecref(listIAdd(self, _rhs));
-    return incref(None);
+    return incref(Py_None);
 }
 
 Box* listAdd(BoxedList* self, Box* _rhs) {
@@ -982,10 +982,10 @@ void _sortArray(Box** elts, long num_elts, Box* cmp, Box* key) {
 void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
     assert(PyList_Check(self));
 
-    if (cmp == None)
+    if (cmp == Py_None)
         cmp = NULL;
 
-    if (key == None)
+    if (key == Py_None)
         key = NULL;
 
     RELEASE_ASSERT(!cmp || !key, "Specifying both the 'cmp' and 'key' keywords is currently not supported");
@@ -1028,7 +1028,7 @@ extern "C" int PyList_Sort(PyObject* v) noexcept {
     }
 
     try {
-        listSort((BoxedList*)v, None, None, Py_False);
+        listSort((BoxedList*)v, Py_None, Py_None, Py_False);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -1391,7 +1391,7 @@ template <ExceptionStyle S> Box* listiterNext(Box* s) noexcept(S == CAPI) {
     Box* rtn = listiter_next(s);
     if (!rtn) {
         if (S == CAPI) {
-            PyErr_SetObject(StopIteration, None);
+            PyErr_SetObject(StopIteration, Py_None);
             return NULL;
         } else
             raiseExcHelper(StopIteration, (const char*)NULL);
@@ -1494,8 +1494,8 @@ void setupList() {
     list_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)listRepr, STR, 1)));
     list_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)listNonzero, BOXED_BOOL, 1)));
 
-    list_cls->giveAttr("pop",
-                       new BoxedFunction(FunctionMetadata::create((void*)listPop, UNKNOWN, 2, false, false), { None }));
+    list_cls->giveAttr(
+        "pop", new BoxedFunction(FunctionMetadata::create((void*)listPop, UNKNOWN, 2, false, false), { Py_None }));
 
     list_cls->giveAttr("append", new BoxedFunction(FunctionMetadata::create((void*)listAppend, NONE, 2)));
     list_cls->giveAttr("extend", new BoxedFunction(FunctionMetadata::create((void*)listExtend, NONE, 2)));
@@ -1511,7 +1511,7 @@ void setupList() {
     list_cls->giveAttr("sort",
                        new BoxedFunction(FunctionMetadata::create((void*)listSortFunc, NONE, 4, false, false,
                                                                   ParamNames({ "", "cmp", "key", "reverse" }, "", "")),
-                                         { None, None, Py_False }));
+                                         { Py_None, Py_None, Py_False }));
     list_cls->giveAttr("__contains__", new BoxedFunction(FunctionMetadata::create((void*)listContains, BOXED_BOOL, 2)));
 
     list_cls->giveAttr(
@@ -1524,7 +1524,7 @@ void setupList() {
     list_cls->giveAttr("remove", new BoxedFunction(FunctionMetadata::create((void*)listRemove, NONE, 2)));
     list_cls->giveAttr("reverse", new BoxedFunction(FunctionMetadata::create((void*)listReverse, NONE, 1)));
 
-    list_cls->giveAttrBorrowed("__hash__", None);
+    list_cls->giveAttrBorrowed("__hash__", Py_None);
     list_cls->freeze();
     list_cls->tp_iter = listIter;
 

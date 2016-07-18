@@ -142,7 +142,7 @@ Box* SourceInfo::getDocString() {
         return boxString(static_cast<AST_Str*>(static_cast<AST_Expr*>(body[0])->value)->str_data);
     }
 
-    return incref(None);
+    return incref(Py_None);
 }
 
 ScopeInfo* SourceInfo::getScopeInfo() {
@@ -344,7 +344,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_interpreted_module_toplevel");
     Box* r = astInterpretFunction(md, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-    assert(r == None);
+    assert(r == Py_None);
     Py_DECREF(r);
 
     // XXX for bjit testing
@@ -359,7 +359,7 @@ Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
     assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 
     Box* doc_string = md->source->getDocString();
-    if (doc_string != None) {
+    if (doc_string != Py_None) {
         static BoxedString* doc_box = getStaticString("__doc__");
         setGlobal(boxedLocals, doc_box, doc_string);
     } else {
@@ -478,10 +478,10 @@ extern "C" int PyEval_MergeCompilerFlags(PyCompilerFlags* cf) noexcept {
 }
 
 static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
-    if (globals == None)
+    if (globals == Py_None)
         globals = NULL;
 
-    if (locals == None)
+    if (locals == Py_None)
         locals = NULL;
 
     if (locals == NULL) {
@@ -535,9 +535,9 @@ extern "C" PyObject* PyEval_EvalCode(PyCodeObject* co, PyObject* globals, PyObje
 
 void exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_flags) {
     if (!globals)
-        globals = None;
+        globals = Py_None;
     if (!locals)
-        locals = None;
+        locals = Py_None;
 
     // this is based on cpythons exec_statement() but (heavily) adopted
     Box* v = NULL;
@@ -628,7 +628,7 @@ void exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_f
     if (!v)
         throwCAPIException();
 
-    assert(v == None); // not really necessary but I think this should be true
+    assert(v == Py_None); // not really necessary but I think this should be true
     Py_DECREF(v);
 }
 

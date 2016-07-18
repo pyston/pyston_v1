@@ -1137,7 +1137,7 @@ template Box* slotTpGetattrHookInternal<CXX, NOT_REWRITABLE>(Box* self, BoxedStr
         static BoxedString* _new_str = getStaticString("__new__");
         Box* new_attr = typeLookup(self, _new_str);
         assert(new_attr);
-        new_attr = processDescriptor(new_attr, None, self);
+        new_attr = processDescriptor(new_attr, Py_None, self);
         AUTO_DECREF(new_attr);
 
         return runtimeCall(new_attr, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
@@ -2184,7 +2184,7 @@ void add_operators(BoxedClass* cls) noexcept {
             continue;
 
         if (*ptr == PyObject_HashNotImplemented) {
-            cls->setattr(static_cast<BoxedString*>(p.name_strobj), None, NULL);
+            cls->setattr(static_cast<BoxedString*>(p.name_strobj), Py_None, NULL);
         } else {
             auto descr = PyDescr_NewWrapper(cls, &p, *ptr);
             assert(descr);
@@ -3614,7 +3614,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         if (cls->tp_doc) {
             cls->giveAttr(incref(doc_str), boxString(cls->tp_doc));
         } else {
-            cls->giveAttr(incref(doc_str), incref(None));
+            cls->giveAttr(incref(doc_str), incref(Py_None));
         }
     }
 

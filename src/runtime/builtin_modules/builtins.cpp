@@ -243,7 +243,7 @@ Box* min_max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs, int opid) {
 }
 
 extern "C" Box* min(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
-    if (arg0 == None && args->size() == 0) {
+    if (arg0 == Py_None && args->size() == 0) {
         raiseExcHelper(TypeError, "min expected 1 arguments, got 0");
     }
 
@@ -256,7 +256,7 @@ extern "C" Box* min(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 extern "C" Box* max(Box* arg0, BoxedTuple* args, BoxedDict* kwargs) {
-    if (arg0 == None && args->size() == 0) {
+    if (arg0 == Py_None && args->size() == 0) {
         raiseExcHelper(TypeError, "max expected 1 arguments, got 0");
     }
 
@@ -525,7 +525,7 @@ Box* delattrFunc(Box* obj, Box* _str) {
     AUTO_DECREF(str);
 
     delattr(obj, str);
-    return incref(None);
+    return incref(Py_None);
 }
 
 static Box* getattrFuncHelper(STOLEN(Box*) return_val, Box* obj, BoxedString* str, Box* default_val) noexcept {
@@ -664,7 +664,7 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     AUTO_DECREF(str);
 
     setattr(obj, str, incref(value));
-    return incref(None);
+    return incref(Py_None);
 }
 
 // Not sure if this should be stealing or not:
@@ -781,7 +781,7 @@ Box* hasattrFuncInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args,
 Box* map2(Box* f, Box* container) {
     Box* rtn = new BoxedList();
     AUTO_DECREF(rtn);
-    bool use_identity_func = f == None;
+    bool use_identity_func = f == Py_None;
     for (Box* e : container->pyElements()) {
         Box* val;
         if (use_identity_func)
@@ -822,7 +822,7 @@ Box* map(Box* f, BoxedTuple* args) {
     assert(args_it.size() == num_iterable);
     assert(args_end.size() == num_iterable);
 
-    bool use_identity_func = f == None;
+    bool use_identity_func = f == Py_None;
     Box* rtn = new BoxedList();
     AUTO_DECREF(rtn);
     std::vector<Box*> current_val(num_iterable);
@@ -831,7 +831,7 @@ Box* map(Box* f, BoxedTuple* args) {
         for (int i = 0; i < num_iterable; ++i) {
             if (args_it[i] == args_end[i]) {
                 ++num_done;
-                current_val[i] = incref(None);
+                current_val[i] = incref(Py_None);
             } else {
                 current_val[i] = *args_it[i];
             }
@@ -1177,7 +1177,7 @@ Box* filter2(Box* f, Box* container) {
     // - actually since we call nonzero() afterwards, we could use an ident() function
     //   but we don't have one.
     // If this is a common case we could speed it up with special handling.
-    if (f == None)
+    if (f == Py_None)
         f = bool_cls;
 
     // Special cases depending on the type of container influences the return type
@@ -1557,7 +1557,7 @@ Box* getreversed(Box* o) {
 
 Box* pydump(Box* p, BoxedInt* level) {
     dumpEx(p, level->n);
-    return incref(None);
+    return incref(Py_None);
 }
 
 Box* pydumpAddr(Box* p) {
@@ -1565,7 +1565,7 @@ Box* pydumpAddr(Box* p) {
         raiseExcHelper(TypeError, "Requires an int");
 
     dump((void*)static_cast<BoxedInt*>(p)->n);
-    return incref(None);
+    return incref(Py_None);
 }
 
 Box* builtinIter(Box* obj, Box* sentinel) {
@@ -2358,7 +2358,7 @@ void setupBuiltins() {
 
     constants.push_back(Ellipsis);
     builtins_module->giveAttrBorrowed("Ellipsis", Ellipsis);
-    builtins_module->giveAttrBorrowed("None", None);
+    builtins_module->giveAttrBorrowed("None", Py_None);
 
     builtins_module->giveAttrBorrowed("__debug__", Py_False);
 
@@ -2397,11 +2397,11 @@ void setupBuiltins() {
     builtins_module->giveAttr("abs", abs_obj);
 
     min_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)min, UNKNOWN, 1, true, true), "min",
-                                               { None }, NULL, min_doc);
+                                               { Py_None }, NULL, min_doc);
     builtins_module->giveAttr("min", min_obj);
 
     max_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)max, UNKNOWN, 1, true, true), "max",
-                                               { None }, NULL, max_doc);
+                                               { Py_None }, NULL, max_doc);
     builtins_module->giveAttr("max", max_obj);
 
     builtins_module->giveAttr(
@@ -2450,7 +2450,7 @@ void setupBuiltins() {
 
     builtins_module->giveAttr(
         "pow", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)powFunc, UNKNOWN, 3, false, false),
-                                                "pow", { None }, NULL, pow_doc));
+                                                "pow", { Py_None }, NULL, pow_doc));
 
     Box* isinstance_obj = new BoxedBuiltinFunctionOrMethod(
         FunctionMetadata::create((void*)isinstance_func, BOXED_BOOL, 2), "isinstance", isinstance_doc);
@@ -2491,8 +2491,8 @@ void setupBuiltins() {
     FunctionMetadata* sorted_func
         = new FunctionMetadata(4, false, false, ParamNames({ "", "cmp", "key", "reverse" }, "", ""));
     sorted_func->addVersion((void*)sorted, LIST, { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN });
-    builtins_module->giveAttr(
-        "sorted", new BoxedBuiltinFunctionOrMethod(sorted_func, "sorted", { None, None, Py_False }, NULL, sorted_doc));
+    builtins_module->giveAttr("sorted", new BoxedBuiltinFunctionOrMethod(
+                                            sorted_func, "sorted", { Py_None, Py_None, Py_False }, NULL, sorted_doc));
 
     builtins_module->giveAttrBorrowed("True", Py_True);
     builtins_module->giveAttrBorrowed("False", Py_False);

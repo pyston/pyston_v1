@@ -32,7 +32,7 @@ extern "C" Box* mod_i64_i64(i64 lhs, i64 rhs);
 
 extern "C" Box* add_i64_i64(i64 lhs, i64 rhs);
 extern "C" Box* sub_i64_i64(i64 lhs, i64 rhs);
-extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs, Box* mod = None);
+extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs, Box* mod = Py_None);
 extern "C" Box* mul_i64_i64(i64 lhs, i64 rhs);
 extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs);
 extern "C" Box* intAnd(BoxedInt* lhs, Box* rhs);
