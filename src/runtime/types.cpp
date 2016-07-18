@@ -1007,7 +1007,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     // this array is ok with not using StlCompatAllocator since we will manually register these objects with the GC
     static std::vector<Box*> class_making_news;
     if (class_making_news.empty()) {
-        for (BoxedClass* allowed_cls : { object_cls, enumerate_cls, xrange_cls, tuple_cls, list_cls, dict_cls }) {
+        for (BoxedClass* allowed_cls :
+             { object_cls, enumerate_cls, xrange_cls, tuple_cls, list_cls, dict_cls, set_cls, frozenset_cls }) {
             auto new_obj = typeLookup(allowed_cls, new_str);
             class_making_news.push_back(new_obj);
         }
