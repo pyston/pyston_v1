@@ -42,6 +42,8 @@ extern "C" PyObject* string_find(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_index(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rindex(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_partition(PyStringObject* self, PyObject* sep_obj) noexcept;
+extern "C" PyObject* string_rpartition(PyStringObject* self, PyObject* sep_obj) noexcept;
 extern "C" PyObject* string_repeat(PyStringObject* a, Py_ssize_t n) noexcept;
 extern "C" PyObject* string_replace(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noexcept;
@@ -1892,38 +1894,7 @@ extern "C" PyObject* _PyString_Join(PyObject* sep, PyObject* x) noexcept {
     return string_join((PyStringObject*)sep, x);
 }
 
-Box* strPartition(BoxedString* self, BoxedString* sep) {
-    RELEASE_ASSERT(PyString_Check(self), "");
-    RELEASE_ASSERT(PyString_Check(sep), "");
 
-    size_t found_idx;
-    if (sep->size() == 1)
-        found_idx = self->s().find(sep->s()[0]);
-    else
-        found_idx = self->s().find(sep->s());
-    if (found_idx == std::string::npos)
-        return BoxedTuple::create({ self, EmptyString, EmptyString });
-
-
-    return BoxedTuple::create({ autoDecref(boxString(llvm::StringRef(self->data(), found_idx))),
-                                autoDecref(boxString(llvm::StringRef(self->data() + found_idx, sep->size()))),
-                                autoDecref(boxString(llvm::StringRef(self->data() + found_idx + sep->size(),
-                                                                     self->size() - found_idx - sep->size()))) });
-}
-
-Box* strRpartition(BoxedString* self, BoxedString* sep) {
-    RELEASE_ASSERT(PyString_Check(self), "");
-    RELEASE_ASSERT(PyString_Check(sep), "");
-
-    size_t found_idx = self->s().rfind(sep->s());
-    if (found_idx == std::string::npos)
-        return BoxedTuple::create({ EmptyString, EmptyString, self });
-
-    return BoxedTuple::create({ autoDecref(boxString(llvm::StringRef(self->data(), found_idx))),
-                                autoDecref(boxString(llvm::StringRef(self->data() + found_idx, sep->size()))),
-                                autoDecref(boxString(llvm::StringRef(self->data() + found_idx + sep->size(),
-                                                                     self->size() - found_idx - sep->size()))) });
-}
 
 extern "C" PyObject* _do_string_format(PyObject* self, PyObject* args, PyObject* kwargs);
 
@@ -2767,6 +2738,8 @@ static PyMethodDef string_methods[] = {
     { "rsplit", (PyCFunction)string_rsplit, METH_VARARGS, NULL },
     { "find", (PyCFunction)string_find, METH_VARARGS, NULL },
     { "index", (PyCFunction)string_index, METH_VARARGS, NULL },
+    { "partition", (PyCFunction)string_partition, METH_O, NULL },
+    { "rpartition", (PyCFunction)string_rpartition, METH_O, NULL },
     { "rindex", (PyCFunction)string_rindex, METH_VARARGS, NULL },
     { "rfind", (PyCFunction)string_rfind, METH_VARARGS, NULL },
     { "expandtabs", (PyCFunction)string_expandtabs, METH_VARARGS, NULL },
@@ -2840,9 +2813,6 @@ void setupStr() {
         new BoxedFunction(FunctionMetadata::create((void*)strStartswith, BOXED_BOOL, 4, 0, 0), { NULL, NULL }));
     str_cls->giveAttr("endswith", new BoxedFunction(FunctionMetadata::create((void*)strEndswith, BOXED_BOOL, 4, 0, 0),
                                                     { NULL, NULL }));
-
-    str_cls->giveAttr("partition", new BoxedFunction(FunctionMetadata::create((void*)strPartition, UNKNOWN, 2)));
-    str_cls->giveAttr("rpartition", new BoxedFunction(FunctionMetadata::create((void*)strRpartition, UNKNOWN, 2)));
 
     str_cls->giveAttr("format", new BoxedFunction(FunctionMetadata::create((void*)strFormat, UNKNOWN, 1, true, true)));
 

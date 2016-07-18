@@ -10,7 +10,11 @@
 #define STRINGLIB_CHAR           char
 #define STRINGLIB_TYPE_NAME      "string"
 #define STRINGLIB_PARSE_CODE     "S"
-#define STRINGLIB_EMPTY          nullstring
+// Pyston change:
+// #define STRINGLIB_EMPTY          nullstring
+extern PyObject* EmptyString;
+#define STRINGLIB_EMPTY          EmptyString
+
 #define STRINGLIB_ISSPACE        Py_ISSPACE
 #define STRINGLIB_ISLINEBREAK(x) ((x == '\n') || (x == '\r'))
 #define STRINGLIB_ISDECIMAL(x)   ((x >= '0') && (x <= '9'))
