@@ -198,6 +198,12 @@ Box* getIdent() {
     return boxInt(pthread_self());
 }
 
+Box* interruptMain() {
+    PyErr_SetInterrupt();
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
 Box* stackSize() {
     Py_FatalError("unimplemented");
 }
@@ -227,6 +233,9 @@ void setupThread() {
                                              FunctionMetadata::create((void*)getIdent, BOXED_INT, 0), "get_ident"));
     thread_module->giveAttr("stack_size", new BoxedBuiltinFunctionOrMethod(
                                               FunctionMetadata::create((void*)stackSize, BOXED_INT, 0), "stack_size"));
+    thread_module->giveAttr(
+        "interrupt_main",
+        new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)interruptMain, UNKNOWN, 0), "interrupt_main"));
     thread_module->giveAttr("_count", new BoxedBuiltinFunctionOrMethod(
                                           FunctionMetadata::create((void*)threadCount, BOXED_INT, 0), "_count"));
 
