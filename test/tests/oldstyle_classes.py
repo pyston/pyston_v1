@@ -461,8 +461,20 @@ class SeqTest:
     def __iter__(self):
         print "iter"
         return SeqTest.Iterator()
+
+    def __setitem__(self, k, v):
+        print "setitem"
+
+    def __getitem__(self, k):
+        print "getitem"
+
 m = SeqTest()
 print list(m)
+m[1] = 1
+m[1:2] = 2
+print m[1]
+print 1 in m
+print 1 not in m
 
 class OldSeqTest:
     def __getitem__(self, n):

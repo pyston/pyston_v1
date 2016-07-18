@@ -723,14 +723,107 @@ Box* instanceLen(Box* _inst) {
     return runtimeCall(len_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
-Box* instanceGetitem(Box* _inst, Box* key) {
+// Analoguous to CPython's, used for sq_slots, mp_slots
+static Py_ssize_t instance_length(PyObject* self) noexcept {
+    PyObject* func;
+    PyObject* res;
+    Py_ssize_t outcome;
+
+    static BoxedString* len_str = getStaticString("__len__");
+
+    func = instance_getattro(self, len_str);
+    if (func == NULL)
+        return -1;
+
+    res = runtimeCallCapi(func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    Py_DECREF(func);
+
+    if (res == NULL)
+        return -1;
+
+    if (PyInt_Check(res)) {
+        outcome = PyInt_AsSsize_t(res);
+        if (outcome == -1 && PyErr_Occurred()) {
+            Py_DECREF(res);
+            return -1;
+        }
+#if SIZEOF_SIZE_T < SIZEOF_INT
+        /* Overflow check -- range of PyInt is more than C int */
+        if (outcome != (int)outcome) {
+            PyErr_SetString(PyExc_OverflowError, "__len__() should return 0 <= outcome < 2**31");
+            outcome = -1;
+        } else
+#endif
+            if (outcome < 0) {
+            PyErr_SetString(PyExc_ValueError, "__len__() should return >= 0");
+            outcome = -1;
+        }
+
+    } else {
+        PyErr_SetString(PyExc_TypeError, "__len__() should return an int");
+        outcome = -1;
+    }
+    Py_DECREF(res);
+    return outcome;
+}
+
+
+// Analoguous to CPython's, used for mp_slots.
+static int instance_ass_sub(Box* inst, Box* key, Box* value) noexcept {
+    Box* func;
+    Box* res;
+
+    static BoxedString* setitem_str = getStaticString("__setitem__");
+    static BoxedString* delitem_str = getStaticString("__delitem__");
+
+    if (value == NULL) {
+        func = instance_getattro(inst, delitem_str);
+    } else {
+        func = instance_getattro(inst, setitem_str);
+    }
+
+    if (func == NULL) {
+        return -1;
+    }
+
+    if (value == NULL) {
+        res = runtimeCallCapi(func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
+    } else {
+        res = runtimeCallCapi(func, ArgPassSpec(2), key, value, NULL, NULL, NULL);
+    }
+
+    Py_DECREF(func);
+    if (res == NULL)
+        return -1;
+
+    Py_DECREF(res);
+    return 0;
+}
+
+template <enum ExceptionStyle S> Box* instanceGetitem(Box* _inst, Box* key) noexcept(S == CAPI) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
     static BoxedString* getitem_str = getStaticString("__getitem__");
-    Box* getitem_func = _instanceGetattribute(inst, getitem_str, true);
+
+    Box* getitem_func;
+
+    if (S == CAPI) {
+        getitem_func = instance_getattro(inst, getitem_str);
+        if (getitem_func == NULL) {
+            return NULL;
+        }
+    } else {
+        getitem_func = _instanceGetattribute(inst, getitem_str, true);
+    }
+
     AUTO_DECREF(getitem_func);
-    return runtimeCall(getitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
+
+    return runtimeCallInternal<S, NOT_REWRITABLE>(getitem_func, NULL, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
+}
+
+Box* instance_item(Box* self, Py_ssize_t i) noexcept {
+    return instanceGetitem<CAPI>(self, autoDecref(boxInt(i)));
 }
 
 Box* instanceSetitem(Box* _inst, Box* key, Box* value) {
@@ -741,6 +834,40 @@ Box* instanceSetitem(Box* _inst, Box* key, Box* value) {
     Box* setitem_func = _instanceGetattribute(inst, setitem_str, true);
     AUTO_DECREF(setitem_func);
     return runtimeCall(setitem_func, ArgPassSpec(2), key, value, NULL, NULL, NULL);
+}
+
+static int instance_ass_item(Box* inst, Py_ssize_t k, PyObject* item) noexcept {
+    static BoxedString* delitem_str, *setitem_str;
+    Box* func = NULL, * res = NULL;
+    Box* key = boxInt(k);
+
+    AUTO_DECREF(key);
+
+    if (item == NULL) {
+        delitem_str = getStaticString("__delitem__");
+
+        func = instance_getattro(inst, delitem_str);
+        if (func == NULL)
+            return -1;
+
+        res = runtimeCallCapi(func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
+    } else {
+        setitem_str = getStaticString("__setitem__");
+
+        func = instance_getattro(inst, setitem_str);
+        if (func == NULL)
+            return -1;
+
+        res = runtimeCallCapi(func, ArgPassSpec(2), key, (Box*)item, NULL, NULL, NULL);
+    }
+
+    Py_DECREF(func);
+
+    if (res == NULL)
+        return -1;
+
+    Py_DECREF(res);
+    return 0;
 }
 
 Box* instanceDelitem(Box* _inst, Box* key) {
@@ -771,7 +898,7 @@ Box* instanceGetslice(Box* _inst, Box* i, Box* j) {
     if (getslice_func == NULL) {
         Box* slice = static_cast<Box*>(createSlice(i, j, None));
         AUTO_DECREF(slice);
-        return instanceGetitem(inst, slice);
+        return instanceGetitem<CXX>(inst, slice);
     }
     AUTO_DECREF(getslice_func);
     return runtimeCall(getslice_func, ArgPassSpec(2), i, j, NULL, NULL, NULL);
@@ -839,6 +966,74 @@ Box* instanceDelslice(Box* _inst, Box* i, Box* j) {
         return NULL;
     }
 }
+
+// Analoguous to CPython's, used for sq_slots.
+static int instance_ass_slice(Box* inst, Py_ssize_t i, Py_ssize_t j, PyObject* value) {
+    static BoxedString* delslice_str, *setslice_str, *delitem_str, *setitem_str;
+    Box* func = NULL, * res = NULL;
+    Box* slice = NULL;
+    Box* begin = boxInt(i);
+    Box* end = boxInt(j);
+
+    AUTO_DECREF(begin);
+    AUTO_DECREF(end);
+
+    if (value == NULL) {
+        delslice_str = getStaticString("__delslice__");
+        func = instance_getattro(inst, delslice_str);
+        if (func == NULL) {
+            if (!PyErr_ExceptionMatches(PyExc_AttributeError))
+                return -1;
+            PyErr_Clear();
+
+            delitem_str = getStaticString("__delitem__");
+            func = instance_getattro(inst, delitem_str);
+            if (func == NULL)
+                return -1;
+
+            slice = static_cast<Box*>(createSlice(begin, end, None));
+            AUTO_DECREF(slice);
+            res = runtimeCallCapi(func, ArgPassSpec(1), slice, NULL, NULL, NULL, NULL);
+        } else {
+            if (PyErr_WarnPy3k("in 3.x, __delslice__ has been removed; use __delitem__", 1) < 0) {
+                Py_DECREF(func);
+                return -1;
+            }
+            res = runtimeCallCapi(func, ArgPassSpec(2), begin, end, NULL, NULL, NULL);
+        }
+    } else {
+        setslice_str = getStaticString("__setslice__");
+        func = instance_getattro(inst, setslice_str);
+        if (func == NULL) {
+            if (!PyErr_ExceptionMatches(PyExc_AttributeError))
+                return -1;
+            PyErr_Clear();
+
+            setitem_str = getStaticString("__setitem__");
+            func = instance_getattro(inst, setitem_str);
+            if (func == NULL)
+                return -1;
+
+            slice = static_cast<Box*>(createSlice(begin, end, None));
+            AUTO_DECREF(slice);
+            res = runtimeCallCapi(func, ArgPassSpec(2), slice, (Box*)value, NULL, NULL, NULL);
+        } else {
+            if (PyErr_WarnPy3k("in 3.x, __setslice__ has been removed; use __setitem__", 1) < 0) {
+                Py_DECREF(func);
+                return -1;
+            }
+            res = runtimeCallCapi(func, ArgPassSpec(3), begin, end, (Box*)value, NULL, NULL);
+        }
+    }
+
+    Py_DECREF(func);
+    if (res == NULL)
+        return -1;
+
+    Py_DECREF(res);
+    return 0;
+}
+
 
 /* Try a 3-way comparison, returning an int; v is an instance.  Return:
    -2 for an exception;
@@ -995,6 +1190,17 @@ Box* instanceContains(Box* _inst, Box* key) {
     Box* r = runtimeCall(contains_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
     AUTO_DECREF(r);
     return boxBool(nonzero(r));
+}
+
+static int instance_contains(Box* inst, Box* key) noexcept {
+    try {
+        Box* res = instanceContains(inst, key);
+        AUTO_DECREF(res);
+        return nonzero(res);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 }
 
 static Box* instanceHash(BoxedInstance* inst) {
@@ -1911,7 +2117,7 @@ void setupClassobj() {
                            new BoxedFunction(FunctionMetadata::create((void*)instanceNonzero, UNKNOWN, 1)));
     instance_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)instanceLen, UNKNOWN, 1)));
     instance_cls->giveAttr("__getitem__",
-                           new BoxedFunction(FunctionMetadata::create((void*)instanceGetitem, UNKNOWN, 2)));
+                           new BoxedFunction(FunctionMetadata::create((void*)instanceGetitem<CXX>, UNKNOWN, 2)));
     instance_cls->giveAttr("__setitem__",
                            new BoxedFunction(FunctionMetadata::create((void*)instanceSetitem, UNKNOWN, 3)));
     instance_cls->giveAttr("__delitem__",
@@ -2014,6 +2220,15 @@ void setupClassobj() {
     instance_cls->tp_as_number->nb_index = instance_index;
     instance_cls->tp_as_number->nb_power = instance_pow;
     instance_cls->tp_as_number->nb_inplace_power = instance_ipow;
+    instance_cls->tp_as_sequence->sq_item = (ssizeargfunc)instance_item;
     instance_cls->tp_as_sequence->sq_slice = instance_slice;
+    instance_cls->tp_as_sequence->sq_ass_item = (ssizeobjargproc)instance_ass_item;
+    instance_cls->tp_as_sequence->sq_ass_slice = (ssizessizeobjargproc)instance_ass_slice;
+    instance_cls->tp_as_sequence->sq_length = (lenfunc)instance_length;
+    instance_cls->tp_as_sequence->sq_contains = (objobjproc)instance_contains;
+
+    instance_cls->tp_as_mapping->mp_length = (lenfunc)instance_length;
+    instance_cls->tp_as_mapping->mp_subscript = (binaryfunc)instanceGetitem<CAPI>;
+    instance_cls->tp_as_mapping->mp_ass_subscript = (objobjargproc)instance_ass_sub;
 }
 }
