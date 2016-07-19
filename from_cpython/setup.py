@@ -174,7 +174,7 @@ def tkinkter_ext():
 
     # Hack: Just hardcode the includes dir and tcl/tk lib dir like our cffi ext.
     # May want something more robust later.
-    tcl_inc = ['/usr/include/tcl']
+    tcl_inc = ['/usr/include/tcl8.5']
     tcl_lib = "tcl8.5"
     tk_lib = "tk8.5"
 
