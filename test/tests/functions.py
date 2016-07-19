@@ -97,3 +97,19 @@ g2 = copyfunc(g)
 assert g.func_defaults == g2.func_defaults, (g.func_defaults, g2.func_defaults)
 g(1)
 g2(2)
+
+
+# Regression test: make sure that __globals__/func_globals gets set
+# properly in exec cases
+d = {}
+exec """
+def f():
+    pass
+""" in d
+assert type(d['f'].__globals__) == dict
+
+exec """
+def f():
+    pass
+""" in globals()
+assert type(globals()['f'].__globals__) == type(globals())

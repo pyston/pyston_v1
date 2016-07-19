@@ -305,6 +305,9 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, llvm::Arra
       doc(NULL) {
     assert((!globals) == (!md->source || md->source->scoping->areGlobalsFromModule()));
 
+    if (globals)
+        ASSERT(globals->cls == dict_cls || globals->cls == module_cls, "%s", globals->cls->tp_name);
+
     Py_XINCREF(closure);
     Py_XINCREF(globals);
 
@@ -1699,6 +1702,8 @@ static Box* function_globals(Box* self, void*) noexcept {
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
     if (func->globals) {
         assert(!func->md->source || !func->md->source->scoping->areGlobalsFromModule());
+        if (func->globals->cls == module_cls)
+            return incref(func->globals->getAttrWrapper());
         return incref(func->globals);
     }
     assert(func->md->source);
