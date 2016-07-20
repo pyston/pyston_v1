@@ -92,7 +92,6 @@ void generatorEntry(BoxedGenerator* g) {
         assert(g->returnValue == Py_None);
         Py_CLEAR(g->returnValue);
 
-        threading::pushGenerator(g, g->stack_begin, g->returnContext);
         try {
             RegisterHelper context_registerer(g, __builtin_frame_address(0));
 
@@ -115,7 +114,6 @@ void generatorEntry(BoxedGenerator* g) {
 
         // we returned from the body of the generator. next/send/throw will notify the caller
         g->entryExited = true;
-        threading::popGenerator();
     }
     assert(g->top_caller_frame_info == cur_thread_state.frame_info);
     swapContext(&g->context, g->returnContext, 0);
@@ -333,16 +331,15 @@ Box* generatorHasnext(Box* s) {
 
 extern "C" Box* yield_capi(BoxedGenerator* obj, STOLEN(Box*) value, int num_live_values, ...) noexcept {
     try {
-        llvm::SmallVector<Box*, 8> live_values;
-        live_values.reserve(num_live_values);
+        Box** live_values = (Box**)alloca(sizeof(Box*) * num_live_values);
         va_list ap;
         va_start(ap, num_live_values);
         for (int i = 0; i < num_live_values; ++i) {
-            live_values.push_back(va_arg(ap, Box*));
+            live_values[i] = va_arg(ap, Box*);
         }
         va_end(ap);
 
-        return yield(obj, value, live_values);
+        return yield(obj, value, llvm::makeArrayRef(live_values, num_live_values));
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -356,8 +353,6 @@ extern "C" Box* yield(BoxedGenerator* obj, STOLEN(Box*) value, llvm::ArrayRef<Bo
     BoxedGenerator* self = static_cast<BoxedGenerator*>(obj);
     assert(!self->returnValue);
     self->returnValue = value;
-
-    threading::popGenerator();
 
     FrameInfo* generator_frame_info = (FrameInfo*)cur_thread_state.frame_info;
     // a generator will only switch back (yield/unhandled exception) to its caller when it is one frame away from the
@@ -383,8 +378,6 @@ extern "C" Box* yield(BoxedGenerator* obj, STOLEN(Box*) value, llvm::ArrayRef<Bo
             frameInvalidateBack(generator_frame_info->frame_obj);
     }
     cur_thread_state.frame_info = generator_frame_info;
-
-    threading::pushGenerator(obj, obj->stack_begin, obj->returnContext);
 
     // if the generator receives a exception from the caller we have to throw it
     if (self->exception.type) {

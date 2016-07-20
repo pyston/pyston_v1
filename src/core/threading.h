@@ -47,13 +47,6 @@ void finishMainThread();
 
 bool isMainThread();
 
-// Some hooks to keep track of the list of stacks that this thread has been using.
-// Every time we switch to a new generator, we need to pass a reference to the generator
-// itself (so we can access the registers it is saving), the location of the new stack, and
-// where we stopped executing on the old stack.
-void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit);
-void popGenerator();
-
 #ifndef THREADING_USE_GIL
 #define THREADING_USE_GIL 1
 #define THREADING_USE_GRWL 0
