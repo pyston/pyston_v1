@@ -4227,7 +4227,8 @@ void setupRuntime() {
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
     bool_cls = new (0) BoxedClass(int_cls, 0, 0, sizeof(BoxedBool), false, "bool", false, NULL, NULL, false);
     complex_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedComplex), false, "complex", true, NULL, NULL, false);
-    long_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedLong), false, "long", true, NULL, NULL, false);
+    long_cls = new (0)
+        BoxedClass(object_cls, 0, 0, sizeof(BoxedLong), false, "long", true, BoxedLong::tp_dealloc, NULL, false);
     long_cls->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
     float_cls = new (0)
         BoxedClass(object_cls, 0, 0, sizeof(BoxedFloat), false, "float", true, BoxedFloat::tp_dealloc, NULL, false);
