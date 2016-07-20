@@ -30,9 +30,11 @@ extern "C" Box* boolNonzero(BoxedBool* v) {
     return incref(v);
 }
 
-extern "C" Box* boolRepr(BoxedBool* v) {
+template <ExceptionStyle S> Box* boolRepr(Box* v) noexcept(S == CAPI) {
     static BoxedString* true_str = getStaticString("True");
     static BoxedString* false_str = getStaticString("False");
+    if (!PyBool_Check(v))
+        return setDescrTypeError<S>(v, "bool", "__repr__");
 
     if (v == Py_True)
         return incref(true_str);
@@ -92,7 +94,7 @@ void setupBool() {
     bool_cls->tp_as_number = &bool_as_number;
 
     bool_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)boolNonzero, BOXED_BOOL, 1)));
-    bool_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)boolRepr, STR, 1)));
+    bool_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)boolRepr<CXX>, STR, 1)));
     bool_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)boolHash, BOXED_INT, 1)));
 
     bool_cls->giveAttr("__new__",
@@ -105,5 +107,6 @@ void setupBool() {
 
     bool_cls->freeze();
     bool_cls->tp_hash = (hashfunc)bool_hash;
+    bool_cls->tp_repr = boolRepr<CAPI>;
 }
 }

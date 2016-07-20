@@ -185,11 +185,12 @@ public:
 
     // Any new ics here need to get reflected in BoxedClass::dealloc
     std::unique_ptr<CallattrCapiIC> next_ic;
-    std::unique_ptr<CallattrIC> hasnext_ic, repr_ic, iter_ic;
+    std::unique_ptr<CallattrIC> hasnext_ic, iter_ic, repr_ic, str_ic;
     std::unique_ptr<NonzeroIC> nonzero_ic;
     Box* callHasnextIC(Box* obj, bool null_on_nonexistent);
     Box* call_nextIC(Box* obj) noexcept;
-    Box* callReprIC(Box* obj);
+    Box* callReprIC(Box* obj); // returns null on nonexistent!
+    Box* callStrIC(Box* obj);  // returns null on nonexistent!
     Box* callIterIC(Box* obj);
     bool callNonzeroIC(Box* obj);
 
@@ -478,16 +479,22 @@ template <typename B> B* xincref(B* b) {
 // }
 //
 // since this version does not need the try-catch block when called from a CXX-style function
-template <ExceptionStyle S, typename Functor> Box* callCXXFromStyle(Functor f) {
+template <ExceptionStyle S, typename Functor, typename... Args> Box* callCXXFromStyle(Functor f, Args&&... args) {
     if (S == CAPI) {
         try {
-            return f();
+            return f(std::forward<Args>(args)...);
         } catch (ExcInfo e) {
             setCAPIException(e);
             return NULL;
         }
     } else
-        return f();
+        return f(std::forward<Args>(args)...);
+}
+template <ExceptionStyle S, typename Func, typename... Args> Box* callCAPIFromStyle(Func f, Args&&... args) {
+    Box* rtn = f(std::forward<Args>(args)...);
+    if (S == CXX && !rtn)
+        throwCAPIException();
+    return rtn;
 }
 
 // Uncoment this to disable the int freelist, which can make debugging eassier.

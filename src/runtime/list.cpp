@@ -60,7 +60,11 @@ extern "C" PyObject* PyList_AsTuple(PyObject* v) noexcept {
     return BoxedTuple::create(l->size, &l->elts->elts[0]);
 }
 
-extern "C" Box* listRepr(BoxedList* self) {
+extern "C" Box* listRepr(Box* _self) {
+    if (!PyList_Check(_self))
+        return setDescrTypeError<CXX>(_self, "list", "__repr__");
+
+    BoxedList* self = (BoxedList*)_self;
     std::vector<char> chars;
     int status = Py_ReprEnter((PyObject*)self);
 
@@ -96,6 +100,10 @@ extern "C" Box* listRepr(BoxedList* self) {
     }
     Py_ReprLeave((PyObject*)self);
     return boxString(llvm::StringRef(&chars[0], chars.size()));
+}
+
+Box* list_repr(Box* self) noexcept {
+    return callCXXFromStyle<CAPI>(listRepr, self);
 }
 
 extern "C" Box* listNonzero(BoxedList* self) {
@@ -1527,6 +1535,7 @@ void setupList() {
     list_cls->giveAttrBorrowed("__hash__", None);
     list_cls->freeze();
     list_cls->tp_iter = listIter;
+    list_cls->tp_repr = list_repr;
 
     list_cls->tp_as_sequence->sq_length = list_length;
     list_cls->tp_as_sequence->sq_concat = (binaryfunc)list_concat;

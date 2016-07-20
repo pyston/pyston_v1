@@ -259,9 +259,11 @@ extern "C" Py_ssize_t PyTuple_Size(PyObject* op) noexcept {
     return static_cast<BoxedTuple*>(op)->size();
 }
 
-Box* tupleRepr(BoxedTuple* t) {
+Box* tupleRepr(Box* _t) {
+    if (!PyTuple_Check(_t))
+        return setDescrTypeError<CXX>(_t, "tuple", "__repr__");
 
-    assert(PyTuple_Check(t));
+    BoxedTuple* t = (BoxedTuple*)_t;
     int n;
     std::vector<char> chars;
     int status = Py_ReprEnter((PyObject*)t);
@@ -307,6 +309,9 @@ Box* tupleRepr(BoxedTuple* t) {
     Py_ReprLeave((PyObject*)t);
 
     return boxString(llvm::StringRef(&chars[0], chars.size()));
+}
+static Box* tuple_repr(Box* v) noexcept {
+    return callCXXFromStyle<CAPI>(tupleRepr, v);
 }
 
 Box* tupleNonzero(BoxedTuple* self) {
@@ -810,6 +815,7 @@ void setupTuple() {
     tuple_cls->tp_as_sequence->sq_repeat = (ssizeargfunc)tuplerepeat;
     tuple_cls->tp_as_sequence->sq_contains = (objobjproc)tuplecontains;
     tuple_cls->tp_iter = tupleIter;
+    tuple_cls->tp_repr = tuple_repr;
 
     tuple_cls->tp_as_mapping->mp_length = (lenfunc)tuplelength;
     tuple_cls->tp_as_mapping->mp_subscript = (binaryfunc)tupleGetitem<CAPI>;

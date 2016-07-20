@@ -41,12 +41,14 @@ public:
 
     PyCFunction getFunction() { return method_def->ml_meth; }
 
-    static BoxedString* __repr__(BoxedCApiFunction* self) {
-        assert(self->cls == capifunc_cls);
+    template <ExceptionStyle S> static Box* __repr__(Box* _self) noexcept(S == CAPI) {
+        if (!isSubclass(_self->cls, capifunc_cls))
+            return setDescrTypeError<S>(_self, "capifunc", "__repr__");
+        BoxedCApiFunction* self = (BoxedCApiFunction*)_self;
         if (self->passthrough == NULL)
-            return (BoxedString*)PyString_FromFormat("<built-in function %s>", self->method_def->ml_name);
-        return (BoxedString*)PyString_FromFormat("<built-in method %s of %s object at %p>", self->method_def->ml_name,
-                                                 self->passthrough->cls->tp_name, self->passthrough);
+            return callCAPIFromStyle<S>(PyString_FromFormat, "<built-in function %s>", self->method_def->ml_name);
+        return callCAPIFromStyle<S>(PyString_FromFormat, "<built-in method %s of %s object at %p>",
+                                    self->method_def->ml_name, self->passthrough->cls->tp_name, self->passthrough);
     }
 
     static Box* __call__(BoxedCApiFunction* self, BoxedTuple* varargs, BoxedDict* kwargs);

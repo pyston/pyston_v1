@@ -438,16 +438,12 @@ Box* complexNonzero(BoxedComplex* self) {
     return boxBool(res);
 }
 
-Box* complexStr(BoxedComplex* self) {
-    if (!PyComplex_Check(self))
-        raiseExcHelper(TypeError, "descriptor '__str__' requires a 'complex' object but received a '%s'",
-                       getTypeName(self));
 
-    Box* r = complex_format((PyComplexObject*)self, 12, 'g');
-    if (!r) {
-        throwCAPIException();
-    }
-    return r;
+template <ExceptionStyle S> Box* complexStr(Box* self) noexcept(S == CAPI) {
+    if (!PyComplex_Check(self))
+        return setDescrTypeError<S>(self, "complex", "__str__");
+
+    return callCAPIFromStyle<S>(complex_format, (PyComplexObject*)self, 12, 'g');
 }
 
 Box* complexInt(BoxedComplex* self) {
@@ -474,16 +470,11 @@ Box* complexLong(BoxedComplex* self) {
     raiseExcHelper(TypeError, "can't convert complex to long");
 }
 
-Box* complexRepr(BoxedComplex* self) {
+template <ExceptionStyle S> Box* complexRepr(Box* self) noexcept(S == CAPI) {
     if (!PyComplex_Check(self))
-        raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'complex' object but received a '%s'",
-                       getTypeName(self));
+        return setDescrTypeError<S>(self, "complex", "__repr__");
 
-    Box* r = complex_format((PyComplexObject*)self, 16, 'g');
-    if (!r) {
-        throwCAPIException();
-    }
-    return r;
+    return callCAPIFromStyle<S>(complex_format, (PyComplexObject*)self, 16, 'g');
 }
 
 template <ExceptionStyle S> Box* complexNew(BoxedClass* cls, Box* real, Box* imag) noexcept(S == CAPI) {
@@ -806,11 +797,11 @@ void setupComplex() {
     complex_cls->giveAttr("__neg__", new BoxedFunction(FunctionMetadata::create((void*)complexNeg, BOXED_COMPLEX, 1)));
     complex_cls->giveAttr("__pos__", new BoxedFunction(FunctionMetadata::create((void*)complexPos, BOXED_COMPLEX, 1)));
     complex_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)complexHash, BOXED_INT, 1)));
-    complex_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)complexStr, STR, 1)));
+    complex_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)complexStr<CXX>, STR, 1)));
     complex_cls->giveAttr("__int__", new BoxedFunction(FunctionMetadata::create((void*)complexInt, UNKNOWN, 1)));
     complex_cls->giveAttr("__float__", new BoxedFunction(FunctionMetadata::create((void*)complexFloat, UNKNOWN, 1)));
     complex_cls->giveAttr("__long__", new BoxedFunction(FunctionMetadata::create((void*)complexLong, UNKNOWN, 1)));
-    complex_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)complexRepr, STR, 1)));
+    complex_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)complexRepr<CXX>, STR, 1)));
     complex_cls->giveAttrMember("real", T_DOUBLE, offsetof(BoxedComplex, real), true);
     complex_cls->giveAttrMember("imag", T_DOUBLE, offsetof(BoxedComplex, imag), true);
 
@@ -824,6 +815,8 @@ void setupComplex() {
     add_operators(complex_cls);
 
     complex_cls->freeze();
+    complex_cls->tp_str = complexStr<CAPI>;
+    complex_cls->tp_repr = complexRepr<CAPI>;
     complex_cls->tp_as_number->nb_negative = (unaryfunc)complex_neg;
     complex_cls->tp_richcompare = complex_richcompare;
 }

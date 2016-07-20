@@ -229,15 +229,30 @@ Box* BoxedClass::callReprIC(Box* obj) {
     assert(obj->cls == this);
 
     auto ic = repr_ic.get();
-    if (!ic) {
+    if (unlikely(!ic)) {
         ic = new CallattrIC();
         repr_ic.reset(ic);
     }
 
     static BoxedString* repr_str = getStaticString("__repr__");
-    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = false, .argspec = ArgPassSpec(0) };
+    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
     return ic->call(obj, repr_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
+
+Box* BoxedClass::callStrIC(Box* obj) {
+    assert(obj->cls == this);
+
+    auto ic = str_ic.get();
+    if (unlikely(!ic)) {
+        ic = new CallattrIC();
+        str_ic.reset(ic);
+    }
+
+    static BoxedString* str_str = getStaticString("__str__");
+    CallattrFlags callattr_flags{.cls_only = true, .null_on_nonexistent = true, .argspec = ArgPassSpec(0) };
+    return ic->call(obj, str_str, callattr_flags, nullptr, nullptr, nullptr, nullptr, nullptr);
+}
+
 
 Box* BoxedClass::callIterIC(Box* obj) {
     assert(obj->cls == this);
@@ -269,8 +284,14 @@ Box* Box::reprIC() {
     return this->cls->callReprIC(this);
 }
 
+Box* Box::strIC() {
+    return this->cls->callStrIC(this);
+}
+
 BoxedString* Box::reprICAsString() {
     Box* r = this->reprIC();
+    if (!r)
+        raiseAttributeError(this, "__repr__");
 
     if (isSubclass(r->cls, unicode_cls)) {
         r = PyUnicode_AsASCIIString(autoDecref(r));
@@ -1506,10 +1527,13 @@ static Box* builtinFunctionOrMethodCall(BoxedBuiltinFunctionOrMethod* self, Box*
                                                     NULL);
 }
 
-extern "C" BoxedString* functionRepr(BoxedFunction* v) {
+template <ExceptionStyle S> static Box* functionRepr(Box* _v) noexcept(S == CAPI) {
+    if (!isSubclass(_v->cls, function_cls))
+        return setDescrTypeError<S>(_v, "function", "__repr__");
+    BoxedFunction* v = (BoxedFunction*)_v;
     if (!v->name)
-        return (BoxedString*)PyString_FromFormat("<function <name_missing?> at %p>", v);
-    return (BoxedString*)PyString_FromFormat("<function %s at %p>", PyString_AsString(v->name), v);
+        return callCAPIFromStyle<S>(PyString_FromFormat, "<function <name_missing?> at %p>", v);
+    return callCAPIFromStyle<S>(PyString_FromFormat, "<function %s at %p>", PyString_AsString(v->name), v);
 }
 
 static Box* functionGet(BoxedFunction* self, Box* inst, Box* owner) {
@@ -2062,7 +2086,12 @@ extern "C" PyObject* PySlice_New(PyObject* start, PyObject* stop, PyObject* step
     return createSlice(start, stop, step);
 }
 
-Box* typeRepr(BoxedClass* self) {
+Box* typeRepr(Box* _self) {
+    if (!isSubclass(_self->cls, type_cls))
+        return setDescrTypeError<CXX>(_self, "type", "__repr__");
+
+    BoxedClass* self = (BoxedClass*)_self;
+
     std::string O("");
     llvm::raw_string_ostream os(O);
 
@@ -2084,6 +2113,10 @@ Box* typeRepr(BoxedClass* self) {
     os << "'>";
 
     return boxString(os.str());
+}
+
+static Box* type_repr(Box* self) noexcept {
+    return callCXXFromStyle<CAPI>(typeRepr, self);
 }
 
 static PyObject* type_module(Box* _type, void* context) noexcept {
@@ -3076,7 +3109,7 @@ static PyObject* object_new(PyTypeObject* type, PyObject* args, PyObject* kwds) 
 }
 
 static Box* type_name(Box* b, void*) noexcept;
-Box* objectRepr(Box* self) {
+Box* object_repr(Box* self) noexcept {
     BoxedClass* type = self->cls;
     DecrefHandle<Box, true> mod(NULL);
 
@@ -3091,12 +3124,12 @@ Box* objectRepr(Box* self) {
 }
 
 static Box* object_str(Box* obj) noexcept {
-    try {
-        return obj->reprIC();
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
+    unaryfunc f;
+
+    f = Py_TYPE(obj)->tp_repr;
+    if (f == NULL)
+        f = object_repr;
+    return f(obj);
 }
 
 Box* objectHash(Box* obj) {
@@ -4329,8 +4362,8 @@ void setupRuntime() {
     SET = typeFromClass(set_cls);
     FROZENSET = typeFromClass(frozenset_cls);
 
-    object_cls->giveAttr("__repr__",
-                         new BoxedFunction(FunctionMetadata::create((void*)objectRepr, UNKNOWN, 1, false, false)));
+    object_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)object_repr, UNKNOWN, 1, false,
+                                                                                false, ParamNames::empty(), CAPI)));
     object_cls->giveAttr("__subclasshook__",
                          boxInstanceMethod(object_cls, autoDecref(new BoxedFunction(FunctionMetadata::create(
                                                            (void*)objectSubclasshook, UNKNOWN, 2))),
@@ -4369,6 +4402,7 @@ void setupRuntime() {
     type_cls->freeze();
 
     type_cls->tp_new = type_new;
+    type_cls->tp_repr = type_repr;
     type_cls->tpp_call.capi_val = &typeTppCall<CAPI>;
     type_cls->tpp_call.cxx_val = &typeTppCall<CXX>;
 
@@ -4433,7 +4467,7 @@ void setupRuntime() {
             { None, None, None }));
     function_cls->giveAttrBorrowed("__dict__", dict_descr);
     function_cls->giveAttrDescriptor("__name__", func_name, func_set_name);
-    function_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)functionRepr, STR, 1)));
+    function_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)functionRepr<CXX>, STR, 1)));
     function_cls->giveAttrMember("__module__", T_OBJECT, offsetof(BoxedFunction, modname), false);
     function_cls->giveAttrMember("__doc__", T_OBJECT, offsetof(BoxedFunction, doc), false);
     function_cls->giveAttrBorrowed("func_doc", function_cls->getattr(getStaticString("__doc__")));
@@ -4453,6 +4487,7 @@ void setupRuntime() {
     function_cls->giveAttrMember("func_closure", T_OBJECT, offsetof(BoxedFunction, closure), true);
     function_cls->freeze();
     function_cls->tp_descr_get = function_descr_get;
+    function_cls->tp_repr = functionRepr<CAPI>;
 
     builtin_function_or_method_cls->giveAttrMember("__module__", T_OBJECT,
                                                    offsetof(BoxedBuiltinFunctionOrMethod, modname));

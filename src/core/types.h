@@ -890,7 +890,8 @@ public:
     // Only valid for hc-backed instances:
     BORROWED(Box*) getAttrWrapper();
 
-    Box* reprIC();
+    Box* reprIC(); // returns null on nonexistent!
+    Box* strIC();  // returns null on nonexistent!
     BoxedString* reprICAsString();
     bool nonzeroIC();
     Box* hasnextOrNullIC();

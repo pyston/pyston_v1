@@ -1907,8 +1907,8 @@ extern "C" int PyCFunction_ClearFreeList() noexcept {
 }
 
 void setupCAPI() {
-    capifunc_cls->giveAttr("__repr__",
-                           new BoxedFunction(FunctionMetadata::create((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
+    capifunc_cls->giveAttr(
+        "__repr__", new BoxedFunction(FunctionMetadata::create((void*)BoxedCApiFunction::__repr__<CXX>, UNKNOWN, 1)));
 
     auto capi_call
         = new BoxedFunction(FunctionMetadata::create((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, true, true));
@@ -1920,5 +1920,6 @@ void setupCAPI() {
     capifunc_cls->giveAttrMember("__module__", T_OBJECT, offsetof(BoxedCApiFunction, module));
 
     capifunc_cls->freeze();
+    capifunc_cls->tp_repr = BoxedCApiFunction::__repr__<CAPI>;
 }
 }

@@ -213,6 +213,21 @@ static const char* objectNewParameterTypeErrorMsg() {
     }
 }
 
+// use this like:
+// if (!PyBool_Check(v))
+//     return setDescrTypeError<S>(v, "bool", "__repr__");
+// ...
+template <ExceptionStyle S>
+Box* __attribute__((warn_unused_result))
+setDescrTypeError(Box* got, const char* expected_cls_name, const char* descr_name) {
+    if (S == CXX)
+        raiseExcHelper((PyTypeObject*)PyExc_TypeError, "descriptor '%s' requires a '%s' object but received a '%s'",
+                       descr_name, expected_cls_name, getTypeName(got));
+    PyErr_Format(PyExc_TypeError, "descriptor '%s' requires a '%s' object but received a '%s'", descr_name,
+                 expected_cls_name, getTypeName(got));
+    return NULL;
+}
+
 inline std::tuple<Box*, Box*, Box*, Box**> getTupleFromArgsArray(Box** args, int num_args) {
     Box* arg1 = num_args >= 1 ? args[0] : nullptr;
     Box* arg2 = num_args >= 2 ? args[1] : nullptr;

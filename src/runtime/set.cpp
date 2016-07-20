@@ -248,9 +248,11 @@ Box* setInit(Box* _self, Box* container, BoxedDict* kwargs) {
     return incref(None);
 }
 
-static Box* setRepr(BoxedSet* self) {
-    RELEASE_ASSERT(PyAnySet_Check(self), "");
+static Box* setRepr(Box* _self) {
+    if (!PyAnySet_Check(_self))
+        return setDescrTypeError<CXX>(_self, "set", "__repr__");
 
+    BoxedSet* self = (BoxedSet*)_self;
     std::vector<char> chars;
     int status = Py_ReprEnter((PyObject*)self);
 
@@ -297,6 +299,9 @@ static Box* setRepr(BoxedSet* self) {
     }
     Py_ReprLeave((PyObject*)self);
     return boxString(llvm::StringRef(&chars[0], chars.size()));
+}
+static Box* set_repr(Box* self) noexcept {
+    return callCXXFromStyle<CAPI>(setRepr, self);
 }
 
 static void _setSymmetricDifferenceUpdate(BoxedSet* self, Box* other) {
@@ -966,11 +971,9 @@ void setupSet() {
     frozenset_cls->giveAttr(
         "__new__", new BoxedFunction(FunctionMetadata::create((void*)frozensetNew, UNKNOWN, 2, false, true), { NULL }));
 
-    Box* set_repr = new BoxedFunction(FunctionMetadata::create((void*)setRepr, STR, 1));
-    set_cls->giveAttrBorrowed("__repr__", set_repr);
-    set_cls->giveAttrBorrowed("__str__", set_repr);
-    frozenset_cls->giveAttrBorrowed("__repr__", set_repr);
-    frozenset_cls->giveAttr("__str__", set_repr);
+    Box* set_repr_func = new BoxedFunction(FunctionMetadata::create((void*)setRepr, STR, 1));
+    set_cls->giveAttrBorrowed("__repr__", set_repr_func);
+    frozenset_cls->giveAttr("__repr__", set_repr_func);
 
     std::vector<ConcreteCompilerType*> v_ss, v_sf, v_su, v_ff, v_fs, v_fu;
     v_ss.push_back(SET);
@@ -1083,7 +1086,7 @@ void setupSet() {
     set_cls->freeze();
     frozenset_cls->freeze();
 
-    set_cls->tp_iter = (decltype(set_cls->tp_iter))setIter;
-    frozenset_cls->tp_iter = (decltype(frozenset_cls->tp_iter))setIter;
+    frozenset_cls->tp_repr = set_cls->tp_repr = set_repr;
+    frozenset_cls->tp_iter = set_cls->tp_iter = (decltype(set_cls->tp_iter))setIter;
 }
 }
