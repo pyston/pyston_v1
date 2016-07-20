@@ -2136,7 +2136,7 @@ public:
     }
 
     CompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
-        if (cls == None->cls)
+        if (cls == Py_None->cls)
             return makeBool(false);
 
         static BoxedString* attr = getStaticString("__nonzero__");

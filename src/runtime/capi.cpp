@@ -715,15 +715,15 @@ void checkAndThrowCAPIException() {
                && "Only support throwing subclass of BaseException for now");
 
         if (!value)
-            value = incref(None);
+            value = incref(Py_None);
 
         // This is similar to PyErr_NormalizeException:
         if (!isSubclass(value->cls, type)) {
             if (value->cls == tuple_cls) {
                 value = runtimeCall(type, ArgPassSpec(0, 0, true, false), autoDecref(value), NULL, NULL, NULL, NULL);
-            } else if (value == None) {
+            } else if (value == Py_None) {
                 value = runtimeCall(type, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-                Py_DECREF(None);
+                Py_DECREF(Py_None);
             } else {
                 value = runtimeCall(type, ArgPassSpec(1), autoDecref(value), NULL, NULL, NULL, NULL);
             }
@@ -759,8 +759,8 @@ extern "C" void PyErr_SetExcInfo(PyObject* type, PyObject* value, PyObject* trac
     AUTO_XDECREF(exc->value);
     AUTO_XDECREF(exc->traceback);
 
-    exc->type = type ? type : incref(None);
-    exc->value = value ? value : incref(None);
+    exc->type = type ? type : incref(Py_None);
+    exc->value = value ? value : incref(Py_None);
     exc->traceback = traceback;
 }
 

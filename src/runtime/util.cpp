@@ -78,7 +78,7 @@ void boundSliceWithLength(i64* start_out, i64* stop_out, i64 start, i64 stop, i6
 
 Box* boxStringOrNone(const char* s) {
     if (s == NULL) {
-        return incref(None);
+        return incref(Py_None);
     } else {
         return boxString(s);
     }
@@ -86,7 +86,7 @@ Box* boxStringOrNone(const char* s) {
 
 BORROWED(Box*) noneIfNull(Box* b) {
     if (b == NULL) {
-        return None;
+        return Py_None;
     } else {
         return b;
     }

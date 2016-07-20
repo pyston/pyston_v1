@@ -372,7 +372,7 @@ static PyObject* va_build_value(const char* fmt, va_list va, int flags) noexcept
         return NULL;
 
     if (n == 0)
-        return incref(None);
+        return incref(Py_None);
 
     va_list lva;
     __va_copy(lva, va);
@@ -482,8 +482,8 @@ extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long valu
 extern "C" PyObject* PyModule_New(const char* name) noexcept {
     BoxedModule* module = new BoxedModule();
     module->giveAttr("__name__", boxString(name));
-    module->giveAttr("__doc__", incref(None));
-    module->giveAttr("__package__", incref(None));
+    module->giveAttr("__doc__", incref(Py_None));
+    module->giveAttr("__package__", incref(Py_None));
     return module;
 }
 

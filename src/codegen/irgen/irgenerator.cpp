@@ -745,7 +745,7 @@ public:
     }
 
     ConcreteCompilerVariable* getNone() override {
-        llvm::Constant* none = embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone");
+        llvm::Constant* none = embedRelocatablePtr(Py_None, g.llvm_value_type_ptr, "cNone");
         setType(none, RefType::BORROWED);
         return new ConcreteCompilerVariable(typeFromClass(none_cls), none);
     }

@@ -161,7 +161,7 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
 
 extern "C" void printHelper(Box* w, Box* v, bool nl) {
     // copied from cpythons PRINT_ITEM and PRINT_NEWLINE op handling code
-    if (w == NULL || w == None) {
+    if (w == NULL || w == Py_None) {
         w = PySys_GetObject("stdout");
         if (w == NULL)
             raiseExcHelper(RuntimeError, "lost sys.stdout");
@@ -1361,14 +1361,14 @@ void HCAttrs::moduleClear() noexcept {
         for (auto&& e : d->d) {
             if (PyString_Check(e.first.value) && first_check_func(PyString_AsString(e.first.value))) {
                 AUTO_DECREF(e.second);
-                e.second = incref(None);
+                e.second = incref(Py_None);
             }
         }
 
         for (auto&& e : d->d) {
             if (PyString_Check(e.first.value) && second_check_func(PyString_AsString(e.first.value))) {
                 AUTO_DECREF(e.second);
-                e.second = incref(None);
+                e.second = incref(Py_None);
             }
         }
         return;
@@ -1382,7 +1382,7 @@ void HCAttrs::moduleClear() noexcept {
         if (first_check_func(s)) {
             int idx = p.second;
             Box* b = attr_list->attrs[idx];
-            attr_list->attrs[idx] = incref(None);
+            attr_list->attrs[idx] = incref(Py_None);
             Py_DECREF(b);
         }
     }
@@ -1392,7 +1392,7 @@ void HCAttrs::moduleClear() noexcept {
         if (second_check_func(s)) {
             int idx = p.second;
             Box* b = attr_list->attrs[idx];
-            attr_list->attrs[idx] = incref(None);
+            attr_list->attrs[idx] = incref(Py_None);
             Py_DECREF(b);
         }
     }
@@ -2157,7 +2157,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedS
 
     else if (descr->cls == property_cls) {
         BoxedProperty* prop = static_cast<BoxedProperty*>(descr);
-        if (prop->prop_get == NULL || prop->prop_get == None) {
+        if (prop->prop_get == NULL || prop->prop_get == Py_None) {
             raiseExcHelper(AttributeError, "unreadable attribute");
         }
 
@@ -7171,7 +7171,7 @@ Box* _typeNew(BoxedClass* metatype, BoxedString* name, BoxedTuple* bases, BoxedD
 
     static BoxedString* doc_str = getStaticString("__doc__");
     if (!made->hasattr(doc_str))
-        made->setattr(doc_str, None, NULL);
+        made->setattr(doc_str, Py_None, NULL);
 
     made->tp_new = base->tp_new;
 
@@ -7498,7 +7498,7 @@ extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
                 raiseExcHelper(AttributeError, "'module' object has no attribute '%s'", casted_attr_name->data());
             setGlobal(to_globals, casted_attr_name, incref(attr_value));
         }
-        return incref(None);
+        return incref(Py_None);
     }
 
     HCAttrs* module_attrs = from_module->getHCAttrsPtr();
@@ -7509,7 +7509,7 @@ extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
         setGlobal(to_globals, p.first, incref(module_attrs->attr_list->attrs[p.second]));
     }
 
-    return incref(None);
+    return incref(Py_None);
 }
 
 // TODO Make these fast, do inline caches and stuff

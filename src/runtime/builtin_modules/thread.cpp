@@ -152,11 +152,11 @@ public:
         if (PyThread_acquire_lock(self->lock_lock, 0)) {
             PyThread_release_lock(self->lock_lock);
             raiseExcHelper(ThreadError, "release unlocked lock");
-            return incref(None);
+            return incref(Py_None);
         }
 
         PyThread_release_lock(self->lock_lock);
-        return incref(None);
+        return incref(Py_None);
     }
 
     static Box* exit(Box* _self, Box* arg1, Box* arg2, Box** args) { return release(_self); }

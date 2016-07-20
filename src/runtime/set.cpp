@@ -224,7 +224,7 @@ Box* setInit(Box* _self, Box* container, BoxedDict* kwargs) {
     }
 
     if (!container)
-        return incref(None);
+        return incref(Py_None);
 
     BoxedSet* self = static_cast<BoxedSet*>(_self);
 
@@ -245,7 +245,7 @@ Box* setInit(Box* _self, Box* container, BoxedDict* kwargs) {
         }
     }
 
-    return incref(None);
+    return incref(Py_None);
 }
 
 static Box* setRepr(Box* _self) {
@@ -342,7 +342,7 @@ static Box* setIntersectionUpdate2(BoxedSet* self, Box* other) {
     Box* tmp = setIntersection2(self, other);
     std::swap(self->s, ((BoxedSet*)tmp)->s);
     Py_DECREF(tmp);
-    return incref(None);
+    return incref(Py_None);
 }
 
 Box* setIOr(BoxedSet* lhs, BoxedSet* rhs) {
@@ -441,7 +441,7 @@ Box* setAdd(BoxedSet* self, Box* v) {
     RELEASE_ASSERT(isSubclass(self->cls, set_cls), "%s", self->cls->tp_name);
 
     _setAdd(self, v);
-    return incref(None);
+    return incref(Py_None);
 }
 
 // Note: PySet_Add is allowed to apply to frozenset objects, though CPython has
@@ -505,7 +505,7 @@ Box* setUpdate(BoxedSet* self, BoxedTuple* args) {
         }
     }
 
-    return incref(None);
+    return incref(Py_None);
 }
 
 Box* setUnion(BoxedSet* self, BoxedTuple* args) {
@@ -553,7 +553,7 @@ Box* setDifferenceUpdate(BoxedSet* self, BoxedTuple* args) {
                        getTypeName(self));
 
     _setDifferenceUpdate(self, args);
-    return incref(None);
+    return incref(Py_None);
 }
 
 Box* setDifference(BoxedSet* self, BoxedTuple* args) {
@@ -574,7 +574,7 @@ Box* setSymmetricDifferenceUpdate(BoxedSet* self, Box* other) {
                        getTypeName(self));
 
     _setSymmetricDifferenceUpdate(self, other);
-    return incref(None);
+    return incref(Py_None);
 }
 
 Box* setSymmetricDifference(BoxedSet* self, Box* other) {
@@ -654,7 +654,7 @@ static Box* setIntersectionUpdate(BoxedSet* self, BoxedTuple* args) {
     Box* tmp = setIntersection(self, args);
     AUTO_DECREF(tmp);
     std::swap(self->s, ((BoxedSet*)tmp)->s);
-    return incref(None);
+    return incref(Py_None);
 }
 
 Box* setCopy(BoxedSet* self) {
@@ -773,7 +773,7 @@ Box* setRemove(BoxedSet* self, Box* key) {
         try {
             bool existed = _setRemove(self, key);
             if (existed)
-                return incref(None);
+                return incref(Py_None);
         } catch (ExcInfo e) {
             if (!e.matches(TypeError))
                 throw e;
@@ -784,14 +784,14 @@ Box* setRemove(BoxedSet* self, Box* key) {
             AUTO_DECREF(tmpKey);
             bool existed = _setRemove(self, tmpKey);
             if (existed)
-                return incref(None);
+                return incref(Py_None);
         }
         raiseExcHelper(KeyError, key);
     }
 
     bool existed = _setRemove(self, key);
     if (existed)
-        return incref(None);
+        return incref(Py_None);
     raiseExcHelper(KeyError, key);
 }
 
@@ -811,12 +811,12 @@ Box* setDiscard(BoxedSet* self, Box* key) {
             AUTO_DECREF(tmpKey);
             _setRemove(self, tmpKey);
         }
-        return incref(None);
+        return incref(Py_None);
     }
 
     _setRemove(self, key);
 
-    return incref(None);
+    return incref(Py_None);
 }
 
 Box* setNocmp(BoxedSet* self, BoxedSet* rhs) {
@@ -1043,7 +1043,7 @@ void setupSet() {
     frozenset_cls->giveAttrBorrowed("__nonzero__", set_cls->getattr(getStaticString("__nonzero__")));
 
     frozenset_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)setHash, BOXED_INT, 1)));
-    set_cls->giveAttrBorrowed("__hash__", None);
+    set_cls->giveAttrBorrowed("__hash__", Py_None);
 
     set_cls->giveAttr("add", new BoxedFunction(FunctionMetadata::create((void*)setAdd, NONE, 2)));
     set_cls->giveAttr("remove", new BoxedFunction(FunctionMetadata::create((void*)setRemove, NONE, 2)));

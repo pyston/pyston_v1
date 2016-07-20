@@ -605,9 +605,9 @@ void ASTInterpreter::doStore(AST_expr* node, STOLEN(Value) value) {
 Value ASTInterpreter::getNone() {
     RewriterVar* v = NULL;
     if (jit) {
-        v = jit->imm(None)->setType(RefType::BORROWED);
+        v = jit->imm(Py_None)->setType(RefType::BORROWED);
     }
-    return Value(incref(None), v);
+    return Value(incref(Py_None), v);
 }
 
 Value ASTInterpreter::visit_unaryop(AST_UnaryOp* node) {
@@ -783,7 +783,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     // TODO: maybe use a different placeholder (=NULL)?
     // - new issue with that -- we can no longer distinguish NULL from unset-in-sorted_symbol_table
     // Currently we pass None because the LLVM jit will decref this value even though it may not be set.
-    static Box* const VAL_UNDEFINED = (Box*)None;
+    static Box* const VAL_UNDEFINED = (Box*)Py_None;
 
     const VRegSet& defined = phis->definedness.getDefinedVregsAtEnd(current_block);
     for (int vreg : defined) {
@@ -1915,8 +1915,8 @@ Box* ASTInterpreterJitInterface::landingpadHelper(void* _interpreter) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     ExcInfo& last_exception = interpreter->last_exception;
     Box* type = last_exception.type;
-    Box* value = last_exception.value ? last_exception.value : None;
-    Box* traceback = last_exception.traceback ? last_exception.traceback : None;
+    Box* value = last_exception.value ? last_exception.value : Py_None;
+    Box* traceback = last_exception.traceback ? last_exception.traceback : Py_None;
     Box* rtn = BoxedTuple::create({ type, value, traceback });
     Py_CLEAR(last_exception.type);
     Py_CLEAR(last_exception.value);
@@ -2080,7 +2080,7 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
 
     interpreter.initArguments((BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3, args);
     Box* v = ASTInterpreter::execute(interpreter);
-    return v ? v : incref(None);
+    return v ? v : incref(Py_None);
 }
 
 Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
@@ -2113,7 +2113,7 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
     interpreter.setGlobals(globals);
 
     Box* v = ASTInterpreter::execute(interpreter);
-    return v ? v : incref(None);
+    return v ? v : incref(Py_None);
 }
 
 // caution when changing the function arguments: this function gets called from an assembler wrapper!
@@ -2220,7 +2220,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
     Py_CLEAR(frame_state.locals);
 
     Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
-    return v ? v : incref(None);
+    return v ? v : incref(Py_None);
 }
 
 extern "C" void printExprHelper(Box* obj) {

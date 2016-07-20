@@ -165,7 +165,7 @@ Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
     BoxedClassobj* made = new (cls) BoxedClassobj(name, bases);
 
     made->giveAttr("__module__", boxString(getCurrentModule()->name()));
-    made->giveAttr("__doc__", incref(None));
+    made->giveAttr("__doc__", incref(Py_None));
 
     for (const auto& p : *dict) {
         RELEASE_ASSERT(p.first->cls == str_cls, "");
@@ -196,7 +196,7 @@ Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
     if (init_func) {
         Box* init_rtn = runtimeCall(init_func, ArgPassSpec(1, 0, true, true), made, args, kwargs, NULL, NULL);
         AUTO_DECREF(init_rtn);
-        if (init_rtn != None)
+        if (init_rtn != Py_None)
             raiseExcHelper(TypeError, "__init__() should return None");
     } else {
         if (args->size() || (kwargs && kwargs->d.size())) {
@@ -233,7 +233,7 @@ static Box* classobjGetattribute(Box* _cls, Box* _attr) {
         if (attr->s() == "__name__") {
             if (cls->name)
                 return incref(cls->name);
-            return incref(None);
+            return incref(Py_None);
         }
     }
 
@@ -241,7 +241,7 @@ static Box* classobjGetattribute(Box* _cls, Box* _attr) {
     if (!r)
         raiseExcHelper(AttributeError, "class %s has no attribute '%s'", cls->name->data(), attr->data());
 
-    r = processDescriptor(r, None, cls);
+    r = processDescriptor(r, Py_None, cls);
     return r;
 }
 
@@ -302,12 +302,12 @@ static Box* classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
     assert(_value);
 
     _classobjSetattr(_cls, _attr, _value);
-    return incref(None);
+    return incref(Py_None);
 }
 
 static Box* classobjDelattr(Box* _cls, Box* _attr) {
     _classobjSetattr(_cls, _attr, NULL);
-    return incref(None);
+    return incref(Py_None);
 }
 
 static int classobj_setattro(Box* cls, Box* attr, Box* value) noexcept {
@@ -626,7 +626,7 @@ Box* instanceDelattr(Box* _inst, Box* _attr) {
         raiseExcHelper(AttributeError, "%.50s instance has no attribute '%.400s'", clsobj->name->c_str(),
                        attr->c_str());
     }
-    return incref(None);
+    return incref(Py_None);
 }
 
 int instance_setattro(Box* inst, Box* attr, Box* value) noexcept {
@@ -896,7 +896,7 @@ Box* instanceGetslice(Box* _inst, Box* i, Box* j) {
     }
 
     if (getslice_func == NULL) {
-        Box* slice = static_cast<Box*>(createSlice(i, j, None));
+        Box* slice = static_cast<Box*>(createSlice(i, j, Py_None));
         AUTO_DECREF(slice);
         return instanceGetitem<CXX>(inst, slice);
     }
@@ -929,7 +929,7 @@ Box* instanceSetslice(Box* _inst, Box* i, Box* j, Box** sequence) {
     }
 
     if (setslice_func == NULL) {
-        Box* slice = static_cast<Box*>(createSlice(i, j, None));
+        Box* slice = static_cast<Box*>(createSlice(i, j, Py_None));
         AUTO_DECREF(slice);
         return instanceSetitem(inst, slice, *sequence);
     }
@@ -954,7 +954,7 @@ Box* instanceDelslice(Box* _inst, Box* i, Box* j) {
     }
 
     if (delslice_func == NULL) {
-        Box* slice = static_cast<Box*>(createSlice(i, j, None));
+        Box* slice = static_cast<Box*>(createSlice(i, j, Py_None));
         AUTO_DECREF(slice);
         return instanceDelitem(inst, slice);
     }
@@ -991,7 +991,7 @@ static int instance_ass_slice(Box* inst, Py_ssize_t i, Py_ssize_t j, PyObject* v
             if (func == NULL)
                 return -1;
 
-            slice = static_cast<Box*>(createSlice(begin, end, None));
+            slice = static_cast<Box*>(createSlice(begin, end, Py_None));
             AUTO_DECREF(slice);
             res = runtimeCallCapi(func, ArgPassSpec(1), slice, NULL, NULL, NULL, NULL);
         } else {
@@ -1014,7 +1014,7 @@ static int instance_ass_slice(Box* inst, Py_ssize_t i, Py_ssize_t j, PyObject* v
             if (func == NULL)
                 return -1;
 
-            slice = static_cast<Box*>(createSlice(begin, end, None));
+            slice = static_cast<Box*>(createSlice(begin, end, Py_None));
             AUTO_DECREF(slice);
             res = runtimeCallCapi(func, ArgPassSpec(2), slice, (Box*)value, NULL, NULL, NULL);
         } else {

@@ -89,7 +89,7 @@ void generatorEntry(BoxedGenerator* g) {
         assert(g->cls == generator_cls);
         assert(g->function->cls == function_cls);
 
-        assert(g->returnValue == None);
+        assert(g->returnValue == Py_None);
         Py_CLEAR(g->returnValue);
 
         threading::pushGenerator(g, g->stack_begin, g->returnContext);
@@ -129,7 +129,7 @@ Box* generatorIter(Box* s) {
 template <ExceptionStyle S> static bool generatorSendInternal(BoxedGenerator* self, Box* v) noexcept(S == CAPI) {
     STAT_TIMER(t0, "us_timer_generator_switching", 0);
 
-    if (!self->returnContext && v != None) {
+    if (!self->returnContext && v != Py_None) {
         if (S == CAPI) {
             PyErr_SetString(TypeError, "can't send non-None value to a just-started generator");
             return true;
@@ -149,7 +149,7 @@ template <ExceptionStyle S> static bool generatorSendInternal(BoxedGenerator* se
     if (self->entryExited) {
         freeGeneratorStack(self);
         if (S == CAPI) {
-            PyErr_SetObject(StopIteration, None);
+            PyErr_SetObject(StopIteration, Py_None);
             return true;
         } else
             raiseExcHelper(StopIteration, (const char*)nullptr);
@@ -237,7 +237,7 @@ template <ExceptionStyle S> static Box* generatorSend(Box* s, Box* v) noexcept(S
         self->exception = ExcInfo(nullptr, nullptr, nullptr);
         if (old_exc.type == NULL) {
             if (S == CAPI) {
-                PyErr_SetObject(StopIteration, None);
+                PyErr_SetObject(StopIteration, Py_None);
                 return NULL;
             } else
                 raiseExcHelper(StopIteration, (const char*)nullptr);
@@ -264,19 +264,19 @@ Box* generatorThrow(Box* s, BoxedClass* exc_cls, Box* exc_val = nullptr, Box** a
         Py_FatalError(".throw called on generator last advanced with __hasnext__");
 
     Box* exc_tb = args ? args[0] : nullptr;
-    if (exc_tb && exc_tb != None && !PyTraceBack_Check(exc_tb))
+    if (exc_tb && exc_tb != Py_None && !PyTraceBack_Check(exc_tb))
         raiseExcHelper(TypeError, "throw() third argument must be a traceback object");
     if (!exc_val)
-        exc_val = None;
+        exc_val = Py_None;
     if (!exc_tb)
-        exc_tb = None;
+        exc_tb = Py_None;
 
     ExcInfo exc_info = excInfoForRaise(incref(exc_cls), incref(exc_val), incref(exc_tb));
     if (self->entryExited)
         throw exc_info;
 
     self->exception = exc_info;
-    return generatorSend<CXX>(self, None);
+    return generatorSend<CXX>(self, Py_None);
 }
 
 Box* generatorClose(Box* s) {
@@ -285,7 +285,7 @@ Box* generatorClose(Box* s) {
 
     // check if the generator already exited
     if (self->entryExited)
-        return incref(None);
+        return incref(Py_None);
 
     try {
         autoDecref(generatorThrow(self, GeneratorExit, nullptr, nullptr));
@@ -293,7 +293,7 @@ Box* generatorClose(Box* s) {
     } catch (ExcInfo e) {
         if (e.matches(StopIteration) || e.matches(GeneratorExit)) {
             e.clear();
-            return incref(None);
+            return incref(Py_None);
         }
         throw e;
     }
@@ -312,7 +312,7 @@ template <ExceptionStyle S> static Box* generatorNext(Box* s) noexcept(S == CAPI
         return rtn;
     }
 
-    return generatorSend<S>(s, None);
+    return generatorSend<S>(s, Py_None);
 }
 
 llvm_compat_bool generatorHasnextUnboxed(Box* s) {
@@ -320,7 +320,7 @@ llvm_compat_bool generatorHasnextUnboxed(Box* s) {
     BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
 
     if (!self->iterated_from__hasnext__) {
-        generatorSendInternal<CXX>(self, None);
+        generatorSendInternal<CXX>(self, Py_None);
         self->iterated_from__hasnext__ = true;
     }
 
