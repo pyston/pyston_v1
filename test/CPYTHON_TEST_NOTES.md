@@ -32,7 +32,6 @@ test_bz2                leaks
 test_capi               [unknown]
 test_cd                 [unknown]
 test_cfgparser          works when run from inside the from_cpython dir
-test_cgi                leaks
 test_class              needs ellipsis
 test_cl                 [unknown]
 test_cmd_line_script    [unknown]
