@@ -47,7 +47,6 @@ FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_
       takes_kwargs(takes_kwargs),
       source(std::move(source)),
       param_names(this->source->ast, this->source->getInternedStrings()),
-      always_use_version(NULL),
       times_interpreted(0),
       internal_callable(NULL, NULL) {
 }
@@ -59,7 +58,6 @@ FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_
       takes_kwargs(takes_kwargs),
       source(nullptr),
       param_names(param_names),
-      always_use_version(NULL),
       times_interpreted(0),
       internal_callable(NULL, NULL) {
 }
@@ -81,9 +79,12 @@ void FunctionMetadata::addVersion(CompiledFunction* compiled) {
 
     if (compiled->entry_descriptor == NULL) {
         bool could_have_speculations = (source.get() != NULL);
-        if (!could_have_speculations && versions.size() == 0 && compiled->effort == EffortLevel::MAXIMAL
-            && compiled->spec->accepts_all_inputs && compiled->spec->boxed_return_value)
-            always_use_version = compiled;
+        if (!could_have_speculations && compiled->effort == EffortLevel::MAXIMAL && compiled->spec->accepts_all_inputs
+            && compiled->spec->boxed_return_value
+            && (versions.size() == 0 || (versions.size() == 1 && !always_use_version.empty()))) {
+            always_use_version.get(compiled->exception_style) = compiled;
+        } else
+            assert(always_use_version.empty());
 
         assert(compiled->spec->arg_types.size() == numReceivedArgs());
         versions.push_back(compiled);

@@ -3959,12 +3959,20 @@ static inline RewriterVar* getArg(int idx, _CallRewriteArgsBase* rewrite_args) {
 }
 
 static StatCounter slowpath_pickversion("slowpath_pickversion");
-static CompiledFunction* pickVersion(FunctionMetadata* f, ExceptionStyle S, int num_output_args, Box* oarg1, Box* oarg2,
-                                     Box* oarg3, Box** oargs) {
+template <ExceptionStyle S>
+static CompiledFunction* pickVersion(FunctionMetadata* f, int num_output_args, Box* oarg1, Box* oarg2, Box* oarg3,
+                                     Box** oargs) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
-    if (f->always_use_version && f->always_use_version->exception_style == S)
-        return f->always_use_version;
+    // if always_use_version is set use it even if the exception style does not match.
+    // But prefer using the correct style if both are available
+    if (f->always_use_version.get(S))
+        return f->always_use_version.get(S);
+    ExceptionStyle other = S == CAPI ? CXX : CAPI;
+    if (f->always_use_version.get(other))
+        return f->always_use_version.get(other);
+
+
     slowpath_pickversion.log();
 
     CompiledFunction* best_nonexcmatch = NULL;
@@ -4845,7 +4853,7 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
         rewrite_args = NULL;
     }
 
-    CompiledFunction* chosen_cf = pickVersion(md, S, num_output_args, oarg1, oarg2, oarg3, oargs);
+    CompiledFunction* chosen_cf = pickVersion<S>(md, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     if (!chosen_cf) {
         if (rewrite_args) {

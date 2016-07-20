@@ -1183,14 +1183,22 @@ extern "C" Box* intTrunc(BoxedInt* self) {
     return boxInt(self->n);
 }
 
+static PyObject* int_int(BoxedInt* v) noexcept {
+    if (v->cls == int_cls)
+        return incref(v);
+    return boxInt(v->n);
+}
+
+static PyObject* int_long(BoxedInt* v) noexcept {
+    return boxLong(v->n);
+}
+
 extern "C" Box* intInt(BoxedInt* self) {
     if (!PyInt_Check(self))
         raiseExcHelper(TypeError, "descriptor '__int__' requires a 'int' object but received a '%s'",
                        getTypeName(self));
 
-    if (self->cls == int_cls)
-        return incref(self);
-    return boxInt(self->n);
+    return int_int(self);
 }
 
 Box* intFloat(BoxedInt* self) {
@@ -1206,7 +1214,7 @@ Box* intLong(BoxedInt* self) {
         raiseExcHelper(TypeError, "descriptor '__long__' requires a 'int' object but received a '%s'",
                        getTypeName(self));
 
-    return boxLong(self->n);
+    return int_long(self);
 }
 
 extern "C" Box* intIndex(BoxedInt* v) {
@@ -1644,5 +1652,7 @@ void setupInt() {
 
     int_cls->tp_repr = (reprfunc)int_to_decimal_string;
     int_cls->tp_new = (newfunc)intNewPacked;
+    int_as_number.nb_int = (unaryfunc)int_int;
+    int_as_number.nb_long = (unaryfunc)int_long;
 }
 }

@@ -698,12 +698,7 @@ extern "C" Box* listDelitem(BoxedList* self, Box* slice) {
     return rtn;
 }
 
-extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
-    if (idx->cls != int_cls) {
-        raiseExcHelper(TypeError, "an integer is required");
-    }
-
-    int64_t n = static_cast<BoxedInt*>(idx)->n;
+extern "C" void listInsertInternal(BoxedList* self, int64_t n, Box* v) {
     if (n < 0)
         n = self->size + n;
 
@@ -721,6 +716,15 @@ extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
         Py_INCREF(v);
         self->elts->elts[n] = v;
     }
+}
+
+extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
+    if (idx->cls != int_cls) {
+        raiseExcHelper(TypeError, "an integer is required");
+    }
+
+    int64_t n = static_cast<BoxedInt*>(idx)->n;
+    listInsertInternal(self, n, v);
 
     Py_RETURN_NONE;
 }
@@ -735,7 +739,7 @@ extern "C" int PyList_Insert(PyObject* op, Py_ssize_t where, PyObject* newitem) 
             PyErr_BadInternalCall();
             return -1;
         }
-        listInsert((BoxedList*)op, boxInt(where), newitem);
+        listInsertInternal((BoxedList*)op, where, newitem);
         return 0;
     } catch (ExcInfo e) {
         setCAPIException(e);
@@ -1218,6 +1222,107 @@ Box* listInit(BoxedList* self, Box* container) {
     Py_RETURN_NONE;
 }
 
+static PyObject* list_richcompare(PyObject* v, PyObject* w, int op) noexcept {
+    PyListObject* vl, *wl;
+    Py_ssize_t i;
+
+    if (!PyList_Check(v) || !PyList_Check(w)) {
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+
+    vl = (PyListObject*)v;
+    wl = (PyListObject*)w;
+
+    if (Py_SIZE(vl) != Py_SIZE(wl) && (op == Py_EQ || op == Py_NE)) {
+        /* Shortcut: if the lengths differ, the lists differ */
+        PyObject* res;
+        if (op == Py_EQ)
+            res = Py_False;
+        else
+            res = Py_True;
+        Py_INCREF(res);
+        return res;
+    }
+
+    /* Search for the first index where items are different */
+    for (i = 0; i < Py_SIZE(vl) && i < Py_SIZE(wl); i++) {
+        int k = PyObject_RichCompareBool(vl->ob_item[i], wl->ob_item[i], Py_EQ);
+        if (k < 0)
+            return NULL;
+        if (!k)
+            break;
+    }
+
+    if (i >= Py_SIZE(vl) || i >= Py_SIZE(wl)) {
+        /* No more items to compare -- compare sizes */
+        Py_ssize_t vs = Py_SIZE(vl);
+        Py_ssize_t ws = Py_SIZE(wl);
+        int cmp;
+        PyObject* res;
+        switch (op) {
+            case Py_LT:
+                cmp = vs < ws;
+                break;
+            case Py_LE:
+                cmp = vs <= ws;
+                break;
+            case Py_EQ:
+                cmp = vs == ws;
+                break;
+            case Py_NE:
+                cmp = vs != ws;
+                break;
+            case Py_GT:
+                cmp = vs > ws;
+                break;
+            case Py_GE:
+                cmp = vs >= ws;
+                break;
+            default:
+                return NULL; /* cannot happen */
+        }
+        if (cmp)
+            res = Py_True;
+        else
+            res = Py_False;
+        Py_INCREF(res);
+        return res;
+    }
+
+    /* We have an item that differs -- shortcuts for EQ/NE */
+    if (op == Py_EQ) {
+        Py_INCREF(Py_False);
+        return Py_False;
+    }
+    if (op == Py_NE) {
+        Py_INCREF(Py_True);
+        return Py_True;
+    }
+
+    /* Compare the final item again using the proper operator */
+    return PyObject_RichCompare(vl->ob_item[i], wl->ob_item[i], op);
+}
+
+
+static int list_init(PyListObject* self, PyObject* args, PyObject* kw) noexcept {
+    PyObject* arg = NULL;
+    static char* kwlist[2] = { NULL, NULL };
+    kwlist[0] = const_cast<char*>("sequence");
+
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "|O:list", kwlist, &arg))
+        return -1;
+
+    try {
+        autoDecref(listInit((BoxedList*)self, arg));
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
+
+    return 0;
+}
+
 extern "C" PyObject* PyList_New(Py_ssize_t size) noexcept {
     try {
         BoxedList* l = new BoxedList();
@@ -1235,65 +1340,12 @@ extern "C" PyObject* PyList_New(Py_ssize_t size) noexcept {
     }
 }
 
-Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {
-    int lsz = lhs->size;
-    int rsz = rhs->size;
-
-    bool is_order
-        = (op_type == AST_TYPE::Lt || op_type == AST_TYPE::LtE || op_type == AST_TYPE::Gt || op_type == AST_TYPE::GtE);
-
-    if (lsz != rsz) {
-        if (op_type == AST_TYPE::Eq)
-            Py_RETURN_FALSE;
-        if (op_type == AST_TYPE::NotEq)
-            Py_RETURN_TRUE;
-    }
-
-    int n = std::min(lsz, rsz);
-    for (int i = 0; i < n; i++) {
-        bool identity_eq = lhs->elts->elts[i] == rhs->elts->elts[i];
-        if (identity_eq)
-            continue;
-
-        int r = PyObject_RichCompareBool(lhs->elts->elts[i], rhs->elts->elts[i], Py_EQ);
-        if (r == -1)
-            throwCAPIException();
-
-        if (r)
-            continue;
-
-        if (op_type == AST_TYPE::Eq) {
-            return boxBool(false);
-        } else if (op_type == AST_TYPE::NotEq) {
-            return boxBool(true);
-        } else {
-            Box* r = compareInternal<NOT_REWRITABLE>(lhs->elts->elts[i], rhs->elts->elts[i], op_type, NULL);
-            return r;
-        }
-    }
-
-    if (op_type == AST_TYPE::Lt)
-        return boxBool(lsz < rsz);
-    else if (op_type == AST_TYPE::LtE)
-        return boxBool(lsz <= rsz);
-    else if (op_type == AST_TYPE::Gt)
-        return boxBool(lsz > rsz);
-    else if (op_type == AST_TYPE::GtE)
-        return boxBool(lsz >= rsz);
-    else if (op_type == AST_TYPE::Eq)
-        return boxBool(lsz == rsz);
-    else if (op_type == AST_TYPE::NotEq)
-        return boxBool(lsz != rsz);
-
-    RELEASE_ASSERT(0, "%d", op_type);
-}
-
 Box* listEq(BoxedList* self, Box* rhs) {
     if (!PyList_Check(rhs)) {
         return incref(NotImplemented);
     }
 
-    return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::Eq);
+    return callCAPIFromStyle<CXX>(list_richcompare, self, rhs, Py_EQ);
 }
 
 Box* listNe(BoxedList* self, Box* rhs) {
@@ -1301,7 +1353,7 @@ Box* listNe(BoxedList* self, Box* rhs) {
         return incref(NotImplemented);
     }
 
-    return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::NotEq);
+    return callCAPIFromStyle<CXX>(list_richcompare, self, rhs, Py_NE);
 }
 
 Box* listLt(BoxedList* self, Box* rhs) {
@@ -1309,7 +1361,7 @@ Box* listLt(BoxedList* self, Box* rhs) {
         return incref(NotImplemented);
     }
 
-    return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::Lt);
+    return callCAPIFromStyle<CXX>(list_richcompare, self, rhs, Py_LT);
 }
 
 Box* listLe(BoxedList* self, Box* rhs) {
@@ -1317,7 +1369,7 @@ Box* listLe(BoxedList* self, Box* rhs) {
         return incref(NotImplemented);
     }
 
-    return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::LtE);
+    return callCAPIFromStyle<CXX>(list_richcompare, self, rhs, Py_LE);
 }
 
 Box* listGt(BoxedList* self, Box* rhs) {
@@ -1325,7 +1377,7 @@ Box* listGt(BoxedList* self, Box* rhs) {
         return incref(NotImplemented);
     }
 
-    return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::Gt);
+    return callCAPIFromStyle<CXX>(list_richcompare, self, rhs, Py_GT);
 }
 
 Box* listGe(BoxedList* self, Box* rhs) {
@@ -1333,7 +1385,7 @@ Box* listGe(BoxedList* self, Box* rhs) {
         return incref(NotImplemented);
     }
 
-    return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::GtE);
+    return callCAPIFromStyle<CXX>(list_richcompare, self, rhs, Py_GE);
 }
 
 extern "C" PyObject* _PyList_Extend(PyListObject* self, PyObject* b) noexcept {
@@ -1536,6 +1588,8 @@ void setupList() {
     list_cls->freeze();
     list_cls->tp_iter = listIter;
     list_cls->tp_repr = list_repr;
+    list_cls->tp_init = (initproc)list_init;
+    list_cls->tp_richcompare = list_richcompare;
 
     list_cls->tp_as_sequence->sq_length = list_length;
     list_cls->tp_as_sequence->sq_concat = (binaryfunc)list_concat;

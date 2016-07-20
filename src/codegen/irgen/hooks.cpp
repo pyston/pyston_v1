@@ -648,7 +648,7 @@ void CompiledFunction::speculationFailed() {
 
         FunctionMetadata* md = this->md;
         assert(md);
-        assert(this != md->always_use_version);
+        assert(this != md->always_use_version.get(exception_style));
 
         bool found = false;
         for (int i = 0; i < md->versions.size(); i++) {
