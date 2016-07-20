@@ -61,7 +61,7 @@ public:
         const char* s = static_cast<BoxedCApiFunction*>(b)->method_def->ml_name;
         if (s)
             return boxString(s);
-        return incref(None);
+        return incref(Py_None);
     }
 
     static Box* doc(Box* b, void*) noexcept {
@@ -69,7 +69,7 @@ public:
         const char* s = static_cast<BoxedCApiFunction*>(b)->method_def->ml_doc;
         if (s)
             return boxString(s);
-        return incref(None);
+        return incref(Py_None);
     }
 
     static void dealloc(Box* _o) noexcept {

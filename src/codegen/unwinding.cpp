@@ -750,7 +750,7 @@ ExcInfo* getFrameExcInfo() {
 
     if (!copy_from_exc->type) {
         // No exceptions found:
-        *copy_from_exc = ExcInfo(incref(None), incref(None), NULL);
+        *copy_from_exc = ExcInfo(incref(Py_None), incref(Py_None), NULL);
     }
 
     for (auto* ex : to_update) {

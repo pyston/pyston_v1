@@ -97,8 +97,8 @@ void setupBool() {
     bool_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)boolRepr<CXX>, STR, 1)));
     bool_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)boolHash, BOXED_INT, 1)));
 
-    bool_cls->giveAttr("__new__",
-                       new BoxedFunction(FunctionMetadata::create((void*)boolNew, UNKNOWN, 2, false, false), { None }));
+    bool_cls->giveAttr(
+        "__new__", new BoxedFunction(FunctionMetadata::create((void*)boolNew, UNKNOWN, 2, false, false), { Py_None }));
 
     // TODO: type specialize
     bool_cls->giveAttr("__and__", new BoxedFunction(FunctionMetadata::create((void*)boolAnd, UNKNOWN, 2)));

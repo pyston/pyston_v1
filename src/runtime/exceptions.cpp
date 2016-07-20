@@ -44,7 +44,7 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringR
         }
         AUTO_DECREF(loc);
 
-        auto args = BoxedTuple::create({ autoDecref(boxString(file)), autoDecref(boxInt(lineno)), None, loc });
+        auto args = BoxedTuple::create({ autoDecref(boxString(file)), autoDecref(boxInt(lineno)), Py_None, loc });
         AUTO_DECREF(args);
         Box* exc = runtimeCall(SyntaxError, ArgPassSpec(2), autoDecref(boxString(msg)), args, NULL, NULL, NULL);
         assert(!PyErr_Occurred());
@@ -98,7 +98,7 @@ ExcInfo excInfoForRaise(STOLEN(Box*) type, STOLEN(Box*) value, STOLEN(Box*) tb) 
     assert(type && value && tb); // use None for default behavior, not nullptr
     // TODO switch this to PyErr_Normalize
 
-    if (tb == None) {
+    if (tb == Py_None) {
         Py_DECREF(tb);
         tb = NULL;
     } else if (tb != NULL && !PyTraceBack_Check(tb)) {
@@ -163,7 +163,7 @@ extern "C" void raise0(ExcInfo* frame_exc_info) {
     assert(frame_exc_info->type);
 
     // TODO need to clean up when we call normalize, do_raise, etc
-    if (frame_exc_info->type == None)
+    if (frame_exc_info->type == Py_None)
         raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
 
     startReraise();
@@ -180,7 +180,7 @@ extern "C" void raise0_capi(ExcInfo* frame_exc_info) noexcept {
     assert(frame_exc_info->type);
 
     // TODO need to clean up when we call normalize, do_raise, etc
-    if (frame_exc_info->type == None) {
+    if (frame_exc_info->type == Py_None) {
         PyErr_SetString(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
         return;
     }
@@ -196,7 +196,7 @@ extern "C" void raise0_capi(ExcInfo* frame_exc_info) noexcept {
 }
 
 extern "C" void raise3(STOLEN(Box*) arg0, STOLEN(Box*) arg1, STOLEN(Box*) arg2) {
-    bool reraise = arg2 != NULL && arg2 != None;
+    bool reraise = arg2 != NULL && arg2 != Py_None;
     auto exc_info = excInfoForRaise(arg0, arg1, arg2);
 
     if (reraise)
@@ -208,7 +208,7 @@ extern "C" void raise3(STOLEN(Box*) arg0, STOLEN(Box*) arg1, STOLEN(Box*) arg2) 
 }
 
 extern "C" void raise3_capi(STOLEN(Box*) arg0, STOLEN(Box*) arg1, STOLEN(Box*) arg2) noexcept {
-    bool reraise = arg2 != NULL && arg2 != None;
+    bool reraise = arg2 != NULL && arg2 != Py_None;
 
     ExcInfo exc_info(NULL, NULL, NULL);
     try {

@@ -902,9 +902,9 @@ where NULL (nil) is not suitable (since NULL often means 'error').
 
 Don't forget to apply Py_INCREF() when returning this value!!!
 */
-// Pyston change: replaced Py_None with just None
-PyAPI_DATA(PyObject*) None;
-#define Py_None None
+// Pyston change: replaced _Py_NoneStruct with pyston_None
+PyAPI_DATA(PyObject*) pyston_None;
+#define Py_None pyston_None
 //PyAPI_DATA(PyObject) _Py_NoneStruct; /* Don't use this directly */
 //#define Py_None (&_Py_NoneStruct)
 

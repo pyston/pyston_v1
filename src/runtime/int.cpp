@@ -467,7 +467,7 @@ extern "C" Box* mod_i64_i64(i64 lhs, i64 rhs) {
 }
 
 extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs, Box* mod) {
-    if (mod != None) {
+    if (mod != Py_None) {
         if (!PyInt_Check(mod)) {
             return incref(NotImplemented);
         }
@@ -905,7 +905,7 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     FunctionMetadata* md = new FunctionMetadata(3, false, false);
     md->addVersion(float_func, UNKNOWN, v_ifu);
     md->addVersion(int_func, UNKNOWN, v_uuu);
-    int_cls->giveAttr(name, new BoxedFunction(md, { None }));
+    int_cls->giveAttr(name, new BoxedFunction(md, { Py_None }));
 }
 
 extern "C" Box* intPowLong(BoxedInt* lhs, BoxedLong* rhs, Box* mod) {
@@ -919,7 +919,7 @@ extern "C" Box* intPowFloat(BoxedInt* lhs, BoxedFloat* rhs, Box* mod) {
     assert(PyInt_Check(lhs));
     assert(PyFloat_Check(rhs));
 
-    if (mod != None) {
+    if (mod != Py_None) {
         raiseExcHelper(TypeError, "pow() 3rd argument not allowed unless all arguments are integers");
     }
     return boxFloat(pow_float_float(lhs->n, rhs->d));
@@ -937,7 +937,7 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs, Box* mod) {
         return incref(NotImplemented);
 
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    if (mod != None) {
+    if (mod != Py_None) {
         if (rhs_int->n < 0)
             raiseExcHelper(TypeError, "pow() 2nd argument "
                                       "cannot be negative when 3rd argument specified");
@@ -957,7 +957,7 @@ Box* intRPow(BoxedInt* lhs, Box* rhs, Box* mod) {
     if (!PyInt_Check(rhs))
         return incref(NotImplemented);
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    if (mod != None) {
+    if (mod != Py_None) {
         if (lhs->n < 0)
             raiseExcHelper(TypeError, "pow() 2nd argument "
                                       "cannot be negative when 3rd argument specified");
@@ -1583,8 +1583,8 @@ void setupInt() {
     int_cls->giveAttr("__rtruediv__", new BoxedFunction(FunctionMetadata::create((void*)intRTruediv, UNKNOWN, 2)));
     int_cls->giveAttr("__rmod__", new BoxedFunction(FunctionMetadata::create((void*)intRMod, UNKNOWN, 2)));
     int_cls->giveAttr("__rdivmod__", new BoxedFunction(FunctionMetadata::create((void*)intRDivmod, UNKNOWN, 2)));
-    int_cls->giveAttr("__rpow__",
-                      new BoxedFunction(FunctionMetadata::create((void*)intRPow, UNKNOWN, 3, false, false), { None }));
+    int_cls->giveAttr(
+        "__rpow__", new BoxedFunction(FunctionMetadata::create((void*)intRPow, UNKNOWN, 3, false, false), { Py_None }));
     int_cls->giveAttr("__rrshift__", new BoxedFunction(FunctionMetadata::create((void*)intRRShift, UNKNOWN, 2)));
     int_cls->giveAttr("__rlshift__", new BoxedFunction(FunctionMetadata::create((void*)intRLShift, UNKNOWN, 2)));
     // Note: CPython implements int comparisons using tp_compare

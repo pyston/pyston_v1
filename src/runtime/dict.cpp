@@ -482,7 +482,7 @@ static int dict_ass_sub(PyDictObject* mp, PyObject* v, PyObject* w) noexcept {
         } else {
             res = dictSetitem((BoxedDict*)mp, v, w);
         }
-        assert(res == None);
+        assert(res == Py_None);
         Py_DECREF(res);
     } catch (ExcInfo e) {
         setCAPIException(e);
@@ -1144,7 +1144,7 @@ void setupDict() {
 
     dict_cls->giveAttr("__eq__", new BoxedFunction(FunctionMetadata::create((void*)dictEq, UNKNOWN, 2)));
     dict_cls->giveAttr("__ne__", new BoxedFunction(FunctionMetadata::create((void*)dictNe, UNKNOWN, 2)));
-    dict_cls->giveAttr("__hash__", incref(None));
+    dict_cls->giveAttr("__hash__", incref(Py_None));
     dict_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)dictIterKeys,
                                                                               typeFromClass(dictiterkey_cls), 1)));
 
@@ -1170,7 +1170,7 @@ void setupDict() {
     dict_cls->giveAttr("popitem", new BoxedFunction(FunctionMetadata::create((void*)dictPopitem, BOXED_TUPLE, 1)));
 
     auto* fromkeys_func
-        = new BoxedFunction(FunctionMetadata::create((void*)dictFromkeys, DICT, 3, false, false), { None });
+        = new BoxedFunction(FunctionMetadata::create((void*)dictFromkeys, DICT, 3, false, false), { Py_None });
     dict_cls->giveAttr("fromkeys", boxInstanceMethod(dict_cls, fromkeys_func, dict_cls));
     Py_DECREF(fromkeys_func);
 
@@ -1178,12 +1178,12 @@ void setupDict() {
     dict_cls->giveAttr("viewvalues", new BoxedFunction(FunctionMetadata::create((void*)dictViewValues, UNKNOWN, 1)));
     dict_cls->giveAttr("viewitems", new BoxedFunction(FunctionMetadata::create((void*)dictViewItems, UNKNOWN, 1)));
 
-    dict_cls->giveAttr("get",
-                       new BoxedFunction(FunctionMetadata::create((void*)dictGet, UNKNOWN, 3, false, false), { None }));
+    dict_cls->giveAttr(
+        "get", new BoxedFunction(FunctionMetadata::create((void*)dictGet, UNKNOWN, 3, false, false), { Py_None }));
 
     dict_cls->giveAttr(
         "setdefault",
-        new BoxedFunction(FunctionMetadata::create((void*)dictSetdefault, UNKNOWN, 3, false, false), { None }));
+        new BoxedFunction(FunctionMetadata::create((void*)dictSetdefault, UNKNOWN, 3, false, false), { Py_None }));
 
     auto dict_getitem = FunctionMetadata::create((void*)dictGetitem<CXX>, UNKNOWN, 2, ParamNames::empty(), CXX);
     dict_getitem->addVersion((void*)dictGetitem<CAPI>, UNKNOWN, CAPI);

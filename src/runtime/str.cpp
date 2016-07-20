@@ -2032,7 +2032,7 @@ Box* strTranslate(BoxedString* self, BoxedString* table, BoxedString* delete_cha
         delete_set.insert(delete_chars->s().begin(), delete_chars->s().end());
     }
 
-    bool have_table = table != None;
+    bool have_table = table != Py_None;
     if (have_table) {
         if (!PyString_Check(table))
             raiseExcHelper(TypeError, "expected a character buffer object");
@@ -2793,12 +2793,12 @@ void setupStr() {
     str_cls->giveAttr("swapcase", new BoxedFunction(FunctionMetadata::create((void*)strSwapcase, STR, 1)));
     str_cls->giveAttr("upper", new BoxedFunction(FunctionMetadata::create((void*)strUpper, STR, 1)));
 
-    str_cls->giveAttr("strip",
-                      new BoxedFunction(FunctionMetadata::create((void*)strStrip, UNKNOWN, 2, false, false), { None }));
     str_cls->giveAttr(
-        "lstrip", new BoxedFunction(FunctionMetadata::create((void*)strLStrip, UNKNOWN, 2, false, false), { None }));
+        "strip", new BoxedFunction(FunctionMetadata::create((void*)strStrip, UNKNOWN, 2, false, false), { Py_None }));
     str_cls->giveAttr(
-        "rstrip", new BoxedFunction(FunctionMetadata::create((void*)strRStrip, UNKNOWN, 2, false, false), { None }));
+        "lstrip", new BoxedFunction(FunctionMetadata::create((void*)strLStrip, UNKNOWN, 2, false, false), { Py_None }));
+    str_cls->giveAttr(
+        "rstrip", new BoxedFunction(FunctionMetadata::create((void*)strRStrip, UNKNOWN, 2, false, false), { Py_None }));
 
     str_cls->giveAttr("capitalize", new BoxedFunction(FunctionMetadata::create((void*)strCapitalize, STR, 1)));
     str_cls->giveAttr("title", new BoxedFunction(FunctionMetadata::create((void*)strTitle, STR, 1)));

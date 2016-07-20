@@ -248,7 +248,7 @@ Box* xrangeRepr(BoxedXrange* self) {
 
 Box* xrangeReduce(Box* self) {
     if (!self) {
-        return incref(None);
+        return incref(Py_None);
     }
     BoxedXrange* r = static_cast<BoxedXrange*>(self);
     BoxedTuple* range = BoxedTuple::create(

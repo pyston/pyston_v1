@@ -48,7 +48,7 @@ Box* sysExcInfo() {
     ExcInfo* exc = getFrameExcInfo();
     assert(exc->type);
     assert(exc->value);
-    Box* tb = exc->traceback ? exc->traceback : None;
+    Box* tb = exc->traceback ? exc->traceback : Py_None;
     return BoxedTuple::create({ exc->type, exc->value, tb });
 }
 
@@ -60,8 +60,8 @@ Box* sysExcClear() {
     Box* old_type = exc->type;
     Box* old_value = exc->value;
     Box* old_traceback = exc->traceback;
-    exc->type = incref(None);
-    exc->value = incref(None);
+    exc->type = incref(Py_None);
+    exc->value = incref(Py_None);
     exc->traceback = NULL;
     Py_DECREF(old_type);
     Py_DECREF(old_value);
@@ -764,7 +764,7 @@ void setupSys() {
                                                           "exc_clear", exc_clear_doc));
     sys_module->giveAttr(
         "exit", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)sysExit, NONE, 1, false, false),
-                                                 "exit", { None }, NULL, exit_doc));
+                                                 "exit", { Py_None }, NULL, exit_doc));
 
     sys_module->giveAttr("warnoptions", new BoxedList());
     sys_module->giveAttrBorrowed("py3kwarning", Py_False);

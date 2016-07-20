@@ -61,9 +61,9 @@ static Box* propertyInit(Box* _self, Box* fget, Box* fset, Box** args) {
     Box* prev_set = self->prop_set;
     Box* prev_del = self->prop_del;
     Box* prev_doc = self->prop_doc;
-    self->prop_get = fget == None ? NULL : incref(fget);
-    self->prop_set = fset == None ? NULL : incref(fset);
-    self->prop_del = fdel == None ? NULL : incref(fdel);
+    self->prop_get = fget == Py_None ? NULL : incref(fget);
+    self->prop_set = fset == Py_None ? NULL : incref(fset);
+    self->prop_del = fdel == Py_None ? NULL : incref(fdel);
     self->prop_doc = xincref(doc);
     self->getter_doc = false;
     Py_XDECREF(prev_get);
@@ -72,18 +72,18 @@ static Box* propertyInit(Box* _self, Box* fget, Box* fset, Box** args) {
     Py_XDECREF(prev_doc);
 
     /* if no docstring given and the getter has one, use that one */
-    if ((doc == NULL || doc == None) && fget != NULL) {
+    if ((doc == NULL || doc == Py_None) && fget != NULL) {
         propertyDocCopy(self, fget);
     }
 
-    return incref(None);
+    return incref(Py_None);
 }
 
 static Box* propertyGet(Box* self, Box* obj, Box* type) {
     RELEASE_ASSERT(isSubclass(self->cls, property_cls), "");
 
     BoxedProperty* prop = static_cast<BoxedProperty*>(self);
-    if (obj == NULL || obj == None) {
+    if (obj == NULL || obj == Py_None) {
         return incref(self);
     }
 
@@ -114,7 +114,7 @@ static Box* propertySet(Box* self, Box* obj, Box* val) {
     } else {
         autoDecref(runtimeCall(func, ArgPassSpec(2), obj, val, NULL, NULL, NULL));
     }
-    return incref(None);
+    return incref(Py_None);
 }
 
 static Box* propertyDel(Box* self, Box* obj) {
@@ -124,11 +124,11 @@ static Box* propertyDel(Box* self, Box* obj) {
 static Box* property_copy(BoxedProperty* old, Box* get, Box* set, Box* del) {
     RELEASE_ASSERT(isSubclass(old->cls, property_cls), "");
 
-    if (!get || get == None)
+    if (!get || get == Py_None)
         get = old->prop_get;
-    if (!set || set == None)
+    if (!set || set == Py_None)
         set = old->prop_set;
-    if (!del || del == None)
+    if (!del || del == Py_None)
         del = old->prop_del;
 
     // Optimization for the case when the old propery is not subclassed
@@ -136,20 +136,20 @@ static Box* property_copy(BoxedProperty* old, Box* get, Box* set, Box* del) {
         BoxedProperty* prop = new BoxedProperty(get, set, del, old->prop_doc);
 
         prop->getter_doc = false;
-        if ((old->getter_doc && get != None) || !old->prop_doc)
+        if ((old->getter_doc && get != Py_None) || !old->prop_doc)
             propertyDocCopy(prop, get);
 
         return prop;
     } else {
         if (!get)
-            get = None;
+            get = Py_None;
         if (!set)
-            set = None;
+            set = Py_None;
         if (!del)
-            del = None;
+            del = Py_None;
         Box* doc;
-        if ((old->getter_doc && get != None) || !old->prop_doc)
-            doc = None;
+        if ((old->getter_doc && get != Py_None) || !old->prop_doc)
+            doc = Py_None;
         else
             doc = old->prop_doc;
 
@@ -181,7 +181,7 @@ static Box* staticmethodInit(Box* _self, Box* f) {
     Py_CLEAR(self->sm_callable);
     self->sm_callable = incref(f);
 
-    return incref(None);
+    return incref(Py_None);
 }
 
 static Box* staticmethodGet(Box* self, Box* obj, Box* type) {
@@ -207,7 +207,7 @@ static Box* classmethodInit(Box* _self, Box* f) {
     self->cm_callable = incref(f);
     Py_XDECREF(prev);
 
-    return incref(None);
+    return incref(Py_None);
 }
 
 static Box* classmethodGet(Box* self, Box* obj, Box* type) {
@@ -595,7 +595,7 @@ void setupDescr() {
     property_cls->giveAttr("__init__", new BoxedFunction(FunctionMetadata::create(
                                                              (void*)propertyInit, UNKNOWN, 5, false, false,
                                                              ParamNames({ "", "fget", "fset", "fdel", "doc" }, "", "")),
-                                                         { None, None, None, NULL }));
+                                                         { Py_None, Py_None, Py_None, NULL }));
     property_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)propertyGet, UNKNOWN, 3)));
     property_cls->giveAttr("__set__", new BoxedFunction(FunctionMetadata::create((void*)propertySet, UNKNOWN, 3)));
     property_cls->giveAttr("__delete__", new BoxedFunction(FunctionMetadata::create((void*)propertyDel, UNKNOWN, 2)));
@@ -611,20 +611,20 @@ void setupDescr() {
     staticmethod_cls->giveAttrMember("__func__", T_OBJECT, offsetof(BoxedStaticmethod, sm_callable));
     staticmethod_cls->giveAttr(
         "__init__", new BoxedFunction(FunctionMetadata::create((void*)staticmethodInit, UNKNOWN, 5, false, false),
-                                      { None, None, None, None }));
+                                      { Py_None, Py_None, Py_None, Py_None }));
     staticmethod_cls->giveAttr(
         "__get__",
-        new BoxedFunction(FunctionMetadata::create((void*)staticmethodGet, UNKNOWN, 3, false, false), { None }));
+        new BoxedFunction(FunctionMetadata::create((void*)staticmethodGet, UNKNOWN, 3, false, false), { Py_None }));
     staticmethod_cls->freeze();
 
 
     classmethod_cls->giveAttrMember("__func__", T_OBJECT, offsetof(BoxedClassmethod, cm_callable));
     classmethod_cls->giveAttr(
         "__init__", new BoxedFunction(FunctionMetadata::create((void*)classmethodInit, UNKNOWN, 5, false, false),
-                                      { None, None, None, None }));
+                                      { Py_None, Py_None, Py_None, Py_None }));
     classmethod_cls->giveAttr(
         "__get__",
-        new BoxedFunction(FunctionMetadata::create((void*)classmethodGet, UNKNOWN, 3, false, false), { None }));
+        new BoxedFunction(FunctionMetadata::create((void*)classmethodGet, UNKNOWN, 3, false, false), { Py_None }));
     classmethod_cls->freeze();
 
     PyType_Ready(&PyGetSetDescr_Type);

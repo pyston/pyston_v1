@@ -404,7 +404,7 @@ RewriterVar* JitFragmentWriter::emitGetClsAttr(RewriterVar* obj, BoxedString* s)
 
 RewriterVar* JitFragmentWriter::emitGetGlobal(BoxedString* s) {
     if (s->s() == "None") {
-        RewriterVar* r = imm(None)->setType(RefType::BORROWED);
+        RewriterVar* r = imm(Py_None)->setType(RefType::BORROWED);
         return r;
     }
 

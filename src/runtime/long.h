@@ -46,7 +46,7 @@ Box* longAdd(BoxedLong* lhs, Box* rhs);
 Box* longSub(BoxedLong* lhs, Box* rhs);
 Box* longMul(BoxedLong* lhs, Box* rhs);
 Box* longDiv(BoxedLong* lhs, Box* rhs);
-Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod = None);
+Box* longPow(BoxedLong* lhs, Box* rhs, Box* mod = Py_None);
 Box* longLShiftLong(BoxedLong* lhs, Box* _rhs);
 Box* longRShiftLong(BoxedLong* lhs, Box* _rhs);
 
