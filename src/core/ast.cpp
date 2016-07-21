@@ -37,6 +37,22 @@ AST::AST(AST_TYPE::AST_TYPE type) : type(type), lineno(++next_lineno) {
 
 #endif
 
+void* AST_slice::accept_slice(SliceVisitor* v) {
+    switch (type) {
+        case AST_TYPE::Ellipsis:
+            return ((AST_Ellipsis*)this)->accept_slice(v);
+        case AST_TYPE::ExtSlice:
+            return ((AST_ExtSlice*)this)->accept_slice(v);
+        case AST_TYPE::Index:
+            return ((AST_Index*)this)->accept_slice(v);
+        case AST_TYPE::Slice:
+            return ((AST_Slice*)this)->accept_slice(v);
+        default:
+            RELEASE_ASSERT(0, "");
+    }
+}
+
+
 llvm::StringRef getOpSymbol(int op_type) {
     switch (op_type) {
         case AST_TYPE::Add:

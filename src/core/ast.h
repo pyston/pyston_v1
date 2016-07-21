@@ -33,58 +33,58 @@ namespace pyston {
 
 namespace AST_TYPE {
 // These are in a pretty random order (started off alphabetical but then I had to add more).
-// These can be changed freely as long as parse_ast.py is also updated
-#define FOREACH_TYPE(X)                                                                                                \
-    X(alias, 1)                                                                                                        \
-    X(arguments, 2)                                                                                                    \
-    X(Assert, 3)                                                                                                       \
-    X(Assign, 4)                                                                                                       \
-    X(Attribute, 5)                                                                                                    \
-    X(AugAssign, 6)                                                                                                    \
-    X(BinOp, 7)                                                                                                        \
-    X(BoolOp, 8)                                                                                                       \
-    X(Call, 9)                                                                                                         \
-    X(ClassDef, 10)                                                                                                    \
-    X(Compare, 11)                                                                                                     \
-    X(comprehension, 12)                                                                                               \
-    X(Delete, 13)                                                                                                      \
-    X(Dict, 14)                                                                                                        \
-    X(Exec, 16)                                                                                                        \
-    X(ExceptHandler, 17)                                                                                               \
-    X(ExtSlice, 18)                                                                                                    \
-    X(Expr, 19)                                                                                                        \
-    X(For, 20)                                                                                                         \
-    X(FunctionDef, 21)                                                                                                 \
-    X(GeneratorExp, 22)                                                                                                \
-    X(Global, 23)                                                                                                      \
-    X(If, 24)                                                                                                          \
-    X(IfExp, 25)                                                                                                       \
-    X(Import, 26)                                                                                                      \
-    X(ImportFrom, 27)                                                                                                  \
-    X(Index, 28)                                                                                                       \
-    X(keyword, 29)                                                                                                     \
-    X(Lambda, 30)                                                                                                      \
-    X(List, 31)                                                                                                        \
-    X(ListComp, 32)                                                                                                    \
-    X(Module, 33)                                                                                                      \
-    X(Num, 34)                                                                                                         \
-    X(Name, 35)                                                                                                        \
-    X(Pass, 37)                                                                                                        \
+// These can be changed freely as long as the .pyc magic get's changed
+#define FOREACH_TYPE(X, A, E, S)                                                                                       \
+    A(alias, 1)                                                                                                        \
+    A(arguments, 2)                                                                                                    \
+    S(Assert, 3)                                                                                                       \
+    S(Assign, 4)                                                                                                       \
+    E(Attribute, 5)                                                                                                    \
+    S(AugAssign, 6)                                                                                                    \
+    E(BinOp, 7)                                                                                                        \
+    E(BoolOp, 8)                                                                                                       \
+    E(Call, 9)                                                                                                         \
+    S(ClassDef, 10)                                                                                                    \
+    E(Compare, 11)                                                                                                     \
+    A(comprehension, 12)                                                                                               \
+    S(Delete, 13)                                                                                                      \
+    E(Dict, 14)                                                                                                        \
+    S(Exec, 16)                                                                                                        \
+    A(ExceptHandler, 17)                                                                                               \
+    A(ExtSlice, 18)                                                                                                    \
+    S(Expr, 19)                                                                                                        \
+    S(For, 20)                                                                                                         \
+    S(FunctionDef, 21)                                                                                                 \
+    E(GeneratorExp, 22)                                                                                                \
+    S(Global, 23)                                                                                                      \
+    S(If, 24)                                                                                                          \
+    E(IfExp, 25)                                                                                                       \
+    S(Import, 26)                                                                                                      \
+    S(ImportFrom, 27)                                                                                                  \
+    A(Index, 28)                                                                                                       \
+    A(keyword, 29)                                                                                                     \
+    E(Lambda, 30)                                                                                                      \
+    E(List, 31)                                                                                                        \
+    E(ListComp, 32)                                                                                                    \
+    A(Module, 33)                                                                                                      \
+    E(Num, 34)                                                                                                         \
+    E(Name, 35)                                                                                                        \
+    S(Pass, 37)                                                                                                        \
     X(Pow, 38)                                                                                                         \
-    X(Print, 39)                                                                                                       \
-    X(Raise, 40)                                                                                                       \
-    X(Repr, 41)                                                                                                        \
-    X(Return, 42)                                                                                                      \
-    X(Slice, 44)                                                                                                       \
-    X(Str, 45)                                                                                                         \
-    X(Subscript, 46)                                                                                                   \
-    X(TryExcept, 47)                                                                                                   \
-    X(TryFinally, 48)                                                                                                  \
-    X(Tuple, 49)                                                                                                       \
-    X(UnaryOp, 50)                                                                                                     \
-    X(With, 51)                                                                                                        \
-    X(While, 52)                                                                                                       \
-    X(Yield, 53)                                                                                                       \
+    S(Print, 39)                                                                                                       \
+    S(Raise, 40)                                                                                                       \
+    E(Repr, 41)                                                                                                        \
+    S(Return, 42)                                                                                                      \
+    A(Slice, 44)                                                                                                       \
+    E(Str, 45)                                                                                                         \
+    E(Subscript, 46)                                                                                                   \
+    S(TryExcept, 47)                                                                                                   \
+    S(TryFinally, 48)                                                                                                  \
+    E(Tuple, 49)                                                                                                       \
+    E(UnaryOp, 50)                                                                                                     \
+    S(With, 51)                                                                                                        \
+    S(While, 52)                                                                                                       \
+    E(Yield, 53)                                                                                                       \
     X(Store, 54)                                                                                                       \
     X(Load, 55)                                                                                                        \
     X(Param, 56)                                                                                                       \
@@ -101,10 +101,10 @@ namespace AST_TYPE {
     X(Gt, 67)                                                                                                          \
     X(Mod, 68)                                                                                                         \
     X(Add, 69)                                                                                                         \
-    X(Continue, 70)                                                                                                    \
+    S(Continue, 70)                                                                                                    \
     X(Lt, 71)                                                                                                          \
     X(LtE, 72)                                                                                                         \
-    X(Break, 73)                                                                                                       \
+    S(Break, 73)                                                                                                       \
     X(Sub, 74)                                                                                                         \
     X(Del, 75)                                                                                                         \
     X(Mult, 76)                                                                                                        \
@@ -118,25 +118,25 @@ namespace AST_TYPE {
     X(Invert, 84)                                                                                                      \
     X(UAdd, 85)                                                                                                        \
     X(FloorDiv, 86)                                                                                                    \
-    X(DictComp, 15)                                                                                                    \
-    X(Set, 43)                                                                                                         \
-    X(Ellipsis, 87)                                                                                                    \
+    E(DictComp, 15)                                                                                                    \
+    E(Set, 43)                                                                                                         \
+    A(Ellipsis, 87)                                                                                                    \
     /* like Module, but used for eval. */                                                                              \
-    X(Expression, 88)                                                                                                  \
-    X(SetComp, 89)                                                                                                     \
-    X(Suite, 90)                                                                                                       \
+    A(Expression, 88)                                                                                                  \
+    E(SetComp, 89)                                                                                                     \
+    A(Suite, 90)                                                                                                       \
                                                                                                                        \
     /* Pseudo-nodes that are specific to this compiler: */                                                             \
-    X(Branch, 200)                                                                                                     \
-    X(Jump, 201)                                                                                                       \
-    X(ClsAttribute, 202)                                                                                               \
-    X(AugBinOp, 203)                                                                                                   \
-    X(Invoke, 204)                                                                                                     \
-    X(LangPrimitive, 205)                                                                                              \
+    A(Branch, 200)                                                                                                     \
+    S(Jump, 201)                                                                                                       \
+    E(ClsAttribute, 202)                                                                                               \
+    E(AugBinOp, 203)                                                                                                   \
+    S(Invoke, 204)                                                                                                     \
+    E(LangPrimitive, 205)                                                                                              \
     /* wraps a ClassDef to make it an expr */                                                                          \
-    X(MakeClass, 206)                                                                                                  \
+    E(MakeClass, 206)                                                                                                  \
     /* wraps a FunctionDef to make it an expr */                                                                       \
-    X(MakeFunction, 207)                                                                                               \
+    E(MakeFunction, 207)                                                                                               \
                                                                                                                        \
     /* These aren't real AST types, but since we use AST types to represent binexp types */                            \
     /* and divmod+truediv are essentially types of binops, we add them here (at least for now): */                     \
@@ -146,15 +146,14 @@ namespace AST_TYPE {
 #define GENERATE_ENUM(ENUM, N) ENUM = N,
 #define GENERATE_STRING(STRING, N) m[N] = #STRING;
 
-enum AST_TYPE { FOREACH_TYPE(GENERATE_ENUM) };
+enum AST_TYPE : unsigned char { FOREACH_TYPE(GENERATE_ENUM, GENERATE_ENUM, GENERATE_ENUM, GENERATE_ENUM) };
 
 static const char* stringify(int n) {
     static std::map<int, const char*> m;
-    FOREACH_TYPE(GENERATE_STRING)
+    FOREACH_TYPE(GENERATE_STRING, GENERATE_STRING, GENERATE_STRING, GENERATE_STRING)
     return m[n];
 }
 
-#undef FOREACH_TYPE
 #undef GENERATE_ENUM
 #undef GENERATE_STRING
 };
@@ -167,12 +166,10 @@ class AST_keyword;
 
 class AST {
 public:
-    virtual ~AST() {}
-
     const AST_TYPE::AST_TYPE type;
     uint32_t lineno, col_offset;
 
-    virtual void accept(ASTVisitor* v) = 0;
+    void accept(ASTVisitor* v);
 
 // #define DEBUG_LINE_NUMBERS 1
 #ifdef DEBUG_LINE_NUMBERS
@@ -188,11 +185,13 @@ public:
 #endif
     AST(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0)
         : type(type), lineno(lineno), col_offset(col_offset) {}
+
+    ~AST() { RELEASE_ASSERT(0, "not implemented currently"); }
 };
 
 class AST_expr : public AST {
 public:
-    virtual void* accept_expr(ExprVisitor* v) = 0;
+    void* accept_expr(ExprVisitor* v);
 
     AST_expr(AST_TYPE::AST_TYPE type) : AST(type) {}
     AST_expr(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0) : AST(type, lineno, col_offset) {}
@@ -200,7 +199,7 @@ public:
 
 class AST_stmt : public AST {
 public:
-    virtual void accept_stmt(StmtVisitor* v) = 0;
+    void accept_stmt(StmtVisitor* v);
 
     int cxx_exception_count = 0;
 
@@ -209,7 +208,7 @@ public:
 
 class AST_slice : public AST {
 public:
-    virtual void* accept_slice(SliceVisitor* s) = 0;
+    void* accept_slice(SliceVisitor* s);
     AST_slice(AST_TYPE::AST_TYPE type) : AST(type) {}
     AST_slice(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0) : AST(type, lineno, col_offset) {}
 };
@@ -219,7 +218,7 @@ public:
     InternedString name, asname;
     int name_vreg = -1, asname_vreg = -1;
 
-    virtual void accept(ASTVisitor* v);
+    void accept(ASTVisitor* v);
 
     AST_alias(InternedString name, InternedString asname) : AST(AST_TYPE::alias), name(name), asname(asname) {}
 
@@ -235,7 +234,7 @@ public:
 
     AST_Name* kwarg = NULL, * vararg = NULL;
 
-    virtual void accept(ASTVisitor* v);
+    void accept(ASTVisitor* v);
 
     AST_arguments() : AST(AST_TYPE::arguments) {}
 
@@ -246,8 +245,8 @@ class AST_Assert : public AST_stmt {
 public:
     AST_expr* msg, *test;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Assert() : AST_stmt(AST_TYPE::Assert) {}
 
@@ -259,8 +258,8 @@ public:
     std::vector<AST_expr*> targets;
     AST_expr* value;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Assign() : AST_stmt(AST_TYPE::Assign) {}
 
@@ -273,8 +272,8 @@ public:
     AST_expr* target;
     AST_TYPE::AST_TYPE op_type;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_AugAssign() : AST_stmt(AST_TYPE::AugAssign) {}
 
@@ -286,8 +285,8 @@ public:
     AST_TYPE::AST_TYPE op_type;
     AST_expr* left, *right;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_AugBinOp() : AST_expr(AST_TYPE::AugBinOp) {}
 
@@ -300,8 +299,8 @@ public:
     AST_TYPE::AST_TYPE ctx_type;
     InternedString attr;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_Attribute() : AST_expr(AST_TYPE::Attribute) {}
 
@@ -316,8 +315,8 @@ public:
     AST_TYPE::AST_TYPE op_type;
     AST_expr* left, *right;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_BinOp() : AST_expr(AST_TYPE::BinOp) {}
 
@@ -329,8 +328,8 @@ public:
     AST_TYPE::AST_TYPE op_type;
     std::vector<AST_expr*> values;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_BoolOp() : AST_expr(AST_TYPE::BoolOp) {}
 
@@ -339,8 +338,8 @@ public:
 
 class AST_Break : public AST_stmt {
 public:
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Break() : AST_stmt(AST_TYPE::Break) {}
 
@@ -353,8 +352,8 @@ public:
     std::vector<AST_expr*> args;
     std::vector<AST_keyword*> keywords;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_Call() : AST_expr(AST_TYPE::Call) {}
 
@@ -367,8 +366,8 @@ public:
     std::vector<AST_expr*> comparators;
     AST_expr* left;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_Compare() : AST_expr(AST_TYPE::Compare) {}
 
@@ -381,7 +380,7 @@ public:
     AST_expr* iter;
     std::vector<AST_expr*> ifs;
 
-    virtual void accept(ASTVisitor* v);
+    void accept(ASTVisitor* v);
 
     AST_comprehension() : AST(AST_TYPE::comprehension) {}
 
@@ -390,8 +389,8 @@ public:
 
 class AST_ClassDef : public AST_stmt {
 public:
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     std::vector<AST_expr*> bases, decorator_list;
     std::vector<AST_stmt*> body;
@@ -404,8 +403,8 @@ public:
 
 class AST_Continue : public AST_stmt {
 public:
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Continue() : AST_stmt(AST_TYPE::Continue) {}
 
@@ -416,8 +415,8 @@ class AST_Dict : public AST_expr {
 public:
     std::vector<AST_expr*> keys, values;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_Dict() : AST_expr(AST_TYPE::Dict) {}
 
@@ -429,8 +428,8 @@ public:
     std::vector<AST_comprehension*> generators;
     AST_expr* key, *value;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_DictComp() : AST_expr(AST_TYPE::DictComp) {}
 
@@ -440,8 +439,8 @@ public:
 class AST_Delete : public AST_stmt {
 public:
     std::vector<AST_expr*> targets;
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Delete() : AST_stmt(AST_TYPE::Delete) {}
 
@@ -450,8 +449,8 @@ public:
 
 class AST_Ellipsis : public AST_slice {
 public:
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_slice(SliceVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_slice(SliceVisitor* v);
 
     AST_Ellipsis() : AST_slice(AST_TYPE::Ellipsis) {}
 
@@ -462,8 +461,8 @@ class AST_Expr : public AST_stmt {
 public:
     AST_expr* value;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Expr() : AST_stmt(AST_TYPE::Expr) {}
     AST_Expr(AST_expr* value) : AST_stmt(AST_TYPE::Expr), value(value) {}
@@ -477,7 +476,7 @@ public:
     AST_expr* type; // can be NULL for a bare "except:" clause
     AST_expr* name; // can be NULL if the exception doesn't get a name
 
-    virtual void accept(ASTVisitor* v);
+    void accept(ASTVisitor* v);
 
     AST_ExceptHandler() : AST(AST_TYPE::ExceptHandler) {}
 
@@ -490,8 +489,8 @@ public:
     AST_expr* globals;
     AST_expr* locals;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Exec() : AST_stmt(AST_TYPE::Exec) {}
 
@@ -506,7 +505,7 @@ public:
     // this should be an expr but we convert it into a AST_Return(AST_expr) to make the code simpler
     AST_stmt* body;
 
-    virtual void accept(ASTVisitor* v);
+    void accept(ASTVisitor* v);
 
     AST_Expression(std::unique_ptr<InternedStringPool> interned_strings)
         : AST(AST_TYPE::Expression), interned_strings(std::move(interned_strings)) {}
@@ -518,8 +517,8 @@ class AST_ExtSlice : public AST_slice {
 public:
     std::vector<AST_slice*> dims;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_slice(SliceVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_slice(SliceVisitor* v);
 
     AST_ExtSlice() : AST_slice(AST_TYPE::ExtSlice) {}
 
@@ -531,8 +530,8 @@ public:
     std::vector<AST_stmt*> body, orelse;
     AST_expr* target, *iter;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_For() : AST_stmt(AST_TYPE::For) {}
 
@@ -546,8 +545,8 @@ public:
     InternedString name; // if the name is not set this is a lambda
     AST_arguments* args;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_FunctionDef() : AST_stmt(AST_TYPE::FunctionDef) {}
 
@@ -559,8 +558,8 @@ public:
     std::vector<AST_comprehension*> generators;
     AST_expr* elt;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_GeneratorExp() : AST_expr(AST_TYPE::GeneratorExp) {}
 
@@ -571,8 +570,8 @@ class AST_Global : public AST_stmt {
 public:
     std::vector<InternedString> names;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Global() : AST_stmt(AST_TYPE::Global) {}
 
@@ -584,8 +583,8 @@ public:
     std::vector<AST_stmt*> body, orelse;
     AST_expr* test;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_If() : AST_stmt(AST_TYPE::If) {}
 
@@ -596,8 +595,8 @@ class AST_IfExp : public AST_expr {
 public:
     AST_expr* body, *test, *orelse;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_IfExp() : AST_expr(AST_TYPE::IfExp) {}
 
@@ -608,8 +607,8 @@ class AST_Import : public AST_stmt {
 public:
     std::vector<AST_alias*> names;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Import() : AST_stmt(AST_TYPE::Import) {}
 
@@ -622,8 +621,8 @@ public:
     std::vector<AST_alias*> names;
     int level;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_ImportFrom() : AST_stmt(AST_TYPE::ImportFrom) {}
 
@@ -634,8 +633,8 @@ class AST_Index : public AST_slice {
 public:
     AST_expr* value;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_slice(SliceVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_slice(SliceVisitor* v);
 
     AST_Index() : AST_slice(AST_TYPE::Index) {}
 
@@ -648,7 +647,7 @@ public:
     AST_expr* value;
     InternedString arg;
 
-    virtual void accept(ASTVisitor* v);
+    void accept(ASTVisitor* v);
 
     AST_keyword() : AST(AST_TYPE::keyword) {}
 
@@ -660,8 +659,8 @@ public:
     AST_arguments* args;
     AST_expr* body;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_Lambda() : AST_expr(AST_TYPE::Lambda) {}
 
@@ -673,8 +672,8 @@ public:
     std::vector<AST_expr*> elts;
     AST_TYPE::AST_TYPE ctx_type;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_List() : AST_expr(AST_TYPE::List) {}
 
@@ -686,8 +685,8 @@ public:
     std::vector<AST_comprehension*> generators;
     AST_expr* elt;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_ListComp() : AST_expr(AST_TYPE::ListComp) {}
 
@@ -701,7 +700,7 @@ public:
     // no lineno, col_offset attributes
     std::vector<AST_stmt*> body;
 
-    virtual void accept(ASTVisitor* v);
+    void accept(ASTVisitor* v);
 
     AST_Module(std::unique_ptr<InternedStringPool> interned_strings)
         : AST(AST_TYPE::Module), interned_strings(std::move(interned_strings)) {}
@@ -715,7 +714,7 @@ public:
 
     std::vector<AST_stmt*> body;
 
-    virtual void accept(ASTVisitor* v);
+    void accept(ASTVisitor* v);
 
     AST_Suite(std::unique_ptr<InternedStringPool> interned_strings)
         : AST(AST_TYPE::Suite), interned_strings(std::move(interned_strings)) {}
@@ -739,8 +738,8 @@ public:
 
     bool is_kill = false;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_Name(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0)
         : AST_expr(AST_TYPE::Name, lineno, col_offset),
@@ -770,8 +769,8 @@ public:
     };
     std::string n_long;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_Num() : AST_expr(AST_TYPE::Num) {}
 
@@ -782,8 +781,8 @@ class AST_Repr : public AST_expr {
 public:
     AST_expr* value;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_Repr() : AST_expr(AST_TYPE::Repr) {}
 
@@ -792,8 +791,8 @@ public:
 
 class AST_Pass : public AST_stmt {
 public:
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Pass() : AST_stmt(AST_TYPE::Pass) {}
 
@@ -806,8 +805,8 @@ public:
     bool nl;
     std::vector<AST_expr*> values;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Print() : AST_stmt(AST_TYPE::Print) {}
 
@@ -822,8 +821,8 @@ public:
     // Ie "raise Exception()" will have type==Exception(), inst==None, tback==None
     AST_expr* arg0, *arg1, *arg2;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Raise() : AST_stmt(AST_TYPE::Raise), arg0(NULL), arg1(NULL), arg2(NULL) {}
 
@@ -834,8 +833,8 @@ class AST_Return : public AST_stmt {
 public:
     AST_expr* value;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Return() : AST_stmt(AST_TYPE::Return) {}
 
@@ -846,8 +845,8 @@ class AST_Set : public AST_expr {
 public:
     std::vector<AST_expr*> elts;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_Set() : AST_expr(AST_TYPE::Set) {}
 
@@ -859,8 +858,8 @@ public:
     std::vector<AST_comprehension*> generators;
     AST_expr* elt;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_SetComp() : AST_expr(AST_TYPE::SetComp) {}
 
@@ -871,8 +870,8 @@ class AST_Slice : public AST_slice {
 public:
     AST_expr* lower, *upper, *step;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_slice(SliceVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_slice(SliceVisitor* v);
 
     AST_Slice() : AST_slice(AST_TYPE::Slice) {}
 
@@ -891,8 +890,8 @@ public:
     // For UNICODE, it's the utf-8 encoded value.
     std::string str_data;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_Str() : AST_expr(AST_TYPE::Str), str_type(UNSET) {}
     AST_Str(std::string s) : AST_expr(AST_TYPE::Str), str_type(STR), str_data(std::move(s)) {}
@@ -906,8 +905,8 @@ public:
     AST_slice* slice;
     AST_TYPE::AST_TYPE ctx_type;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_Subscript() : AST_expr(AST_TYPE::Subscript) {}
 
@@ -919,8 +918,8 @@ public:
     std::vector<AST_stmt*> body, orelse;
     std::vector<AST_ExceptHandler*> handlers;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_TryExcept() : AST_stmt(AST_TYPE::TryExcept) {}
 
@@ -931,8 +930,8 @@ class AST_TryFinally : public AST_stmt {
 public:
     std::vector<AST_stmt*> body, finalbody;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_TryFinally() : AST_stmt(AST_TYPE::TryFinally) {}
 
@@ -944,8 +943,8 @@ public:
     std::vector<AST_expr*> elts;
     AST_TYPE::AST_TYPE ctx_type;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_Tuple() : AST_expr(AST_TYPE::Tuple) {}
 
@@ -957,8 +956,8 @@ public:
     AST_expr* operand;
     AST_TYPE::AST_TYPE op_type;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_UnaryOp() : AST_expr(AST_TYPE::UnaryOp) {}
 
@@ -970,8 +969,8 @@ public:
     AST_expr* test;
     std::vector<AST_stmt*> body, orelse;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_While() : AST_stmt(AST_TYPE::While) {}
 
@@ -983,8 +982,8 @@ public:
     AST_expr* optional_vars, *context_expr;
     std::vector<AST_stmt*> body;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_With() : AST_stmt(AST_TYPE::With) {}
 
@@ -995,8 +994,8 @@ class AST_Yield : public AST_expr {
 public:
     AST_expr* value;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_Yield() : AST_expr(AST_TYPE::Yield) {}
 
@@ -1007,8 +1006,8 @@ class AST_MakeFunction : public AST_expr {
 public:
     AST_FunctionDef* function_def;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_MakeFunction(AST_FunctionDef* fd)
         : AST_expr(AST_TYPE::MakeFunction, fd->lineno, fd->col_offset), function_def(fd) {}
@@ -1020,8 +1019,8 @@ class AST_MakeClass : public AST_expr {
 public:
     AST_ClassDef* class_def;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_MakeClass(AST_ClassDef* cd) : AST_expr(AST_TYPE::MakeClass, cd->lineno, cd->col_offset), class_def(cd) {}
 
@@ -1039,8 +1038,8 @@ public:
     AST_expr* test;
     CFGBlock* iftrue, *iffalse;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Branch() : AST_stmt(AST_TYPE::Branch) {}
 
@@ -1051,8 +1050,8 @@ class AST_Jump : public AST_stmt {
 public:
     CFGBlock* target;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Jump() : AST_stmt(AST_TYPE::Jump) {}
 
@@ -1064,8 +1063,8 @@ public:
     AST_expr* value;
     InternedString attr;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_ClsAttribute() : AST_expr(AST_TYPE::ClsAttribute) {}
 
@@ -1078,8 +1077,8 @@ public:
 
     CFGBlock* normal_dest, *exc_dest;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    void accept(ASTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
 
     AST_Invoke(AST_stmt* stmt) : AST_stmt(AST_TYPE::Invoke), stmt(stmt) {}
 
@@ -1109,8 +1108,8 @@ public:
     } opcode;
     std::vector<AST_expr*> args;
 
-    virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
+    void accept(ASTVisitor* v);
+    void* accept_expr(ExprVisitor* v);
 
     AST_LangPrimitive(Opcodes opcode) : AST_expr(AST_TYPE::LangPrimitive), opcode(opcode) {}
 
@@ -1122,6 +1121,48 @@ template <typename T> T* ast_cast(AST* node) {
     return static_cast<T*>(node);
 }
 
+inline void AST::accept(ASTVisitor* v) {
+    switch (type) {
+#define NOTHING(x, n)
+#define CASEACCEPT(x, n)                                                                                               \
+    case AST_TYPE::x:                                                                                                  \
+        ((AST_##x*)this)->accept(v);                                                                                   \
+        break;
+
+        FOREACH_TYPE(NOTHING, CASEACCEPT, CASEACCEPT, CASEACCEPT)
+        default:
+            RELEASE_ASSERT(0, "");
+    }
+}
+
+inline void* AST_expr::accept_expr(ExprVisitor* v) {
+    switch (type) {
+#define CASEEXPR(x, n)                                                                                                 \
+    case AST_TYPE::x:                                                                                                  \
+        return ((AST_##x*)this)->accept_expr(v);
+
+        FOREACH_TYPE(NOTHING, NOTHING, CASEEXPR, NOTHING)
+        default:
+            RELEASE_ASSERT(0, "");
+    }
+}
+
+inline void AST_stmt::accept_stmt(StmtVisitor* v) {
+    switch (type) {
+#define CASESTMT(x, n)                                                                                                 \
+    case AST_TYPE::x:                                                                                                  \
+        return ((AST_##x*)this)->accept_stmt(v);
+
+        FOREACH_TYPE(NOTHING, NOTHING, NOTHING, CASESTMT)
+        default:
+            break;
+    }
+}
+#undef CASEACCEPT
+#undef CASEEXPR
+#undef CASESTMT
+#undef NOTHING
+#undef FOREACH_TYPE
 
 
 class ASTVisitor {
