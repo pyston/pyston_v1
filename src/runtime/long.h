@@ -33,6 +33,8 @@ public:
 
     BoxedLong() __attribute__((visibility("default"))) {}
 
+    static void tp_dealloc(Box* b) noexcept;
+
     DEFAULT_CLASS_SIMPLE(long_cls, false);
 };
 

@@ -63,6 +63,10 @@ int _PyLong_DigitValue[256] = {
 #define IS_LITTLE_ENDIAN (int)*(unsigned char*)&one
 #define PY_ABS_LLONG_MIN (0 - (unsigned PY_LONG_LONG)PY_LLONG_MIN)
 
+void BoxedLong::tp_dealloc(Box* b) noexcept {
+    mpz_clear(static_cast<BoxedLong*>(b)->n);
+}
+
 extern "C" int _PyLong_Sign(PyObject* l) noexcept {
     return mpz_sgn(static_cast<BoxedLong*>(l)->n);
 }
