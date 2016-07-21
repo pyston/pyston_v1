@@ -53,9 +53,11 @@ addons:
     - python-dev
     - texlive-extra-utils
     - libcurl4-openssl-dev
-    - libxml2-dev 
+    - libxml2-dev
     - libxslt1-dev
     - libssl-dev
+    - tcl8.5-dev
+    - tk8.5-dev
     - swig
 
 before_install:
@@ -75,6 +77,9 @@ install:
 
 before_script:
   - mysql -e 'create database mysqldb_test charset utf8;'
+  - "export DISPLAY=:99.0"
+  - "sh -e /etc/init.d/xvfb start"
+  - sleep 3 # give xvfb some time to start
 
 script:
   - ccache -z

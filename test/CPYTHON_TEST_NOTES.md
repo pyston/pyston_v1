@@ -138,7 +138,6 @@ test_pydoc              [unknown]
 test_random             long("invalid number")
 test_repr               complex.__hash__; some unknown issues
 test_resource           fails on travis-ci: setrlimit RLIMIT_CPU not allowed to raise maximum limit
-test_richcmp            PyObject_Not
 test_runpy              [unknown]
 test_scope              eval of code object from existing function (not currently supported)
 test_scriptpackages     [unknown]
@@ -165,14 +164,13 @@ test_tempfile           [unknown]
 test_threading_local    [unknown]
 test_threading          [unknown]
 test_thread             [unknown]
-test_tk                 [unknown]
+test_tk                 references leak, test files setting
 test_tokenize           [unknown]
 test_tools              [unknown]
 test_traceback          [unknown]
 test_trace              [unknown]
 test_transformer        [unknown]
-test_ttk_guionly        [unknown]
-test_ttk_textonly       [unknown]
+test_ttk_guionly        Can not pass it in CI. Passed in local machine.
 test_types              PyErr_WarnEx
 test_undocumented_details   function.func_closure
 test_unicode            argument passing issue?

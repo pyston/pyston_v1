@@ -398,6 +398,7 @@ calculate_path(void)
     char argv0_path[MAXPATHLEN+1];
     char zip_path[MAXPATHLEN+1];
     char lib_pyston_path[MAXPATHLEN+1]; // Pyston change
+    char lib_tk_path[MAXPATHLEN+1]; // Pyston change
     int pfound, efound; /* 1 if found; -1 if found build directory */
     char *buf;
     size_t bufsz;
@@ -591,14 +592,19 @@ calculate_path(void)
     bufsz += strlen(zip_path) + 1;
     bufsz += strlen(exec_prefix) + 1;
 
-    // Pyston change: add from_cpython/Lib and lib_pyston
+    // Pyston change: add from_cpython/Lib, lib_pyston and Lib/lib-tk
     // Prefix contains at this point the full path to 'from_cpython/Lib'
     strcpy(lib_pyston_path, prefix);
     // go from ./from_cpython/Lib to ./lib_pyston
     reduce(lib_pyston_path);
     reduce(lib_pyston_path);
     joinpath(lib_pyston_path, "lib_pyston");
+    // add from_cpython/Lib/lib-tk
+    strcpy(lib_tk_path, prefix);
+    joinpath(lib_tk_path, "lib-tk");
     bufsz += strlen(lib_pyston_path) + 1;
+    bufsz += strlen(prefix) + 1;
+    bufsz += strlen(lib_tk_path) + 1;
     bufsz += strlen(prefix) + 1;
 
     /* This is the only malloc call in this file */
@@ -630,6 +636,9 @@ calculate_path(void)
         // add lib_pyston
         strcat(buf, delimiter);
         strcat(buf, lib_pyston_path);
+        strcat(buf, delimiter);
+        // add from_cpython/Lib/lib-tk
+        strcat(buf, lib_tk_path);
         strcat(buf, delimiter);
 
 
