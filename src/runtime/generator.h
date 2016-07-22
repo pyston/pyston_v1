@@ -26,7 +26,7 @@ struct Context;
 extern BoxedClass* generator_cls;
 
 void setupGenerator();
-void generatorEntry(BoxedGenerator* g);
+void generatorEntry(BoxedGenerator* g) noexcept;
 Context* getReturnContextForGeneratorFrame(void* frame_addr);
 
 extern "C" Box* yield(BoxedGenerator* obj, STOLEN(Box*) value, llvm::ArrayRef<Box*> live_values = {});

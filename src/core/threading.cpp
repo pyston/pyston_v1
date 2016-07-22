@@ -83,24 +83,6 @@ private:
 public:
     void* stack_start;
 
-    struct StackInfo {
-        BoxedGenerator* next_generator;
-        void* stack_start;
-        void* stack_limit;
-
-        StackInfo(BoxedGenerator* next_generator, void* stack_start, void* stack_limit)
-            : next_generator(next_generator), stack_start(stack_start), stack_limit(stack_limit) {
-#if STACK_GROWS_DOWN
-            assert(stack_start > stack_limit);
-            assert((char*)stack_start - (char*)stack_limit < (1L << 30));
-#else
-            assert(stack_start < stack_limit);
-            assert((char*)stack_limit - (char*)stack_start < (1L << 30));
-#endif
-        }
-    };
-
-    std::vector<StackInfo> previous_stacks;
     pthread_t pthread_id;
 
     PyThreadState* public_thread_state;
@@ -137,35 +119,9 @@ public:
     }
 
     ucontext_t* getContext() { return &ucontext; }
-
-    void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit) {
-        previous_stacks.emplace_back(g, this->stack_start, old_stack_limit);
-        this->stack_start = new_stack_start;
-    }
-
-    void popGenerator() {
-        assert(previous_stacks.size());
-        StackInfo& stack = previous_stacks.back();
-        stack_start = stack.stack_start;
-        previous_stacks.pop_back();
-    }
-
-    void assertNoGenerators() { assert(previous_stacks.size() == 0); }
 };
 static std::unordered_map<pthread_t, ThreadStateInternal*> current_threads;
 static __thread ThreadStateInternal* current_internal_thread_state = 0;
-
-void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit) {
-    assert(new_stack_start);
-    assert(old_stack_limit);
-    assert(current_internal_thread_state);
-    current_internal_thread_state->pushGenerator(g, new_stack_start, old_stack_limit);
-}
-
-void popGenerator() {
-    assert(current_internal_thread_state);
-    current_internal_thread_state->popGenerator();
-}
 
 // These are guarded by threading_lock
 static int signals_waiting(0);
@@ -243,8 +199,6 @@ static void tstate_delete_common(PyThreadState* tstate) {
 }
 
 static void unregisterThread() {
-    current_internal_thread_state->assertNoGenerators();
-
     tstate_delete_common(current_internal_thread_state->public_thread_state);
     PyThreadState_Clear(current_internal_thread_state->public_thread_state);
 
@@ -438,7 +392,6 @@ static void wait_for_thread_shutdown(void) noexcept {
 
 void finishMainThread() {
     assert(current_internal_thread_state);
-    current_internal_thread_state->assertNoGenerators();
 
     wait_for_thread_shutdown();
 }
