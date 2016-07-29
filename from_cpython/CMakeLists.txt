@@ -95,6 +95,7 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     fileobject.c
     import.c
     iterobject.c
+    listobject.c
     memoryobject.c
     obmalloc.c
     stringobject.c
