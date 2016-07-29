@@ -144,7 +144,6 @@ test_scope              eval of code object from existing function (not currentl
 test_scriptpackages     [unknown]
 test_site               [unknown]
 test_socket             [unknown]
-test_sort               argument specification issue in listSort?
 test_startfile          [unknown]
 test_str                memory leak?
 test_structmembers      [unknown]
