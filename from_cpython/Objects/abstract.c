@@ -736,8 +736,6 @@ PyBuffer_Release(Py_buffer *view)
     view->obj = NULL;
 }
 
-// pyston change: comment this out
-#if 0
 PyObject *
 PyObject_Format(PyObject* obj, PyObject *format_spec)
 {
@@ -894,7 +892,6 @@ done:
     Py_XDECREF(empty);
     return result;
 }
-#endif
 
 /* Operations on numbers */
 
