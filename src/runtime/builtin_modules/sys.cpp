@@ -42,6 +42,10 @@ extern "C" {
 int Py_BytesWarningFlag = 0;
 int Py_DivisionWarningFlag = 0;
 int Py_HashRandomizationFlag = 0;
+int Py_DebugFlag = 0;
+int _Py_QnewFlag = 0;
+int Py_DontWriteBytecodeFlag = 0;
+int Py_NoUserSiteDirectory = 0;
 }
 
 Box* sysExcInfo() {
@@ -228,35 +232,6 @@ void prependToSysPath(llvm::StringRef path) {
     autoDecref(callattr(sys_path, insert_str, callattr_flags, autoDecref(boxInt(0)), autoDecref(boxString(path)), NULL,
                         NULL, NULL));
 }
-
-static BoxedClass* sys_flags_cls;
-class BoxedSysFlags : public Box {
-public:
-    Box* division_warning, *bytes_warning, *no_user_site, *optimize;
-
-    BoxedSysFlags() {
-        auto zero = boxInt(0);
-        assert(zero);
-        division_warning = incref(zero);
-        bytes_warning = incref(zero);
-        no_user_site = incref(zero);
-        optimize = incref(zero);
-        Py_DECREF(zero);
-    }
-
-    DEFAULT_CLASS(sys_flags_cls);
-
-    static Box* __new__(Box* cls, Box* args, Box* kwargs) {
-        raiseExcHelper(TypeError, "cannot create 'sys.flags' instances");
-    }
-
-    static void dealloc(BoxedSysFlags* self) {
-        Py_DECREF(self->division_warning);
-        Py_DECREF(self->bytes_warning);
-        Py_DECREF(self->no_user_site);
-        Py_DECREF(self->optimize);
-    }
-};
 
 static std::string generateVersionString() {
     std::ostringstream oss;
@@ -570,6 +545,87 @@ static PyMethodDef sys_methods[] = {
     { "getsizeof", (PyCFunction)sys_getsizeof, METH_VARARGS | METH_KEYWORDS, getsizeof_doc },
 };
 
+PyDoc_STRVAR(flags__doc__, "sys.flags\n\
+\n\
+Flags provided through command line arguments or environment vars.");
+
+static struct _typeobject FlagsType;
+
+static PyStructSequence_Field flags_fields[] = {
+    { "debug", "-d" },
+    { "py3k_warning", "-3" },
+    { "division_warning", "-Q" },
+    { "division_new", "-Qnew" },
+    { "inspect", "-i" },
+    { "interactive", "-i" },
+    { "optimize", "-O or -OO" },
+    { "dont_write_bytecode", "-B" },
+    { "no_user_site", "-s" },
+    { "no_site", "-S" },
+    { "ignore_environment", "-E" },
+    { "tabcheck", "-t or -tt" },
+    { "verbose", "-v" },
+#ifdef RISCOS
+    { "riscos_wimp", "???" },
+#endif
+    /* {"unbuffered",                   "-u"}, */
+    { "unicode", "-U" },
+    /* {"skip_first",                   "-x"}, */
+    { "bytes_warning", "-b" },
+    { "hash_randomization", "-R" },
+    { 0, 0 },
+};
+
+static PyStructSequence_Desc flags_desc = { "sys.flags",  /* name */
+                                            flags__doc__, /* doc */
+                                            flags_fields, /* fields */
+#ifdef RISCOS
+                                            17
+#else
+                                            16
+#endif
+};
+
+static PyObject* make_flags(void) {
+    int pos = 0;
+    PyObject* seq;
+
+    seq = PyStructSequence_New(&FlagsType);
+    if (seq == NULL)
+        return NULL;
+
+#define SetFlag(flag) PyStructSequence_SET_ITEM(seq, pos++, PyInt_FromLong(flag))
+
+    SetFlag(Py_DebugFlag);
+    SetFlag(Py_Py3kWarningFlag);
+    SetFlag(Py_DivisionWarningFlag);
+    SetFlag(_Py_QnewFlag);
+    SetFlag(Py_InspectFlag);
+    SetFlag(Py_InteractiveFlag);
+    SetFlag(Py_OptimizeFlag);
+    SetFlag(Py_DontWriteBytecodeFlag);
+    SetFlag(Py_NoUserSiteDirectory);
+    SetFlag(Py_NoSiteFlag);
+    SetFlag(Py_IgnoreEnvironmentFlag);
+    SetFlag(Py_TabcheckFlag);
+    SetFlag(Py_VerboseFlag);
+#ifdef RISCOS
+    SetFlag(Py_RISCOSWimpFlag);
+#endif
+    /* SetFlag(saw_unbuffered_flag); */
+    SetFlag(Py_UnicodeFlag);
+    /* SetFlag(skipfirstline); */
+    SetFlag(Py_BytesWarningFlag);
+    SetFlag(Py_HashRandomizationFlag);
+#undef SetFlag
+
+    if (PyErr_Occurred()) {
+        Py_DECREF(seq);
+        return NULL;
+    }
+    return seq;
+}
+
 PyDoc_STRVAR(version_info__doc__, "sys.version_info\n\
         \n\
         Version information as a named tuple.");
@@ -811,20 +867,6 @@ void setupSys() {
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
     sys_module->giveAttr("maxsize", boxInt(PY_SSIZE_T_MAX));
 
-    sys_flags_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSysFlags), false, "flags", false, NULL,
-                                       NULL, false);
-    sys_flags_cls->giveAttr(
-        "__new__", new BoxedFunction(FunctionMetadata::create((void*)BoxedSysFlags::__new__, UNKNOWN, 1, true, true)));
-    sys_flags_cls->tp_dealloc = (destructor)BoxedSysFlags::dealloc;
-
-    sys_flags_cls->giveAttr("ignore_environment", boxInt(Py_IgnoreEnvironmentFlag));
-#define ADD(name) sys_flags_cls->giveAttrMember(STRINGIFY(name), T_OBJECT, offsetof(BoxedSysFlags, name));
-    ADD(division_warning);
-    ADD(bytes_warning);
-    ADD(no_user_site);
-    ADD(optimize);
-#undef ADD
-
 #define SET_SYS_FROM_STRING(key, value) sys_module->giveAttr((key), (value))
 #ifdef Py_USING_UNICODE
     SET_SYS_FROM_STRING("maxunicode", PyInt_FromLong(PyUnicode_GetMax()));
@@ -837,7 +879,6 @@ void setupSys() {
     SET_SYS_FROM_STRING("float_repr_style", PyString_FromString("legacy"));
 #endif
 
-    sys_flags_cls->freeze();
 
     auto sys_str = getStaticString("sys");
     for (auto& md : sys_methods) {
@@ -845,7 +886,6 @@ void setupSys() {
     }
 
     sys_module->giveAttrBorrowed("__displayhook__", sys_module->getattr(autoDecref(internStringMortal("displayhook"))));
-    sys_module->giveAttr("flags", new BoxedSysFlags());
 }
 
 void setupSysEnd() {
@@ -889,6 +929,13 @@ void setupSysEnd() {
     /* float_info */
     if (FloatInfoType.tp_name == 0)
         PyStructSequence_InitType((PyTypeObject*)&FloatInfoType, &float_info_desc);
+    /* flags */
+    if (FlagsType.tp_name == 0)
+        PyStructSequence_InitType((PyTypeObject*)&FlagsType, &flags_desc);
+    SET_SYS_FROM_STRING("flags", make_flags());
+    /* prevent user from creating new instances */
+    FlagsType.tp_init = NULL;
+    FlagsType.tp_new = NULL;
     /* prevent user from creating new instances */
     FloatInfoType.tp_init = NULL;
     FloatInfoType.tp_new = NULL;
