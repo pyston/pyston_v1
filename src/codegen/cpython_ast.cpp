@@ -710,6 +710,13 @@ public:
         auto r = _convert(stmt);
         r->lineno = stmt->lineno;
         r->col_offset = stmt->col_offset;
+
+        if (stmt->lineno == 0) {
+            // So far it looks like these can only be generated for empty lines on the repl
+            assert(stmt->kind == Pass_kind);
+            r->lineno = 1;
+        }
+
         return r;
     }
 
