@@ -681,7 +681,8 @@ public:
 };
 
 class HiddenClass;
-extern HiddenClass* root_hcls;
+class HiddenClassNormal;
+extern HiddenClassNormal* root_hcls;
 
 struct SetattrRewriteArgs;
 struct GetattrRewriteArgs;

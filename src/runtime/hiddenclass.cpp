@@ -27,7 +27,35 @@
 
 namespace pyston {
 
-void HiddenClass::appendAttribute(BoxedString* attr) {
+HiddenClassSingleton* HiddenClass::makeSingleton() {
+    return new HiddenClassSingleton;
+}
+
+HiddenClassNormal* HiddenClass::makeRoot() {
+#ifndef NDEBUG
+    static bool made = false;
+    assert(!made);
+    made = true;
+#endif
+    return new HiddenClassNormal;
+}
+
+HiddenClassDict* HiddenClass::makeDictBacked() {
+#ifndef NDEBUG
+    static bool made = false;
+    assert(!made);
+    made = true;
+#endif
+    return new HiddenClassDict;
+}
+
+int HiddenClass::attributeArraySize() {
+    if (type == HiddenClass::DICT_BACKED)
+        return getAsDictBacked()->attributeArraySize();
+    return getAsSingletonOrNormal()->attributeArraySize();
+}
+
+void HiddenClassSingleton::appendAttribute(BoxedString* attr) {
     assert(attr->interned_state != SSTATE_NOT_INTERNED);
     assert(type == SINGLETON);
     dependent_getattrs.invalidateAll();
@@ -36,14 +64,14 @@ void HiddenClass::appendAttribute(BoxedString* attr) {
     attr_offsets[attr] = n;
 }
 
-void HiddenClass::appendAttrwrapper() {
+void HiddenClassSingleton::appendAttrwrapper() {
     assert(type == SINGLETON);
     dependent_getattrs.invalidateAll();
     assert(attrwrapper_offset == -1);
     attrwrapper_offset = this->attributeArraySize();
 }
 
-void HiddenClass::delAttribute(BoxedString* attr) {
+void HiddenClassSingleton::delAttribute(BoxedString* attr) {
     assert(attr->interned_state != SSTATE_NOT_INTERNED);
     assert(type == SINGLETON);
     dependent_getattrs.invalidateAll();
@@ -61,12 +89,12 @@ void HiddenClass::delAttribute(BoxedString* attr) {
         attrwrapper_offset--;
 }
 
-void HiddenClass::addDependence(Rewriter* rewriter) {
+void HiddenClassSingleton::addDependence(Rewriter* rewriter) {
     assert(type == SINGLETON);
     rewriter->addDependenceOn(dependent_getattrs);
 }
 
-HiddenClass* HiddenClass::getOrMakeChild(BoxedString* attr) {
+HiddenClassNormal* HiddenClassNormal::getOrMakeChild(BoxedString* attr) {
     STAT_TIMER(t0, "us_timer_hiddenclass_getOrMakeChild", 0);
 
     assert(attr->interned_state != SSTATE_NOT_INTERNED);
@@ -74,25 +102,25 @@ HiddenClass* HiddenClass::getOrMakeChild(BoxedString* attr) {
 
     auto it = children.find(attr);
     if (it != children.end())
-        return children.getMapped(it->second);
+        return it->second;
 
     static StatCounter num_hclses("num_hidden_classes");
     num_hclses.log();
 
     // XXX: need to hold a ref to the string (or maybe we don't if we can hook the un-interning)
-    HiddenClass* rtn = new HiddenClass(this);
+    HiddenClassNormal* rtn = new HiddenClassNormal(this);
     rtn->attr_offsets[attr] = this->attributeArraySize();
     this->children[attr] = rtn;
     assert(rtn->attributeArraySize() == this->attributeArraySize() + 1);
     return rtn;
 }
 
-HiddenClass* HiddenClass::getAttrwrapperChild() {
+HiddenClassNormal* HiddenClassNormal::getAttrwrapperChild() {
     assert(type == NORMAL);
     assert(attrwrapper_offset == -1);
 
     if (!attrwrapper_child) {
-        HiddenClass* made = new HiddenClass(this);
+        HiddenClassNormal* made = new HiddenClassNormal(this);
         made->attrwrapper_offset = this->attributeArraySize();
         this->attrwrapper_child = made;
         assert(made->attributeArraySize() == this->attributeArraySize() + 1);
@@ -104,7 +132,7 @@ HiddenClass* HiddenClass::getAttrwrapperChild() {
 /**
  * del attr from current HiddenClass, maintaining the order of the remaining attrs
  */
-HiddenClass* HiddenClass::delAttrToMakeHC(BoxedString* attr) {
+HiddenClassNormal* HiddenClassNormal::delAttrToMakeHC(BoxedString* attr) {
     STAT_TIMER(t0, "us_timer_hiddenclass_delAttrToMakeHC", 0);
 
     assert(attr->interned_state != SSTATE_NOT_INTERNED);
@@ -127,7 +155,7 @@ HiddenClass* HiddenClass::delAttrToMakeHC(BoxedString* attr) {
 
     // TODO we can first locate the parent HiddenClass of the deleted
     // attribute and hence avoid creation of its ancestors.
-    HiddenClass* cur = root_hcls;
+    HiddenClassNormal* cur = root_hcls;
     int curidx = 0;
     for (const auto& attr : new_attrs) {
         if (curidx == new_attrwrapper_offset)

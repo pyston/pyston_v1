@@ -19,16 +19,20 @@
 
 #include "Python.h"
 
-#include "core/contiguous_map.h"
+#include "core/from_llvm/DenseMap.h"
 #include "core/types.h"
 
 namespace pyston {
 
+class HiddenClassDict;
+class HiddenClassNormal;
+class HiddenClassSingleton;
+class HiddenClassSingletonOrNormal;
 class HiddenClass {
 public:
     // We have a couple different storage strategies for attributes, which
     // are distinguished by having a different hidden class type.
-    enum HCType {
+    enum HCType : unsigned char {
         NORMAL,      // attributes stored in attributes array, name->offset map stored in hidden class
         DICT_BACKED, // first attribute in array is a dict-like object which stores the attributes
         SINGLETON,   // name->offset map stored in hidden class, but hcls is mutable
@@ -37,70 +41,76 @@ public:
     static HiddenClass* dict_backed;
     void dump() noexcept;
 
-private:
+protected:
     HiddenClass(HCType type) : type(type) {}
-    HiddenClass(HiddenClass* parent)
-        : type(NORMAL), attr_offsets(parent->attr_offsets), attrwrapper_offset(parent->attrwrapper_offset) {
-        assert(parent->type == NORMAL);
+    virtual ~HiddenClass() = default;
+
+public:
+    static HiddenClassSingleton* makeSingleton();
+    static HiddenClassNormal* makeRoot();
+    static HiddenClassDict* makeDictBacked();
+
+    int attributeArraySize();
+
+    HiddenClassDict* getAsDictBacked() {
+        assert(type == HiddenClass::DICT_BACKED);
+        return reinterpret_cast<HiddenClassDict*>(this);
     }
 
-    // These fields only make sense for NORMAL or SINGLETON hidden classes:
-    llvm::DenseMap<BoxedString*, int> attr_offsets;
+    HiddenClassNormal* getAsNormal() {
+        assert(type == HiddenClass::NORMAL);
+        return reinterpret_cast<HiddenClassNormal*>(this);
+    }
+
+    HiddenClassSingleton* getAsSingleton() {
+        assert(type == HiddenClass::SINGLETON);
+        return reinterpret_cast<HiddenClassSingleton*>(this);
+    }
+
+    HiddenClassSingletonOrNormal* getAsSingletonOrNormal() {
+        assert(type == HiddenClass::NORMAL || type == HiddenClass::SINGLETON);
+        return reinterpret_cast<HiddenClassSingletonOrNormal*>(this);
+    }
+};
+
+class HiddenClassDict final : public HiddenClass {
+protected:
+    HiddenClassDict() : HiddenClass(HiddenClass::DICT_BACKED) {}
+
+public:
+    // The total size of the attribute array.  The slots in the attribute array may not correspond 1:1 to Python
+    // attributes.
+    int attributeArraySize() { return 1; }
+
+    friend class HiddenClass;
+};
+
+class HiddenClassSingletonOrNormal : public HiddenClass {
+protected:
+    HiddenClassSingletonOrNormal(HCType type) : HiddenClass(type) {}
+
+    HiddenClassSingletonOrNormal(HiddenClassSingletonOrNormal* parent)
+        : HiddenClass(HiddenClass::NORMAL),
+          attrwrapper_offset(parent->attrwrapper_offset),
+          attr_offsets(parent->attr_offsets) {
+        assert(parent->type == HiddenClass::NORMAL);
+    }
+
     // If >= 0, is the offset where we stored an attrwrapper object
     int attrwrapper_offset = -1;
 
-    // These are only for NORMAL hidden classes:
-    ContiguousMap<BoxedString*, HiddenClass*, llvm::DenseMap<BoxedString*, int>> children;
-    HiddenClass* attrwrapper_child = NULL;
-
-    // Only for SINGLETON hidden classes:
-    ICInvalidator dependent_getattrs;
+    typedef pyston::DenseMap<BoxedString*, int, pyston::DenseMapInfo<BoxedString*>,
+                             pyston::detail::DenseMapPair<BoxedString*, int>, 16> Map;
+    Map attr_offsets;
 
 public:
-    static HiddenClass* makeSingleton() { return new HiddenClass(SINGLETON); }
-
-    static HiddenClass* makeRoot() {
-#ifndef NDEBUG
-        static bool made = false;
-        assert(!made);
-        made = true;
-#endif
-        return new HiddenClass(NORMAL);
-    }
-    static HiddenClass* makeDictBacked() {
-#ifndef NDEBUG
-        static bool made = false;
-        assert(!made);
-        made = true;
-#endif
-        return new HiddenClass(DICT_BACKED);
-    }
-
-    // The total size of the attribute array.  The slots in the attribute array may not correspond 1:1 to Python
-    // attributes.
-    int attributeArraySize() {
-        if (type == DICT_BACKED)
-            return 1;
-
-        ASSERT(type == NORMAL || type == SINGLETON, "%d", type);
-        int r = attr_offsets.size();
-        if (attrwrapper_offset != -1)
-            r += 1;
-        return r;
-    }
-
     // The mapping from string attribute names to attribute offsets.  There may be other objects in the attributes
     // array.
-    // Only valid for NORMAL or SINGLETON hidden classes
-    BORROWED(const llvm::DenseMap<BoxedString*, int>&) getStrAttrOffsets() {
+    BORROWED(const Map&) getStrAttrOffsets() {
         assert(type == NORMAL || type == SINGLETON);
         return attr_offsets;
     }
 
-    // Only valid for NORMAL hidden classes:
-    HiddenClass* getOrMakeChild(BoxedString* attr);
-
-    // Only valid for NORMAL or SINGLETON hidden classes:
     int getOffset(BoxedString* attr) {
         assert(type == NORMAL || type == SINGLETON);
         auto it = attr_offsets.find(attr);
@@ -114,17 +124,48 @@ public:
         return attrwrapper_offset;
     }
 
-    // Only valid for SINGLETON hidden classes:
+    // The total size of the attribute array.  The slots in the attribute array may not correspond 1:1 to Python
+    // attributes.
+    int attributeArraySize() {
+        ASSERT(type == NORMAL || type == SINGLETON, "%d", type);
+        int r = attr_offsets.size();
+        if (attrwrapper_offset != -1)
+            r += 1;
+        return r;
+    }
+
+    friend class HiddenClass;
+};
+
+class HiddenClassNormal final : public HiddenClassSingletonOrNormal {
+protected:
+    HiddenClassNormal() : HiddenClassSingletonOrNormal(HiddenClass::NORMAL) {}
+    HiddenClassNormal(HiddenClassNormal* parent) : HiddenClassSingletonOrNormal(parent) {}
+
+    pyston::SmallDenseMap<BoxedString*, HiddenClassNormal*> children;
+    HiddenClassNormal* attrwrapper_child = NULL;
+
+public:
+    HiddenClassNormal* getOrMakeChild(BoxedString* attr);
+    HiddenClassNormal* getAttrwrapperChild();
+    HiddenClassNormal* delAttrToMakeHC(BoxedString* attr);
+
+    friend class HiddenClass;
+};
+
+class HiddenClassSingleton final : public HiddenClassSingletonOrNormal {
+protected:
+    HiddenClassSingleton() : HiddenClassSingletonOrNormal(HiddenClass::SINGLETON) {}
+
+    ICInvalidator dependent_getattrs;
+
+public:
     void appendAttribute(BoxedString* attr);
     void appendAttrwrapper();
     void delAttribute(BoxedString* attr);
     void addDependence(Rewriter* rewriter);
 
-    // Only valid for NORMAL hidden classes:
-    HiddenClass* getAttrwrapperChild();
-
-    // Only valid for NORMAL hidden classes:
-    HiddenClass* delAttrToMakeHC(BoxedString* attr);
+    friend class HiddenClass;
 };
 }
 #endif
