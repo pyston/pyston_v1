@@ -1070,9 +1070,8 @@ template <Rewritable rewritable> BORROWED(Box*) Box::getattr(BoxedString* attr, 
     // otherwise the guard will fail anyway.;
     if (cls->instancesHaveHCAttrs()) {
         HCAttrs* attrs = getHCAttrsPtr();
-        HiddenClass* hcls = attrs->hcls;
 
-        if (unlikely(hcls && hcls->type == HiddenClass::DICT_BACKED)) {
+        if (unlikely(attrs->hcls && attrs->hcls->type == HiddenClass::DICT_BACKED)) {
             if (rewrite_args)
                 assert(!rewrite_args->isSuccessful());
             rewrite_args = NULL;
@@ -1084,7 +1083,8 @@ template <Rewritable rewritable> BORROWED(Box*) Box::getattr(BoxedString* attr, 
             return r;
         }
 
-        assert(!hcls || hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
+        assert(!attrs->hcls || attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON);
+        auto hcls = attrs->hcls ? attrs->hcls->getAsSingletonOrNormal() : NULL;
 
         if (unlikely(rewrite_args)) {
             if (!rewrite_args->obj_hcls_guarded) {
@@ -1097,7 +1097,7 @@ template <Rewritable rewritable> BORROWED(Box*) Box::getattr(BoxedString* attr, 
                         rewrite_args->obj->addAttrGuard(cls->attrs_offset + offsetof(HCAttrs, hcls), (intptr_t)hcls);
                     }
                     if (hcls && hcls->type == HiddenClass::SINGLETON)
-                        hcls->addDependence(rewrite_args->rewriter);
+                        hcls->getAsSingleton()->addDependence(rewrite_args->rewriter);
                 }
             }
         }
@@ -1283,7 +1283,7 @@ void Box::setDictBacked(STOLEN(Box*) val) {
     // e.g.:
     //     a = v.__dict__
     //     v.__dict__ = {} # 'a' must switch now from wrapping 'v' to a the private dict.
-    int offset = hcls->getAttrwrapperOffset();
+    int offset = hcls->getAsSingletonOrNormal()->getAttrwrapperOffset();
     if (offset != -1) {
         Box* wrapper = hcattrs->attr_list->attrs[offset];
         RELEASE_ASSERT(wrapper->cls == attrwrapper_cls, "");
@@ -1296,7 +1296,7 @@ void Box::setDictBacked(STOLEN(Box*) val) {
     new_attr_list->attrs[0] = val;
 
     auto old_attr_list = hcattrs->attr_list;
-    int old_attr_list_size = hcls->attributeArraySize();
+    int old_attr_list_size = hcls->getAsSingletonOrNormal()->attributeArraySize();
 
     hcattrs->hcls = HiddenClass::dict_backed;
     hcattrs->attr_list = new_attr_list;
@@ -1337,7 +1337,7 @@ void HCAttrs::clearForDealloc() noexcept {
         return;
 
     if (hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON) {
-        int offset = hcls->getAttrwrapperOffset();
+        int offset = hcls->getAsSingletonOrNormal()->getAttrwrapperOffset();
         if (offset != -1) {
             Box* attrwrapper = this->attr_list->attrs[offset];
             if (attrwrapper->ob_refcnt != 1)
@@ -1377,7 +1377,7 @@ void HCAttrs::moduleClear() noexcept {
     RELEASE_ASSERT(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON, "");
     auto attr_list = this->attr_list;
 
-    for (auto&& p : hcls->getStrAttrOffsets()) {
+    for (auto&& p : hcls->getAsSingletonOrNormal()->getStrAttrOffsets()) {
         const char* s = p.first->c_str();
         if (first_check_func(s)) {
             int idx = p.second;
@@ -1387,7 +1387,7 @@ void HCAttrs::moduleClear() noexcept {
         }
     }
 
-    for (auto&& p : hcls->getStrAttrOffsets()) {
+    for (auto&& p : hcls->getAsSingletonOrNormal()->getStrAttrOffsets()) {
         const char* s = p.first->c_str();
         if (second_check_func(s)) {
             int idx = p.second;
@@ -1480,16 +1480,16 @@ void Box::setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rew
 
     if (cls->instancesHaveHCAttrs()) {
         HCAttrs* attrs = getHCAttrsPtr();
-        HiddenClass* hcls = attrs->hcls;
+        HiddenClass* hcls_ = attrs->hcls;
 
-        if (unlikely(hcls == NULL)) {
+        if (unlikely(hcls_ == NULL)) {
             // We could update PyObject_Init and PyObject_INIT to do this, but that has a small compatibility
             // issue (what if people don't call either of those) and I'm not sure that this check will be that
             // harmful.  But if it is we might want to try pushing this assignment to allocation time.
-            hcls = root_hcls;
+            hcls_ = root_hcls;
         }
 
-        if (hcls->type == HiddenClass::DICT_BACKED) {
+        if (hcls_->type == HiddenClass::DICT_BACKED) {
             if (rewrite_args)
                 assert(!rewrite_args->out_success);
             rewrite_args = NULL;
@@ -1501,8 +1501,9 @@ void Box::setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rew
             return;
         }
 
-        assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
+        assert(hcls_->type == HiddenClass::NORMAL || hcls_->type == HiddenClass::SINGLETON);
 
+        auto hcls = hcls_->getAsSingletonOrNormal();
         int offset = hcls->getOffset(attr);
 
         if (rewrite_args) {
@@ -1512,7 +1513,7 @@ void Box::setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rew
             } else {
                 rewrite_args->obj->addAttrGuard(cls->attrs_offset + offsetof(HCAttrs, hcls), (intptr_t)attrs->hcls);
                 if (hcls->type == HiddenClass::SINGLETON)
-                    hcls->addDependence(rewrite_args->rewriter);
+                    hcls->getAsSingleton()->addDependence(rewrite_args->rewriter);
             }
         }
 
@@ -1544,7 +1545,7 @@ void Box::setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rew
         assert(offset == -1);
 
         if (hcls->type == HiddenClass::NORMAL) {
-            HiddenClass* new_hcls = hcls->getOrMakeChild(attr);
+            auto* new_hcls = hcls->getAsNormal()->getOrMakeChild(attr);
             // make sure we don't need to rearrange the attributes
             assert(new_hcls->getStrAttrOffsets().lookup(attr) == hcls->attributeArraySize());
 
@@ -1567,7 +1568,7 @@ void Box::setattr(BoxedString* attr, BORROWED(Box*) val, SetattrRewriteArgs* rew
             rewrite_args = NULL;
 
             this->appendNewHCAttr(val, NULL);
-            hcls->appendAttribute(attr);
+            hcls->getAsSingleton()->appendAttribute(attr);
         }
 
         return;
@@ -6617,9 +6618,8 @@ void Box::delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args) {
     if (cls->instancesHaveHCAttrs()) {
         // as soon as the hcls changes, the guard on hidden class won't pass.
         HCAttrs* attrs = getHCAttrsPtr();
-        HiddenClass* hcls = attrs->hcls;
 
-        if (hcls->type == HiddenClass::DICT_BACKED) {
+        if (attrs->hcls->type == HiddenClass::DICT_BACKED) {
             if (rewrite_args)
                 assert(!rewrite_args->out_success);
             rewrite_args = NULL;
@@ -6631,7 +6631,8 @@ void Box::delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args) {
             return;
         }
 
-        assert(hcls->type == HiddenClass::NORMAL || hcls->type == HiddenClass::SINGLETON);
+        assert(attrs->hcls->type == HiddenClass::NORMAL || attrs->hcls->type == HiddenClass::SINGLETON);
+        auto* hcls = attrs->hcls->getAsSingletonOrNormal();
 
         // The order of attributes is pertained as delAttrToMakeHC constructs
         // the new HiddenClass by invoking getOrMakeChild in the prevous order
@@ -6644,11 +6645,11 @@ void Box::delattr(BoxedString* attr, DelattrRewriteArgs* rewrite_args) {
         memmove(start + offset, start + offset + 1, (num_attrs - offset - 1) * sizeof(Box*));
 
         if (hcls->type == HiddenClass::NORMAL) {
-            HiddenClass* new_hcls = hcls->delAttrToMakeHC(attr);
+            HiddenClass* new_hcls = hcls->getAsNormal()->delAttrToMakeHC(attr);
             attrs->hcls = new_hcls;
         } else {
             assert(hcls->type == HiddenClass::SINGLETON);
-            hcls->delAttribute(attr);
+            hcls->getAsSingleton()->delAttribute(attr);
         }
 
         // guarantee the size of the attr_list equals the number of attrs
@@ -7502,7 +7503,7 @@ extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
     }
 
     HCAttrs* module_attrs = from_module->getHCAttrsPtr();
-    for (auto& p : module_attrs->hcls->getStrAttrOffsets()) {
+    for (auto& p : module_attrs->hcls->getAsSingletonOrNormal()->getStrAttrOffsets()) {
         if (p.first->data()[0] == '_')
             continue;
 
