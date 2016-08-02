@@ -1253,8 +1253,8 @@ private:
             static BoxedString* setitem_str = getStaticString("__setitem__");
             CompilerVariable* setitem = rtn->getattr(emitter, getEmptyOpInfo(unw_info), setitem_str, true);
             for (int i = 0; i < node->keys.size(); i++) {
-                CompilerVariable* key = evalExpr(node->keys[i], unw_info);
                 CompilerVariable* value = evalExpr(node->values[i], unw_info);
+                CompilerVariable* key = evalExpr(node->keys[i], unw_info);
                 assert(key);
                 assert(value);
 

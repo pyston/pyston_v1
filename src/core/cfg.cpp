@@ -622,6 +622,24 @@ private:
         return compare;
     }
 
+    AST_Index* makeIndex(AST_expr* value) {
+        auto index = new AST_Index();
+        index->value = value;
+        index->lineno = value->lineno;
+        index->col_offset = value->col_offset;
+        return index;
+    }
+
+    AST_Subscript* makeSubscript(AST_TYPE::AST_TYPE ctx_type, AST_expr* value, AST_slice* slice) {
+        auto subscript = new AST_Subscript();
+        subscript->ctx_type = ctx_type;
+        subscript->value = value;
+        subscript->slice = slice;
+        subscript->lineno = slice->lineno;
+        subscript->col_offset = slice->col_offset;
+        return subscript;
+    }
+
     void pushAssign(AST_expr* target, AST_expr* val) {
         AST_Assign* assign = new AST_Assign();
         assign->value = val;
@@ -980,14 +998,18 @@ private:
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
 
-        for (auto k : node->keys) {
-            rtn->keys.push_back(remapExpr(k));
-        }
-        for (auto v : node->values) {
-            rtn->values.push_back(remapExpr(v));
+        InternedString dict_name = nodeName();
+
+        pushAssign(dict_name, rtn);
+
+        for (int i = 0; i < node->keys.size(); i++) {
+            AST_expr* value = remapExpr(node->values[i]);
+            AST_Index* index = makeIndex(node->keys[i]);
+            AST_Subscript* subscript = makeSubscript(AST_TYPE::Store, makeLoad(dict_name, node, false), index);
+            pushAssign(remapSubscript(subscript), value);
         }
 
-        return rtn;
+        return makeLoad(dict_name, node, true);
     }
 
     AST_slice* remapEllipsis(AST_Ellipsis* node) { return node; }

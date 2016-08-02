@@ -1,5 +1,3 @@
-# expected: fail
-# - the CFG expands to the wrong code here
 
 class H(object):
     def __init__(self, n):
