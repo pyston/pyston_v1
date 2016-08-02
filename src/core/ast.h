@@ -164,6 +164,9 @@ class StmtVisitor;
 class SliceVisitor;
 class AST_keyword;
 
+// we pack AST nodes which only contain POD fields
+#define PACKED __attribute__((packed))
+
 class AST {
 public:
     const AST_TYPE::AST_TYPE type;
@@ -187,7 +190,7 @@ public:
         : type(type), lineno(lineno), col_offset(col_offset) {}
 
     ~AST() { RELEASE_ASSERT(0, "not implemented currently"); }
-};
+} PACKED;
 
 class AST_expr : public AST {
 public:
@@ -195,7 +198,7 @@ public:
 
     AST_expr(AST_TYPE::AST_TYPE type) : AST(type) {}
     AST_expr(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0) : AST(type, lineno, col_offset) {}
-};
+} PACKED;
 
 class AST_stmt : public AST {
 public:
@@ -204,14 +207,14 @@ public:
     int cxx_exception_count = 0;
 
     AST_stmt(AST_TYPE::AST_TYPE type) : AST(type) {}
-};
+} PACKED;
 
 class AST_slice : public AST {
 public:
     void* accept_slice(SliceVisitor* s);
     AST_slice(AST_TYPE::AST_TYPE type) : AST(type) {}
     AST_slice(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0) : AST(type, lineno, col_offset) {}
-};
+} PACKED;
 
 class AST_alias : public AST {
 public:
@@ -251,7 +254,7 @@ public:
     AST_Assert() : AST_stmt(AST_TYPE::Assert) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Assert;
-};
+} PACKED;
 
 class AST_Assign : public AST_stmt {
 public:
@@ -278,7 +281,7 @@ public:
     AST_AugAssign() : AST_stmt(AST_TYPE::AugAssign) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::AugAssign;
-};
+} PACKED;
 
 class AST_AugBinOp : public AST_expr {
 public:
@@ -291,7 +294,7 @@ public:
     AST_AugBinOp() : AST_expr(AST_TYPE::AugBinOp) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::AugBinOp;
-};
+} PACKED;
 
 class AST_Attribute : public AST_expr {
 public:
@@ -321,7 +324,7 @@ public:
     AST_BinOp() : AST_expr(AST_TYPE::BinOp) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::BinOp;
-};
+} PACKED;
 
 class AST_BoolOp : public AST_expr {
 public:
@@ -344,7 +347,7 @@ public:
     AST_Break() : AST_stmt(AST_TYPE::Break) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Break;
-};
+} PACKED;
 
 class AST_Call : public AST_expr {
 public:
@@ -409,7 +412,7 @@ public:
     AST_Continue() : AST_stmt(AST_TYPE::Continue) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Continue;
-};
+} PACKED;
 
 class AST_Dict : public AST_expr {
 public:
@@ -455,7 +458,7 @@ public:
     AST_Ellipsis() : AST_slice(AST_TYPE::Ellipsis) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Ellipsis;
-};
+} PACKED;
 
 class AST_Expr : public AST_stmt {
 public:
@@ -468,7 +471,7 @@ public:
     AST_Expr(AST_expr* value) : AST_stmt(AST_TYPE::Expr), value(value) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Expr;
-};
+} PACKED;
 
 class AST_ExceptHandler : public AST {
 public:
@@ -495,7 +498,7 @@ public:
     AST_Exec() : AST_stmt(AST_TYPE::Exec) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Exec;
-};
+} PACKED;
 
 // (Alternative to AST_Module, used for, e.g., eval)
 class AST_Expression : public AST {
@@ -601,7 +604,7 @@ public:
     AST_IfExp() : AST_expr(AST_TYPE::IfExp) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::IfExp;
-};
+} PACKED;
 
 class AST_Import : public AST_stmt {
 public:
@@ -639,7 +642,7 @@ public:
     AST_Index() : AST_slice(AST_TYPE::Index) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Index;
-};
+} PACKED;
 
 class AST_keyword : public AST {
 public:
@@ -665,7 +668,7 @@ public:
     AST_Lambda() : AST_expr(AST_TYPE::Lambda) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Lambda;
-};
+} PACKED;
 
 class AST_List : public AST_expr {
 public:
@@ -787,7 +790,7 @@ public:
     AST_Repr() : AST_expr(AST_TYPE::Repr) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Repr;
-};
+} PACKED;
 
 class AST_Pass : public AST_stmt {
 public:
@@ -797,7 +800,7 @@ public:
     AST_Pass() : AST_stmt(AST_TYPE::Pass) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Pass;
-};
+} PACKED;
 
 class AST_Print : public AST_stmt {
 public:
@@ -827,7 +830,7 @@ public:
     AST_Raise() : AST_stmt(AST_TYPE::Raise), arg0(NULL), arg1(NULL), arg2(NULL) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Raise;
-};
+} PACKED;
 
 class AST_Return : public AST_stmt {
 public:
@@ -839,7 +842,7 @@ public:
     AST_Return() : AST_stmt(AST_TYPE::Return) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Return;
-};
+} PACKED;
 
 class AST_Set : public AST_expr {
 public:
@@ -876,7 +879,7 @@ public:
     AST_Slice() : AST_slice(AST_TYPE::Slice) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Slice;
-};
+} PACKED;
 
 class AST_Str : public AST_expr {
 public:
@@ -911,7 +914,7 @@ public:
     AST_Subscript() : AST_expr(AST_TYPE::Subscript) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Subscript;
-};
+} PACKED;
 
 class AST_TryExcept : public AST_stmt {
 public:
@@ -962,7 +965,7 @@ public:
     AST_UnaryOp() : AST_expr(AST_TYPE::UnaryOp) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::UnaryOp;
-};
+} PACKED;
 
 class AST_While : public AST_stmt {
 public:
@@ -1000,7 +1003,7 @@ public:
     AST_Yield() : AST_expr(AST_TYPE::Yield) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Yield;
-};
+} PACKED;
 
 class AST_MakeFunction : public AST_expr {
 public:
@@ -1013,7 +1016,7 @@ public:
         : AST_expr(AST_TYPE::MakeFunction, fd->lineno, fd->col_offset), function_def(fd) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::MakeFunction;
-};
+} PACKED;
 
 class AST_MakeClass : public AST_expr {
 public:
@@ -1025,7 +1028,7 @@ public:
     AST_MakeClass(AST_ClassDef* cd) : AST_expr(AST_TYPE::MakeClass, cd->lineno, cd->col_offset), class_def(cd) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::MakeClass;
-};
+} PACKED;
 
 
 // AST pseudo-nodes that will get added during CFG-construction.  These don't exist in the input AST, but adding them in
@@ -1044,7 +1047,7 @@ public:
     AST_Branch() : AST_stmt(AST_TYPE::Branch) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Branch;
-};
+} PACKED;
 
 class AST_Jump : public AST_stmt {
 public:
@@ -1056,7 +1059,7 @@ public:
     AST_Jump() : AST_stmt(AST_TYPE::Jump) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Jump;
-};
+} PACKED;
 
 class AST_ClsAttribute : public AST_expr {
 public:
@@ -1083,7 +1086,7 @@ public:
     AST_Invoke(AST_stmt* stmt) : AST_stmt(AST_TYPE::Invoke), stmt(stmt) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Invoke;
-};
+} PACKED;
 
 // "LangPrimitive" represents operations that "primitive" to the language,
 // but aren't directly *exactly* representable as normal Python.
