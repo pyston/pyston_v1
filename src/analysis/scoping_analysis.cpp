@@ -203,23 +203,37 @@ public:
     InternedString internString(llvm::StringRef s) override { abort(); }
 };
 
+struct ScopeNameUsageEntry {
+    // Properties determined from crawling the scope:
+    unsigned char read : 1;
+    unsigned char written : 1;
+    unsigned char forced_globals : 1;
+    unsigned char params : 1;
+
+    // Properties determined by looking at other scopes as well:
+    unsigned char referenced_from_nested : 1;
+    unsigned char got_from_closure : 1;
+    unsigned char passthrough_accesses : 1; // what names a child scope accesses a name from a parent scope
+
+    ScopeNameUsageEntry()
+        : read(0),
+          written(0),
+          forced_globals(0),
+          params(0),
+          referenced_from_nested(0),
+          got_from_closure(0),
+          passthrough_accesses(0) {}
+};
+
 struct ScopingAnalysis::ScopeNameUsage {
     AST* node;
     ScopeNameUsage* parent;
     llvm::StringRef private_name;
     ScopingAnalysis* scoping;
 
-    // Properties determined from crawling the scope:
-    StrSet read;
-    StrSet written;
-    StrSet forced_globals;
-    StrSet params;
-    std::vector<AST_Name*> del_name_nodes;
+    std::unordered_map<InternedString, ScopeNameUsageEntry> results;
 
-    // Properties determined by looking at other scopes as well:
-    StrSet referenced_from_nested;
-    StrSet got_from_closure;
-    StrSet passthrough_accesses; // what names a child scope accesses a name from a parent scope
+    std::vector<AST_Name*> del_name_nodes;
 
     // `import *` and `exec` both force the scope to use the NAME lookup
     // However, this is not allowed to happen (a SyntaxError) if the scope has
@@ -251,12 +265,12 @@ struct ScopingAnalysis::ScopeNameUsage {
             AST_ClassDef* classdef = ast_cast<AST_ClassDef>(node);
 
             // classes have an implicit write to "__module__"
-            written.insert(scoping->getInternedStrings().get("__module__"));
+            results[scoping->getInternedStrings().get("__module__")].written = 1;
 
             if (classdef->body.size() && classdef->body[0]->type == AST_TYPE::Expr) {
                 AST_Expr* first_expr = ast_cast<AST_Expr>(classdef->body[0]);
                 if (first_expr->value->type == AST_TYPE::Str) {
-                    written.insert(scoping->getInternedStrings().get("__doc__"));
+                    results[scoping->getInternedStrings().get("__doc__")].written = 1;
                 }
             }
         }
@@ -273,8 +287,10 @@ struct ScopingAnalysis::ScopeNameUsage {
     void dump() {
 #define DUMP(n)                                                                                                        \
     printf(STRINGIFY(n) ":\n");                                                                                        \
-    for (auto s : n) {                                                                                                 \
-        printf("%s\n", s.c_str());                                                                                     \
+    for (auto s : results) {                                                                                           \
+        if (!s.second.n)                                                                                               \
+            continue;                                                                                                  \
+        printf("%s\n", s.first.c_str());                                                                               \
     }
 
         DUMP(read);
@@ -300,6 +316,8 @@ private:
     bool allDerefVarsAndInfoCached;
 
     bool globals_from_module;
+    bool takes_closure = false;
+    bool passthrough_accesses = false;
 
 public:
     ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, bool usesNameLookup,
@@ -313,45 +331,57 @@ public:
         assert(usage);
         assert(ast);
 
+        bool got_from_closure = false;
+        std::vector<InternedString> referenced_from_nested_sorted;
+        for (auto&& r : usage->results) {
+            if (r.second.referenced_from_nested)
+                referenced_from_nested_sorted.push_back(r.first);
+            got_from_closure = got_from_closure || r.second.got_from_closure;
+            passthrough_accesses = passthrough_accesses || r.second.passthrough_accesses;
+        }
+
         // Sort the entries by name to make the order deterministic.
-        std::vector<InternedString> referenced_from_nested_sorted(usage->referenced_from_nested.begin(),
-                                                                  usage->referenced_from_nested.end());
         std::sort(referenced_from_nested_sorted.begin(), referenced_from_nested_sorted.end());
         int i = 0;
         for (auto& p : referenced_from_nested_sorted) {
             closure_offsets[p] = i;
             i++;
         }
+
+        takes_closure = got_from_closure || passthrough_accesses;
     }
 
     ~ScopeInfoBase() override { delete this->usage; }
 
     ScopeInfo* getParent() override { return parent; }
 
-    bool createsClosure() override { return usage->referenced_from_nested.size() > 0; }
+    bool createsClosure() override { return closure_offsets.size() > 0; }
 
-    bool takesClosure() override {
-        return usage->got_from_closure.size() > 0 || usage->passthrough_accesses.size() > 0;
-    }
+    bool takesClosure() override { return takes_closure; }
 
-    bool passesThroughClosure() override { return usage->passthrough_accesses.size() > 0 && !createsClosure(); }
+    bool passesThroughClosure() override { return passthrough_accesses && !createsClosure(); }
 
     VarScopeType getScopeTypeOfName(InternedString name) override {
         if (name.isCompilerCreatedName())
             return VarScopeType::FAST;
 
-        if (usage->forced_globals.count(name) > 0)
+        ScopeNameUsageEntry r;
+        auto it = usage->results.find(name);
+        if (it != usage->results.end())
+            r = it->second;
+
+        if (r.forced_globals)
             return VarScopeType::GLOBAL;
 
-        if (usage->got_from_closure.count(name) > 0)
+        if (r.got_from_closure)
             return VarScopeType::DEREF;
 
         if (usesNameLookup_) {
             return VarScopeType::NAME;
         } else {
-            if (usage->written.count(name) == 0)
+            if (!r.written)
                 return VarScopeType::GLOBAL;
-            else if (usage->referenced_from_nested.count(name) > 0)
+            else if (r.referenced_from_nested)
                 return VarScopeType::CLOSURE;
             else
                 return VarScopeType::FAST;
@@ -409,18 +439,16 @@ public:
 
             // Get all the variables that we need to return: any variable from the
             // passed-in closure that is accessed in this scope or in a child scope.
-            StrSet allDerefs = usage->got_from_closure;
-            for (InternedString name : usage->passthrough_accesses) {
-                if (allDerefs.find(name) != allDerefs.end()) {
-                    allDerefs.insert(name);
-                }
-            }
+            for (auto&& r : usage->results) {
+                if (!r.second.got_from_closure)
+                    continue;
 
-            // Call `getDerefInfo` on all of these variables and put the results in
-            // `allDerefVarsAndInfo`
-            for (InternedString name : allDerefs) {
+                auto&& name = r.first;
+                // Call `getDerefInfo` on all of these variables and put the results in
+                // `allDerefVarsAndInfo`
                 allDerefVarsAndInfo.push_back({ name, getDerefInfo(name) });
             }
+
 
             // Sort in order of `num_parents_from_passed_closure`
             std::sort(
@@ -459,16 +487,17 @@ private:
 public:
     void doWrite(InternedString name) {
         assert(name == mangleName(name, cur->private_name, scoping->getInternedStrings()));
-        cur->read.insert(name);
-        cur->written.insert(name);
+        auto& r = cur->results[name];
+        r.read = 1;
+        r.written = 1;
         if (this->currently_visiting_functiondef_args) {
-            cur->params.insert(name);
+            r.params = 1;
         }
     }
 
     void doRead(InternedString name) {
         assert(name == mangleName(name, cur->private_name, scoping->getInternedStrings()));
-        cur->read.insert(name);
+        cur->results[name].read = 1;
     }
 
     void doDel(AST_Name* node) { cur->del_name_nodes.push_back(node); }
@@ -557,11 +586,12 @@ public:
     bool visit_global(AST_Global* node) override {
         for (int i = 0; i < node->names.size(); i++) {
             mangleNameInPlace(node->names[i], cur->private_name, scoping->getInternedStrings());
-            if (cur->params.find(node->names[i]) != cur->params.end()) {
+            auto& r = cur->results[node->names[i]];
+            if (r.params) {
                 // Throw an exception if a name is both declared global and a parameter
                 raiseGlobalAndLocalException(node->names[i], this->orig_node);
             }
-            cur->forced_globals.insert(node->names[i]);
+            r.forced_globals = 1;
         }
         return true;
     }
@@ -788,11 +818,15 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
 
         bool is_any_name_free = false;
 
-        for (const auto& name : usage->read) {
-            if (usage->forced_globals.count(name))
+        for (auto&& r : usage->results) {
+            if (!r.second.read)
                 continue;
-            if (usage->written.count(name))
+            if (r.second.forced_globals)
                 continue;
+            if (r.second.written)
+                continue;
+
+            auto&& name = r.first;
 
             bool is_name_free = true;
 
@@ -800,18 +834,20 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
 
             ScopeNameUsage* parent = usage->parent;
             while (parent) {
+                auto parent_result = parent->results.find(name);
+                bool found_parent = parent_result != parent->results.end();
                 if (parent->node->type == AST_TYPE::ClassDef) {
                     intermediate_parents.push_back(parent);
                     parent = parent->parent;
-                } else if (parent->forced_globals.count(name)) {
+                } else if (found_parent && parent_result->second.forced_globals) {
                     is_name_free = false;
                     break;
-                } else if (parent->written.count(name)) {
-                    usage->got_from_closure.insert(name);
-                    parent->referenced_from_nested.insert(name);
+                } else if (found_parent && parent_result->second.written) {
+                    r.second.got_from_closure = 1;
+                    parent_result->second.referenced_from_nested = 1;
 
                     for (ScopeNameUsage* iparent : intermediate_parents) {
-                        iparent->passthrough_accesses.insert(name);
+                        iparent->results[name].passthrough_accesses = 1;
                     }
 
                     break;
@@ -853,7 +889,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
         // `del` for closure variables. But it is, so, there you go:
         for (AST_Name* name_node : usage->del_name_nodes) {
             InternedString name = name_node->id;
-            if (usage->referenced_from_nested.count(name) > 0) {
+            if (usage->results.count(name) && usage->results[name].referenced_from_nested) {
                 char buf[1024];
                 snprintf(buf, sizeof(buf), "can not delete variable '%s' referenced in nested scope", name.c_str());
                 assert(usage->node->type == AST_TYPE::FunctionDef);
