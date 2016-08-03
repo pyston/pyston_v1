@@ -43,9 +43,10 @@ public:
 
 protected:
     HiddenClass(HCType type) : type(type) {}
-    virtual ~HiddenClass() = default;
 
 public:
+    virtual ~HiddenClass() = default;
+
     static HiddenClassSingleton* makeSingleton();
     static HiddenClassNormal* makeRoot();
     static HiddenClassDict* makeDictBacked();
