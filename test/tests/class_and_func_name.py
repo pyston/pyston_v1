@@ -50,10 +50,10 @@ set_name(f, "b\0b")
 #del_name(f)
 set_name(f, "")
 
-print sorted.__name__
+print cmp.__name__
 # should all fail:
-set_name(sorted, "blah")
-set_name(sorted, 5)
+set_name(cmp, "blah")
+set_name(cmp, 5)
 
 import abc
 class D(C):

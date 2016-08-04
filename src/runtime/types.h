@@ -718,9 +718,9 @@ private:
 public:
     Py_ssize_t size;
     GCdArray* elts;
-    Py_ssize_t capacity;
+    Py_ssize_t allocated;
 
-    BoxedList() __attribute__((visibility("default"))) : size(0), elts(NULL), capacity(0) {}
+    BoxedList() __attribute__((visibility("default"))) : size(0), elts(NULL), allocated(0) {}
 
     void ensure(int min_free);
     void shrink();
@@ -737,7 +737,7 @@ static_assert(sizeof(BoxedList) >= sizeof(PyListObject), "");
 static_assert(offsetof(BoxedList, size) == offsetof(PyListObject, ob_size), "");
 static_assert(offsetof(BoxedList, elts) == offsetof(PyListObject, ob_item), "");
 static_assert(offsetof(GCdArray, elts) == 0, "");
-static_assert(offsetof(BoxedList, capacity) == offsetof(PyListObject, allocated), "");
+static_assert(offsetof(BoxedList, allocated) == offsetof(PyListObject, allocated), "");
 
 #define PyTuple_MAXSAVESIZE 20   /* Largest tuple to save on free list */
 #define PyTuple_MAXFREELIST 2000 /* Maximum number of tuples of each size to save */

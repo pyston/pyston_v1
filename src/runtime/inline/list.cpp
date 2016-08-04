@@ -131,15 +131,15 @@ const int BoxedList::INITIAL_CAPACITY = 8;
 // TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?
 void BoxedList::shrink() {
     // TODO more attention to the shrink condition to avoid frequent shrink and alloc
-    if (capacity > size * 3) {
-        int new_capacity = std::max(static_cast<int64_t>(INITIAL_CAPACITY), capacity / 2);
+    if (allocated > size * 3) {
+        int new_allocated = std::max(static_cast<int64_t>(INITIAL_CAPACITY), allocated / 2);
         if (size > 0) {
-            elts = GCdArray::grow(elts, new_capacity);
-            capacity = new_capacity;
+            elts = GCdArray::grow(elts, new_allocated);
+            allocated = new_allocated;
         } else if (size == 0) {
             delete elts;
             elts = NULL;
-            capacity = 0;
+            allocated = 0;
         }
     }
 }
@@ -149,14 +149,14 @@ extern "C" void listAppendArrayInternal(Box* s, Box** v, int nelts) {
     assert(PyList_Check(s));
     BoxedList* self = static_cast<BoxedList*>(s);
 
-    assert(self->size <= self->capacity);
+    assert(self->size <= self->allocated);
     self->ensure(nelts);
 
     for (int i = 0; i < nelts; i++) {
         Py_INCREF(v[i]);
     }
 
-    assert(self->size <= self->capacity);
+    assert(self->size <= self->allocated);
     memcpy(&self->elts->elts[self->size], &v[0], nelts * sizeof(Box*));
 
     self->size += nelts;

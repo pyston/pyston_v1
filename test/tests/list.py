@@ -279,3 +279,7 @@ try:
     a.index(None)
 except ValueError as e:
     print e
+
+a_list = [(0, 0, 0), (1.0, 2, 0.0), (1.0, 3, 0.0)]
+reverse_list = sorted(a_list, key=lambda x: x[0], reverse=True)
+print(reverse_list)

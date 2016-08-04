@@ -1,7 +1,3 @@
-# expected: fail
-# - we don't support the cmp= keyword yet
-# (apparently it's removed in Python 3)
-
 printed = False
 def mycmp(x, y):
     global printed

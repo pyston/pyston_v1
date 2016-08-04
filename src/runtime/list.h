@@ -51,7 +51,6 @@ Box* listreviterHasnext(Box* self);
 llvm_compat_bool listreviterHasnextUnboxed(Box* self);
 Box* listreviterNext(Box* self);
 Box* listreviter_next(Box* s) noexcept;
-void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse);
 extern "C" Box* listAppend(Box* self, Box* v);
 }
 
