@@ -637,7 +637,8 @@ _call(IREmitter& emitter, const OpInfo& info, llvm::Value* func, ExceptionStyle 
         // Don't use the IRBuilder since we want to specifically put this in the entry block so it only gets called
         // once.
         // TODO we could take this further and use the same alloca for all function calls?
-        llvm::Instruction* insertion_point = emitter.currentFunction()->func->getEntryBlock().getFirstInsertionPt();
+        llvm::Instruction* insertion_point
+            = emitter.getBuilder()->GetInsertBlock()->getParent()->getEntryBlock().getFirstInsertionPt();
         arg_array = new llvm::AllocaInst(g.llvm_value_type_ptr, n_varargs, "arg_scratch", insertion_point);
 
         for (int i = 3; i < args.size(); i++) {
@@ -1928,7 +1929,7 @@ public:
         llvm::FunctionType* ft = llvm::FunctionType::get(cf->spec->rtn_type->llvmType(), arg_types, false);
 
         llvm::Value* linked_function;
-        if (cf->func) // for JITed functions we need to make the desination address relocatable.
+        if (cf->md->source) // for JITed functions we need to make the desination address relocatable.
             linked_function = embedRelocatablePtr(cf->code, ft->getPointerTo());
         else
             linked_function = embedConstantPtr(cf->code, ft->getPointerTo());

@@ -63,6 +63,7 @@ private:
     // to md at the end of irgen.
     FunctionMetadata* md;
     CompiledFunction* cf;
+    llvm::Function* func;
     SourceInfo* source_info;
     std::unique_ptr<PhiAnalysis> phis;
     ParamNames* param_names;
@@ -82,8 +83,9 @@ private:
     int scratch_size;
 
 public:
-    IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<PhiAnalysis> phis,
-               ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info, RefcountTracker* refcount_tracker);
+    IRGenState(FunctionMetadata* md, CompiledFunction* cf, llvm::Function* func, SourceInfo* source_info,
+               std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info,
+               RefcountTracker* refcount_tracker);
     ~IRGenState();
 
     CFG* getCFG() { return getSourceInfo()->cfg; }
@@ -93,7 +95,7 @@ public:
 
     ExceptionStyle getExceptionStyle() { return cf->exception_style; }
 
-    llvm::Function* getLLVMFunction() { return cf->func; }
+    llvm::Function* getLLVMFunction() { return func; }
 
     EffortLevel getEffortLevel() { return cf->effort; }
 

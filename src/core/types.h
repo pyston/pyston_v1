@@ -335,7 +335,6 @@ struct CompiledFunction {
 private:
 public:
     FunctionMetadata* md;
-    llvm::Function* func; // the llvm IR object
 
     // Some compilation settings:
     EffortLevel effort;
