@@ -72,7 +72,7 @@ ParamNames::ParamNames(AST* ast, InternedStringPool& pool)
                 args.push_back(name->id.s());
             } else {
                 InternedString dot_arg_name = pool.get("." + std::to_string(i));
-                arg_names.push_back(new AST_Name(dot_arg_name, AST_TYPE::Param, arg->lineno, arg->col_offset));
+                arg_names.push_back(new AST_Name(dot_arg_name, AST_TYPE::Param, arg->lineno));
                 args.push_back(dot_arg_name.s());
             }
         }

@@ -285,19 +285,18 @@ private:
         return source->getInternedStrings().get(std::move(name));
     }
 
-    AST_Name* makeName(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0,
-                       bool is_kill = false) {
-        AST_Name* name = new AST_Name(id, ctx_type, lineno, col_offset);
+    AST_Name* makeName(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, bool is_kill = false) {
+        AST_Name* name = new AST_Name(id, ctx_type, lineno);
         name->is_kill = is_kill;
         return name;
     }
 
     AST_Name* makeLoad(InternedString id, AST* node, bool is_kill = false) {
-        return makeName(id, AST_TYPE::Load, node->lineno, 0, is_kill);
+        return makeName(id, AST_TYPE::Load, node->lineno, is_kill);
     }
 
     AST_Name* makeLoad(InternedString id, int lineno, bool is_kill = false) {
-        return makeName(id, AST_TYPE::Load, lineno, 0, is_kill);
+        return makeName(id, AST_TYPE::Load, lineno, is_kill);
     }
 
     void pushLoopContinuation(CFGBlock* continue_dest, CFGBlock* break_dest) {
@@ -331,7 +330,6 @@ private:
 
         AST_Return* node = new AST_Return();
         node->value = value;
-        node->col_offset = value->col_offset;
         node->lineno = value->lineno;
         push_back(node);
         curblock = NULL;
@@ -351,8 +349,7 @@ private:
             }
         }
 
-        raiseSyntaxError("'continue' not properly in loop", value->lineno, value->col_offset, source->getFn()->s(), "",
-                         true);
+        raiseSyntaxError("'continue' not properly in loop", value->lineno, source->getFn()->s(), "", true);
     }
 
     void doBreak(AST* value) {
@@ -369,14 +366,13 @@ private:
             }
         }
 
-        raiseSyntaxError("'break' outside loop", value->lineno, value->col_offset, source->getFn()->s(), "", true);
+        raiseSyntaxError("'break' outside loop", value->lineno, source->getFn()->s(), "", true);
     }
 
     AST_expr* callNonzero(AST_expr* e) {
         AST_LangPrimitive* call = new AST_LangPrimitive(AST_LangPrimitive::NONZERO);
         call->args.push_back(e);
         call->lineno = e->lineno;
-        call->col_offset = e->col_offset;
 
         // Simple optimization: allow the generation of nested nodes if there isn't a
         // current exc handler.
@@ -440,7 +436,6 @@ private:
             // printf("Body block for comp %d is %d\n", i, body_block->idx);
 
             AST_Branch* br = new AST_Branch();
-            br->col_offset = node->col_offset;
             br->lineno = node->lineno;
             br->test = test;
             br->iftrue = body_block;
@@ -534,7 +529,6 @@ private:
     AST_Branch* makeBranch(AST_expr* test) {
         AST_Branch* rtn = new AST_Branch();
         rtn->test = callNonzero(test);
-        rtn->col_offset = test->col_offset;
         rtn->lineno = test->lineno;
         return rtn;
     }
@@ -578,7 +572,6 @@ private:
             attr->attr = name;
             rtn = attr;
         }
-        rtn->col_offset = base->col_offset;
         rtn->lineno = base->lineno;
         return rtn;
     }
@@ -588,7 +581,6 @@ private:
         call->starargs = NULL;
         call->kwargs = NULL;
         call->func = func;
-        call->col_offset = func->col_offset;
         call->lineno = func->lineno;
         return call;
     }
@@ -626,7 +618,6 @@ private:
         auto index = new AST_Index();
         index->value = value;
         index->lineno = value->lineno;
-        index->col_offset = value->col_offset;
         return index;
     }
 
@@ -636,14 +627,12 @@ private:
         subscript->value = value;
         subscript->slice = slice;
         subscript->lineno = slice->lineno;
-        subscript->col_offset = slice->col_offset;
         return subscript;
     }
 
     void pushAssign(AST_expr* target, AST_expr* val) {
         AST_Assign* assign = new AST_Assign();
         assign->value = val;
-        assign->col_offset = val->col_offset;
         assign->lineno = val->lineno;
 
         if (target->type == AST_TYPE::Name) {
@@ -657,7 +646,6 @@ private:
             s_target->value = remapExpr(s->value);
             s_target->slice = remapSlice(s->slice);
             s_target->ctx_type = AST_TYPE::Store;
-            s_target->col_offset = s->col_offset;
             s_target->lineno = s->lineno;
 
             assign->targets.push_back(s_target);
@@ -670,7 +658,6 @@ private:
             a_target->value = remapExpr(a->value);
             a_target->attr = source->mangleName(a->attr);
             a_target->ctx_type = AST_TYPE::Store;
-            a_target->col_offset = a->col_offset;
             a_target->lineno = a->lineno;
 
             assign->targets.push_back(a_target);
@@ -690,7 +677,6 @@ private:
             AST_Tuple* new_target = new AST_Tuple();
             new_target->ctx_type = AST_TYPE::Store;
             new_target->lineno = target->lineno;
-            new_target->col_offset = target->col_offset;
 
             // A little hackery: push the assign, even though we're not done constructing it yet,
             // so that we can iteratively push more stuff after it
@@ -718,7 +704,6 @@ private:
         AST_Expr* stmt = new AST_Expr();
         stmt->value = expr;
         stmt->lineno = expr->lineno;
-        stmt->col_offset = expr->col_offset;
         return stmt;
     }
 
@@ -733,7 +718,6 @@ private:
     AST_expr* remapAttribute(AST_Attribute* node) {
         AST_Attribute* rtn = new AST_Attribute();
 
-        rtn->col_offset = node->col_offset;
         rtn->lineno = node->lineno;
         rtn->ctx_type = node->ctx_type;
         rtn->attr = source->mangleName(node->attr);
@@ -744,7 +728,6 @@ private:
     AST_expr* remapBinOp(AST_BinOp* node) {
         AST_BinOp* rtn = new AST_BinOp();
         rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
         rtn->op_type = remapBinOpType(node->op_type);
         rtn->left = remapExpr(node->left);
         rtn->right = remapExpr(node->right);
@@ -757,13 +740,11 @@ private:
         } else if (val->type == AST_TYPE::Ellipsis) {
             AST_Ellipsis* orig = ast_cast<AST_Ellipsis>(val);
             AST_Ellipsis* made = new AST_Ellipsis();
-            made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             return made;
         } else if (val->type == AST_TYPE::ExtSlice) {
             AST_ExtSlice* orig = ast_cast<AST_ExtSlice>(val);
             AST_ExtSlice* made = new AST_ExtSlice();
-            made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             made->dims.reserve(orig->dims.size());
             for (AST_slice* item : orig->dims) {
@@ -774,13 +755,11 @@ private:
             AST_Index* orig = ast_cast<AST_Index>(val);
             AST_Index* made = new AST_Index();
             made->value = _dup(orig->value);
-            made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             return made;
         } else if (val->type == AST_TYPE::Slice) {
             AST_Slice* orig = ast_cast<AST_Slice>(val);
             AST_Slice* made = new AST_Slice();
-            made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             made->lower = _dup(orig->lower);
             made->upper = _dup(orig->upper);
@@ -803,7 +782,7 @@ private:
 
         if (val->type == AST_TYPE::Name) {
             AST_Name* orig = ast_cast<AST_Name>(val);
-            AST_Name* made = makeName(orig->id, orig->ctx_type, orig->lineno, orig->col_offset);
+            AST_Name* made = makeName(orig->id, orig->ctx_type, orig->lineno);
             return made;
         } else if (val->type == AST_TYPE::Num) {
             AST_Num* orig = ast_cast<AST_Num>(val);
@@ -811,7 +790,6 @@ private:
             made->num_type = orig->num_type;
             made->n_int = orig->n_int;
             made->n_long = orig->n_long;
-            made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             return made;
         } else if (val->type == AST_TYPE::Str) {
@@ -819,7 +797,6 @@ private:
             AST_Str* made = new AST_Str();
             made->str_type = orig->str_type;
             made->str_data = orig->str_data;
-            made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             return made;
         } else {
@@ -879,7 +856,6 @@ private:
     AST_expr* remapCall(AST_Call* node) {
         AST_Call* rtn = new AST_Call();
         rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
 
         if (node->func->type == AST_TYPE::Attribute) {
             // TODO this is a cludge to make sure that "callattrs" stick together.
@@ -913,7 +889,6 @@ private:
     AST_expr* remapClsAttribute(AST_ClsAttribute* node) {
         AST_ClsAttribute* rtn = new AST_ClsAttribute();
 
-        rtn->col_offset = node->col_offset;
         rtn->lineno = node->lineno;
         rtn->attr = node->attr;
         rtn->value = remapExpr(node->value);
@@ -927,7 +902,6 @@ private:
         if (node->ops.size() == 1) {
             AST_Compare* rtn = new AST_Compare();
             rtn->lineno = node->lineno;
-            rtn->col_offset = node->col_offset;
 
             rtn->ops = node->ops;
 
@@ -949,7 +923,6 @@ private:
                 AST_expr* right = remapExpr(node->comparators[i]);
 
                 AST_Compare* val = new AST_Compare;
-                val->col_offset = node->col_offset;
                 val->lineno = node->lineno;
                 val->left = left;
                 if (i < node->ops.size() - 1)
@@ -996,7 +969,6 @@ private:
     AST_expr* remapDict(AST_Dict* node) {
         AST_Dict* rtn = new AST_Dict();
         rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
 
         InternedString dict_name = nodeName();
 
@@ -1017,7 +989,6 @@ private:
     AST_slice* remapExtSlice(AST_ExtSlice* node) {
         AST_ExtSlice* rtn = new AST_ExtSlice();
         rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
 
         for (auto* e : node->dims)
             rtn->dims.push_back(remapSlice(e));
@@ -1032,7 +1003,6 @@ private:
     AST_MakeFunction* makeFunctionForScope(AST* node) {
         AST_FunctionDef* func = new AST_FunctionDef();
         func->lineno = node->lineno;
-        func->col_offset = node->col_offset;
         // TODO this should be set off the type of the comprehension (ie <setcomp> or <dictcomp> or <genexpr>)
         InternedString func_name = internString("<comprehension>");
         func->name = func_name;
@@ -1087,7 +1057,7 @@ private:
         AST_MakeFunction* func = makeFunctionForScope(node);
         func->function_def->args->args.push_back(makeName(arg_name, AST_TYPE::Param, node->lineno));
         emitComprehensionLoops(node->lineno, &func->function_def->body, node->generators,
-                               makeName(arg_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true),
+                               makeName(arg_name, AST_TYPE::Load, node->lineno, /* is_kill */ true),
                                [this, node](std::vector<AST_stmt*>* insert_point) {
                                    auto y = new AST_Yield();
                                    y->value = node->elt;
@@ -1131,20 +1101,18 @@ private:
 
         auto lambda =
             [&](std::vector<AST_stmt*>* insert_point) { emitComprehensionYield(node, rtn_name, insert_point); };
-        AST_Name* first_name
-            = makeName(internString("#arg"), AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true);
+        AST_Name* first_name = makeName(internString("#arg"), AST_TYPE::Load, node->lineno, /* is_kill */ true);
         emitComprehensionLoops(node->lineno, &func->function_def->body, node->generators, first_name, lambda);
 
         auto rtn = new AST_Return();
-        rtn->value = makeName(rtn_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true);
+        rtn->value = makeName(rtn_name, AST_TYPE::Load, node->lineno, /* is_kill */ true);
         rtn->lineno = node->lineno;
         func->function_def->body.push_back(rtn);
 
         InternedString func_var_name = nodeName();
         pushAssign(func_var_name, func);
 
-        return makeCall(makeName(func_var_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true),
-                        first);
+        return makeCall(makeName(func_var_name, AST_TYPE::Load, node->lineno, /* is_kill */ true), first);
     }
 
     AST_expr* remapIfExp(AST_IfExp* node) {
@@ -1181,7 +1149,6 @@ private:
     AST_slice* remapIndex(AST_Index* node) {
         AST_Index* rtn = new AST_Index();
         rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
         rtn->value = remapExpr(node->value);
         return rtn;
     }
@@ -1202,11 +1169,9 @@ private:
         // we convert lambdas into normal functions (but don't give it a name)
         auto def = new AST_FunctionDef();
         def->lineno = node->lineno;
-        def->col_offset = node->col_offset;
 
         auto stmt = new AST_Return;
         stmt->lineno = node->lineno;
-        stmt->col_offset = node->col_offset;
         stmt->value = node->body; // don't remap now; will be CFG'ed later
 
         def->body = { stmt };
@@ -1222,7 +1187,6 @@ private:
 
     AST_expr* remapLangPrimitive(AST_LangPrimitive* node) {
         AST_LangPrimitive* rtn = new AST_LangPrimitive(node->opcode);
-        rtn->col_offset = node->col_offset;
         rtn->lineno = node->lineno;
 
         for (AST_expr* arg : node->args) {
@@ -1236,7 +1200,6 @@ private:
 
         AST_List* rtn = new AST_List();
         rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
         rtn->ctx_type = node->ctx_type;
 
         for (auto elt : node->elts) {
@@ -1248,7 +1211,6 @@ private:
     AST_expr* remapRepr(AST_Repr* node) {
         AST_Repr* rtn = new AST_Repr();
         rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
         rtn->value = remapExpr(node->value);
         return rtn;
     }
@@ -1256,7 +1218,6 @@ private:
     AST_expr* remapSet(AST_Set* node) {
         AST_Set* rtn = new AST_Set();
         rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
 
         for (auto e : node->elts) {
             rtn->elts.push_back(remapExpr(e));
@@ -1268,7 +1229,6 @@ private:
     AST_slice* remapSlice(AST_Slice* node) {
         AST_Slice* rtn = new AST_Slice();
         rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
 
         rtn->lower = remapExpr(node->lower);
         rtn->upper = remapExpr(node->upper);
@@ -1282,7 +1242,6 @@ private:
 
         AST_Tuple* rtn = new AST_Tuple();
         rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
         rtn->ctx_type = node->ctx_type;
 
         for (auto elt : node->elts) {
@@ -1294,7 +1253,6 @@ private:
     AST_expr* remapSubscript(AST_Subscript* node) {
         AST_Subscript* rtn = new AST_Subscript();
         rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
         rtn->ctx_type = node->ctx_type;
         rtn->value = remapExpr(node->value);
         rtn->slice = remapSlice(node->slice);
@@ -1304,7 +1262,6 @@ private:
     AST_expr* remapUnaryOp(AST_UnaryOp* node) {
         AST_UnaryOp* rtn = new AST_UnaryOp();
         rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
         rtn->op_type = node->op_type;
         rtn->operand = remapExpr(node->operand);
         return rtn;
@@ -1313,7 +1270,6 @@ private:
     AST_expr* remapYield(AST_Yield* node) {
         AST_Yield* rtn = new AST_Yield();
         rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
         rtn->value = remapExpr(node->value);
 
         InternedString node_name(nodeName());
@@ -1606,7 +1562,6 @@ public:
         AST_Invoke* invoke = new AST_Invoke(node);
         invoke->normal_dest = normal_dest;
         invoke->exc_dest = exc_dest;
-        invoke->col_offset = node->col_offset;
         invoke->lineno = node->lineno;
 
         curblock->push_back(invoke);
@@ -1641,7 +1596,6 @@ public:
         // waitaminute, who deallocates `node'?
         auto def = new AST_ClassDef();
         def->lineno = node->lineno;
-        def->col_offset = node->col_offset;
         def->name = node->name;
         def->body = node->body; // expensive vector copy
 
@@ -1655,7 +1609,7 @@ public:
 
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeClass(def));
-        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, 0, true));
+        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, true));
 
         return true;
     }
@@ -1663,7 +1617,6 @@ public:
     bool visit_functiondef(AST_FunctionDef* node) override {
         auto def = new AST_FunctionDef();
         def->lineno = node->lineno;
-        def->col_offset = node->col_offset;
         def->name = node->name;
         def->body = node->body; // expensive vector copy
         // Decorators are evaluated before the defaults, so this *must* go before remapArguments().
@@ -1676,7 +1629,7 @@ public:
 
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeFunction(def));
-        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, node->col_offset, true));
+        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, true));
 
         return true;
     }
@@ -1699,7 +1652,6 @@ public:
         for (AST_alias* a : node->names) {
             AST_LangPrimitive* import = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_NAME);
             import->lineno = node->lineno;
-            import->col_offset = node->col_offset;
 
             import->args.push_back(new AST_Num());
             static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
@@ -1752,7 +1704,6 @@ public:
     bool visit_importfrom(AST_ImportFrom* node) override {
         AST_LangPrimitive* import = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_NAME);
         import->lineno = node->lineno;
-        import->col_offset = node->col_offset;
 
         import->args.push_back(new AST_Num());
         static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
@@ -1785,19 +1736,16 @@ public:
 
                 AST_LangPrimitive* import_star = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_STAR);
                 import_star->lineno = node->lineno;
-                import_star->col_offset = node->col_offset;
                 import_star->args.push_back(makeLoad(tmp_module_name, node, is_kill));
 
                 AST_Expr* import_star_expr = new AST_Expr();
                 import_star_expr->value = import_star;
                 import_star_expr->lineno = node->lineno;
-                import_star_expr->col_offset = node->col_offset;
 
                 push_back(import_star_expr);
             } else {
                 AST_LangPrimitive* import_from = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_FROM);
                 import_from->lineno = node->lineno;
-                import_from->col_offset = node->col_offset;
                 import_from->args.push_back(makeLoad(tmp_module_name, node, is_kill));
                 import_from->args.push_back(new AST_Str(a->name.s()));
 
@@ -1840,7 +1788,6 @@ public:
         fake_test->n_int = 0;
         remapped->test = fake_test;
         remapped->lineno = node->lineno;
-        remapped->col_offset = node->col_offset;
         push_back(remapped);
 
         curblock = iftrue;
@@ -1902,14 +1849,12 @@ public:
                 s_target->value = remapExpr(s->value);
                 s_target->slice = remapSlice(s->slice);
                 s_target->ctx_type = AST_TYPE::Store;
-                s_target->col_offset = s->col_offset;
                 s_target->lineno = s->lineno;
                 remapped_target = s_target;
 
                 AST_Subscript* s_lhs = new AST_Subscript();
                 s_lhs->value = _dup(s_target->value);
                 s_lhs->slice = _dup(s_target->slice);
-                s_lhs->col_offset = s->col_offset;
                 s_lhs->lineno = s->lineno;
                 s_lhs->ctx_type = AST_TYPE::Load;
                 remapped_lhs = remapExpr(s_lhs);
@@ -1924,7 +1869,6 @@ public:
                 a_target->value = remapExpr(a->value);
                 a_target->attr = a->attr;
                 a_target->ctx_type = AST_TYPE::Store;
-                a_target->col_offset = a->col_offset;
                 a_target->lineno = a->lineno;
                 remapped_target = a_target;
 
@@ -1932,7 +1876,6 @@ public:
                 a_lhs->value = _dup(a_target->value);
                 a_lhs->attr = a->attr;
                 a_lhs->ctx_type = AST_TYPE::Load;
-                a_lhs->col_offset = a->col_offset;
                 a_lhs->lineno = a->lineno;
                 remapped_lhs = remapExpr(a_lhs);
 
@@ -1946,7 +1889,6 @@ public:
         binop->op_type = remapBinOpType(node->op_type);
         binop->left = remapped_lhs;
         binop->right = remapExpr(node->value);
-        binop->col_offset = node->col_offset;
         binop->lineno = node->lineno;
 
         InternedString node_name(nodeName());
@@ -1967,7 +1909,6 @@ public:
         for (auto t : node->targets) {
             AST_Delete* astdel = new AST_Delete();
             astdel->lineno = node->lineno;
-            astdel->col_offset = node->col_offset;
             AST_expr* target = NULL;
             switch (t->type) {
                 case AST_TYPE::Subscript: {
@@ -1993,7 +1934,6 @@ public:
                     AST_List* list = static_cast<AST_List*>(t);
                     AST_Delete* temp_ast_del = new AST_Delete();
                     temp_ast_del->lineno = node->lineno;
-                    temp_ast_del->col_offset = node->col_offset;
 
                     for (auto elt : list->elts) {
                         temp_ast_del->targets.push_back(elt);
@@ -2005,7 +1945,6 @@ public:
                     AST_Tuple* tuple = static_cast<AST_Tuple*>(t);
                     AST_Delete* temp_ast_del = new AST_Delete();
                     temp_ast_del->lineno = node->lineno;
-                    temp_ast_del->col_offset = node->col_offset;
 
                     for (auto elt : tuple->elts) {
                         temp_ast_del->targets.push_back(elt);
@@ -2030,7 +1969,6 @@ public:
     bool visit_expr(AST_Expr* node) override {
         AST_Expr* remapped = new AST_Expr();
         remapped->lineno = node->lineno;
-        remapped->col_offset = node->col_offset;
         remapped->value = remapExpr(node->value, false);
         push_back(remapped);
         return true;
@@ -2042,7 +1980,6 @@ public:
         int i = 0;
         for (auto v : node->values) {
             AST_Print* remapped = new AST_Print();
-            remapped->col_offset = node->col_offset;
             remapped->lineno = node->lineno;
 
             if (i < node->values.size() - 1) {
@@ -2063,7 +2000,6 @@ public:
             assert(node->nl);
 
             AST_Print* final = new AST_Print();
-            final->col_offset = node->col_offset;
             final->lineno = node->lineno;
             // TODO not good to reuse 'dest' like this
             final->dest = dest;
@@ -2094,7 +2030,6 @@ public:
         assert(curblock);
 
         AST_Branch* br = new AST_Branch();
-        br->col_offset = node->col_offset;
         br->lineno = node->lineno;
         br->test = callNonzero(remapExpr(node->test));
         push_back(br);
@@ -2161,7 +2096,6 @@ public:
     bool visit_exec(AST_Exec* node) override {
         AST_Exec* astexec = new AST_Exec();
         astexec->lineno = node->lineno;
-        astexec->col_offset = node->col_offset;
         astexec->body = remapExpr(node->body);
         astexec->globals = remapExpr(node->globals);
         astexec->locals = remapExpr(node->locals);
@@ -2229,7 +2163,7 @@ public:
     AST_stmt* makeKill(InternedString name) {
         // There might be a better way to represent this, maybe with a dedicated AST_Kill bytecode?
         auto del = new AST_Delete();
-        del->targets.push_back(makeName(name, AST_TYPE::Del, 0, 0, false));
+        del->targets.push_back(makeName(name, AST_TYPE::Del, 0, false));
         return del;
     }
 
@@ -2341,7 +2275,6 @@ public:
         assert(curblock);
 
         AST_Raise* remapped = new AST_Raise();
-        remapped->col_offset = node->col_offset;
         remapped->lineno = node->lineno;
 
         if (node->arg0)
@@ -2931,8 +2864,7 @@ CFG* computeCFG(SourceInfo* source, const ParamNames& param_names) {
         for (AST_expr* arg_expr : args->args) {
             if (arg_expr->type == AST_TYPE::Tuple) {
                 InternedString arg_name = source->getInternedStrings().get("." + std::to_string(counter));
-                AST_Name* arg_name_expr
-                    = new AST_Name(arg_name, AST_TYPE::Load, arg_expr->lineno, arg_expr->col_offset);
+                AST_Name* arg_name_expr = new AST_Name(arg_name, AST_TYPE::Load, arg_expr->lineno);
                 visitor.pushAssign(arg_expr, arg_name_expr);
             } else {
                 assert(arg_expr->type == AST_TYPE::Name);
@@ -2963,7 +2895,6 @@ CFG* computeCFG(SourceInfo* source, const ParamNames& param_names) {
         // having to support not having a return statement:
         AST_Return* return_stmt = new AST_Return();
         return_stmt->lineno = getLastLineno(source->ast);
-        return_stmt->col_offset = 0;
         return_stmt->value = NULL;
         visitor.push_back(return_stmt);
     }

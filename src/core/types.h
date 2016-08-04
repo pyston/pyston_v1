@@ -1012,7 +1012,7 @@ void addToSysArgv(const char* str);
 // CPython has slightly different behavior depending on where in the pipeline (parser vs compiler)
 // the SyntaxError was thrown; setting compiler_error=True is for the case that it was thrown in
 // the compiler portion (which calls a function called compiler_error()).
-void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func,
+void raiseSyntaxError(const char* msg, int lineno, llvm::StringRef file, llvm::StringRef func,
                       bool compiler_error = false);
 void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* node_at, const char* msg, ...)
     __attribute__((format(printf, 4, 5)));
@@ -1020,11 +1020,10 @@ void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* nod
 // A data structure used for storing information for tracebacks.
 struct LineInfo {
 public:
-    int line, column;
+    int line;
     BoxedString* file, *func;
 
-    LineInfo(int line, int column, BoxedString* file, BoxedString* func)
-        : line(line), column(column), file(file), func(func) {}
+    LineInfo(int line, BoxedString* file, BoxedString* func) : line(line), file(file), func(func) {}
 };
 
 // A data structure to simplify passing around all the data about a thrown exception.
