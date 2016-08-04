@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "capi/typeobject.h"
 #include "capi/types.h"
 #include "core/ast.h"
 #include "core/common.h"
@@ -26,6 +27,8 @@
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
+
+extern "C" PyObject* listsort(PyListObject* self, PyObject* args, PyObject* kwds) noexcept;
 
 namespace pyston {
 
@@ -991,64 +994,6 @@ void _sortArray(Box** elts, long num_elts, Box* cmp, Box* key) {
     }
 }
 
-void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
-    assert(PyList_Check(self));
-
-    if (cmp == Py_None)
-        cmp = NULL;
-
-    if (key == Py_None)
-        key = NULL;
-
-    RELEASE_ASSERT(!cmp || !key, "Specifying both the 'cmp' and 'key' keywords is currently not supported");
-
-    auto orig_size = self->size;
-    auto orig_elts = self->elts;
-
-    self->elts = new (0) GCdArray();
-    self->size = 0;
-
-    try {
-        _sortArray(orig_elts->elts, orig_size, cmp, key);
-    } catch (ExcInfo e) {
-        delete self->elts;
-        self->elts = orig_elts;
-        self->size = orig_size;
-        throw e;
-    }
-
-    delete self->elts;
-    self->elts = orig_elts;
-    self->size = orig_size;
-
-    if (nonzero(reverse)) {
-        Box* r = listReverse(self);
-        Py_DECREF(r);
-    }
-}
-
-Box* listSortFunc(BoxedList* self, Box* cmp, Box* key, Box** _args) {
-    Box* reverse = _args[0];
-    listSort(self, cmp, key, reverse);
-    Py_RETURN_NONE;
-}
-
-extern "C" int PyList_Sort(PyObject* v) noexcept {
-    if (v == NULL || !PyList_Check(v)) {
-        PyErr_BadInternalCall();
-        return -1;
-    }
-
-    try {
-        listSort((BoxedList*)v, Py_None, Py_None, Py_False);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return -1;
-    }
-
-    return 0;
-}
-
 extern "C" Box* PyList_GetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh) noexcept {
     assert(PyList_Check(a));
     BoxedList* self = static_cast<BoxedList*>(a);
@@ -1495,6 +1440,12 @@ int BoxedList::clear(Box* _a) noexcept {
     return 0;
 }
 
+PyDoc_STRVAR(sort_doc, "L.sort(cmp=None, key=None, reverse=False) -- stable sort *IN PLACE*;\n\
+cmp(x, y) -> -1, 0, 1");
+
+static PyMethodDef list_methods[]
+    = { { "sort", (PyCFunction)listsort, METH_VARARGS | METH_KEYWORDS, sort_doc }, { NULL, NULL, 0, NULL } };
+
 void setupList() {
     static PySequenceMethods list_as_sequence;
     list_cls->tp_as_sequence = &list_as_sequence;
@@ -1568,10 +1519,6 @@ void setupList() {
     list_cls->giveAttr("__iadd__", new BoxedFunction(FunctionMetadata::create((void*)listIAdd, UNKNOWN, 2)));
     list_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)listAdd, UNKNOWN, 2)));
 
-    list_cls->giveAttr("sort",
-                       new BoxedFunction(FunctionMetadata::create((void*)listSortFunc, NONE, 4, false, false,
-                                                                  ParamNames({ "", "cmp", "key", "reverse" }, "", "")),
-                                         { Py_None, Py_None, Py_False }));
     list_cls->giveAttr("__contains__", new BoxedFunction(FunctionMetadata::create((void*)listContains, BOXED_BOOL, 2)));
 
     list_cls->giveAttr(
@@ -1585,6 +1532,7 @@ void setupList() {
     list_cls->giveAttr("reverse", new BoxedFunction(FunctionMetadata::create((void*)listReverse, NONE, 1)));
 
     list_cls->giveAttrBorrowed("__hash__", Py_None);
+    add_methods(list_cls, list_methods);
     list_cls->freeze();
     list_cls->tp_iter = listIter;
     list_cls->tp_repr = list_repr;
