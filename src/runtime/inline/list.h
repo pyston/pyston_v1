@@ -48,7 +48,7 @@ extern "C" inline void listAppendInternalStolen(Box* s, Box* v) {
     assert(PyList_Check(s));
     BoxedList* self = static_cast<BoxedList*>(s);
 
-    assert(self->size <= self->allocated);
+    assert(self->size <= self->allocated || self->allocated == -1);
     self->ensure(1);
 
     assert(self->size < self->allocated);
