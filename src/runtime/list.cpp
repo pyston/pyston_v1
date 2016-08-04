@@ -1426,7 +1426,7 @@ int BoxedList::clear(Box* _a) noexcept {
            this list, we make it empty first. */
         i = Py_SIZE(a);
         Py_SIZE(a) = 0;
-        a->capacity = 0;
+        a->allocated = 0;
         auto old_elts = a->elts;
         a->elts = NULL;
         while (--i >= 0) {
