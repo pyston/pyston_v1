@@ -753,7 +753,7 @@ public:
 
 class AST_Num : public AST_expr {
 public:
-    enum NumType {
+    enum NumType : unsigned char {
         // These values must correspond to the values in parse_ast.py
         INT = 0x10,
         FLOAT = 0x20,
@@ -880,7 +880,7 @@ public:
 
 class AST_Str : public AST_expr {
 public:
-    enum StrType {
+    enum StrType : unsigned char {
         UNSET = 0x00,
         STR = 0x10,
         UNICODE = 0x20,
@@ -1091,7 +1091,7 @@ public:
 // These are basically bytecodes, framed as pseudo-AST-nodes.
 class AST_LangPrimitive : public AST_expr {
 public:
-    enum Opcodes {
+    enum Opcodes : unsigned char {
         LANDINGPAD, // grabs the info about the last raised exception
         LOCALS,
         GET_ITER,
