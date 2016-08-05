@@ -297,6 +297,7 @@ public:
     void addDependent(ICSlotInfo* icentry);
     int64_t version();
     void invalidateAll();
+    void remove(ICSlotInfo* icentry) { dependents.erase(icentry); }
 
     friend class ICInfo;
     friend class ICSlotInfo;

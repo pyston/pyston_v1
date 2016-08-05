@@ -73,9 +73,20 @@ void ICInvalidator::invalidateAll() {
     dependents.clear();
 }
 
-void ICSlotInfo::clear() {
-    ic->clear(this);
+void ICSlotInfo::clear(bool should_invalidate) {
+    if (should_invalidate)
+        ic->invalidate(this);
     used = false;
+
+    for (auto p : gc_references) {
+        Py_DECREF(p);
+    }
+    gc_references.clear();
+
+    for (auto&& invalidator : invalidators) {
+        invalidator->remove(this);
+    }
+    invalidators.clear();
 
     if (num_inside == 0)
         decref_infos.clear();
@@ -163,11 +174,6 @@ void ICSlotRewrite::commit(CommitHook* hook, std::vector<void*> gc_references,
         assert(original_size == assembler.bytesWritten());
     }
 
-    for (int i = 0; i < dependencies.size(); i++) {
-        ICInvalidator* invalidator = dependencies[i].first;
-        invalidator->addDependent(ic_entry);
-    }
-
     ic->next_slot_to_try++;
 
     // we can create a new IC slot if this is the last slot in the IC in addition we are checking that the new slot is
@@ -202,12 +208,16 @@ void ICSlotRewrite::commit(CommitHook* hook, std::vector<void*> gc_references,
     // if (VERBOSITY()) printf("Commiting to %p-%p\n", start, start + ic->slot_size);
     memcpy(slot_start, buf, original_size);
 
-    for (auto p : ic_entry->gc_references) {
-        Py_DECREF(p);
-    }
+    ic_entry->clear(false /* don't invalidate */);
+
     ic_entry->gc_references = std::move(gc_references);
     ic_entry->used = true;
     ic->times_rewritten++;
+
+    for (int i = 0; i < dependencies.size(); i++) {
+        ICInvalidator* invalidator = dependencies[i].first;
+        invalidator->addDependent(ic_entry);
+    }
 
     if (ic->times_rewritten == IC_MEGAMORPHIC_THRESHOLD) {
         static StatCounter megamorphic_ics("megamorphic_ics");
@@ -416,7 +426,7 @@ ICInfo* getICInfo(void* rtn_addr) {
     return it->second;
 }
 
-void ICInfo::clear(ICSlotInfo* icentry) {
+void ICInfo::invalidate(ICSlotInfo* icentry) {
     assert(icentry);
 
     uint8_t* start = (uint8_t*)icentry->start_addr;
@@ -428,11 +438,6 @@ void ICInfo::clear(ICSlotInfo* icentry) {
     writer.nop();
     writer.jmp(JumpDestination::fromStart(icentry->size));
     assert(writer.bytesWritten() <= IC_INVALDITION_HEADER_SIZE);
-
-    for (auto p : icentry->gc_references) {
-        Py_DECREF(p);
-    }
-    icentry->gc_references.clear();
 
     // std::unique_ptr<MCWriter> writer(createMCWriter(start, getSlotSize(), 0));
     // writer->emitNop();
