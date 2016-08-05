@@ -1023,9 +1023,11 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel eff
     return os.str();
 }
 
-CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames* param_names,
-                            const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
-                            ExceptionStyle exception_style, FunctionSpecialization* spec, llvm::StringRef nameprefix) {
+std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, SourceInfo* source,
+                                                        ParamNames* param_names,
+                                                        const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
+                                                        ExceptionStyle exception_style, FunctionSpecialization* spec,
+                                                        llvm::StringRef nameprefix) {
     Timer _t("in doCompile");
     Timer _t2;
     long irgen_us = 0;
@@ -1096,8 +1098,6 @@ CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames
 
     llvm::Function* f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, name, g.cur_module);
 
-    cf->func = f;
-
     // g.func_registry.registerFunction(f, g.cur_module);
 
     llvm::MDNode* dbg_funcinfo = setupDebugInfo(source, f, nameprefix);
@@ -1138,7 +1138,7 @@ CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames
 
     RefcountTracker refcounter;
 
-    IRGenState irstate(md, cf, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo, &refcounter);
+    IRGenState irstate(md, cf, f, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo, &refcounter);
 
     emitBBs(&irstate, types, entry_descriptor, blocks);
     assert(!llvm::verifyFunction(*f, &llvm::errs()));
@@ -1187,7 +1187,7 @@ CompiledFunction* doCompile(FunctionMetadata* md, SourceInfo* source, ParamNames
 
     g.cur_module = NULL;
 
-    return cf;
+    return std::make_pair(cf, f);
 }
 
 

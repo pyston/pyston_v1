@@ -44,11 +44,12 @@ extern "C" void dumpLLVM(void* _v) {
     v->dump();
 }
 
-IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* source_info,
+IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, llvm::Function* func, SourceInfo* source_info,
                        std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc,
                        llvm::MDNode* func_dbg_info, RefcountTracker* refcount_tracker)
     : md(md),
       cf(cf),
+      func(func),
       source_info(source_info),
       phis(std::move(phis)),
       param_names(param_names),
@@ -61,7 +62,7 @@ IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, SourceInfo* s
       vregs(NULL),
       stmt(NULL),
       scratch_size(0) {
-    assert(cf->func);
+    assert(func);
     assert(cf->md->source.get() == source_info); // I guess this is duplicate now
 }
 

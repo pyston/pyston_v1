@@ -157,23 +157,25 @@ LivenessAnalysis* SourceInfo::getLiveness() {
     return liveness_info.get();
 }
 
-static void compileIR(CompiledFunction* cf, EffortLevel effort) {
+static void compileIR(CompiledFunction* cf, llvm::Function* func, EffortLevel effort) {
     assert(cf);
-    assert(cf->func);
+    assert(func);
 
     void* compiled = NULL;
     cf->code = NULL;
 
     {
         Timer _t("to jit the IR");
+        llvm::Module* module = func->getParent();
+
 #if LLVMREV < 215967
-        g.engine->addModule(cf->func->getParent());
+        g.engine->addModule(module);
 #else
-        g.engine->addModule(std::unique_ptr<llvm::Module>(cf->func->getParent()));
+        g.engine->addModule(std::unique_ptr<llvm::Module>(module));
 #endif
 
         g.cur_cf = cf;
-        void* compiled = (void*)g.engine->getFunctionAddress(cf->func->getName());
+        void* compiled = (void*)g.engine->getFunctionAddress(func->getName());
         g.cur_cf = NULL;
         assert(compiled);
         ASSERT(compiled == cf->code, "cf->code should have gotten filled in");
@@ -185,9 +187,12 @@ static void compileIR(CompiledFunction* cf, EffortLevel effort) {
         num_jits.log();
 
         if (VERBOSITY() >= 1 && us > 100000) {
-            printf("Took %.1fs to compile %s\n", us * 0.000001, cf->func->getName().data());
-            printf("Has %ld basic blocks\n", cf->func->getBasicBlockList().size());
+            printf("Took %.1fs to compile %s\n", us * 0.000001, func->getName().data());
+            printf("Has %ld basic blocks\n", func->getBasicBlockList().size());
         }
+
+        g.engine->removeModule(module);
+        delete module;
     }
 
     if (VERBOSITY("irgen") >= 2) {
@@ -275,9 +280,11 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
     }
 
 
-    CompiledFunction* cf
+    CompiledFunction* cf = NULL;
+    llvm::Function* func = NULL;
+    std::tie(cf, func)
         = doCompile(f, source, &f->param_names, entry_descriptor, effort, exception_style, spec, name->s());
-    compileIR(cf, effort);
+    compileIR(cf, func, effort);
 
     f->addVersion(cf);
 
@@ -684,7 +691,6 @@ std::unordered_set<CompiledFunction*> all_compiled_functions;
 CompiledFunction::CompiledFunction(FunctionMetadata* md, FunctionSpecialization* spec, void* code, EffortLevel effort,
                                    ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor)
     : md(md),
-      func(NULL),
       effort(effort),
       exception_style(exception_style),
       spec(spec),
