@@ -71,7 +71,7 @@ public:
     std::vector<DecrefInfo> decref_infos;
     std::vector<ICInvalidator*> invalidators; // ICInvalidators that reference this slotinfo
 
-    void clear();
+    void clear(bool should_invalidate = true);
 };
 
 typedef BitSet<16> LiveOutSet;
@@ -120,10 +120,10 @@ public:
     const LiveOutSet& getLiveOuts() { return live_outs; }
 
     std::unique_ptr<ICSlotRewrite> startRewrite(const char* debug_name);
-    void clear(ICSlotInfo* entry);
+    void invalidate(ICSlotInfo* entry);
     void clearAll() {
         for (ICSlotInfo& slot_info : slots) {
-            clear(&slot_info);
+            slot_info.clear();
         }
     }
 
