@@ -107,6 +107,7 @@ typedef struct {
 PyAPI_DATA(PyTypeObject) wrappertype;
 PyAPI_DATA(PyTypeObject) PyMethodDescr_Type;
 PyAPI_DATA(PyTypeObject) PyClassMethodDescr_Type;
+#define PyMethodDescr_Check(op) (Py_TYPE(op) == &PyMethodDescr_Type)
 
 #ifdef __cplusplus
 }

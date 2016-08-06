@@ -871,6 +871,14 @@ extern "C" PyObject* PyFrozenSet_New(PyObject* iterable) noexcept {
     }
 }
 
+extern "C" PyObject* PySet_Pop(PyObject* set) noexcept {
+    if (!PySet_Check(set)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    return setPop(static_cast<BoxedSet*>(set));
+}
+
 static PyObject* set_reduce(BoxedSet* so) noexcept {
     PyObject* keys = NULL, * args = NULL, * result = NULL, * dict = NULL;
 
