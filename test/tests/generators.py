@@ -142,3 +142,8 @@ def this_is_not_generator():
     def f():
         yield
 print type(this_is_not_generator())
+
+# we used to crash when a generator had more than 3 arguments and kwargs (because they can be NULL)
+def G(a, b, c, *args, **kwargs):
+    yield 1
+print list(G(1,2,2))
