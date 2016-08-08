@@ -107,7 +107,7 @@ public:
     llvm::DenseMap<int, LocationTable> definedness_vars;
 };
 
-StackMap* parseStackMap();
+std::unique_ptr<StackMap> parseStackMap();
 llvm::JITEventListener* makeStackMapListener();
 }
 

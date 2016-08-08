@@ -34,14 +34,14 @@ namespace pyston {
 // TODO shouldn't be recording this in a global variable
 static uint64_t stackmap_address = 0;
 
-StackMap* parseStackMap() {
+std::unique_ptr<StackMap> parseStackMap() {
     if (!stackmap_address)
         return NULL;
 
     if (VERBOSITY() >= 3)
         printf("Found the stackmaps at stackmap_address 0x%lx\n", stackmap_address);
 
-    StackMap* cur_map = new StackMap();
+    std::unique_ptr<StackMap> cur_map = std::unique_ptr<StackMap>(new StackMap());
 
     union {
         const int8_t* i8;

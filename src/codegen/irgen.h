@@ -111,9 +111,10 @@ public:
                                            llvm::Value* arg2, llvm::Value* arg3,
                                            ExceptionStyle target_exception_style = CXX,
                                            llvm::Value* capi_exc_value = NULL) = 0;
-    virtual llvm::Instruction* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
-                                        const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX,
-                                        llvm::Value* capi_exc_value = NULL) = 0;
+    virtual llvm::Instruction* createIC(std::unique_ptr<const ICSetupInfo> pp, void* func_addr,
+                                        const std::vector<llvm::Value*>& args, const UnwindInfo& unw_info,
+                                        ExceptionStyle target_exception_style = CXX, llvm::Value* capi_exc_value = NULL)
+        = 0;
 
     // virtual void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val,
     // llvm::Value* exc_val, bool double_check = false) = 0;

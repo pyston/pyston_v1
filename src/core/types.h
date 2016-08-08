@@ -345,9 +345,6 @@ public:
     // Otherwise this field is NULL.
     const OSREntryDescriptor* entry_descriptor;
 
-    // Pointers that were written directly into the code, which the GC should be aware of.
-    std::vector<const void*> pointers_in_code;
-
     // The function pointer to the generated code.  For convenience, it can be accessed
     // as one of many different types.
     // TODO: we instead make these accessor-functions that make sure that the code actually
@@ -377,10 +374,10 @@ public:
     ICInvalidator dependent_callsites;
 
     // Metadata that lets us find local variables from the C stack fram.
-    LocationMap* location_map;
+    std::unique_ptr<LocationMap> location_map;
 
     // List of metadata objects for ICs inside this compilation
-    std::vector<ICInfo*> ics;
+    std::vector<std::unique_ptr<ICInfo>> ics;
 
     CompiledFunction(FunctionMetadata* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
                      ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor);

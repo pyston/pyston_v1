@@ -199,9 +199,8 @@ static void compileIR(CompiledFunction* cf, llvm::Function* func, EffortLevel ef
         printf("Compiled function to %p\n", cf->code);
     }
 
-    StackMap* stackmap = parseStackMap();
-    processStackmap(cf, stackmap);
-    delete stackmap;
+    std::unique_ptr<StackMap> stackmap = parseStackMap();
+    processStackmap(cf, stackmap.get());
 }
 
 // Compiles a new version of the function with the given signature and adds it to the list;
