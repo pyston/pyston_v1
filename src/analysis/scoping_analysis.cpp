@@ -26,31 +26,28 @@ namespace pyston {
 
 class YieldVisitor : public NoopASTVisitor {
 public:
-    YieldVisitor() : containsYield(false) {}
+    AST* starting_node;
+    bool contains_yield;
 
-    bool visit_functiondef(AST_FunctionDef*) override { return true; }
+    YieldVisitor(AST* initial_node) : starting_node(initial_node), contains_yield(false) {}
+
+    // we are only interested if the statements of the initial node contain a yield not if any child function contains a
+    // yield
+    bool shouldSkip(AST* node) const { return starting_node != node; }
+    bool visit_classdef(AST_ClassDef* node) override { return shouldSkip(node); }
+    bool visit_functiondef(AST_FunctionDef* node) override { return shouldSkip(node); }
+    bool visit_lambda(AST_Lambda* node) override { return shouldSkip(node); }
 
     bool visit_yield(AST_Yield*) override {
-        containsYield = true;
+        contains_yield = true;
         return true;
     }
-
-    bool containsYield;
 };
 
 bool containsYield(AST* ast) {
-    YieldVisitor visitor;
-    if (ast->type == AST_TYPE::FunctionDef) {
-        AST_FunctionDef* funcDef = static_cast<AST_FunctionDef*>(ast);
-        for (auto& e : funcDef->body) {
-            e->accept(&visitor);
-            if (visitor.containsYield)
-                return true;
-        }
-    } else {
-        ast->accept(&visitor);
-    }
-    return visitor.containsYield;
+    YieldVisitor visitor(ast);
+    ast->accept(&visitor);
+    return visitor.contains_yield;
 }
 
 // TODO
