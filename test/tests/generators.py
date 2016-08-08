@@ -134,3 +134,16 @@ x = lambda: (yield 1)
 print list(x())
 x = lambda: ((yield 1), (yield 2))
 print list(x())
+
+# we used to think that this function is a generator
+def this_is_not_generator():
+    type((lambda: (yield)))
+    type((lambda: (yield))())
+    def f():
+        yield
+print type(this_is_not_generator())
+
+# we used to crash when a generator had more than 3 arguments and kwargs (because they can be NULL)
+def G(a, b, c, *args, **kwargs):
+    yield 1
+print list(G(1,2,2))

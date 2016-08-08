@@ -467,7 +467,7 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
         this->args = new (numArgs) GCdArray();
         memcpy(&this->args->elts[0], args, numArgs * sizeof(Box*));
         for (int i = 0; i < numArgs; i++) {
-            Py_INCREF(args[i]);
+            Py_XINCREF(args[i]);
         }
     }
 
