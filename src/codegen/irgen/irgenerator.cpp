@@ -539,7 +539,7 @@ private:
         }
     }
 
-    llvm::CallSite emitPatchpoint(llvm::Type* return_type, const ICSetupInfo* pp, llvm::Value* func,
+    llvm::CallSite emitPatchpoint(llvm::Type* return_type, std::unique_ptr<const ICSetupInfo> pp, llvm::Value* func,
                                   const std::vector<llvm::Value*>& args,
                                   const std::vector<llvm::Value*>& ic_stackmap_args, const UnwindInfo& unw_info,
                                   ExceptionStyle target_exception_style, llvm::Value* capi_exc_value) {
@@ -563,10 +563,13 @@ private:
         }
         assert(func_addr);
 
-        PatchpointInfo* info = PatchpointInfo::create(currentFunction(), pp, ic_stackmap_args.size(), func_addr);
+        int pp_size = pp ? pp->totalSize() : CALL_ONLY_SIZE;
+        auto calling_convention = pp ? pp->getCallingConvention() : (llvm::CallingConv::ID)llvm::CallingConv::C;
+        PatchpointInfo* info
+            = PatchpointInfo::create(currentFunction(), std::move(pp), ic_stackmap_args.size(), func_addr);
 
         int64_t pp_id = info->getId();
-        int pp_size = pp ? pp->totalSize() : CALL_ONLY_SIZE;
+
 
         std::vector<llvm::Value*> pp_args;
         pp_args.push_back(getConstantInt(pp_id, g.i64));
@@ -604,6 +607,7 @@ private:
         }
         llvm::Function* patchpoint = this->getIntrinsic(intrinsic_id);
         llvm::CallSite rtn = this->emitCall(unw_info, patchpoint, pp_args, target_exception_style, capi_exc_value);
+        rtn.setCallingConv(calling_convention);
         return rtn;
     }
 
@@ -700,24 +704,22 @@ public:
         return createCall(unw_info, callee, { arg1, arg2, arg3 }, target_exception_style, capi_exc_value);
     }
 
-    llvm::Instruction* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
-                                const UnwindInfo& unw_info, ExceptionStyle target_exception_style = CXX,
+    llvm::Instruction* createIC(std::unique_ptr<const ICSetupInfo> pp, void* func_addr,
+                                const std::vector<llvm::Value*>& args, const UnwindInfo& unw_info,
+                                ExceptionStyle target_exception_style = CXX,
                                 llvm::Value* capi_exc_value = NULL) override {
         std::vector<llvm::Value*> stackmap_args;
-
-        llvm::CallSite rtn = emitPatchpoint(pp->hasReturnValue() ? g.i64 : g.void_, pp,
-                                            embedConstantPtr(func_addr, g.i8->getPointerTo()), args, stackmap_args,
-                                            unw_info, target_exception_style, capi_exc_value);
-
-        rtn.setCallingConv(pp->getCallingConvention());
+        auto return_type = pp->hasReturnValue() ? g.i64 : g.void_;
+        llvm::CallSite rtn
+            = emitPatchpoint(return_type, std::move(pp), embedConstantPtr(func_addr, g.i8->getPointerTo()), args,
+                             stackmap_args, unw_info, target_exception_style, capi_exc_value);
         return rtn.getInstruction();
     }
 
     llvm::Value* createDeopt(AST_stmt* current_stmt, AST_expr* node, llvm::Value* node_value) override {
-        ICSetupInfo* pp = createDeoptIC();
-        llvm::Instruction* v
-            = createIC(pp, (void*)pyston::deopt, { embedRelocatablePtr(node, g.llvm_astexpr_type_ptr), node_value },
-                       UnwindInfo(current_stmt, NULL, /* is_after_deopt*/ true));
+        llvm::Instruction* v = createIC(createDeoptIC(), (void*)pyston::deopt,
+                                        { embedRelocatablePtr(node, g.llvm_astexpr_type_ptr), node_value },
+                                        UnwindInfo(current_stmt, NULL, /* is_after_deopt*/ true));
         llvm::Value* rtn = createAfter<llvm::IntToPtrInst>(v, v, g.llvm_value_type_ptr, "");
         setType(rtn, RefType::OWNED);
         return rtn;
@@ -1330,14 +1332,15 @@ private:
 
         bool do_patchpoint = ENABLE_ICGETGLOBALS;
         if (do_patchpoint) {
-            ICSetupInfo* pp = createGetGlobalIC(getOpInfoForNode(node, unw_info).getTypeRecorder());
+            auto pp = createGetGlobalIC(getOpInfoForNode(node, unw_info).getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(irstate->getGlobals());
             llvm_args.push_back(emitter.setType(embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr),
                                                 RefType::BORROWED));
 
-            llvm::Instruction* uncasted = emitter.createIC(pp, (void*)pyston::getGlobal, llvm_args, unw_info);
+            llvm::Instruction* uncasted
+                = emitter.createIC(std::move(pp), (void*)pyston::getGlobal, llvm_args, unw_info);
             llvm::Value* r = createAfter<llvm::IntToPtrInst>(uncasted, uncasted, g.llvm_value_type_ptr, "");
             emitter.setType(r, RefType::OWNED);
             return new ConcreteCompilerVariable(UNKNOWN, r);
@@ -2025,7 +2028,7 @@ private:
 
         bool do_patchpoint = ENABLE_ICSETITEMS;
         if (do_patchpoint) {
-            ICSetupInfo* pp = createSetitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
+            auto pp = createSetitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(target);
@@ -2033,7 +2036,7 @@ private:
             llvm_args.push_back(cstop);
             llvm_args.push_back(value);
 
-            emitter.createIC(pp, (void*)pyston::assignSlice, llvm_args, unw_info);
+            emitter.createIC(std::move(pp), (void*)pyston::assignSlice, llvm_args, unw_info);
         } else {
             emitter.createCall(unw_info, g.funcs.assignSlice, { target, cstart, cstop, value });
         }
@@ -2056,14 +2059,14 @@ private:
             // patchpoints if it couldn't.
             bool do_patchpoint = ENABLE_ICSETITEMS;
             if (do_patchpoint) {
-                ICSetupInfo* pp = createSetitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
+                auto pp = createSetitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
 
                 std::vector<llvm::Value*> llvm_args;
                 llvm_args.push_back(converted_target->getValue());
                 llvm_args.push_back(converted_slice->getValue());
                 llvm_args.push_back(converted_val->getValue());
 
-                emitter.createIC(pp, (void*)pyston::setitem, llvm_args, unw_info);
+                emitter.createIC(std::move(pp), (void*)pyston::setitem, llvm_args, unw_info);
             } else {
                 emitter.createCall3(unw_info, g.funcs.setitem, converted_target->getValue(),
                                     converted_slice->getValue(), converted_val->getValue());
@@ -2186,13 +2189,13 @@ private:
 
             bool do_patchpoint = ENABLE_ICDELITEMS;
             if (do_patchpoint) {
-                ICSetupInfo* pp = createDelitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
+                auto pp = createDelitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
 
                 std::vector<llvm::Value*> llvm_args;
                 llvm_args.push_back(converted_target->getValue());
                 llvm_args.push_back(converted_slice->getValue());
 
-                emitter.createIC(pp, (void*)pyston::delitem, llvm_args, unw_info);
+                emitter.createIC(std::move(pp), (void*)pyston::delitem, llvm_args, unw_info);
             } else {
                 emitter.createCall2(unw_info, g.funcs.delitem, converted_target->getValue(),
                                     converted_slice->getValue());

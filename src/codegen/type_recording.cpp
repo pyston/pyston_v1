@@ -21,12 +21,12 @@
 
 namespace pyston {
 
-static std::unordered_map<AST*, TypeRecorder*> type_recorders;
+static std::unordered_map<AST*, std::unique_ptr<TypeRecorder>> type_recorders;
 TypeRecorder* getTypeRecorderForNode(AST* node) {
-    TypeRecorder*& r = type_recorders[node];
+    std::unique_ptr<TypeRecorder>& r = type_recorders[node];
     if (r == NULL)
-        r = new TypeRecorder();
-    return r;
+        r = llvm::make_unique<TypeRecorder>();
+    return r.get();
 }
 
 Box* recordType(TypeRecorder* self, Box* obj) {
@@ -56,8 +56,7 @@ BoxedClass* predictClassFor(AST* node) {
     if (it == type_recorders.end())
         return NULL;
 
-    TypeRecorder* r = it->second;
-    return r->predict();
+    return it->second->predict();
 }
 
 BoxedClass* TypeRecorder::predict() {

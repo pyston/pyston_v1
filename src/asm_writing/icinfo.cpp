@@ -348,6 +348,10 @@ ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, S
 }
 
 ICInfo::~ICInfo() {
+    // if this ICInfo got created with registerCompiledPatchpoint we have to unregister this
+    ics_by_return_addr.erase(slowpath_rtn_addr);
+    deregisterGCTrackedICInfo(this);
+
     for (auto& slot : slots) {
         for (auto invalidator : slot.invalidators) {
             assert(invalidator->dependents.count(&slot));
@@ -407,15 +411,6 @@ std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t*
     registerGCTrackedICInfo(icinfo);
 
     return std::unique_ptr<ICInfo>(icinfo);
-}
-
-void deregisterCompiledPatchpoint(ICInfo* ic) {
-    ic->clearAll();
-
-    assert(ics_by_return_addr[ic->slowpath_rtn_addr] == ic);
-    ics_by_return_addr.erase(ic->slowpath_rtn_addr);
-
-    deregisterGCTrackedICInfo(ic);
 }
 
 ICInfo* getICInfo(void* rtn_addr) {

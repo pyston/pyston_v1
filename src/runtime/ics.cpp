@@ -299,7 +299,6 @@ RuntimeIC::RuntimeIC(void* func_addr, int patchable_size) {
 
 RuntimeIC::~RuntimeIC() {
     if (ENABLE_RUNTIME_ICS) {
-        deregisterCompiledPatchpoint(icinfo.get());
         uint8_t* eh_frame_addr = (uint8_t*)addr - EH_FRAME_SIZE;
         deregisterEHFrames(eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
 #ifdef NVALGRIND

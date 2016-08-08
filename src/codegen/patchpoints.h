@@ -97,8 +97,9 @@ public:
         return llvm::CallingConv::C;
     }
 
-    static ICSetupInfo* initialize(bool has_return_value, int size, ICType type, TypeRecorder* type_recorder,
-                                   assembler::RegisterSet allocatable_regs = assembler::RegisterSet::stdAllocatable());
+    static std::unique_ptr<ICSetupInfo>
+    initialize(bool has_return_value, int size, ICType type, TypeRecorder* type_recorder,
+               assembler::RegisterSet allocatable_regs = assembler::RegisterSet::stdAllocatable());
 };
 
 struct PatchpointInfo {
@@ -114,7 +115,7 @@ public:
 
 private:
     CompiledFunction* const parent_cf;
-    const ICSetupInfo* icinfo;
+    std::unique_ptr<const ICSetupInfo> icinfo;
     int num_ic_stackmap_args;
     int num_frame_stackmap_args;
     bool is_frame_info_stackmap;
@@ -122,9 +123,9 @@ private:
 
     FrameInfoDesc frame_info_desc;
 
-    PatchpointInfo(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args)
+    PatchpointInfo(CompiledFunction* parent_cf, std::unique_ptr<const ICSetupInfo> icinfo, int num_ic_stackmap_args)
         : parent_cf(parent_cf),
-          icinfo(icinfo),
+          icinfo(std::move(icinfo)),
           num_ic_stackmap_args(num_ic_stackmap_args),
           num_frame_stackmap_args(-1),
           is_frame_info_stackmap(false),
@@ -132,7 +133,7 @@ private:
 
 
 public:
-    const ICSetupInfo* getICInfo() { return icinfo; }
+    const ICSetupInfo* getICInfo() { return icinfo.get(); }
 
     int patchpointSize();
     CompiledFunction* parentFunction() { return parent_cf; }
@@ -171,25 +172,25 @@ public:
 
     int totalStackmapArgs() { return frameStackmapArgsStart() + numFrameStackmapArgs(); }
 
-    static PatchpointInfo* create(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args,
-                                  void* func_addr);
+    static PatchpointInfo* create(CompiledFunction* parent_cf, std::unique_ptr<const ICSetupInfo> icinfo,
+                                  int num_ic_stackmap_args, void* func_addr);
     static void* getSlowpathAddr(unsigned int pp_id);
 };
 
 class ICInfo;
-ICSetupInfo* createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size);
-ICSetupInfo* createCallsiteIC(TypeRecorder* type_recorder, int num_args, ICInfo* bjit_ic_info);
-ICSetupInfo* createGetGlobalIC(TypeRecorder* type_recorder);
-ICSetupInfo* createGetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
-ICSetupInfo* createSetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
-ICSetupInfo* createDelattrIC(TypeRecorder* type_recorder);
-ICSetupInfo* createGetitemIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
-ICSetupInfo* createSetitemIC(TypeRecorder* type_recorder);
-ICSetupInfo* createDelitemIC(TypeRecorder* type_recorder);
-ICSetupInfo* createBinexpIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
-ICSetupInfo* createNonzeroIC(TypeRecorder* type_recorder);
-ICSetupInfo* createHasnextIC(TypeRecorder* type_recorder);
-ICSetupInfo* createDeoptIC();
+std::unique_ptr<ICSetupInfo> createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size);
+std::unique_ptr<ICSetupInfo> createCallsiteIC(TypeRecorder* type_recorder, int num_args, ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createGetGlobalIC(TypeRecorder* type_recorder);
+std::unique_ptr<ICSetupInfo> createGetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createSetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createDelattrIC(TypeRecorder* type_recorder);
+std::unique_ptr<ICSetupInfo> createGetitemIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createSetitemIC(TypeRecorder* type_recorder);
+std::unique_ptr<ICSetupInfo> createDelitemIC(TypeRecorder* type_recorder);
+std::unique_ptr<ICSetupInfo> createBinexpIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createNonzeroIC(TypeRecorder* type_recorder);
+std::unique_ptr<ICSetupInfo> createHasnextIC(TypeRecorder* type_recorder);
+std::unique_ptr<ICSetupInfo> createDeoptIC();
 
 } // namespace pyston
 

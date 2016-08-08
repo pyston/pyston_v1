@@ -42,11 +42,13 @@ int ICSetupInfo::totalSize() const {
     return size + call_size;
 }
 
-static std::vector<std::pair<PatchpointInfo*, void* /* addr of func to call */>> new_patchpoints;
+static std::vector<std::pair<std::unique_ptr<PatchpointInfo>, void* /* addr of func to call */>> new_patchpoints;
 
-ICSetupInfo* ICSetupInfo::initialize(bool has_return_value, int size, ICType type, TypeRecorder* type_recorder,
-                                     assembler::RegisterSet allocatable_regs) {
-    ICSetupInfo* rtn = new ICSetupInfo(type, size, has_return_value, type_recorder, allocatable_regs);
+std::unique_ptr<ICSetupInfo> ICSetupInfo::initialize(bool has_return_value, int size, ICType type,
+                                                     TypeRecorder* type_recorder,
+                                                     assembler::RegisterSet allocatable_regs) {
+    auto rtn
+        = std::unique_ptr<ICSetupInfo>(new ICSetupInfo(type, size, has_return_value, type_recorder, allocatable_regs));
 
 
     // We use size == CALL_ONLY_SIZE to imply that the call isn't patchable
@@ -210,7 +212,7 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
     int nrecords = stackmap ? stackmap->records.size() : 0;
 
     assert(cf->location_map == NULL);
-    cf->location_map = new LocationMap();
+    cf->location_map = llvm::make_unique<LocationMap>();
     if (stackmap)
         cf->location_map->constants = stackmap->constants;
 
@@ -232,7 +234,7 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         }
 
         RELEASE_ASSERT(new_patchpoints.size() > r->id, "");
-        PatchpointInfo* pp = new_patchpoints[r->id].first;
+        std::unique_ptr<PatchpointInfo>& pp = new_patchpoints[r->id].first;
         assert(pp);
 
         if (pp->isFrameInfoStackmap()) {
@@ -247,13 +249,12 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
 
         void* slowpath_func = PatchpointInfo::getSlowpathAddr(r->id);
         if (VERBOSITY() >= 2) {
-            printf("Processing pp %ld; [%d, %d)\n", reinterpret_cast<int64_t>(pp), r->offset,
-                   r->offset + pp->patchpointSize());
+            printf("Processing pp %p; [%d, %d)\n", pp.get(), r->offset, r->offset + pp->patchpointSize());
         }
 
         assert(r->locations.size() == pp->totalStackmapArgs());
 
-        int scratch_rbp_offset = extractScratchOffset(pp, r);
+        int scratch_rbp_offset = extractScratchOffset(pp.get(), r);
         int scratch_size = pp->scratchSize();
         assert(scratch_size % sizeof(void*) == 0);
         assert(scratch_rbp_offset % sizeof(void*) == 0);
@@ -290,7 +291,7 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         // TODO: is something like this necessary?
         // llvm::sys::Memory::InvalidateInstructionCache(start, getSlotSize());
 
-        pp->parseLocationMap(r, cf->location_map);
+        pp->parseLocationMap(r, cf->location_map.get());
 
         const ICSetupInfo* ic = pp->getICInfo();
         if (ic == NULL) {
@@ -340,28 +341,22 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
             std::move(initialization_info.live_outs));
 
         assert(cf);
-        // TODO: unsafe.  hard to use a unique_ptr here though.
-        cf->ics.push_back(icinfo.release());
+        cf->ics.push_back(std::move(icinfo));
     }
 
-    for (auto& e : new_patchpoints) {
-        PatchpointInfo* pp = e.first;
-        const ICSetupInfo* ic = pp->getICInfo();
-        if (ic)
-            delete ic;
-        delete pp;
-    }
     new_patchpoints.clear();
 }
 
-PatchpointInfo* PatchpointInfo::create(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args,
-                                       void* func_addr) {
+PatchpointInfo* PatchpointInfo::create(CompiledFunction* parent_cf, std::unique_ptr<const ICSetupInfo> icinfo,
+                                       int num_ic_stackmap_args, void* func_addr) {
     if (icinfo == NULL)
         assert(num_ic_stackmap_args == 0);
 
-    auto* r = new PatchpointInfo(parent_cf, icinfo, num_ic_stackmap_args);
-    r->id = new_patchpoints.size();
-    new_patchpoints.push_back(std::make_pair(r, func_addr));
+    auto pp_info
+        = std::unique_ptr<PatchpointInfo>(new PatchpointInfo(parent_cf, std::move(icinfo), num_ic_stackmap_args));
+    pp_info->id = new_patchpoints.size();
+    auto* r = pp_info.get();
+    new_patchpoints.emplace_back(std::move(pp_info), func_addr);
 
     assert(r->id != DECREF_PP_ID);
     assert(r->id != XDECREF_PP_ID);
@@ -387,57 +382,56 @@ int slotSize(ICInfo* bjit_ic_info, int default_size) {
     return suggested_size;
 }
 
-ICSetupInfo* createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size) {
+std::unique_ptr<ICSetupInfo> createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size) {
     return ICSetupInfo::initialize(has_return_value, size, ICSetupInfo::Generic, type_recorder);
 }
 
-ICSetupInfo* createGetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
+std::unique_ptr<ICSetupInfo> createGetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
     return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 1024), ICSetupInfo::Getattr, type_recorder);
 }
 
-ICSetupInfo* createGetitemIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
+std::unique_ptr<ICSetupInfo> createGetitemIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
     return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 512), ICSetupInfo::Getitem, type_recorder);
 }
 
-ICSetupInfo* createSetitemIC(TypeRecorder* type_recorder) {
+std::unique_ptr<ICSetupInfo> createSetitemIC(TypeRecorder* type_recorder) {
     return ICSetupInfo::initialize(true, 512, ICSetupInfo::Setitem, type_recorder);
 }
 
-ICSetupInfo* createDelitemIC(TypeRecorder* type_recorder) {
+std::unique_ptr<ICSetupInfo> createDelitemIC(TypeRecorder* type_recorder) {
     return ICSetupInfo::initialize(false, 512, ICSetupInfo::Delitem, type_recorder);
 }
 
-ICSetupInfo* createSetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
+std::unique_ptr<ICSetupInfo> createSetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
     return ICSetupInfo::initialize(false, slotSize(bjit_ic_info, 1024), ICSetupInfo::Setattr, type_recorder);
 }
 
-ICSetupInfo* createDelattrIC(TypeRecorder* type_recorder) {
+std::unique_ptr<ICSetupInfo> createDelattrIC(TypeRecorder* type_recorder) {
     return ICSetupInfo::initialize(false, 144, ICSetupInfo::Delattr, type_recorder);
 }
 
-ICSetupInfo* createCallsiteIC(TypeRecorder* type_recorder, int num_args, ICInfo* bjit_ic_info) {
-
+std::unique_ptr<ICSetupInfo> createCallsiteIC(TypeRecorder* type_recorder, int num_args, ICInfo* bjit_ic_info) {
     return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 4 * (640 + 48 * num_args)), ICSetupInfo::Callsite,
                                    type_recorder);
 }
 
-ICSetupInfo* createGetGlobalIC(TypeRecorder* type_recorder) {
+std::unique_ptr<ICSetupInfo> createGetGlobalIC(TypeRecorder* type_recorder) {
     return ICSetupInfo::initialize(true, 128, ICSetupInfo::GetGlobal, type_recorder);
 }
 
-ICSetupInfo* createBinexpIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
+std::unique_ptr<ICSetupInfo> createBinexpIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
     return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 2048), ICSetupInfo::Binexp, type_recorder);
 }
 
-ICSetupInfo* createNonzeroIC(TypeRecorder* type_recorder) {
+std::unique_ptr<ICSetupInfo> createNonzeroIC(TypeRecorder* type_recorder) {
     return ICSetupInfo::initialize(true, 1024, ICSetupInfo::Nonzero, type_recorder);
 }
 
-ICSetupInfo* createHasnextIC(TypeRecorder* type_recorder) {
+std::unique_ptr<ICSetupInfo> createHasnextIC(TypeRecorder* type_recorder) {
     return ICSetupInfo::initialize(true, 128, ICSetupInfo::Hasnext, type_recorder);
 }
 
-ICSetupInfo* createDeoptIC() {
+std::unique_ptr<ICSetupInfo> createDeoptIC() {
     return ICSetupInfo::initialize(true, 0, ICSetupInfo::Deopt, NULL);
 }
 

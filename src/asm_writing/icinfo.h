@@ -204,7 +204,6 @@ std::unique_ptr<ICInfo>
 registerCompiledPatchpoint(uint8_t* start_addr, uint8_t* slowpath_start_addr, uint8_t* continue_addr,
                            uint8_t* slowpath_rtn_addr, const ICSetupInfo*, StackInfo stack_info, LiveOutSet live_outs,
                            std::vector<Location> ic_global_decref_locations = std::vector<Location>());
-void deregisterCompiledPatchpoint(ICInfo* ic);
 
 ICInfo* getICInfo(void* rtn_addr);
 
