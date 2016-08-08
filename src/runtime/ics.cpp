@@ -14,9 +14,7 @@
 
 #include "runtime/ics.h"
 
-#ifndef NVALGRIND
 #include <sys/mman.h>
-#endif
 
 #include "asm_writing/icinfo.h"
 #include "asm_writing/rewriter.h"
@@ -188,8 +186,36 @@ static void writeTrivialEhFrame(void* eh_frame_addr, void* func_addr, uint64_t f
 #define SCRATCH_BYTES 0x30
 #endif
 
-RuntimeIC::RuntimeIC(void* func_addr, int patchable_size) {
-    static StatCounter sc("runtime_ics_num");
+template <int chunk_size> class RuntimeICMemoryManager {
+private:
+    static constexpr int region_size = 4096;
+    static_assert(chunk_size < region_size, "");
+    static_assert(region_size % chunk_size == 0, "");
+
+    std::vector<void*> memory_regions;
+    llvm::SmallVector<void*, region_size / chunk_size> free_chunks;
+
+public:
+    void* alloc() {
+        if (free_chunks.empty()) {
+            int protection = PROT_READ | PROT_WRITE | PROT_EXEC;
+            int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT;
+            char* addr = (char*)mmap(NULL, region_size, protection, flags, -1, 0);
+            for (int i = 0; i < region_size / chunk_size; ++i) {
+                free_chunks.push_back(&addr[i * chunk_size]);
+            }
+        }
+        return free_chunks.pop_back_val();
+    }
+    void dealloc(void* ptr) {
+        free_chunks.push_back(ptr); // TODO: we should probably delete some regions if this list gets to large
+    }
+};
+
+static RuntimeICMemoryManager<512> memory_manager_512b;
+
+RuntimeIC::RuntimeIC(void* func_addr, int total_size) {
+    static StatCounter sc("num_runtime_ics");
     sc.log();
 
     if (ENABLE_RUNTIME_ICS) {
@@ -228,17 +254,13 @@ RuntimeIC::RuntimeIC(void* func_addr, int patchable_size) {
 #endif
         static const int CALL_SIZE = 13;
 
-        int total_code_size = PROLOGUE_SIZE + patchable_size + CALL_SIZE + EPILOGUE_SIZE;
+        int total_code_size = total_size - EH_FRAME_SIZE;
+        int patchable_size = total_code_size - (PROLOGUE_SIZE + CALL_SIZE + EPILOGUE_SIZE);
 
-#ifdef NVALGRIND
         int total_size = total_code_size + EH_FRAME_SIZE;
-        addr = malloc(total_size);
-#else
-        total_size = total_code_size + EH_FRAME_SIZE;
-        addr = mmap(NULL, (total_size + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1), PROT_READ | PROT_WRITE | PROT_EXEC,
-                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        RELEASE_ASSERT(addr != MAP_FAILED, "");
-#endif
+        assert(total_size == 512 && "we currently only have a 512 byte block memory manager");
+        addr = memory_manager_512b.alloc();
+
         // the memory block contains the EH frame directly followed by the generated machine code.
         void* eh_frame_addr = addr;
         addr = (char*)addr + EH_FRAME_SIZE;
@@ -302,11 +324,7 @@ RuntimeIC::~RuntimeIC() {
         deregisterCompiledPatchpoint(icinfo.get());
         uint8_t* eh_frame_addr = (uint8_t*)addr - EH_FRAME_SIZE;
         deregisterEHFrames(eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
-#ifdef NVALGRIND
-        free(eh_frame_addr);
-#else
-        munmap(eh_frame_addr, total_size);
-#endif
+        memory_manager_512b.dealloc(eh_frame_addr);
     } else {
     }
 }
