@@ -20,9 +20,9 @@ docker run -it pyston/pyston
 
 to be dropped in to a container that runs a pre-activated pyston virtualenv.  This means that the "pip" and "python" commands correspond to Pyston, so you can directly start doing `pip install mypackage` to get started.  As mentioned though, the docker images are experimental, so please give us feedback [on gitter](https.://gitter.im/dropbox/pyston).
 
-You can also download the latest release [from GitHub](https://github.com/dropbox/pyston/releases).  It should for the most part just extract and run.  One thing to note is that current virtualenv versions do not support Pyston, so you will need to use our version that we ship in the releases.  See our [Dockerfile](https://github.com/dropbox/pyston/blob/master/docker/Dockerfile) for how to do this.
+You can also download the latest release from [GitHub](https://github.com/dropbox/pyston/releases).  It should for the most part just extract and run.  One thing to note is that current virtualenv versions do not support Pyston, so you will need to use our version that we ship in the releases.  See our [Dockerfile](https://github.com/dropbox/pyston/blob/master/docker/Dockerfile) for how to do this.
 
-You can also build Pyston directly from source.  We have some build instructions at [INSTALLING.md](https://github.com/dropbox/pyston/blob/master/docs/INSTALLING.md).  If you have any issues, please feel free to file an issue in the issue tracker, or mention it via email or gitter.
+You can also build Pyston directly from source.  We have some build instructions at [`INSTALLING.md`](https://github.com/dropbox/pyston/blob/master/docs/INSTALLING.md).  If you have any issues, please feel free to file an issue in the issue tracker, or mention it via email or gitter.
 
 ##### NumPy
 
@@ -41,7 +41,7 @@ pip install git+git://github.com/numpy/numpy@v1.11.0
 
 ### Contributing
 
-Pyston welcomes any kind of contribution; please see [CONTRIBUTING.md](https://github.com/dropbox/pyston/blob/master/CONTRIBUTING.md) for details.
+Pyston welcomes any kind of contribution; please see [`CONTRIBUTING.md`](https://github.com/dropbox/pyston/blob/master/CONTRIBUTING.md) for details.
 > tl;dr: You will need to sign the [Dropbox CLA](https://opensource.dropbox.com/cla/) and run the tests.
 
 We have some documentation for those interested in contributing: see our [Development Guide](https://github.com/dropbox/pyston/wiki/Development-Guide) and [development tips](docs/TIPS.md).
