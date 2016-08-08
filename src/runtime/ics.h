@@ -25,9 +25,6 @@ class ICInfo;
 class RuntimeIC {
 private:
     void* addr; // points to function start not the start of the allocated memory block.
-#ifndef NVALGRIND
-    size_t total_size;
-#endif
 
     std::unique_ptr<ICInfo> icinfo;
 
@@ -35,7 +32,7 @@ private:
     void operator=(const RuntimeIC&) = delete;
 
 protected:
-    RuntimeIC(void* addr, int patchable_size);
+    RuntimeIC(void* addr, int total_size);
     ~RuntimeIC();
 
     template <class... Args> uint64_t call_int(Args... args) {
@@ -57,7 +54,7 @@ protected:
 
 class CallattrIC : public RuntimeIC {
 public:
-    CallattrIC() : RuntimeIC((void*)callattr, 320) {}
+    CallattrIC() : RuntimeIC((void*)callattr, 512) {}
 
     Box* call(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg0, Box* arg1, Box* arg2, Box** args,
               const std::vector<BoxedString*>* keyword_names) {
@@ -67,7 +64,7 @@ public:
 
 class CallattrCapiIC : public RuntimeIC {
 public:
-    CallattrCapiIC() : RuntimeIC((void*)callattrCapi, 320) {}
+    CallattrCapiIC() : RuntimeIC((void*)callattrCapi, 512) {}
 
     Box* call(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg0, Box* arg1, Box* arg2, Box** args,
               const std::vector<BoxedString*>* keyword_names) {
@@ -78,7 +75,7 @@ public:
 
 class BinopIC : public RuntimeIC {
 public:
-    BinopIC() : RuntimeIC((void*)binop, 2 * 240) {}
+    BinopIC() : RuntimeIC((void*)binop, 512) {}
 
     Box* call(Box* lhs, Box* rhs, int op_type) { return (Box*)call_ptr(lhs, rhs, op_type); }
 };
