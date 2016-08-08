@@ -1088,7 +1088,6 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
     }
 
     CompiledFunction* cf = new CompiledFunction(md, spec, NULL, effort, exception_style, entry_descriptor);
-    setPointersInCodeStorage(&cf->pointers_in_code);
 
     // Make sure that the instruction memory keeps the module object alive.
     // TODO: implement this for real

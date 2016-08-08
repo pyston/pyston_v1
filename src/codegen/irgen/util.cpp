@@ -100,16 +100,8 @@ llvm::Constant* getStringConstantPtr(llvm::StringRef str) {
 
 static llvm::StringMap<const void*> relocatable_syms;
 
-// Pointer to a vector where we want to keep track of all the pointers written directly into
-// the compiled code, which the GC needs to be aware of.
-std::vector<const void*>* pointers_in_code;
-
 void clearRelocatableSymsMap() {
     relocatable_syms.clear();
-}
-
-void setPointersInCodeStorage(std::vector<const void*>* v) {
-    pointers_in_code = v;
 }
 
 const void* getValueOfRelocatableSym(const std::string& str) {

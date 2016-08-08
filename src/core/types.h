@@ -345,9 +345,6 @@ public:
     // Otherwise this field is NULL.
     const OSREntryDescriptor* entry_descriptor;
 
-    // Pointers that were written directly into the code, which the GC should be aware of.
-    std::vector<const void*> pointers_in_code;
-
     // The function pointer to the generated code.  For convenience, it can be accessed
     // as one of many different types.
     // TODO: we instead make these accessor-functions that make sure that the code actually
