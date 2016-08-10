@@ -515,9 +515,6 @@ Box* setUnion(BoxedSet* self, BoxedTuple* args) {
     BoxedSet* rtn = makeNewSet(self->cls, self);
     AUTO_DECREF(rtn);
 
-    for (auto&& p : self->s)
-        _setAdd(rtn, p);
-
     for (auto container : args->pyElements()) {
         AUTO_DECREF(container);
         for (auto elt : container->pyElements()) {

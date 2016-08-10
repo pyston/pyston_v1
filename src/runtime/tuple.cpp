@@ -265,7 +265,7 @@ Box* tupleRepr(Box* _t) {
 
     BoxedTuple* t = (BoxedTuple*)_t;
     int n;
-    std::vector<char> chars;
+    llvm::SmallVector<char, 128> chars;
     int status = Py_ReprEnter((PyObject*)t);
     n = t->size();
     if (n == 0) {
@@ -427,7 +427,7 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
             return r;
         }
 
-        std::vector<Box*> elts;
+        llvm::SmallVector<Box*, 16> elts;
         try {
             for (auto e : elements->pyElements())
                 elts.push_back(e);
@@ -437,10 +437,16 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
             throw e;
         }
 
-        auto rtn = BoxedTuple::create(elts.size(), cls);
-        memcpy(&rtn->elts[0], &elts[0], elts.size() * sizeof(Box*));
+        if (elts.empty()) {
+            if (cls == tuple_cls)
+                return incref(EmptyTuple);
+            return BoxedTuple::create(0, cls);
+        } else {
+            auto rtn = BoxedTuple::create(elts.size(), cls);
+            memcpy(&rtn->elts[0], &elts[0], elts.size() * sizeof(Box*));
+            return rtn;
+        }
 
-        return rtn;
     } else {
         if (cls == tuple_cls)
             return incref(EmptyTuple);

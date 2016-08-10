@@ -50,6 +50,9 @@
 #include "llvm/Support/PointerLikeTypeTraits.h"
 #include "llvm/Support/type_traits.h"
 
+// Pyston change: use the python allocator
+#include "Python.h"
+
 namespace pyston {
 
 // This should only take effect for this header file:
@@ -721,6 +724,10 @@ private:
     Buckets = static_cast<BucketT*>(operator new(sizeof(BucketT) * NumBuckets));
     return true;
   }
+
+  // Pyston change: use the python allocator
+  static void* operator new(size_t count) { return PyObject_Malloc(count); }
+  static void operator delete(void* p) { PyObject_Free(p); }
 };
 
 template <typename KeyT, typename ValueT, unsigned InlineBuckets = 4,

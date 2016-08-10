@@ -342,17 +342,17 @@ extern "C" PyObject* PyInt_FromString(const char* s, char** pend, int base) noex
 #ifdef Py_USING_UNICODE
 extern "C" PyObject* PyInt_FromUnicode(Py_UNICODE* s, Py_ssize_t length, int base) noexcept {
     PyObject* result;
-    char* buffer = (char*)malloc(length + 1);
+    char* buffer = (char*)PyMem_MALLOC(length + 1);
 
     if (buffer == NULL)
         return PyErr_NoMemory();
 
     if (PyUnicode_EncodeDecimal(s, length, buffer, NULL)) {
-        free(buffer);
+        PyMem_FREE(buffer);
         return NULL;
     }
     result = PyInt_FromString(buffer, NULL, base);
-    free(buffer);
+    PyMem_FREE(buffer);
     return result;
 }
 #endif

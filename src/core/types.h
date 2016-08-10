@@ -25,6 +25,7 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/iterator_range.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "Python.h"
 
 #include "core/common.h"
@@ -288,7 +289,7 @@ struct ParamReceiveSpec {
 class ICInvalidator {
 private:
     int64_t cur_version;
-    std::unordered_set<ICSlotInfo*> dependents;
+    llvm::SmallPtrSet<ICSlotInfo*, 2> dependents;
 
 public:
     ICInvalidator() : cur_version(0) {}
