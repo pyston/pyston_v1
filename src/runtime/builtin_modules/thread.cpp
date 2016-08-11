@@ -161,7 +161,7 @@ public:
 
     static Box* exit(Box* _self, Box* arg1, Box* arg2, Box** args) { return release(_self); }
 
-    static void threadLockDestructor(Box* _self) {
+    static void dealloc(Box* _self) {
         RELEASE_ASSERT(_self->cls == thread_lock_cls, "");
         BoxedThreadLock* self = static_cast<BoxedThreadLock*>(_self);
 
@@ -173,6 +173,8 @@ public:
             PyThread_free_lock(self->lock_lock);
             self->lock_lock = NULL;
         }
+
+        _self->cls->tp_free(_self);
     }
 
     static Box* locked(Box* _self) {
@@ -185,8 +187,6 @@ public:
         }
         Py_RETURN_TRUE;
     }
-
-    static void dealloc(Box* b) noexcept { Py_FatalError("unimplemented"); }
 };
 
 
@@ -232,7 +232,6 @@ void setupThread() {
 
     thread_lock_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedThreadLock), false, "lock", true,
                                          BoxedThreadLock::dealloc, NULL, false);
-    thread_lock_cls->tp_dealloc = BoxedThreadLock::threadLockDestructor;
     thread_lock_cls->instances_are_nonzero = true;
 
     thread_lock_cls->giveAttr("__module__", boxString("thread"));
