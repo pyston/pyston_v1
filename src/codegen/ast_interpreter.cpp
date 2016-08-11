@@ -103,7 +103,6 @@ private:
     Value visit_expr(AST_Expr* node);
     Value visit_extslice(AST_ExtSlice* node);
     Value visit_index(AST_Index* node);
-    Value visit_lambda(AST_Lambda* node);
     Value visit_list(AST_List* node);
     Value visit_name(AST_Name* node);
     Value visit_num(AST_Num* node);
@@ -1481,8 +1480,6 @@ Value ASTInterpreter::visit_expr(AST_expr* node) {
             return visit_compare((AST_Compare*)node);
         case AST_TYPE::Dict:
             return visit_dict((AST_Dict*)node);
-        case AST_TYPE::Lambda:
-            return visit_lambda((AST_Lambda*)node);
         case AST_TYPE::List:
             return visit_list((AST_List*)node);
         case AST_TYPE::Name:
@@ -1638,15 +1635,6 @@ Value ASTInterpreter::visit_repr(AST_Repr* node) {
     Value v = visit_expr(node->value);
     AUTO_DECREF(v.o);
     return Value(repr(v.o), jit ? jit->emitRepr(v) : NULL);
-}
-
-Value ASTInterpreter::visit_lambda(AST_Lambda* node) {
-    AST_Return* expr = new AST_Return();
-    expr->value = node->body;
-    expr->lineno = node->body->lineno;
-
-    std::vector<AST_stmt*> body = { expr };
-    return createFunction(node, node->args, body);
 }
 
 Value ASTInterpreter::visit_dict(AST_Dict* node) {

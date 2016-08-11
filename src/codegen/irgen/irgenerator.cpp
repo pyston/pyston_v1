@@ -1281,18 +1281,6 @@ private:
 
     CompilerVariable* evalIndex(AST_Index* node, const UnwindInfo& unw_info) { return evalExpr(node->value, unw_info); }
 
-    CompilerVariable* evalLambda(AST_Lambda* node, const UnwindInfo& unw_info) {
-        AST_Return* expr = new AST_Return();
-        expr->value = node->body;
-        expr->lineno = node->body->lineno;
-
-        std::vector<AST_stmt*> body = { expr };
-        CompilerVariable* func = _createFunction(node, unw_info, node->args, body);
-        ConcreteCompilerVariable* converted = func->makeConverted(emitter, func->getBoxType());
-
-        return converted;
-    }
-
 
     CompilerVariable* evalList(AST_List* node, const UnwindInfo& unw_info) {
         std::vector<CompilerVariable*> elts;
@@ -1843,9 +1831,6 @@ private:
                 break;
             case AST_TYPE::Dict:
                 rtn = evalDict(ast_cast<AST_Dict>(node), unw_info);
-                break;
-            case AST_TYPE::Lambda:
-                rtn = evalLambda(ast_cast<AST_Lambda>(node), unw_info);
                 break;
             case AST_TYPE::List:
                 rtn = evalList(ast_cast<AST_List>(node), unw_info);

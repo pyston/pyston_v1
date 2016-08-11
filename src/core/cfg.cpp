@@ -1199,14 +1199,25 @@ private:
     }
 
     AST_expr* remapLambda(AST_Lambda* node) {
-        auto rtn = new AST_Lambda();
-        rtn->body = node->body; // don't remap now; will be CFG'ed later
-        rtn->args = remapArguments(node->args);
-        rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
-        // lambdas create scope, need to register as replacement
-        scoping_analysis->registerScopeReplacement(node, rtn);
-        return rtn;
+        // we convert lambdas into normal functions (but don't give it a name)
+        auto def = new AST_FunctionDef();
+        def->lineno = node->lineno;
+        def->col_offset = node->col_offset;
+
+        auto stmt = new AST_Return;
+        stmt->lineno = node->lineno;
+        stmt->col_offset = node->col_offset;
+        stmt->value = node->body; // don't remap now; will be CFG'ed later
+
+        def->body = { stmt };
+        def->args = remapArguments(node->args);
+
+        scoping_analysis->registerScopeReplacement(node, def);
+
+        auto tmp = nodeName();
+        pushAssign(tmp, new AST_MakeFunction(def));
+
+        return makeLoad(tmp, def, /* is_kill */ false);
     }
 
     AST_expr* remapLangPrimitive(AST_LangPrimitive* node) {

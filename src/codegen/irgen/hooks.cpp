@@ -122,8 +122,8 @@ BORROWED(BoxedString*) SourceInfo::getName() noexcept {
         case AST_TYPE::ClassDef:
             return ast_cast<AST_ClassDef>(ast)->name.getBox();
         case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->name.getBox();
-        case AST_TYPE::Lambda:
+            if (ast_cast<AST_FunctionDef>(ast)->name != InternedString())
+                return ast_cast<AST_FunctionDef>(ast)->name.getBox();
             return lambda_name;
         case AST_TYPE::Module:
         case AST_TYPE::Expression:

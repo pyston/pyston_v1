@@ -542,7 +542,7 @@ class AST_FunctionDef : public AST_stmt {
 public:
     std::vector<AST_stmt*> body;
     std::vector<AST_expr*> decorator_list;
-    InternedString name;
+    InternedString name; // if the name is not set this is a lambda
     AST_arguments* args;
 
     virtual void accept(ASTVisitor* v);

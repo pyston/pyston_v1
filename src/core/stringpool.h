@@ -75,6 +75,7 @@ public:
         // assert(this->pool == rhs.pool || this->pool == invalidPool() || rhs.pool == invalidPool());
         return this->_str == rhs._str;
     }
+    bool operator!=(InternedString rhs) const { return !(*this == rhs); }
 
     // This function compares the actual string contents
     bool operator<(InternedString rhs) const { return this->s().compare(rhs.s()) == -1; }
