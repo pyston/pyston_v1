@@ -1754,7 +1754,7 @@ private:
             // I think it's better to just not generate bad speculations:
             if (rtn->canConvertTo(speculated_type)) {
                 auto source = irstate->getSourceInfo();
-                printf("On %s:%d, function %s:\n", source->getFn()->c_str(), source->body[0]->lineno,
+                printf("On %s:%d, function %s:\n", source->getFn()->c_str(), source->getBody()[0]->lineno,
                        source->getName()->c_str());
                 irstate->getSourceInfo()->cfg->print();
             }
@@ -3268,7 +3268,7 @@ FunctionMetadata* wrapFunction(AST* node, AST_arguments* args, const std::vector
     FunctionMetadata*& md = made[node];
     if (md == NULL) {
         std::unique_ptr<SourceInfo> si(
-            new SourceInfo(source->parent_module, source->scoping, source->future_flags, node, body, source->getFn()));
+            new SourceInfo(source->parent_module, source->scoping, source->future_flags, node, source->getFn()));
         if (args)
             md = new FunctionMetadata(args->args.size(), args->vararg, args->kwarg, std::move(si));
         else

@@ -253,7 +253,7 @@ private:
 
     unsigned int next_var_index = 0;
 
-    friend CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamNames& param_names);
+    friend CFG* computeCFG(SourceInfo* source, const ParamNames& param_names);
 
 public:
     CFGVisitor(SourceInfo* source, AST_TYPE::AST_TYPE root_type, FutureFlags future_flags,
@@ -2862,8 +2862,10 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* s
 #endif
 }
 
-CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamNames& param_names) {
+CFG* computeCFG(SourceInfo* source, const ParamNames& param_names) {
     STAT_TIMER(t0, "us_timer_computecfg", 0);
+
+    auto body = source->getBody();
 
     CFG* rtn = new CFG();
 

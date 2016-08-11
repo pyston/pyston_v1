@@ -93,15 +93,8 @@ void FunctionMetadata::addVersion(CompiledFunction* compiled) {
     }
 }
 
-SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast,
-                       std::vector<AST_stmt*> body, BoxedString* fn)
-    : parent_module(m),
-      scoping(scoping),
-      scope_info(NULL),
-      future_flags(future_flags),
-      ast(ast),
-      cfg(NULL),
-      body(std::move(body)) {
+SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast, BoxedString* fn)
+    : parent_module(m), scoping(scoping), scope_info(NULL), future_flags(future_flags), ast(ast), cfg(NULL) {
     assert(fn);
 
     // TODO: this is a very bad way of handling this:

@@ -503,7 +503,8 @@ class AST_Expression : public AST {
 public:
     std::unique_ptr<InternedStringPool> interned_strings;
 
-    AST_expr* body;
+    // this should be an expr but we convert it into a AST_Return(AST_expr) to make the code simpler
+    AST_stmt* body;
 
     virtual void accept(ASTVisitor* v);
 

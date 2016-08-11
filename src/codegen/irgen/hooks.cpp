@@ -103,6 +103,21 @@ InternedString SourceInfo::mangleName(InternedString id) {
     return getScopeInfo()->mangleName(id);
 }
 
+llvm::ArrayRef<AST_stmt*> SourceInfo::getBody() const {
+    switch (ast->type) {
+        case AST_TYPE::ClassDef:
+            return ((AST_ClassDef*)ast)->body;
+        case AST_TYPE::Expression:
+            return ((AST_Expression*)ast)->body;
+        case AST_TYPE::FunctionDef:
+            return ((AST_FunctionDef*)ast)->body;
+        case AST_TYPE::Module:
+            return ((AST_Module*)ast)->body;
+        default:
+            RELEASE_ASSERT(0, "unknown %d", ast->type);
+    };
+}
+
 InternedStringPool& SourceInfo::getInternedStrings() {
     return scoping->getInternedStrings();
 }
@@ -135,8 +150,7 @@ BORROWED(BoxedString*) SourceInfo::getName() noexcept {
 }
 
 Box* SourceInfo::getDocString() {
-    AST_Str* first_str = NULL;
-
+    auto body = getBody();
     if (body.size() > 0 && body[0]->type == AST_TYPE::Expr
         && static_cast<AST_Expr*>(body[0])->value->type == AST_TYPE::Str) {
         return boxString(static_cast<AST_Str*>(static_cast<AST_Expr*>(body[0])->value)->str_data);
@@ -275,7 +289,7 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
 
     // Do the analysis now if we had deferred it earlier:
     if (source->cfg == NULL) {
-        source->cfg = computeCFG(source, source->body, f->param_names);
+        source->cfg = computeCFG(source, f->param_names);
     }
 
 
@@ -336,7 +350,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         auto fn_str = boxString(fn);
         AUTO_DECREF(fn_str);
-        std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, m->body, fn_str));
+        std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, fn_str));
 
         static BoxedString* doc_str = getStaticString("__doc__");
         bm->setattr(doc_str, autoDecref(si->getDocString()), NULL);
@@ -375,7 +389,7 @@ Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
     return astInterpretFunctionEval(md, globals, boxedLocals);
 }
 
-static FunctionMetadata* compileForEvalOrExec(AST* source, std::vector<AST_stmt*> body, BoxedString* fn,
+static FunctionMetadata* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_stmt*> body, BoxedString* fn,
                                               PyCompilerFlags* flags) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
@@ -394,8 +408,7 @@ static FunctionMetadata* compileForEvalOrExec(AST* source, std::vector<AST_stmt*
         flags->cf_flags = future_flags;
     }
 
-    std::unique_ptr<SourceInfo> si(
-        new SourceInfo(getCurrentModule(), scoping, future_flags, source, std::move(body), fn));
+    std::unique_ptr<SourceInfo> si(new SourceInfo(getCurrentModule(), scoping, future_flags, source, fn));
 
     FunctionMetadata* md = new FunctionMetadata(0, false, false, std::move(si));
     return md;
@@ -406,14 +419,7 @@ static FunctionMetadata* compileExec(AST_Module* parsedModule, BoxedString* fn, 
 }
 
 static FunctionMetadata* compileEval(AST_Expression* parsedExpr, BoxedString* fn, PyCompilerFlags* flags) {
-    // We need body (list of statements) to compile.
-    // Obtain this by simply making a single statement which contains the expression.
-    AST_Return* stmt = new AST_Return();
-    stmt->lineno = parsedExpr->body->lineno;
-    stmt->value = parsedExpr->body;
-    std::vector<AST_stmt*> body = { stmt };
-
-    return compileForEvalOrExec(parsedExpr, std::move(body), fn, flags);
+    return compileForEvalOrExec(parsedExpr, parsedExpr->body, fn, flags);
 }
 
 extern "C" PyCodeObject* PyAST_Compile(struct _mod* _mod, const char* filename, PyCompilerFlags* flags,

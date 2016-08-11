@@ -2041,7 +2041,7 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
     // (For instance, throwing the exception will try to fetch the current statement, but we determine
     // that by looking at the cfg.)
     if (!source_info->cfg)
-        source_info->cfg = computeCFG(source_info, source_info->body, md->param_names);
+        source_info->cfg = computeCFG(source_info, md->param_names);
 
     Box** vregs = NULL;
     int num_vregs = source_info->cfg->getVRegInfo().getTotalNumOfVRegs();
@@ -2083,7 +2083,7 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
     // that by looking at the cfg.)
     SourceInfo* source_info = md->source.get();
     if (!source_info->cfg)
-        source_info->cfg = computeCFG(source_info, source_info->body, md->param_names);
+        source_info->cfg = computeCFG(source_info, md->param_names);
 
     Box** vregs = NULL;
     int num_vregs = source_info->cfg->getVRegInfo().getTotalNumOfVRegs();

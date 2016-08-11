@@ -421,20 +421,17 @@ public:
     ScopeInfo* getScopeInfo();
     LivenessAnalysis* getLiveness();
 
-    // TODO we're currently copying the body of the AST into here, since lambdas don't really have a statement-based
-    // body and we have to create one.  Ideally, we'd be able to avoid the space duplication for non-lambdas.
-    const std::vector<AST_stmt*> body;
-
     // does not throw CXX or CAPI exceptions:
     BORROWED(BoxedString*) getName() noexcept;
     BORROWED(BoxedString*) getFn();
 
     InternedString mangleName(InternedString id);
 
+    llvm::ArrayRef<AST_stmt*> getBody() const;
+
     Box* getDocString();
 
-    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast,
-               std::vector<AST_stmt*> body, BoxedString* fn);
+    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast, BoxedString* fn);
     ~SourceInfo();
 
 private:
