@@ -15,7 +15,7 @@
 #ifndef PYSTON_CODEGEN_IRGEN_FUTURE_H
 #define PYSTON_CODEGEN_IRGEN_FUTURE_H
 
-#include <vector>
+#include "llvm/ADT/ArrayRef.h"
 
 #include "core/types.h"
 
@@ -25,7 +25,7 @@ namespace pyston {
 // bad __future__ imports. Returns the futures that are turned on. This is used
 // for irgeneration; the parser still has to handle some futures on its own,
 // when they are relevant for the parser.
-FutureFlags getFutureFlags(std::vector<AST_stmt*> const& body, const char* file);
+FutureFlags getFutureFlags(llvm::ArrayRef<AST_stmt*> body, const char* file);
 }
 
 #endif

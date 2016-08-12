@@ -320,7 +320,7 @@ public:
 };
 
 class SourceInfo;
-CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamNames& param_names);
+CFG* computeCFG(SourceInfo* source, const ParamNames& param_names);
 void printCFG(CFG* cfg);
 }
 

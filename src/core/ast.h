@@ -503,7 +503,8 @@ class AST_Expression : public AST {
 public:
     std::unique_ptr<InternedStringPool> interned_strings;
 
-    AST_expr* body;
+    // this should be an expr but we convert it into a AST_Return(AST_expr) to make the code simpler
+    AST_stmt* body;
 
     virtual void accept(ASTVisitor* v);
 
@@ -542,7 +543,7 @@ class AST_FunctionDef : public AST_stmt {
 public:
     std::vector<AST_stmt*> body;
     std::vector<AST_expr*> decorator_list;
-    InternedString name;
+    InternedString name; // if the name is not set this is a lambda
     AST_arguments* args;
 
     virtual void accept(ASTVisitor* v);

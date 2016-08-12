@@ -253,7 +253,7 @@ private:
 
     unsigned int next_var_index = 0;
 
-    friend CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamNames& param_names);
+    friend CFG* computeCFG(SourceInfo* source, const ParamNames& param_names);
 
 public:
     CFGVisitor(SourceInfo* source, AST_TYPE::AST_TYPE root_type, FutureFlags future_flags,
@@ -1199,14 +1199,25 @@ private:
     }
 
     AST_expr* remapLambda(AST_Lambda* node) {
-        auto rtn = new AST_Lambda();
-        rtn->body = node->body; // don't remap now; will be CFG'ed later
-        rtn->args = remapArguments(node->args);
-        rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
-        // lambdas create scope, need to register as replacement
-        scoping_analysis->registerScopeReplacement(node, rtn);
-        return rtn;
+        // we convert lambdas into normal functions (but don't give it a name)
+        auto def = new AST_FunctionDef();
+        def->lineno = node->lineno;
+        def->col_offset = node->col_offset;
+
+        auto stmt = new AST_Return;
+        stmt->lineno = node->lineno;
+        stmt->col_offset = node->col_offset;
+        stmt->value = node->body; // don't remap now; will be CFG'ed later
+
+        def->body = { stmt };
+        def->args = remapArguments(node->args);
+
+        scoping_analysis->registerScopeReplacement(node, def);
+
+        auto tmp = nodeName();
+        pushAssign(tmp, new AST_MakeFunction(def));
+
+        return makeLoad(tmp, def, /* is_kill */ false);
     }
 
     AST_expr* remapLangPrimitive(AST_LangPrimitive* node) {
@@ -2851,8 +2862,10 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* s
 #endif
 }
 
-CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body, const ParamNames& param_names) {
+CFG* computeCFG(SourceInfo* source, const ParamNames& param_names) {
     STAT_TIMER(t0, "us_timer_computecfg", 0);
+
+    auto body = source->getBody();
 
     CFG* rtn = new CFG();
 

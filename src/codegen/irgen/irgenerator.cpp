@@ -1281,18 +1281,6 @@ private:
 
     CompilerVariable* evalIndex(AST_Index* node, const UnwindInfo& unw_info) { return evalExpr(node->value, unw_info); }
 
-    CompilerVariable* evalLambda(AST_Lambda* node, const UnwindInfo& unw_info) {
-        AST_Return* expr = new AST_Return();
-        expr->value = node->body;
-        expr->lineno = node->body->lineno;
-
-        std::vector<AST_stmt*> body = { expr };
-        CompilerVariable* func = _createFunction(node, unw_info, node->args, body);
-        ConcreteCompilerVariable* converted = func->makeConverted(emitter, func->getBoxType());
-
-        return converted;
-    }
-
 
     CompilerVariable* evalList(AST_List* node, const UnwindInfo& unw_info) {
         std::vector<CompilerVariable*> elts;
@@ -1766,7 +1754,7 @@ private:
             // I think it's better to just not generate bad speculations:
             if (rtn->canConvertTo(speculated_type)) {
                 auto source = irstate->getSourceInfo();
-                printf("On %s:%d, function %s:\n", source->getFn()->c_str(), source->body[0]->lineno,
+                printf("On %s:%d, function %s:\n", source->getFn()->c_str(), source->getBody()[0]->lineno,
                        source->getName()->c_str());
                 irstate->getSourceInfo()->cfg->print();
             }
@@ -1843,9 +1831,6 @@ private:
                 break;
             case AST_TYPE::Dict:
                 rtn = evalDict(ast_cast<AST_Dict>(node), unw_info);
-                break;
-            case AST_TYPE::Lambda:
-                rtn = evalLambda(ast_cast<AST_Lambda>(node), unw_info);
                 break;
             case AST_TYPE::List:
                 rtn = evalList(ast_cast<AST_List>(node), unw_info);
@@ -3283,7 +3268,7 @@ FunctionMetadata* wrapFunction(AST* node, AST_arguments* args, const std::vector
     FunctionMetadata*& md = made[node];
     if (md == NULL) {
         std::unique_ptr<SourceInfo> si(
-            new SourceInfo(source->parent_module, source->scoping, source->future_flags, node, body, source->getFn()));
+            new SourceInfo(source->parent_module, source->scoping, source->future_flags, node, source->getFn()));
         if (args)
             md = new FunctionMetadata(args->args.size(), args->vararg, args->kwarg, std::move(si));
         else

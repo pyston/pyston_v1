@@ -67,7 +67,7 @@ inline bool is_stmt_string(AST_stmt* stmt) {
     return stmt->type == AST_TYPE::Expr && static_cast<AST_Expr*>(stmt)->value->type == AST_TYPE::Str;
 }
 
-FutureFlags getFutureFlags(std::vector<AST_stmt*> const& body, const char* file) {
+FutureFlags getFutureFlags(llvm::ArrayRef<AST_stmt*> body, const char* file) {
     FutureFlags ff = 0;
 
     // Set the defaults for the future flags depending on what version we are

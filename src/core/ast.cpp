@@ -1405,7 +1405,12 @@ bool PrintVisitor::visit_functiondef(AST_FunctionDef* node) {
         printIndent();
     }
 
-    stream << "def " << node->name.s() << "(";
+    stream << "def ";
+    if (node->name != InternedString())
+        stream << node->name.s();
+    else
+        stream << "<lambda>";
+    stream << "(";
     node->args->accept(this);
     stream << ")";
 

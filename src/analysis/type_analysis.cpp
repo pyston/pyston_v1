@@ -391,8 +391,6 @@ private:
 
     void* visit_index(AST_Index* node) override { return getType(node->value); }
 
-    void* visit_lambda(AST_Lambda* node) override { return typeFromClass(function_cls); }
-
     void* visit_langprimitive(AST_LangPrimitive* node) override {
         switch (node->opcode) {
             case AST_LangPrimitive::CHECK_EXC_MATCH:

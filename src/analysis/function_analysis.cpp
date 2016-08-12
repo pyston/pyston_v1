@@ -98,12 +98,6 @@ public:
         return true;
     }
 
-    bool visit_lambda(AST_Lambda* node) {
-        for (auto* d : node->args->defaults)
-            d->accept(this);
-        return true;
-    }
-
     bool visit_name(AST_Name* node) {
         if (node->vreg == -1)
             return true;

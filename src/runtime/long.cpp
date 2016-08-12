@@ -65,6 +65,7 @@ int _PyLong_DigitValue[256] = {
 
 void BoxedLong::tp_dealloc(Box* b) noexcept {
     mpz_clear(static_cast<BoxedLong*>(b)->n);
+    b->cls->tp_free(b);
 }
 
 extern "C" int _PyLong_Sign(PyObject* l) noexcept {

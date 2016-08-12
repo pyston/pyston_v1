@@ -40,11 +40,10 @@ TEST_F(AnalysisTest, augassign) {
 
     FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
 
-    SourceInfo* si = new SourceInfo(createModule(boxString("augassign"), fn.c_str()), scoping, future_flags, func,
-            func->body, boxString(fn));
+    SourceInfo* si = new SourceInfo(createModule(boxString("augassign"), fn.c_str()), scoping, future_flags, func, boxString(fn));
 
     ParamNames param_names(si->ast, si->getInternedStrings());
-    CFG* cfg = computeCFG(si, func->body, param_names);
+    CFG* cfg = computeCFG(si, param_names);
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
     auto&& vregs = cfg->getVRegInfo();
 
@@ -73,10 +72,10 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
 
     ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
     std::unique_ptr<SourceInfo> si(new SourceInfo(createModule(boxString("osr" + std::to_string((is_osr << 1) + i_maybe_undefined)),
-                    fn.c_str()), scoping, future_flags, func, func->body, boxString(fn)));
+                    fn.c_str()), scoping, future_flags, func, boxString(fn)));
     FunctionMetadata* clfunc = new FunctionMetadata(0, false, false, std::move(si));
 
-    CFG* cfg = computeCFG(clfunc->source.get(), func->body, clfunc->param_names);
+    CFG* cfg = computeCFG(clfunc->source.get(), clfunc->param_names);
     clfunc->source->cfg = cfg;
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
 

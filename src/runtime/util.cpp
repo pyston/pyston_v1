@@ -251,7 +251,7 @@ extern "C" void dumpEx(void* p, int levels) {
             FunctionMetadata* md = f->md;
             if (md->source) {
                 printf("User-defined function '%s'\n", md->source->getName()->c_str());
-                printf("Defined at %s:%d\n", md->source->getFn()->c_str(), md->source->body[0]->lineno);
+                printf("Defined at %s:%d\n", md->source->getFn()->c_str(), md->source->getBody()[0]->lineno);
 
                 if (md->source->cfg && levels > 0) {
                     md->source->cfg->print();

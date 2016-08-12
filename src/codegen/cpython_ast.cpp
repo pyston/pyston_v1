@@ -740,7 +740,15 @@ public:
             case Expression_kind: {
                 AST_Expression* rtn = new AST_Expression(llvm::make_unique<InternedStringPool>());
                 this->pool = rtn->interned_strings.get();
-                rtn->body = this->convert(mod->v.Expression.body);
+
+                // instead of storing the expression inside the AST node we convert it directly to a return statement
+                AST_expr* expr = this->convert(mod->v.Expression.body);
+                auto rtn_stmt = new AST_Return;
+                rtn_stmt->lineno = expr->lineno;
+                rtn_stmt->col_offset = expr->col_offset;
+                rtn_stmt->value = expr;
+
+                rtn->body = rtn_stmt;
                 return rtn;
             }
             default:
