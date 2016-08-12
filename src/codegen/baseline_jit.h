@@ -188,7 +188,16 @@ public:
     void fragmentFinished(int bytes_witten, int num_bytes_overlapping, void* next_fragment_start, ICInfo& ic_info);
 };
 
-class JitFragmentWriter : public Rewriter {
+// Hold the ICInfo of the JitFragmentWriter in a separate class from which JitFragmentWriter derives.
+// This way the ICInfo will get deleted last (after the Rewriter destructor gets called) otherwise
+// we would delete the ICInfo before the Rewriter destructor gets called and this causes memory corruptions because
+// there are still accesses to it.
+class ICInfoManager {
+protected:
+    std::unique_ptr<ICInfo> ic_info;
+    ICInfoManager(std::unique_ptr<ICInfo> ic_info) : ic_info(std::move(ic_info)) {}
+};
+class JitFragmentWriter : ICInfoManager, public Rewriter {
 private:
     struct ExitInfo {
         int num_bytes;    // the number of bytes for the overwriteable jump
@@ -218,7 +227,7 @@ private:
     llvm::DenseMap<InternedString, RewriterVar*> local_syms;
     // keeps track which non block local vregs are known to have a non NULL value
     llvm::DenseSet<int> known_non_null_vregs;
-    std::unique_ptr<ICInfo> ic_info;
+
     llvm::SmallPtrSet<RewriterVar*, 4> var_is_a_python_bool;
 
     // Optional points to a CFGBlock and a patch location which should get patched to a direct jump if
