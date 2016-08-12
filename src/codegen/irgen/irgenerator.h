@@ -179,7 +179,9 @@ public:
     virtual void doFunctionEntry(const ParamNames& param_names, const std::vector<ConcreteCompilerType*>& arg_types)
         = 0;
 
+#ifndef NDEBUG
     virtual void giveLocalSymbol(InternedString name, CompilerVariable* var) = 0;
+#endif
     virtual void giveLocalSymbol(int vreg, CompilerVariable* var) = 0;
     virtual void giveDefinednessVar(int vreg, llvm::Value* val) = 0;
     virtual void copySymbolsFrom(SymbolTable* st) = 0;

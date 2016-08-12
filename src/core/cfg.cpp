@@ -2847,12 +2847,17 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* s
                 num_vregs = std::max(num_vregs, visitor.next_vreg);
         }
 
-        if (step == AssignVRegsVisitor::UserVisible)
+        if (step == AssignVRegsVisitor::UserVisible) {
+            num_vregs_user_visible = visitor.sym_vreg_map.size();
+#ifndef NDEBUG
             sym_vreg_map_user_visible = visitor.sym_vreg_map;
-        else if (step == AssignVRegsVisitor::CrossBlock)
+#endif
+        } else if (step == AssignVRegsVisitor::CrossBlock)
             num_vregs = num_vregs_cross_block = visitor.next_vreg;
     }
+#ifndef NDEBUG
     sym_vreg_map = std::move(visitor.sym_vreg_map);
+#endif
     vreg_sym_map = std::move(visitor.vreg_sym_map);
     assert(hasVRegsAssigned());
 #if REUSE_VREGS

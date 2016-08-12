@@ -24,6 +24,8 @@ protected:
     }
 };
 
+// this test use functions (VRegInfo::getVReg) which are only available in a debug build
+#ifndef NDEBUG
 TEST_F(AnalysisTest, augassign) {
     const std::string fn("test/unittests/analysis_listcomp.py");
     AST_Module* module = caching_parse_file(fn.c_str(), 0);
@@ -146,3 +148,4 @@ TEST_F(AnalysisTest, osr1) {
 TEST_F(AnalysisTest, osr2) {
     doOsrTest(true, true);
 }
+#endif
