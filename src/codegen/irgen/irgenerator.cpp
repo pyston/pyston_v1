@@ -2663,18 +2663,6 @@ private:
         }
     }
 
-    void loadArgument(InternedString name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {
-        assert(name.s() != FRAME_INFO_PTR_NAME);
-        CompilerVariable* var = unboxVar(t, v);
-        auto cfg = irstate->getSourceInfo()->cfg;
-        auto vst = irstate->getScopeInfo()->getScopeTypeOfName(name);
-        int vreg = -1;
-        if (vst == ScopeInfo::VarScopeType::FAST || vst == ScopeInfo::VarScopeType::CLOSURE) {
-            vreg = cfg->getVRegInfo().getVReg(name);
-        }
-        _doSet(vreg, name, vst, var, unw_info);
-    }
-
     void loadArgument(AST_expr* name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {
         CompilerVariable* var = unboxVar(t, v);
         _doSet(name, var, unw_info);
@@ -2882,6 +2870,7 @@ public:
         setDefinedVar(vreg, val);
     }
 
+#ifndef NDEBUG
     void giveLocalSymbol(InternedString name, CompilerVariable* var) override {
         assert(name.s() != "None");
         assert(name.s() != FRAME_INFO_PTR_NAME);
@@ -2895,6 +2884,7 @@ public:
         int vreg = irstate->getSourceInfo()->cfg->getVRegInfo().getVReg(name);
         giveLocalSymbol(vreg, var);
     }
+#endif
 
     void giveLocalSymbol(int vreg, CompilerVariable* var) override {
         assert(var->getType()->isUsable());
@@ -2994,13 +2984,11 @@ public:
 
         int i = 0;
         for (; i < param_names.args.size(); i++) {
-            loadArgument(internString(param_names.args[i]), arg_types[i], python_parameters[i],
-                         UnwindInfo::cantUnwind());
+            loadArgument(param_names.arg_names[i], arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
         }
 
         if (param_names.vararg.size()) {
-            loadArgument(internString(param_names.vararg), arg_types[i], python_parameters[i],
-                         UnwindInfo::cantUnwind());
+            loadArgument(param_names.vararg_name, arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
             i++;
         }
 
@@ -3030,7 +3018,7 @@ public:
             emitter.refConsumed(passed_dict, null_check);
             emitter.refConsumed(created_dict, isnull_terminator);
 
-            loadArgument(internString(param_names.kwarg), arg_types[i], phi, UnwindInfo::cantUnwind());
+            loadArgument(param_names.kwarg_name, arg_types[i], phi, UnwindInfo::cantUnwind());
             i++;
         }
 

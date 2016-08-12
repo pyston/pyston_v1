@@ -155,9 +155,12 @@ public:
     ~ASTInterpreter() { Py_XDECREF(this->created_closure); }
 
     const VRegInfo& getVRegInfo() const { return source_info->cfg->getVRegInfo(); }
+
+#ifndef NDEBUG
     const llvm::DenseMap<InternedString, DefaultedInt<-1>>& getSymVRegMap() const {
-        return source_info->cfg->getVRegInfo().getSymVRegMap();
+        return getVRegInfo().getSymVRegMap();
     }
+#endif
 
     AST_stmt* getCurrentStatement() {
         assert(frame_info.stmt);
@@ -755,12 +758,13 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
         = computeRequiredPhis(getMD()->param_names, source_info->cfg, liveness, scope_info);
 
     llvm::SmallVector<int, 16> dead_vregs;
-    for (auto&& sym : getSymVRegMap()) {
-        if (!liveness->isLiveAtEnd(sym.second, current_block)) {
-            dead_vregs.push_back(sym.second);
-        } else if (phis->isRequiredAfter(sym.second, current_block)) {
-            assert(scope_info->getScopeTypeOfName(sym.first) != ScopeInfo::VarScopeType::GLOBAL);
-        } else {
+
+    for (int vreg = 0; vreg < getVRegInfo().getTotalNumOfVRegs(); ++vreg) {
+        if (!liveness->isLiveAtEnd(vreg, current_block)) {
+            dead_vregs.push_back(vreg);
+        } else if (phis->isRequiredAfter(vreg, current_block)) {
+            assert(!getVRegInfo().vregHasName(vreg)
+                   || scope_info->getScopeTypeOfName(getVRegInfo().getName(vreg)) != ScopeInfo::VarScopeType::GLOBAL);
         }
     }
     for (auto&& vreg_num : dead_vregs) {

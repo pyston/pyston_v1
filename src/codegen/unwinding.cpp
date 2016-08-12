@@ -890,15 +890,16 @@ DeoptState getDeoptState() {
             // and assigning them to the new vregs array...
             // But deopts are so rare it's not really worth it.
             Box** vregs = frame_iter->getFrameInfo()->vregs;
-            for (const auto& p : cf->md->source->cfg->getVRegInfo().getUserVisibleSymVRegMap()) {
-                if (is_undefined.count(p.second))
+            int num_vregs_user_visible = cf->md->source->cfg->getVRegInfo().getNumOfUserVisibleVRegs();
+            for (int vreg = 0; vreg < num_vregs_user_visible; ++vreg) {
+                if (is_undefined.count(vreg))
                     assert(0);
 
-                Box* v = vregs[p.second];
+                Box* v = vregs[vreg];
                 if (!v)
                     continue;
 
-                d->d[boxInt(p.second)] = incref(v);
+                d->d[boxInt(vreg)] = incref(v);
             }
 
             for (const auto& p : cf->location_map->vars) {
@@ -930,12 +931,14 @@ BORROWED(Box*) fastLocalsToBoxedLocals() {
 
 static BoxedDict* localsForFrame(Box** vregs, CFG* cfg) {
     BoxedDict* rtn = new BoxedDict();
-    rtn->d.grow(cfg->getVRegInfo().getNumOfUserVisibleVRegs());
-    for (auto& l : cfg->getVRegInfo().getUserVisibleSymVRegMap()) {
-        Box* val = vregs[l.second];
+    auto vregs_sym_map = cfg->getVRegInfo().getVRegSymUserVisibleMap();
+    int num_user_visible_vregs = vregs_sym_map.size();
+    rtn->d.grow(num_user_visible_vregs);
+    for (int vreg = 0; vreg < num_user_visible_vregs; ++vreg) {
+        Box* val = vregs[vreg];
         if (val) {
-            assert(!rtn->d.count(l.first.getBox()));
-            rtn->d[incref(l.first.getBox())] = incref(val);
+            assert(!rtn->d.count(vregs_sym_map[vreg].getBox()));
+            rtn->d[incref(vregs_sym_map[vreg].getBox())] = incref(val);
         }
     }
     return rtn;

@@ -29,6 +29,7 @@
 
 #include <vector>
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
 
 #include "core/ast.h"
@@ -107,21 +108,26 @@ public:
 // llvm jit    : [user visible]
 class VRegInfo {
 private:
+#ifndef NDEBUG
+    // this maps use too much memory, we only use them in the debug build for asserts
     llvm::DenseMap<InternedString, DefaultedInt<-1>> sym_vreg_map_user_visible;
     llvm::DenseMap<InternedString, DefaultedInt<-1>> sym_vreg_map;
+#endif
 
     // Reverse map, from vreg->symbol name.
-    // Entries won't exist for all vregs
+    // Entries won't exist for all vregs (=no entries for reused vregs)
     std::vector<InternedString> vreg_sym_map;
 
     int num_vregs_cross_block = -1;
+    int num_vregs_user_visible = -1;
     int num_vregs = -1;
 
 public:
+#ifndef NDEBUG
     // map of all assigned names. if the name is block local the vreg number is not unique because this vregs get reused
     // between blocks.
-    const llvm::DenseMap<InternedString, DefaultedInt<-1>>& getSymVRegMap() { return sym_vreg_map; }
-    const llvm::DenseMap<InternedString, DefaultedInt<-1>>& getUserVisibleSymVRegMap() {
+    const llvm::DenseMap<InternedString, DefaultedInt<-1>>& getSymVRegMap() const { return sym_vreg_map; }
+    const llvm::DenseMap<InternedString, DefaultedInt<-1>>& getUserVisibleSymVRegMap() const {
         return sym_vreg_map_user_visible;
     }
 
@@ -132,6 +138,11 @@ public:
         assert(it != sym_vreg_map.end());
         assert(it->second != -1);
         return it->second;
+    }
+#endif
+
+    llvm::ArrayRef<InternedString> getVRegSymUserVisibleMap() const {
+        return llvm::makeArrayRef(vreg_sym_map).slice(0, num_vregs_user_visible);
     }
 
     // Not all vregs correspond to a name; many are our compiler-generated variables.
@@ -149,12 +160,12 @@ public:
         return vreg_sym_map[vreg];
     }
 
-    bool isUserVisibleVReg(int vreg) const { return vreg < sym_vreg_map_user_visible.size(); }
+    bool isUserVisibleVReg(int vreg) const { return vreg < num_vregs_user_visible; }
     bool isCrossBlockVReg(int vreg) const { return !isUserVisibleVReg(vreg) && vreg < num_vregs_cross_block; }
     bool isBlockLocalVReg(int vreg) const { return vreg >= num_vregs_cross_block; }
 
     int getTotalNumOfVRegs() const { return num_vregs; }
-    int getNumOfUserVisibleVRegs() const { return sym_vreg_map_user_visible.size(); }
+    int getNumOfUserVisibleVRegs() const { return num_vregs_user_visible; }
     int getNumOfCrossBlockVRegs() const { return num_vregs_cross_block; }
 
     bool hasVRegsAssigned() const { return num_vregs != -1; }
