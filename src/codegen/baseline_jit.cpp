@@ -168,7 +168,8 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
                                      std::unique_ptr<ICSlotRewrite> rewrite, int code_offset, int num_bytes_overlapping,
                                      void* entry_code, JitCodeBlock& code_block,
                                      llvm::DenseSet<int> known_non_null_vregs)
-    : Rewriter(std::move(rewrite), 0, {}, /* needs_invalidation_support = */ false),
+    : ICInfoManager(std::move(ic_info)),
+      Rewriter(std::move(rewrite), 0, {}, /* needs_invalidation_support = */ false),
       block(block),
       code_offset(code_offset),
       exit_info(),
@@ -176,8 +177,7 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
       entry_code(entry_code),
       code_block(code_block),
       interp(0),
-      known_non_null_vregs(std::move(known_non_null_vregs)),
-      ic_info(std::move(ic_info)) {
+      known_non_null_vregs(std::move(known_non_null_vregs)) {
 
     added_changing_action = true;
 
