@@ -3755,6 +3755,7 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
 
         if (rewrite_args) {
             r_val->addGuard((int64_t)val);
+            rewrite_args->rewriter->addGCReference(val);
             rewrite_args->obj = r_val;
             rewrite_args->func_guarded = true;
         }
@@ -5255,6 +5256,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
         if (rewrite_args && !rewrite_args->func_guarded) {
             r_im_func->addGuard((intptr_t)im->func);
+            rewrite_args->rewriter->addGCReference(im->func);
             rewrite_args->func_guarded = true;
         }
 
@@ -5567,8 +5569,11 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, BinopRewriteArgs* rewrite_ar
 
         RewriterVar* r_lhs_cls = r_lhs->getAttr(offsetof(Box, cls))->setType(RefType::BORROWED);
         r_lhs_cls->addGuard((intptr_t)lhs->cls);
+        rewrite_args->rewriter->addGCReference(lhs->cls);
+
         RewriterVar* r_rhs_cls = r_rhs->getAttr(offsetof(Box, cls))->setType(RefType::BORROWED);
         r_rhs_cls->addGuard((intptr_t)rhs->cls);
+        rewrite_args->rewriter->addGCReference(rhs->cls);
 
         r_lhs_cls->addAttrGuard(offsetof(BoxedClass, tp_mro), (intptr_t)lhs->cls->tp_mro);
         r_rhs_cls->addAttrGuard(offsetof(BoxedClass, tp_mro), (intptr_t)rhs->cls->tp_mro);
@@ -6786,6 +6791,7 @@ extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
         } else if (r) {
             RewriterVar* rtn = rewrite_args.getReturn(ReturnConvention::HAS_RETURN);
             rtn->addGuard((uint64_t)r);
+            rewrite_args.rewriter->addGCReference(r);
             rewriter->commitReturning(r_o);
             return incref(o);
         } else /* if (!r) */ {

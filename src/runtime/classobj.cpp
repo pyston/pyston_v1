@@ -564,6 +564,7 @@ void instanceSetattroInternal(Box* _inst, Box* _attr, STOLEN(Box*) value, Setatt
     if (rewrite_args) {
         RewriterVar* inst_r = rewrite_args->obj->getAttr(offsetof(BoxedInstance, inst_cls));
         inst_r->addGuard((uint64_t)inst->inst_cls);
+        rewrite_args->rewriter->addGCReference(inst->inst_cls);
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, inst_r,
                                          rewrite_args->rewriter->getReturnDestination());
         Box* setattr = classLookup<REWRITABLE>(inst->inst_cls, setattr_str, &grewrite_args);

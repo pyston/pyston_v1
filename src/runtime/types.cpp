@@ -823,6 +823,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
     if (rewrite_args) {
         rewrite_args->arg1->addGuard((intptr_t)cls);
+        rewrite_args->rewriter->addGCReference(cls);
     }
 
     // Special-case unicode for now, maybe there's something about this that can eventually be generalized:
@@ -1083,6 +1084,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                 if (init_attr) {
                     r_init = grewrite_args.getReturn(ReturnConvention::HAS_RETURN);
                     r_init->addGuard((intptr_t)init_attr);
+                    rewrite_args->rewriter->addGCReference(init_attr);
                 } else {
                     grewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
                 }
