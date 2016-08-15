@@ -78,10 +78,13 @@ void ICSlotInfo::clear(bool should_invalidate) {
         ic->invalidate(this);
     used = false;
 
-    for (auto p : gc_references) {
+    // Have to be careful here: DECREF can end up recursively clearing this slot
+    std::vector<void*> saved_gc_references;
+    std::swap(saved_gc_references, gc_references);
+    for (auto p : saved_gc_references) {
         Py_DECREF(p);
     }
-    gc_references.clear();
+    saved_gc_references.clear();
 
     for (auto&& invalidator : invalidators) {
         invalidator->remove(this);
@@ -353,10 +356,8 @@ ICInfo::~ICInfo() {
     deregisterGCTrackedICInfo(this);
 
     for (auto& slot : slots) {
-        for (auto invalidator : slot.invalidators) {
-            assert(invalidator->dependents.count(&slot));
-            invalidator->dependents.erase(&slot);
-        }
+        // Calling a full clear() might be overkill here, but probably better safe than sorry:
+        slot.clear(false);
     }
 }
 
