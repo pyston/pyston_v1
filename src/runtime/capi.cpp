@@ -1572,6 +1572,7 @@ Box* BoxedCApiFunction::tppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPa
 
     if (rewrite_args) {
         rewrite_args->obj->addGuard((intptr_t)self);
+        rewrite_args->rewriter->addGCReference(self);
     }
 
     int flags = self->method_def->ml_flags;
