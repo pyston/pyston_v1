@@ -369,62 +369,6 @@ template <ExceptionStyle S> Box* strAdd(BoxedString* lhs, Box* _rhs) noexcept(S 
     return new (lhs->size() + rhs->size()) BoxedString(lhs->s(), rhs->s());
 }
 
-static llvm::StringMap<BoxedString*> interned_strings;
-static StatCounter num_interned_strings("num_interned_string");
-extern "C" PyObject* PyString_InternFromString(const char* s) noexcept {
-    RELEASE_ASSERT(s, "");
-    return internStringImmortal(s);
-}
-
-BoxedString* internStringImmortal(llvm::StringRef s) noexcept {
-    auto& entry = interned_strings[s];
-    if (!entry) {
-        num_interned_strings.log();
-        entry = boxString(s);
-        // CPython returns mortal but in our current implementation they are inmortal
-        entry->interned_state = SSTATE_INTERNED_IMMORTAL;
-    }
-    Py_INCREF(entry);
-    return entry;
-}
-
-extern "C" void PyString_InternInPlace(PyObject** p) noexcept {
-    BoxedString* s = (BoxedString*)*p;
-    if (s == NULL || !PyString_Check(s))
-        Py_FatalError("PyString_InternInPlace: strings only please!");
-    /* If it's a string subclass, we don't really know what putting
-       it in the interned dict might do. */
-    if (!PyString_CheckExact(s))
-        return;
-
-    if (PyString_CHECK_INTERNED(s))
-        return;
-
-    auto& entry = interned_strings[s->s()];
-    if (entry) {
-        Py_INCREF(entry);
-        Py_DECREF(*p);
-        *p = entry;
-    } else {
-        // TODO: do CPython's refcounting here
-        num_interned_strings.log();
-        entry = s;
-
-        Py_INCREF(s);
-
-        // CPython returns mortal but in our current implementation they are inmortal
-        s->interned_state = SSTATE_INTERNED_IMMORTAL;
-    }
-}
-
-extern "C" void _Py_ReleaseInternedStrings() noexcept {
-    // printf("%ld interned strings\n", interned_strings.size());
-    for (const auto& p : interned_strings) {
-        Py_DECREF(p.second);
-    }
-    interned_strings.clear();
-}
-
 /* Format codes
  * F_LJUST      '-'
  * F_SIGN       '+'
@@ -1613,6 +1557,34 @@ extern "C" size_t unicodeHashUnboxed(PyUnicodeObject* self) {
     return x;
 }
 
+
+size_t strHashUnboxedStrRef(llvm::StringRef self) {
+    const char* p;
+    long x;
+
+#ifdef Py_DEBUG
+    assert(_Py_HashSecret_Initialized);
+#endif
+    long len = self.size();
+    /*
+      We make the hash of the empty string be 0, rather than using
+      (prefix ^ suffix), since this slightly obfuscates the hash secret
+    */
+    if (len == 0) {
+        return 0;
+    }
+    p = self.data();
+    x = _Py_HashSecret.prefix;
+    x ^= *p << 7;
+    while (--len >= 0)
+        x = (1000003 * x) ^ *p++;
+    x ^= self.size();
+    x ^= _Py_HashSecret.suffix;
+    if (x == -1)
+        x = -2;
+    return x;
+}
+
 extern "C" size_t strHashUnboxed(BoxedString* self) {
     assert(PyString_Check(self));
     const char* p;
@@ -1623,24 +1595,7 @@ extern "C" size_t strHashUnboxed(BoxedString* self) {
 #endif
     if (self->hash != -1)
         return self->hash;
-    long len = Py_SIZE(self);
-    /*
-      We make the hash of the empty string be 0, rather than using
-      (prefix ^ suffix), since this slightly obfuscates the hash secret
-    */
-    if (len == 0) {
-        self->hash = 0;
-        return 0;
-    }
-    p = self->s().data();
-    x = _Py_HashSecret.prefix;
-    x ^= *p << 7;
-    while (--len >= 0)
-        x = (1000003 * x) ^ *p++;
-    x ^= Py_SIZE(self);
-    x ^= _Py_HashSecret.suffix;
-    if (x == -1)
-        x = -2;
+    x = strHashUnboxedStrRef(self->s());
     self->hash = x;
     return x;
 }

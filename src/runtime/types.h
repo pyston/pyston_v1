@@ -672,6 +672,7 @@ static_assert(offsetof(BoxedString, hash) == offsetof(PyStringObject, ob_shash),
 static_assert(offsetof(BoxedString, interned_state) == offsetof(PyStringObject, ob_sstate), "");
 static_assert(offsetof(BoxedString, s_data) == offsetof(PyStringObject, ob_sval), "");
 
+size_t strHashUnboxedStrRef(llvm::StringRef str);
 extern "C" size_t strHashUnboxed(BoxedString* self);
 extern "C" int64_t hashUnboxed(Box* obj);
 
