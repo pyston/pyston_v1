@@ -1435,8 +1435,7 @@ void Rewriter::commit() {
 
     for (auto p : gc_references) {
         if (Py_REFCNT(p) == 1) {
-            // we hold the only ref to this object
-            assert(0 && "untested");
+            // we hold the only ref to this object, there's no way this could succeed in the future
 
             this->abort();
             return;

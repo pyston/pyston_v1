@@ -823,6 +823,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
 
     if (rewrite_args) {
         rewrite_args->arg1->addGuard((intptr_t)cls);
+        rewrite_args->rewriter->addGCReference(cls);
     }
 
     // Special-case unicode for now, maybe there's something about this that can eventually be generalized:
@@ -1083,6 +1084,7 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
                 if (init_attr) {
                     r_init = grewrite_args.getReturn(ReturnConvention::HAS_RETURN);
                     r_init->addGuard((intptr_t)init_attr);
+                    rewrite_args->rewriter->addGCReference(init_attr);
                 } else {
                     grewrite_args.assertReturnConvention(ReturnConvention::NO_RETURN);
                 }
@@ -3953,6 +3955,10 @@ static int type_traverse(PyTypeObject* type, visitproc visit, void* arg) {
     Py_VISIT(type->tp_bases);
     Py_VISIT(type->tp_base);
 
+    // TODO: should have something like this to traverse GC references in the type runtime ICs:
+    // if (type->hasnext_ic)
+    // Py_TRAVERSE(*type->hasnext_ic);
+
     /* There's no need to visit type->tp_subclasses or
        ((PyHeapTypeObject *)type)->ht_slots, because they can't be involved
        in cycles; tp_subclasses is a list of weak references,
@@ -4707,6 +4713,7 @@ extern "C" void Py_Finalize() noexcept {
     // initialized = 0;
 
     PyType_ClearCache();
+    clearAllICs();
     PyGC_Collect();
 
     PyImport_Cleanup();
@@ -4717,6 +4724,8 @@ extern "C" void Py_Finalize() noexcept {
 
     // May need to run multiple collections to collect everything:
     while (true) {
+        clearAllICs();
+
         int freed = 0;
         freed += PyGC_Collect();
 
@@ -4736,7 +4745,6 @@ extern "C" void Py_Finalize() noexcept {
     }
     constant_locations.clear();
 
-    clearAllICs();
     PyType_ClearCache();
     PyOS_FiniInterrupts();
     _PyCodecRegistry_Deinit();
@@ -4750,6 +4758,7 @@ extern "C" void Py_Finalize() noexcept {
     constants.clear();
 
     clearAllICs();
+    PyGC_Collect();
 
     for (auto b : late_constants) {
         Py_DECREF(b);

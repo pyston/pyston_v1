@@ -39,8 +39,18 @@ def test(ET):
         name = country.get('name')
         print name, rank
 
+    it = root.iter
+    i = it()
+    for e in it():
+        assert not isinstance(e, str)
+
 import xml.etree.ElementTree as Python_ET
 import xml.etree.cElementTree as CAPI_ET
 
-test(Python_ET)
-test(CAPI_ET)
+for i in xrange(20):
+    print
+    print i
+    test(Python_ET)
+    test(CAPI_ET)
+    test(CAPI_ET)
+    test(CAPI_ET)

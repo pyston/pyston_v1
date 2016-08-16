@@ -972,8 +972,10 @@ Box* slotTpGetattrHookInternal(Box* self, BoxedString* name, GetattrRewriteArgs*
         if (rewrite_args) {
             // Fetching getattribute should have done the appropriate guarding on whether or not
             // getattribute exists.
-            if (getattribute)
+            if (getattribute) {
                 r_getattribute->addGuard((intptr_t)getattribute);
+                rewrite_args->rewriter->addGCReference(getattribute);
+            }
 
             GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
             try {
