@@ -26,8 +26,6 @@ class RTDyldMemoryManager;
 namespace pyston {
 
 std::unique_ptr<llvm::RTDyldMemoryManager> createMemoryManager();
-void registerEHFrames(uint8_t* addr, uint64_t load_addr, size_t size);
-void deregisterEHFrames(uint8_t* addr, uint64_t load_addr, size_t size);
 }
 
 #endif
