@@ -4713,6 +4713,7 @@ extern "C" void Py_Finalize() noexcept {
     // initialized = 0;
 
     PyType_ClearCache();
+    clearAllICs();
     PyGC_Collect();
 
     PyImport_Cleanup();
