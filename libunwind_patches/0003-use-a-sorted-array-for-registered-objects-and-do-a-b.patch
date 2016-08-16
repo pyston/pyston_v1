@@ -89,7 +89,7 @@ index e784317..fedba3e 100644
 +      int i;
 +      for (i = 0; i < _U_dyn_info_list_size; i ++) {
 +          if (di == _U_dyn_info_list[i] && i < _U_dyn_info_list_size - 1) {
-+              memmove(_U_dyn_info_list[i], _U_dyn_info_list[i+1],
++              memmove(&_U_dyn_info_list[i], &_U_dyn_info_list[i+1],
 +                      sizeof(unw_dyn_info_t*) * (_U_dyn_info_list_size - i - 1));
 +              break;
 +          }
