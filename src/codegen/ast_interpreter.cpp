@@ -306,7 +306,7 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset, llvm::DenseSe
         code_block = code_blocks[code_blocks.size() - 1].get();
 
     if (!code_block || code_block->shouldCreateNewBlock()) {
-        code_blocks.push_back(llvm::make_unique<JitCodeBlock>(source_info->getName()->s()));
+        code_blocks.push_back(llvm::make_unique<JitCodeBlock>(getMD(), source_info->getName()->s()));
         code_block = code_blocks[code_blocks.size() - 1].get();
         exit_offset = 0;
     }
@@ -354,12 +354,16 @@ void ASTInterpreter::finishJITing(CFGBlock* continue_block) {
 }
 
 Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
+    auto& num_inside = getMD()->bjit_num_inside;
     try {
         UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_baseline_jitted_code");
+        ++num_inside;
         std::pair<CFGBlock*, Box*> rtn = b->entry_code(this, b, vregs);
+        --num_inside;
         next_block = rtn.first;
         return rtn.second;
     } catch (ExcInfo e) {
+        --num_inside;
         AST_stmt* stmt = getCurrentStatement();
         if (stmt->type != AST_TYPE::Invoke)
             throw e;

@@ -67,7 +67,7 @@ public:
 
 class CFGBlock {
 public:
-    CFG* cfg;
+    CFG* const cfg;
 
     // Baseline JIT helper fields:
     // contains address to the start of the code of this basic block

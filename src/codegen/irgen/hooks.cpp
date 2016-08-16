@@ -331,6 +331,10 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
             RELEASE_ASSERT(0, "%d", effort);
     }
 
+    // free the bjit code if this is not a OSR compilation
+    if (!entry_descriptor)
+        f->tryDeallocatingTheBJitCode();
+
     return cf;
 }
 
@@ -840,5 +844,25 @@ void FunctionMetadata::addVersion(void* f, ConcreteCompilerType* rtn_type,
 
     FunctionSpecialization* spec = new FunctionSpecialization(processType(rtn_type), arg_types);
     addVersion(new CompiledFunction(this, spec, f, EffortLevel::MAXIMAL, exception_style, NULL));
+}
+
+bool FunctionMetadata::tryDeallocatingTheBJitCode() {
+    // we can only delete the code object if we are not executing it currently
+    assert(bjit_num_inside >= 0);
+    if (bjit_num_inside != 0) {
+        // TODO: we could check later on again
+        static StatCounter num_baselinejit_blocks_failed_to_free("num_baselinejit_code_blocks_cant_free");
+        num_baselinejit_blocks_failed_to_free.log(code_blocks.size());
+        return false;
+    }
+
+    static StatCounter num_baselinejit_blocks_freed("num_baselinejit_code_blocks_freed");
+    num_baselinejit_blocks_freed.log(code_blocks.size());
+    code_blocks.clear();
+    for (CFGBlock* block : source->cfg->blocks) {
+        block->code = NULL;
+        block->entry_code = NULL;
+    }
+    return true;
 }
 }

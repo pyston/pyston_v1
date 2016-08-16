@@ -73,14 +73,19 @@ JitCodeBlock::MemoryManager::MemoryManager() {
 }
 
 JitCodeBlock::MemoryManager::~MemoryManager() {
-    munmap(addr, JitCodeBlock::memory_size);
+    // unfortunately we can't free the memory when profiling otherwise we would reuse the same addresses which makes
+    // profiling impossible
+    if (!PROFILE)
+        munmap(addr, JitCodeBlock::memory_size);
     addr = NULL;
-
-    RELEASE_ASSERT(0, "we have to unregister this block from g.func_addr_registry");
 }
 
-JitCodeBlock::JitCodeBlock(llvm::StringRef name)
-    : entry_offset(0), a(memory.get() + sizeof(eh_info), code_size), is_currently_writing(false), asm_failed(false) {
+JitCodeBlock::JitCodeBlock(FunctionMetadata* md, llvm::StringRef name)
+    : md(md),
+      entry_offset(0),
+      a(memory.get() + sizeof(eh_info), code_size),
+      is_currently_writing(false),
+      asm_failed(false) {
     static StatCounter num_jit_code_blocks("num_baselinejit_code_blocks");
     num_jit_code_blocks.log();
     static StatCounter num_jit_total_bytes("num_baselinejit_total_bytes");
@@ -116,6 +121,17 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     g.func_addr_registry.registerFunction(unique_name, code, code_size, NULL);
 }
 
+JitCodeBlock::~JitCodeBlock() {
+    // we should not deregister the function in profiling mode because otherwise the profiler can't show it
+    if (!PROFILE)
+        g.func_addr_registry.deregisterFunction(a.getStartAddr());
+    register_eh_info.deregisterFrame();
+
+    for (auto&& block : md->source->cfg->blocks) {
+        block_patch_locations.erase(block);
+    }
+}
+
 std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, int patch_jump_offset,
                                                              llvm::DenseSet<int> known_non_null_vregs) {
     if (is_currently_writing || blocks_aborted.count(block))
@@ -137,7 +153,7 @@ std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, in
     std::unique_ptr<ICSlotRewrite> rewrite = ic_info->startRewrite("");
 
     return std::unique_ptr<JitFragmentWriter>(
-        new JitFragmentWriter(block, std::move(ic_info), std::move(rewrite), fragment_offset, patch_jump_offset,
+        new JitFragmentWriter(md, block, std::move(ic_info), std::move(rewrite), fragment_offset, patch_jump_offset,
                               a.getStartAddr(), *this, std::move(known_non_null_vregs)));
 }
 
@@ -147,7 +163,7 @@ void JitCodeBlock::fragmentAbort(bool not_enough_space) {
 }
 
 void JitCodeBlock::fragmentFinished(int bytes_written, int num_bytes_overlapping, void* next_fragment_start,
-                                    ICInfo& ic_info) {
+                                    std::vector<std::unique_ptr<ICInfo>>&& pp_ic_infos, ICInfo& ic_info) {
     assert(next_fragment_start == bytes_written + a.curInstPointer() - num_bytes_overlapping);
     a.setCurInstPointer((uint8_t*)next_fragment_start);
 
@@ -155,14 +171,17 @@ void JitCodeBlock::fragmentFinished(int bytes_written, int num_bytes_overlapping
     is_currently_writing = false;
 
     ic_info.appendDecrefInfosTo(decref_infos);
+    std::move(std::begin(pp_ic_infos), std::end(pp_ic_infos), std::back_inserter(this->pp_ic_infos));
+    pp_ic_infos.clear();
 }
 
-JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic_info,
+JitFragmentWriter::JitFragmentWriter(FunctionMetadata* md, CFGBlock* block, std::unique_ptr<ICInfo> ic_info,
                                      std::unique_ptr<ICSlotRewrite> rewrite, int code_offset, int num_bytes_overlapping,
                                      void* entry_code, JitCodeBlock& code_block,
                                      llvm::DenseSet<int> known_non_null_vregs)
     : ICInfoManager(std::move(ic_info)),
       Rewriter(std::move(rewrite), 0, {}, /* needs_invalidation_support = */ false),
+      md(md),
       block(block),
       code_offset(code_offset),
       exit_info(),
@@ -185,6 +204,13 @@ JitFragmentWriter::JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic
     addAction([=]() { vregs_array->bumpUse(); }, vregs_array, ActionType::NORMAL);
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: JitFragmentWriter() end");
+
+    // this makes sure that we can't delete the code blocks while we are inside JitFragmentWriter
+    ++md->bjit_num_inside;
+}
+
+JitFragmentWriter::~JitFragmentWriter() {
+    --md->bjit_num_inside;
 }
 
 RewriterVar* JitFragmentWriter::getInterp() {
@@ -823,6 +849,7 @@ std::pair<int, llvm::DenseSet<int>> JitFragmentWriter::finishCompilation() {
         block_patch_locations[side_exit_patch_location.first].push_back(patch_location);
     }
 
+    std::vector<std::unique_ptr<ICInfo>> ic_infos;
     for (auto&& pp_info : pp_infos) {
         SpillMap _spill_map;
         uint8_t* start_addr = pp_info.start_addr;
@@ -837,7 +864,7 @@ std::pair<int, llvm::DenseSet<int>> JitFragmentWriter::finishCompilation() {
             start_addr, slowpath_start, initialization_info.continue_addr, slowpath_rtn_addr, pp_info.ic.get(),
             pp_info.stack_info, LiveOutSet(), std::move(pp_info.decref_infos));
         pp->associateNodeWithICInfo(pp_info.node);
-        pp.release();
+        ic_infos.push_back(std::move(pp));
     }
 
 #ifndef NDEBUG
@@ -852,7 +879,8 @@ std::pair<int, llvm::DenseSet<int>> JitFragmentWriter::finishCompilation() {
         ASSERT(assembler->curInstPointer() == (uint8_t*)exit_info.exit_start + exit_info.num_bytes,
                "Error! wrote more bytes out after the 'retq' that we thought was going to be the end of the assembly.  "
                "We will end up overwriting those instructions.");
-    code_block.fragmentFinished(assembler->bytesWritten(), num_bytes_overlapping, next_fragment_start, *ic_info);
+    code_block.fragmentFinished(assembler->bytesWritten(), num_bytes_overlapping, next_fragment_start,
+                                std::move(ic_infos), *ic_info);
 
 #if MOVING_GC
     // If JitFragmentWriter is destroyed, we don't necessarily want the ICInfo to be destroyed also,

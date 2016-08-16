@@ -168,6 +168,7 @@ private:
         uint8_t* get() { return addr; }
     };
 
+    FunctionMetadata* md;
     // the memory block contains the EH frame directly followed by the generated machine code.
     MemoryManager memory;
     int entry_offset;
@@ -178,15 +179,19 @@ private:
     // this allows us to deregister them when we release the code
     std::vector<DecrefInfo> decref_infos;
     RegisterEHFrame register_eh_info;
+    std::vector<std::unique_ptr<ICInfo>> pp_ic_infos;
+
 
 public:
-    JitCodeBlock(llvm::StringRef name);
+    JitCodeBlock(FunctionMetadata* md, llvm::StringRef name);
+    ~JitCodeBlock();
 
     std::unique_ptr<JitFragmentWriter> newFragment(CFGBlock* block, int patch_jump_offset,
                                                    llvm::DenseSet<int> known_non_null_vregs);
     bool shouldCreateNewBlock() const { return asm_failed || a.bytesLeft() < 128; }
     void fragmentAbort(bool not_enough_space);
-    void fragmentFinished(int bytes_witten, int num_bytes_overlapping, void* next_fragment_start, ICInfo& ic_info);
+    void fragmentFinished(int bytes_witten, int num_bytes_overlapping, void* next_fragment_start,
+                          std::vector<std::unique_ptr<ICInfo>>&& pp_ic_infos, ICInfo& ic_info);
 };
 
 // Hold the ICInfo of the JitFragmentWriter in a separate class from which JitFragmentWriter derives.
@@ -209,6 +214,7 @@ private:
 
     static constexpr int min_patch_size = 13;
 
+    FunctionMetadata* md;
     CFGBlock* block;
     int code_offset; // offset inside the JitCodeBlock to the start of this block
 
@@ -250,9 +256,10 @@ private:
     llvm::SmallVector<PPInfo, 8> pp_infos;
 
 public:
-    JitFragmentWriter(CFGBlock* block, std::unique_ptr<ICInfo> ic_info, std::unique_ptr<ICSlotRewrite> rewrite,
-                      int code_offset, int num_bytes_overlapping, void* entry_code, JitCodeBlock& code_block,
-                      llvm::DenseSet<int> known_non_null_vregs);
+    JitFragmentWriter(FunctionMetadata* md, CFGBlock* block, std::unique_ptr<ICInfo> ic_info,
+                      std::unique_ptr<ICSlotRewrite> rewrite, int code_offset, int num_bytes_overlapping,
+                      void* entry_code, JitCodeBlock& code_block, llvm::DenseSet<int> known_non_null_vregs);
+    ~JitFragmentWriter();
 
     RewriterVar* getInterp();
     RewriterVar* imm(uint64_t val);

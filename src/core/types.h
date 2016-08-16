@@ -477,6 +477,7 @@ public:
 
     // For use by the interpreter/baseline jit:
     int times_interpreted;
+    long bjit_num_inside = 0;
     std::vector<std::unique_ptr<JitCodeBlock>> code_blocks;
     ICInvalidator dependent_interp_callsites;
 
@@ -530,6 +531,9 @@ public:
                                     ExceptionStyle exception_style = CXX) {
         return create(f, rtn_type, nargs, false, false, param_names, exception_style);
     }
+
+    // tries to free the bjit allocated code. returns true on success
+    bool tryDeallocatingTheBJitCode();
 };
 
 

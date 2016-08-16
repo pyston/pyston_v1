@@ -102,6 +102,9 @@ private:
     // global ones.
     std::vector<Location> ic_global_decref_locations;
 
+    // associated AST node for this IC
+    AST* node;
+
     // for ICSlotRewrite:
     ICSlotInfo* pickEntryForRewrite(const char* debug_name);
 

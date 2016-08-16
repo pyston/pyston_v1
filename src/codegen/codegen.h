@@ -50,6 +50,7 @@ public:
     std::string getFuncNameAtAddress(void* addr, bool demangle, bool* out_success = NULL);
     llvm::Function* getLLVMFuncAtAddress(void* addr);
     void registerFunction(const std::string& name, void* addr, int length, llvm::Function* llvm_func);
+    void deregisterFunction(void* addr) { functions.erase(addr); }
     void dumpPerfMap();
 };
 
