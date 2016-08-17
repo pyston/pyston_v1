@@ -30,7 +30,24 @@ class BoxedDict;
 class BoxedModule;
 struct FrameInfo;
 
-void registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size);
+class RegisterEHFrame {
+private:
+    void* dyn_info;
+
+public:
+    RegisterEHFrame() : dyn_info(NULL) {}
+    ~RegisterEHFrame() { deregisterFrame(); }
+
+    // updates the EH info at eh_frame_addr to reference the passed code addr and code size and registers it
+    void updateAndRegisterFrameFromTemplate(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr,
+                                            size_t eh_frame_size);
+
+    void registerFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size);
+    void deregisterFrame();
+};
+
+void* registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size);
+void deregisterDynamicEhFrame(void* dyn_info);
 uint64_t getCXXUnwindSymbolAddress(llvm::StringRef sym);
 
 // use this instead of std::uncaught_exception.

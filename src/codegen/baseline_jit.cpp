@@ -104,19 +104,12 @@ JitCodeBlock::JitCodeBlock(llvm::StringRef name)
     entry_offset = a.bytesWritten();
 
     // generate the eh frame...
-    const int size = sizeof(eh_info);
+    const int eh_frame_size = sizeof(eh_info);
     void* eh_frame_addr = memory.get();
-    memcpy(eh_frame_addr, eh_info, size);
+    memcpy(eh_frame_addr, eh_info, eh_frame_size);
 
-    int32_t* offset_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x20);
-    int32_t* size_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x24);
-    int64_t offset = (int8_t*)code - (int8_t*)offset_ptr;
-    assert(offset >= INT_MIN && offset <= INT_MAX);
-    *offset_ptr = offset;
-    *size_ptr = code_size;
-
-    registerDynamicEhFrame((uint64_t)code, code_size, (uint64_t)eh_frame_addr, size - 4);
-    registerEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, size);
+    register_eh_info.updateAndRegisterFrameFromTemplate((uint64_t)code, code_size, (uint64_t)eh_frame_addr,
+                                                        eh_frame_size);
 
     static int num_block = 0;
     auto unique_name = ("bjit_" + name + "_" + llvm::Twine(num_block++)).str();

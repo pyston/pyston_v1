@@ -22,7 +22,6 @@
 #include "codegen/memmgr.h"
 #include "codegen/patchpoints.h"
 #include "codegen/stackmaps.h"
-#include "codegen/unwinding.h" // registerDynamicEhFrame
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -161,23 +160,6 @@ static constexpr int _eh_frame_template_fp_size = sizeof(_eh_frame_template_fp) 
 
 static_assert(sizeof("") == 1, "strings are null-terminated");
 
-static void writeTrivialEhFrame(void* eh_frame_addr, void* func_addr, uint64_t func_size, bool omit_frame_pointer) {
-    if (omit_frame_pointer)
-        memcpy(eh_frame_addr, _eh_frame_template_ofp, _eh_frame_template_ofp_size);
-    else
-        memcpy(eh_frame_addr, _eh_frame_template_fp, _eh_frame_template_fp_size);
-
-    int32_t* offset_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x20);
-    int32_t* size_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x24);
-
-    int64_t offset = (int8_t*)func_addr - (int8_t*)offset_ptr;
-    RELEASE_ASSERT(offset >= INT_MIN && offset <= INT_MAX, "");
-    *offset_ptr = offset;
-
-    assert(func_size <= UINT_MAX);
-    *size_ptr = func_size;
-}
-
 #if RUNTIMEICS_OMIT_FRAME_PTR
 // If you change this, you *must* update the value in _eh_frame_template
 // (set the -9'th byte to this value plus 8)
@@ -309,11 +291,13 @@ RuntimeIC::RuntimeIC(void* func_addr, int total_size) {
         assert(!epilogue_assem.hasFailed());
         assert(epilogue_assem.isExactlyFull());
 
-        writeTrivialEhFrame(eh_frame_addr, addr, total_code_size, RUNTIMEICS_OMIT_FRAME_PTR);
-        // (EH_FRAME_SIZE - 4) to omit the 4-byte null terminator, otherwise we trip an assert in parseEhFrame.
-        // TODO: can we omit the terminator in general?
-        registerDynamicEhFrame((uint64_t)addr, total_code_size, (uint64_t)eh_frame_addr, EH_FRAME_SIZE - 4);
-        registerEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
+
+        if (RUNTIMEICS_OMIT_FRAME_PTR)
+            memcpy(eh_frame_addr, _eh_frame_template_ofp, _eh_frame_template_ofp_size);
+        else
+            memcpy(eh_frame_addr, _eh_frame_template_fp, _eh_frame_template_fp_size);
+        register_eh_frame.updateAndRegisterFrameFromTemplate((uint64_t)addr, total_code_size, (uint64_t)eh_frame_addr,
+                                                             EH_FRAME_SIZE);
     } else {
         addr = func_addr;
     }
@@ -321,8 +305,8 @@ RuntimeIC::RuntimeIC(void* func_addr, int total_size) {
 
 RuntimeIC::~RuntimeIC() {
     if (ENABLE_RUNTIME_ICS) {
+        register_eh_frame.deregisterFrame();
         uint8_t* eh_frame_addr = (uint8_t*)addr - EH_FRAME_SIZE;
-        deregisterEHFrames(eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
         memory_manager_512b.dealloc(eh_frame_addr);
     } else {
     }

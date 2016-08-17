@@ -94,7 +94,7 @@ void parseEhFrame(uint64_t start_addr, uint64_t size, uint64_t func_addr, uint64
     *out_len = nentries;
 }
 
-void registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size) {
+void* registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr, size_t eh_frame_size) {
     unw_dyn_info_t* dyn_info = new unw_dyn_info_t();
     dyn_info->start_ip = code_addr;
     dyn_info->end_ip = code_addr + code_size;
@@ -116,6 +116,42 @@ void registerDynamicEhFrame(uint64_t code_addr, size_t code_size, uint64_t eh_fr
     // as opposed to the binary search it can do within a dyn_info.
     // If we're registering a lot of dyn_info's, it might make sense to coalesce them into a single
     // dyn_info that contains a binary search table.
+    return dyn_info;
+}
+
+void deregisterDynamicEhFrame(void* _dyn_info) {
+    auto dyn_info = (unw_dyn_info_t*)_dyn_info;
+    _U_dyn_cancel(dyn_info);
+    delete (uw_table_entry*)dyn_info->u.rti.table_data;
+    delete dyn_info;
+}
+
+void RegisterEHFrame::updateAndRegisterFrameFromTemplate(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr,
+                                                         size_t eh_frame_size) {
+    assert(eh_frame_size > 0x24);
+    int32_t* offset_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x20);
+    int32_t* size_ptr = (int32_t*)((uint8_t*)eh_frame_addr + 0x24);
+    int64_t offset = (int8_t*)code_addr - (int8_t*)offset_ptr;
+    assert(offset >= INT_MIN && offset <= INT_MAX);
+    *offset_ptr = offset;
+    *size_ptr = code_size;
+
+    // (EH_FRAME_SIZE - 4) to omit the 4-byte null terminator, otherwise we trip an assert in parseEhFrame.
+    // TODO: can we omit the terminator in general?
+    registerFrame(code_addr, code_size, eh_frame_addr, eh_frame_size - 4);
+}
+
+void RegisterEHFrame::registerFrame(uint64_t code_addr, size_t code_size, uint64_t eh_frame_addr,
+                                    size_t eh_frame_size) {
+    assert(!dyn_info);
+    dyn_info = registerDynamicEhFrame(code_addr, code_size, eh_frame_addr, eh_frame_size);
+}
+
+void RegisterEHFrame::deregisterFrame() {
+    if (dyn_info) {
+        deregisterDynamicEhFrame(dyn_info);
+        dyn_info = NULL;
+    }
 }
 
 struct compare_cf {

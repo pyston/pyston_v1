@@ -15,6 +15,7 @@
 #ifndef PYSTON_RUNTIME_ICS_H
 #define PYSTON_RUNTIME_ICS_H
 
+#include "codegen/unwinding.h" // RegisterEHFrame
 #include "core/common.h"
 #include "runtime/objmodel.h"
 
@@ -26,6 +27,7 @@ class RuntimeIC {
 private:
     void* addr; // points to function start not the start of the allocated memory block.
 
+    RegisterEHFrame register_eh_frame;
     std::unique_ptr<ICInfo> icinfo;
 
     RuntimeIC(const RuntimeIC&) = delete;

@@ -177,6 +177,7 @@ private:
     // this contains all the decref infos the bjit generated inside the memory block,
     // this allows us to deregister them when we release the code
     std::vector<DecrefInfo> decref_infos;
+    RegisterEHFrame register_eh_info;
 
 public:
     JitCodeBlock(llvm::StringRef name);
