@@ -326,6 +326,7 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(const char* debug_name) {
 }
 
 static llvm::DenseMap<void*, ICInfo*> ics_by_return_addr;
+static llvm::DenseMap<AST*, ICInfo*> ics_by_ast_node;
 
 ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int size,
                llvm::CallingConv::ID calling_conv, LiveOutSet _live_outs, assembler::GenericRegister return_register,
@@ -342,6 +343,7 @@ ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, S
       times_rewritten(0),
       allocatable_registers(allocatable_registers),
       ic_global_decref_locations(std::move(ic_global_decref_locations)),
+      node(NULL),
       start_addr(start_addr),
       slowpath_rtn_addr(slowpath_rtn_addr),
       continue_addr(continue_addr) {
@@ -353,6 +355,8 @@ ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, S
 ICInfo::~ICInfo() {
     // if this ICInfo got created with registerCompiledPatchpoint we have to unregister this
     ics_by_return_addr.erase(slowpath_rtn_addr);
+    if (node)
+        ics_by_ast_node.erase(node);
     deregisterGCTrackedICInfo(this);
 
     for (auto& slot : slots) {
@@ -469,8 +473,6 @@ bool ICInfo::isMegamorphic() {
     return times_rewritten >= IC_MEGAMORPHIC_THRESHOLD;
 }
 
-static llvm::DenseMap<AST*, ICInfo*> ics_by_ast_node;
-
 ICInfo* ICInfo::getICInfoForNode(AST* node) {
     auto&& it = ics_by_ast_node.find(node);
     if (it != ics_by_ast_node.end())
@@ -478,6 +480,8 @@ ICInfo* ICInfo::getICInfoForNode(AST* node) {
     return NULL;
 }
 void ICInfo::associateNodeWithICInfo(AST* node) {
+    assert(!this->node);
+    this->node = node;
     ics_by_ast_node[node] = this;
 }
 void ICInfo::appendDecrefInfosTo(std::vector<DecrefInfo>& dest_decref_infos) {
