@@ -4847,7 +4847,15 @@ extern "C" void Py_Finalize() noexcept {
             b->getHCAttrsPtr()->_clearRaw();
             Py_CLEAR(b->tp_mro);
         }
-        Py_DECREF(b);
+
+        // Try to support extensions that get away with having one-too-few refs to their class
+        // (such as google protobufs)
+        if (b->ob_refcnt == 0) {
+            RELEASE_ASSERT(!b->is_pyston_class, "%s", b->tp_name);
+            RELEASE_ASSERT((b->tp_flags & Py_TPFLAGS_HEAPTYPE) == 0, "%s", b->tp_name);
+        } else {
+            Py_DECREF(b);
+        }
     }
 
     clearAllICs();
