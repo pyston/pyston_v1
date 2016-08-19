@@ -21,6 +21,8 @@
 #include <ucontext.h>
 #include <vector>
 
+#include "Python.h"
+
 #include "core/common.h"
 #include "core/thread_utils.h"
 
@@ -32,6 +34,8 @@ class BoxedGenerator;
 extern int sigprof_pending;
 void _printStacktrace();
 #endif
+
+extern __thread PyThreadState cur_thread_state;
 
 namespace threading {
 

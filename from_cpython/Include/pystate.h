@@ -136,10 +136,7 @@ PyAPI_FUNC(int) PyThreadState_SetAsyncExc(long, PyObject *) PYSTON_NOEXCEPT;
 
 /* Variable and macro for in-line access to current thread state */
 
-// Pyston change: use our internal name for this
-//PyAPI_DATA(PyThreadState *) _PyThreadState_Current;
-PyAPI_DATA(__thread PyThreadState) cur_thread_state;
-#define _PyThreadState_Current (&cur_thread_state)
+PyAPI_DATA(PyThreadState *) _PyThreadState_Current;
 
 #ifdef Py_DEBUG
 #define PyThreadState_GET() PyThreadState_Get()
