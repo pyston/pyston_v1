@@ -1317,6 +1317,9 @@ void HCAttrs::_clearRaw() noexcept {
     auto old_attr_list = this->attr_list;
     auto old_attr_list_size = hcls->attributeArraySize();
 
+    // singleton classes will not get reused so free it
+    if (hcls->type == HiddenClass::SINGLETON)
+        delete hcls;
     new ((void*)this) HCAttrs(NULL);
 
     if (old_attr_list) {
