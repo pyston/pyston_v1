@@ -19,6 +19,7 @@
 // over having them spread randomly in different files, this should probably be split again
 // but in a way that makes more sense.
 
+#include <forward_list>
 #include <memory>
 #include <stddef.h>
 #include <vector>
@@ -26,6 +27,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/TinyPtrVector.h"
 #include "Python.h"
 
 #include "core/common.h"
@@ -217,7 +219,6 @@ static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in 
 static_assert(sizeof(ArgPassSpec) == sizeof(uint32_t), "ArgPassSpec::asInt needs to be updated");
 
 struct ParamNames {
-    bool takes_param_names;
     std::vector<llvm::StringRef> args;
     llvm::StringRef vararg, kwarg;
 
@@ -226,6 +227,8 @@ struct ParamNames {
     // (InternedString, lookup_type) which would otherwise have to get recomputed all the time.
     std::vector<AST_Name*> arg_names;
     AST_Name* vararg_name, *kwarg_name;
+
+    bool takes_param_names;
 
     explicit ParamNames(AST* ast, InternedStringPool& pool);
     ParamNames(const std::vector<llvm::StringRef>& args, llvm::StringRef vararg, llvm::StringRef kwarg);
@@ -241,7 +244,7 @@ struct ParamNames {
     }
 
 private:
-    ParamNames() : takes_param_names(false), vararg_name(NULL), kwarg_name(NULL) {}
+    ParamNames() : vararg_name(NULL), kwarg_name(NULL), takes_param_names(false) {}
 };
 
 // Similar to ArgPassSpec, this struct is how functions specify what their parameter signature is.
@@ -406,14 +409,15 @@ class LivenessAnalysis;
 class SourceInfo {
 private:
     BoxedString* fn; // equivalent of code.co_filename
+    std::unique_ptr<LivenessAnalysis> liveness_info;
 
 public:
     BoxedModule* parent_module;
     ScopingAnalysis* scoping;
     ScopeInfo* scope_info;
-    FutureFlags future_flags;
     AST* ast;
     CFG* cfg;
+    FutureFlags future_flags;
     bool is_generator;
 
     InternedStringPool& getInternedStrings();
@@ -433,12 +437,9 @@ public:
 
     SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast, BoxedString* fn);
     ~SourceInfo();
-
-private:
-    std::unique_ptr<LivenessAnalysis> liveness_info;
 };
 
-typedef std::vector<CompiledFunction*> FunctionList;
+typedef llvm::TinyPtrVector<CompiledFunction*> FunctionList;
 struct CallRewriteArgs;
 
 // A BoxedCode is our implementation of the Python "code" object (such as function.func_code).
@@ -470,7 +471,7 @@ public:
         versions; // any compiled versions along with their type parameters; in order from most preferred to least
     ExceptionSwitchable<CompiledFunction*>
         always_use_version; // if this version is set, always use it (for unboxed cases)
-    std::unordered_map<const OSREntryDescriptor*, CompiledFunction*> osr_versions;
+    std::forward_list<std::pair<const OSREntryDescriptor*, CompiledFunction*>> osr_versions;
 
     // Profiling counter:
     int propagated_cxx_exceptions = 0;

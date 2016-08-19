@@ -260,7 +260,7 @@ extern "C" void dumpEx(void* p, int levels) {
                 printf("A builtin function\n");
             }
 
-            printf("Has %ld function versions\n", md->versions.size());
+            printf("Has %u function versions\n", md->versions.size());
             for (CompiledFunction* cf : md->versions) {
                 bool got_name;
                 if (cf->exception_style == CXX)

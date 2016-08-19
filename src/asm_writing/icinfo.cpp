@@ -252,15 +252,19 @@ void ICSlotRewrite::addDependenceOn(ICInvalidator& invalidator) {
 int ICInfo::calculateSuggestedSize() {
     // if we never rewrote this IC just return the whole IC size for now
     if (!times_rewritten)
-        return slots[0].size;
+        return slots.begin()->size;
 
     int additional_space_per_slot = 50;
     // if there are less rewrites than slots we can give a very accurate estimate
     if (times_rewritten < slots.size()) {
         // add up the sizes of all used slots
         int size = 0;
-        for (int i = 0; i < times_rewritten; ++i) {
-            size += slots[i].size + additional_space_per_slot;
+        int i = 0;
+        for (auto&& slot : slots) {
+            if (i >= times_rewritten)
+                break;
+            size += slot.size + additional_space_per_slot;
+            ++i;
         }
         return size;
     }
@@ -286,18 +290,23 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(const char* debug_name) {
     int num_slots = slots.size();
     int fallback_to_in_use_slot = -1;
 
+    llvm::SmallVector<ICSlotInfo*, 8> slots_vec;
+    for (auto&& slot : slots) {
+        slots_vec.push_back(&slot);
+    }
+
     // we prefer to use a unused slot and if non is available we will fallback to a slot which is in use (but no one is
     // inside)
     for (int _i = 0; _i < num_slots; _i++) {
         int i = (_i + next_slot_to_try) % num_slots;
 
-        ICSlotInfo& sinfo = slots[i];
-        assert(sinfo.num_inside >= 0);
+        ICSlotInfo* sinfo = slots_vec[i];
+        assert(sinfo->num_inside >= 0);
 
-        if (sinfo.num_inside || sinfo.size == 0)
+        if (sinfo->num_inside || sinfo->size == 0)
             continue;
 
-        if (sinfo.used) {
+        if (sinfo->used) {
             if (fallback_to_in_use_slot == -1)
                 fallback_to_in_use_slot = i;
             continue;
@@ -308,7 +317,7 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(const char* debug_name) {
         }
 
         next_slot_to_try = i;
-        return &sinfo;
+        return sinfo;
     }
 
     if (fallback_to_in_use_slot != -1) {
@@ -317,7 +326,7 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(const char* debug_name) {
         }
 
         next_slot_to_try = fallback_to_in_use_slot;
-        return &slots[fallback_to_in_use_slot];
+        return slots_vec[fallback_to_in_use_slot];
     }
 
     if (VERBOSITY() >= 4)
@@ -447,11 +456,13 @@ void ICInfo::invalidate(ICSlotInfo* icentry) {
 
     llvm::sys::Memory::InvalidateInstructionCache(start, icentry->size);
 
-    for (int i = 0; i < slots.size(); ++i) {
-        if (&slots[i] == icentry) {
+    int i = 0;
+    for (auto&& slot : slots) {
+        if (&slot == icentry) {
             next_slot_to_try = i;
             break;
         }
+        ++i;
     }
 
     icentry->used = false;

@@ -205,7 +205,7 @@ IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRG
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                                CFGBlock* myblock, TypeAnalysis* types);
 
-FunctionMetadata* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source);
+FunctionMetadata* wrapFunction(AST* node, AST_arguments* args, SourceInfo* source);
 std::vector<BoxedString*>* getKeywordNameStorage(AST_Call* node);
 }
 

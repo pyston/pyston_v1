@@ -87,12 +87,12 @@ void FunctionMetadata::addVersion(CompiledFunction* compiled) {
         assert(compiled->spec->arg_types.size() == numReceivedArgs());
         versions.push_back(compiled);
     } else {
-        osr_versions[compiled->entry_descriptor] = compiled;
+        osr_versions.emplace_front(compiled->entry_descriptor, compiled);
     }
 }
 
 SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast, BoxedString* fn)
-    : parent_module(m), scoping(scoping), scope_info(NULL), future_flags(future_flags), ast(ast), cfg(NULL) {
+    : parent_module(m), scoping(scoping), scope_info(NULL), ast(ast), cfg(NULL), future_flags(future_flags) {
     assert(fn);
 
     // TODO: this is a very bad way of handling this:

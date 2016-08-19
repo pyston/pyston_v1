@@ -15,12 +15,13 @@
 #ifndef PYSTON_ASMWRITING_ICINFO_H
 #define PYSTON_ASMWRITING_ICINFO_H
 
-#include <deque>
+#include <list>
 #include <memory>
 #include <unordered_set>
 #include <vector>
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/IR/CallingConv.h"
 
 #include "asm_writing/assembler.h"
@@ -62,14 +63,15 @@ public:
 
     ICInfo* ic;
     uint8_t* start_addr;
+
+    std::vector<void*> gc_references;
+    std::vector<DecrefInfo> decref_infos;
+    llvm::TinyPtrVector<ICInvalidator*> invalidators; // ICInvalidators that reference this slotinfo
+
     int num_inside; // the number of stack frames that are currently inside this slot will also get increased during a
                     // rewrite
     int size;
     bool used; // if this slot is empty or got invalidated
-
-    std::vector<void*> gc_references;
-    std::vector<DecrefInfo> decref_infos;
-    std::vector<ICInvalidator*> invalidators; // ICInvalidators that reference this slotinfo
 
     void clear(bool should_invalidate = true);
 };
@@ -79,7 +81,7 @@ typedef BitSet<16> LiveOutSet;
 class ICSlotRewrite;
 class ICInfo {
 private:
-    std::deque<ICSlotInfo> slots;
+    std::list<ICSlotInfo> slots;
     // For now, just use a round-robin eviction policy.
     // This is probably a bunch worse than LRU, but it's also
     // probably a bunch better than the "always evict slot #0" policy

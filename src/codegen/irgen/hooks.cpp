@@ -56,7 +56,7 @@ namespace pyston {
 
 // TODO terrible place for these!
 ParamNames::ParamNames(AST* ast, InternedStringPool& pool)
-    : takes_param_names(true), vararg_name(NULL), kwarg_name(NULL) {
+    : vararg_name(NULL), kwarg_name(NULL), takes_param_names(true) {
     if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef || ast->type == AST_TYPE::Expression
         || ast->type == AST_TYPE::Suite) {
         kwarg = "";
@@ -90,7 +90,7 @@ ParamNames::ParamNames(AST* ast, InternedStringPool& pool)
 }
 
 ParamNames::ParamNames(const std::vector<llvm::StringRef>& args, llvm::StringRef vararg, llvm::StringRef kwarg)
-    : takes_param_names(true), vararg_name(NULL), kwarg_name(NULL) {
+    : vararg_name(NULL), kwarg_name(NULL), takes_param_names(true) {
     this->args = args;
     this->vararg = vararg;
     this->kwarg = kwarg;
@@ -233,7 +233,7 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
 
     BoxedString* name = source->getName();
 
-    ASSERT(f->versions.size() < 20, "%s %ld", name->c_str(), f->versions.size());
+    ASSERT(f->versions.size() < 20, "%s %u", name->c_str(), f->versions.size());
 
     ExceptionStyle exception_style;
     if (force_exception_style)
@@ -669,14 +669,14 @@ void CompiledFunction::speculationFailed() {
         }
 
         if (!found) {
-            for (auto it = md->osr_versions.begin(); it != md->osr_versions.end(); ++it) {
-                if (it->second == this) {
-                    md->osr_versions.erase(it);
+            md->osr_versions.remove_if([&](const std::pair<const OSREntryDescriptor*, CompiledFunction*>& e) {
+                if (e.second == this) {
                     this->dependent_callsites.invalidateAll();
                     found = true;
-                    break;
+                    return true;
                 }
-            }
+                return false;
+            });
         }
 
         if (!found) {
@@ -752,7 +752,7 @@ static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel new_effort) 
         }
     }
 
-    printf("Couldn't find a version; %ld exist:\n", versions.size());
+    printf("Couldn't find a version; %u exist:\n", versions.size());
     for (auto cf : versions) {
         printf("%p\n", cf);
     }
@@ -770,17 +770,17 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
 
     FunctionMetadata* md = exit->entry->md;
     assert(md);
-    CompiledFunction*& new_cf = md->osr_versions[exit->entry];
-    if (new_cf == NULL) {
-        EffortLevel new_effort = EffortLevel::MAXIMAL;
-        CompiledFunction* compiled
-            = compileFunction(md, NULL, new_effort, exit->entry, true, exit->entry->exception_style);
-        assert(compiled == new_cf);
-
-        stat_osr_compiles.log();
+    for (auto&& osr_functions : md->osr_versions) {
+        if (osr_functions.first == exit->entry)
+            return osr_functions.second;
     }
 
-    return new_cf;
+    EffortLevel new_effort = EffortLevel::MAXIMAL;
+    CompiledFunction* compiled = compileFunction(md, NULL, new_effort, exit->entry, true, exit->entry->exception_style);
+    stat_osr_compiles.log();
+    assert(std::find(md->osr_versions.begin(), md->osr_versions.end(), std::make_pair(exit->entry, compiled))
+           != md->osr_versions.end());
+    return compiled;
 }
 
 void* compilePartialFunc(OSRExit* exit) {

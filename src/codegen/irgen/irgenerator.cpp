@@ -1617,7 +1617,7 @@ private:
             decorators.push_back(evalExpr(d, unw_info));
         }
 
-        FunctionMetadata* md = wrapFunction(node, nullptr, node->body, irstate->getSourceInfo());
+        FunctionMetadata* md = wrapFunction(node, nullptr, irstate->getSourceInfo());
 
         // TODO duplication with _createFunction:
         llvm::Value* this_closure = NULL;
@@ -1658,9 +1658,8 @@ private:
         return cls;
     }
 
-    CompilerVariable* _createFunction(AST* node, const UnwindInfo& unw_info, AST_arguments* args,
-                                      const std::vector<AST_stmt*>& body) {
-        FunctionMetadata* md = wrapFunction(node, args, body, irstate->getSourceInfo());
+    CompilerVariable* _createFunction(AST* node, const UnwindInfo& unw_info, AST_arguments* args) {
+        FunctionMetadata* md = wrapFunction(node, args, irstate->getSourceInfo());
 
         std::vector<ConcreteCompilerVariable*> defaults;
         for (auto d : args->defaults) {
@@ -1706,7 +1705,7 @@ private:
             decorators.push_back(evalExpr(d, unw_info));
         }
 
-        CompilerVariable* func = _createFunction(node, unw_info, node->args, node->body);
+        CompilerVariable* func = _createFunction(node, unw_info, node->args);
 
         for (int i = decorators.size() - 1; i >= 0; i--) {
             func = decorators[i]->call(emitter, getOpInfoForNode(node, unw_info), ArgPassSpec(1), { func }, NULL);
@@ -3248,10 +3247,10 @@ IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*
     return new IRGeneratorImpl(irstate, entry_blocks, myblock, types);
 }
 
-FunctionMetadata* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source) {
+FunctionMetadata* wrapFunction(AST* node, AST_arguments* args, SourceInfo* source) {
     // Different compilations of the parent scope of a functiondef should lead
     // to the same FunctionMetadata* being used:
-    static std::unordered_map<AST*, FunctionMetadata*> made;
+    static llvm::DenseMap<AST*, FunctionMetadata*> made;
 
     FunctionMetadata*& md = made[node];
     if (md == NULL) {
