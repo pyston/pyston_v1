@@ -549,22 +549,15 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames& args, CFG* cf
         initial_map[vreg] = DefinednessAnalysis::Undefined;
     }
 
-    auto maybe_add = [&](AST_Name* n) {
+    for (AST_Name* n : args.allArgsAsName()) {
         ScopeInfo::VarScopeType vst = n->lookup_type;
         assert(vst != ScopeInfo::VarScopeType::UNKNOWN);
         assert(vst != ScopeInfo::VarScopeType::GLOBAL); // global-and-local error
         if (vst == ScopeInfo::VarScopeType::NAME)
-            return;
+            continue;
         assert(n->vreg >= 0);
         initial_map[n->vreg] = DefinednessAnalysis::Defined;
-    };
-
-    for (auto e : args.arg_names)
-        maybe_add(e);
-    if (args.vararg_name)
-        maybe_add(args.vararg_name);
-    if (args.kwarg_name)
-        maybe_add(args.kwarg_name);
+    }
 
     assert(initial_map.numVregs() == vreg_info.getTotalNumOfVRegs());
 

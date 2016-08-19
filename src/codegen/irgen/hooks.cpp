@@ -56,11 +56,9 @@ namespace pyston {
 
 // TODO terrible place for these!
 ParamNames::ParamNames(AST* ast, InternedStringPool& pool)
-    : vararg_name(NULL), kwarg_name(NULL), takes_param_names(true) {
+    : all_args_contains_names(1), takes_param_names(1), has_vararg_name(0), has_kwarg_name(0) {
     if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef || ast->type == AST_TYPE::Expression
         || ast->type == AST_TYPE::Suite) {
-        kwarg = "";
-        vararg = "";
     } else if (ast->type == AST_TYPE::FunctionDef || ast->type == AST_TYPE::Lambda) {
         AST_arguments* arguments = ast->type == AST_TYPE::FunctionDef ? ast_cast<AST_FunctionDef>(ast)->args
                                                                       : ast_cast<AST_Lambda>(ast)->args;
@@ -68,32 +66,57 @@ ParamNames::ParamNames(AST* ast, InternedStringPool& pool)
             AST_expr* arg = arguments->args[i];
             if (arg->type == AST_TYPE::Name) {
                 AST_Name* name = ast_cast<AST_Name>(arg);
-                arg_names.push_back(name);
-                args.push_back(name->id.s());
+                all_args.emplace_back(name);
             } else {
                 InternedString dot_arg_name = pool.get("." + std::to_string(i));
-                arg_names.push_back(new AST_Name(dot_arg_name, AST_TYPE::Param, arg->lineno, arg->col_offset));
-                args.push_back(dot_arg_name.s());
+                all_args.emplace_back(new AST_Name(dot_arg_name, AST_TYPE::Param, arg->lineno, arg->col_offset));
             }
         }
 
-        vararg_name = arguments->vararg;
-        if (vararg_name)
-            vararg = vararg_name->id.s();
+        auto vararg_name = arguments->vararg;
+        if (vararg_name) {
+            has_vararg_name = 1;
+            all_args.emplace_back(vararg_name);
+        }
 
-        kwarg_name = arguments->kwarg;
-        if (kwarg_name)
-            kwarg = kwarg_name->id.s();
+        auto kwarg_name = arguments->kwarg;
+        if (kwarg_name) {
+            has_kwarg_name = 1;
+            all_args.emplace_back(kwarg_name);
+        }
     } else {
         RELEASE_ASSERT(0, "%d", ast->type);
     }
 }
 
-ParamNames::ParamNames(const std::vector<llvm::StringRef>& args, llvm::StringRef vararg, llvm::StringRef kwarg)
-    : vararg_name(NULL), kwarg_name(NULL), takes_param_names(true) {
-    this->args = args;
-    this->vararg = vararg;
-    this->kwarg = kwarg;
+ParamNames::ParamNames(const std::vector<const char*>& args, const char* vararg, const char* kwarg)
+    : all_args_contains_names(0),
+      takes_param_names(1),
+      has_vararg_name(vararg && *vararg),
+      has_kwarg_name(kwarg && *kwarg) {
+    all_args.reserve(args.size() + has_vararg_name + has_kwarg_name);
+    for (auto&& arg : args) {
+        all_args.emplace_back(arg);
+    }
+    if (has_vararg_name)
+        all_args.emplace_back(vararg);
+    if (has_kwarg_name)
+        all_args.emplace_back(kwarg);
+}
+
+std::vector<const char*> ParamNames::allArgsAsStr() const {
+    std::vector<const char*> ret;
+    ret.reserve(all_args.size());
+    if (all_args_contains_names) {
+        for (auto&& arg : all_args) {
+            ret.push_back(arg.name->id.c_str());
+        }
+    } else {
+        for (auto&& arg : all_args) {
+            ret.push_back(arg.str);
+        }
+    }
+    return ret;
 }
 
 InternedString SourceInfo::mangleName(InternedString id) {

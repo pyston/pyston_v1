@@ -40,22 +40,22 @@ namespace pyston {
 FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs,
                                    std::unique_ptr<SourceInfo> source)
     : code_obj(NULL),
-      num_args(num_args),
-      takes_varargs(takes_varargs),
-      takes_kwargs(takes_kwargs),
       source(std::move(source)),
       param_names(this->source->ast, this->source->getInternedStrings()),
+      takes_varargs(takes_varargs),
+      takes_kwargs(takes_kwargs),
+      num_args(num_args),
       times_interpreted(0),
       internal_callable(NULL, NULL) {
 }
 
 FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
     : code_obj(NULL),
-      num_args(num_args),
-      takes_varargs(takes_varargs),
-      takes_kwargs(takes_kwargs),
       source(nullptr),
       param_names(param_names),
+      takes_varargs(takes_varargs),
+      takes_kwargs(takes_kwargs),
+      num_args(num_args),
       times_interpreted(0),
       internal_callable(NULL, NULL) {
 }
@@ -271,7 +271,6 @@ GlobalState::GlobalState() : context(llvm::getGlobalContext()), cur_module(NULL)
 llvm::JITEventListener* makeRegistryListener() {
     return new RegistryEventListener();
 }
-
 
 FunctionSpecialization::FunctionSpecialization(ConcreteCompilerType* rtn_type) : rtn_type(rtn_type) {
     accepts_all_inputs = true;

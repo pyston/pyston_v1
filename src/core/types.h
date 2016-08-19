@@ -219,32 +219,61 @@ static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in 
 static_assert(sizeof(ArgPassSpec) == sizeof(uint32_t), "ArgPassSpec::asInt needs to be updated");
 
 struct ParamNames {
-    std::vector<llvm::StringRef> args;
-    llvm::StringRef vararg, kwarg;
+    // the arguments are either an array of char* or AST_Name* depending on if all_args_contains_names is set or not
+    union NameOrStr {
+        NameOrStr(const char* str) : str(str) {}
+        NameOrStr(AST_Name* name) : name(name) {}
 
-    // This members are only set if the InternedStringPool& constructor is used (aka. source is available)!
-    // They are used as an optimization while interpreting because the AST_Names nodes cache important stuff
-    // (InternedString, lookup_type) which would otherwise have to get recomputed all the time.
-    std::vector<AST_Name*> arg_names;
-    AST_Name* vararg_name, *kwarg_name;
+        const char* str;
+        AST_Name* name;
+    };
+    std::vector<NameOrStr> all_args;
 
-    bool takes_param_names;
+    const unsigned char all_args_contains_names : 1;
+    const unsigned char takes_param_names : 1;
+    unsigned char has_vararg_name : 1;
+    unsigned char has_kwarg_name : 1;
 
     explicit ParamNames(AST* ast, InternedStringPool& pool);
-    ParamNames(const std::vector<llvm::StringRef>& args, llvm::StringRef vararg, llvm::StringRef kwarg);
+    ParamNames(const std::vector<const char*>& args, const char* vararg, const char* kwarg);
     static ParamNames empty() { return ParamNames(); }
 
-    int totalParameters() const {
-        return args.size() + (vararg.str().size() == 0 ? 0 : 1) + (kwarg.str().size() == 0 ? 0 : 1);
-    }
+    int numNormalArgs() const { return all_args.size() - has_vararg_name - has_kwarg_name; }
+    int totalParameters() const { return all_args.size(); }
 
     int kwargsIndex() const {
-        assert(kwarg.str().size());
-        return args.size() + (vararg.str().size() == 0 ? 0 : 1);
+        assert(has_kwarg_name);
+        return all_args.size() - 1;
+    }
+
+    llvm::ArrayRef<AST_Name*> argsAsName() const {
+        assert(all_args_contains_names);
+        return llvm::makeArrayRef((AST_Name * const*)all_args.data(), numNormalArgs());
+    }
+
+    llvm::ArrayRef<AST_Name*> allArgsAsName() const {
+        assert(all_args_contains_names);
+        return llvm::makeArrayRef((AST_Name * const*)all_args.data(), all_args.size());
+    }
+
+    std::vector<const char*> allArgsAsStr() const;
+
+    AST_Name* varArgAsName() const {
+        assert(all_args_contains_names);
+        if (has_vararg_name)
+            return all_args[all_args.size() - 1 - has_kwarg_name].name;
+        return NULL;
+    }
+
+    AST_Name* kwArgAsName() const {
+        assert(all_args_contains_names);
+        if (has_kwarg_name)
+            return all_args.back().name;
+        return NULL;
     }
 
 private:
-    ParamNames() : vararg_name(NULL), kwarg_name(NULL), takes_param_names(false) {}
+    ParamNames() : all_args_contains_names(0), takes_param_names(0), has_vararg_name(0), has_kwarg_name(0) {}
 };
 
 // Similar to ArgPassSpec, this struct is how functions specify what their parameter signature is.
@@ -461,11 +490,11 @@ private:
     BoxedCode* code_obj;
 
 public:
-    int num_args;
-    bool takes_varargs, takes_kwargs;
-
     std::unique_ptr<SourceInfo> source; // source can be NULL for functions defined in the C/C++ runtime
-    ParamNames param_names;
+
+    const ParamNames param_names;
+    const bool takes_varargs, takes_kwargs;
+    const int num_args;
 
     FunctionList
         versions; // any compiled versions along with their type parameters; in order from most preferred to least
@@ -518,9 +547,9 @@ public:
     static FunctionMetadata* create(void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs,
                                     bool takes_kwargs, const ParamNames& param_names = ParamNames::empty(),
                                     ExceptionStyle exception_style = CXX) {
-        assert(!param_names.takes_param_names || nargs == param_names.args.size());
-        assert(takes_varargs || param_names.vararg.str() == "");
-        assert(takes_kwargs || param_names.kwarg.str() == "");
+        assert(!param_names.takes_param_names || nargs == param_names.numNormalArgs());
+        assert(takes_varargs || !param_names.has_vararg_name);
+        assert(takes_kwargs || !param_names.has_kwarg_name);
 
         FunctionMetadata* fmd = new FunctionMetadata(nargs, takes_varargs, takes_kwargs, param_names);
         fmd->addVersion(f, rtn_type, exception_style);

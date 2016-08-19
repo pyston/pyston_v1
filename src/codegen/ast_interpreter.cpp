@@ -272,26 +272,21 @@ void ASTInterpreter::initArguments(BoxedClosure* _closure, BoxedGenerator* _gene
 
     const ParamNames& param_names = getMD()->param_names;
 
-    // make sure the AST_Name nodes are set
-    assert(param_names.args.size() == param_names.arg_names.size());
-    assert(param_names.vararg.empty() == (param_names.vararg_name == NULL));
-    assert(param_names.kwarg.empty() == (param_names.kwarg_name == NULL));
-
     int i = 0;
-    for (auto& name : param_names.arg_names) {
+    for (auto& name : param_names.argsAsName()) {
         doStore(name, Value(incref(getArg(i++, arg1, arg2, arg3, args)), 0));
     }
 
-    if (param_names.vararg_name)
-        doStore(param_names.vararg_name, Value(incref(getArg(i++, arg1, arg2, arg3, args)), 0));
+    if (param_names.has_vararg_name)
+        doStore(param_names.varArgAsName(), Value(incref(getArg(i++, arg1, arg2, arg3, args)), 0));
 
-    if (param_names.kwarg_name) {
+    if (param_names.has_kwarg_name) {
         Box* val = getArg(i++, arg1, arg2, arg3, args);
         if (!val)
             val = createDict();
         else
             Py_INCREF(val);
-        doStore(param_names.kwarg_name, Value(val, 0));
+        doStore(param_names.kwArgAsName(), Value(val, 0));
     }
     assert(i == param_names.totalParameters());
 }
@@ -314,13 +309,9 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset, llvm::DenseSe
     // small optimization: we know that the passed arguments in the entry block are non zero
     if (block == block->cfg->getStartingBlock() && block->predecessors.empty()) {
         auto param_names = getMD()->param_names;
-        for (auto&& arg : param_names.arg_names) {
+        for (auto&& arg : param_names.allArgsAsName()) {
             known_non_null_vregs.insert(arg->vreg);
         }
-        if (param_names.vararg_name)
-            known_non_null_vregs.insert(param_names.vararg_name->vreg);
-        if (param_names.kwarg_name)
-            known_non_null_vregs.insert(param_names.kwarg_name->vreg);
     }
     jit = code_block->newFragment(block, exit_offset, std::move(known_non_null_vregs));
 }

@@ -45,7 +45,7 @@ extern "C" void dumpLLVM(void* _v) {
 }
 
 IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, llvm::Function* func, SourceInfo* source_info,
-                       std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc,
+                       std::unique_ptr<PhiAnalysis> phis, const ParamNames* param_names, GCBuilder* gc,
                        llvm::MDNode* func_dbg_info, RefcountTracker* refcount_tracker)
     : md(md),
       cf(cf),
@@ -2982,16 +2982,17 @@ public:
         assert(python_parameters.size() == param_names.totalParameters());
 
         int i = 0;
-        for (; i < param_names.args.size(); i++) {
-            loadArgument(param_names.arg_names[i], arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
+        for (auto&& arg : param_names.argsAsName()) {
+            loadArgument(arg, arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
+            ++i;
         }
 
-        if (param_names.vararg.size()) {
-            loadArgument(param_names.vararg_name, arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
+        if (param_names.has_vararg_name) {
+            loadArgument(param_names.varArgAsName(), arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
             i++;
         }
 
-        if (param_names.kwarg.size()) {
+        if (param_names.has_kwarg_name) {
             llvm::Value* passed_dict = python_parameters[i];
             emitter.setNullable(passed_dict, true);
 
@@ -3017,7 +3018,7 @@ public:
             emitter.refConsumed(passed_dict, null_check);
             emitter.refConsumed(created_dict, isnull_terminator);
 
-            loadArgument(param_names.kwarg_name, arg_types[i], phi, UnwindInfo::cantUnwind());
+            loadArgument(param_names.kwArgAsName(), arg_types[i], phi, UnwindInfo::cantUnwind());
             i++;
         }
 

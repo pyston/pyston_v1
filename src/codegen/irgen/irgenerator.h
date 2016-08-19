@@ -66,7 +66,7 @@ private:
     llvm::Function* func;
     SourceInfo* source_info;
     std::unique_ptr<PhiAnalysis> phis;
-    ParamNames* param_names;
+    const ParamNames* param_names;
     GCBuilder* gc;
     llvm::MDNode* func_dbg_info;
     RefcountTracker* refcount_tracker;
@@ -84,8 +84,8 @@ private:
 
 public:
     IRGenState(FunctionMetadata* md, CompiledFunction* cf, llvm::Function* func, SourceInfo* source_info,
-               std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc, llvm::MDNode* func_dbg_info,
-               RefcountTracker* refcount_tracker);
+               std::unique_ptr<PhiAnalysis> phis, const ParamNames* param_names, GCBuilder* gc,
+               llvm::MDNode* func_dbg_info, RefcountTracker* refcount_tracker);
     ~IRGenState();
 
     CFG* getCFG() { return getSourceInfo()->cfg; }
@@ -125,7 +125,7 @@ public:
 
     RefcountTracker* getRefcounts() { return refcount_tracker; }
 
-    ParamNames* getParamNames() { return param_names; }
+    const ParamNames* getParamNames() { return param_names; }
 
     llvm::Value* getPassedClosure();
     llvm::Value* getCreatedClosure();

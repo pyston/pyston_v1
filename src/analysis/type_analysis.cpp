@@ -859,29 +859,14 @@ TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& arg_names, const std::v
 
     TypeMap initial_types(cfg->getVRegInfo().getTotalNumOfVRegs());
     int i = 0;
-
-    auto maybe_add = [&](AST_Name* n) {
+    for (AST_Name* n : arg_names.allArgsAsName()) {
         ScopeInfo::VarScopeType vst = n->lookup_type;
         assert(vst != ScopeInfo::VarScopeType::UNKNOWN);
         assert(vst != ScopeInfo::VarScopeType::GLOBAL); // global-and-local error
-        if (vst == ScopeInfo::VarScopeType::NAME)
-            return;
-        initial_types[n->vreg] = unboxedType(arg_types[i]);
+        if (vst != ScopeInfo::VarScopeType::NAME)
+            initial_types[n->vreg] = unboxedType(arg_types[i]);
+        ++i;
     };
-
-    for (; i < arg_names.args.size(); i++) {
-        maybe_add(arg_names.arg_names[i]);
-    }
-
-    if (arg_names.vararg.size()) {
-        maybe_add(arg_names.vararg_name);
-        i++;
-    }
-
-    if (arg_names.kwarg.size()) {
-        maybe_add(arg_names.kwarg_name);
-        i++;
-    }
 
     assert(i == arg_types.size());
 

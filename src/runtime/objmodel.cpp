@@ -4066,8 +4066,13 @@ static int placeKeyword(const ParamNames* param_names, llvm::SmallVector<bool, 8
     assert(kw_val);
     assert(kw_name);
 
-    for (int j = 0; j < param_names->args.size(); j++) {
-        if (param_names->args[j] == kw_name->s() && kw_name->size() > 0) {
+    for (int j = 0; j < param_names->numNormalArgs(); j++) {
+        llvm::StringRef s;
+        if (param_names->all_args_contains_names)
+            s = param_names->all_args[j].name->id.s();
+        else
+            s = param_names->all_args[j].str;
+        if (s == kw_name->s() && kw_name->size() > 0) {
             if (params_filled[j]) {
                 raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'", func_name_cb(),
                                kw_name->c_str());
