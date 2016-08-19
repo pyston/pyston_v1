@@ -492,7 +492,7 @@ static const LineInfo lineInfoForFrameInfo(FrameInfo* frame_info) {
 
     auto source = md->source.get();
 
-    return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->getFn(), source->getName());
+    return LineInfo(current_stmt->lineno, source->getFn(), source->getName());
 }
 
 // A class that converts a C stack trace to a Python stack trace.

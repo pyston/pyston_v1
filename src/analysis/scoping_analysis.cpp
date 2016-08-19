@@ -463,7 +463,7 @@ static void raiseGlobalAndLocalException(InternedString name, AST* node) {
     AST_FunctionDef* funcNode = ast_cast<AST_FunctionDef>(node);
     char buf[1024];
     snprintf(buf, sizeof(buf), "name '%s' is local and global", name.c_str());
-    raiseSyntaxError(buf, funcNode->lineno, funcNode->col_offset, "" /* file?? */, funcNode->name.s());
+    raiseSyntaxError(buf, funcNode->lineno, "" /* file?? */, funcNode->name.s());
 }
 
 class NameCollectorVisitor : public ASTVisitor {
@@ -805,7 +805,7 @@ static void raiseNameForcingSyntaxError(const char* msg, ScopingAnalysis::ScopeN
 
     char buf[1024];
     snprintf(buf, sizeof(buf), syntaxElemMsg, funcNode->name.c_str(), msg);
-    raiseSyntaxError(buf, lineno, 0, "" /* file?? */, funcNode->name.s());
+    raiseSyntaxError(buf, lineno, "" /* file?? */, funcNode->name.s());
 }
 
 void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
@@ -891,7 +891,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
                 snprintf(buf, sizeof(buf), "can not delete variable '%s' referenced in nested scope", name.c_str());
                 assert(usage->node->type == AST_TYPE::FunctionDef);
                 AST_FunctionDef* funcNode = static_cast<AST_FunctionDef*>(usage->node);
-                raiseSyntaxError(buf, name_node->lineno, 0, "" /* file?? */, funcNode->name);
+                raiseSyntaxError(buf, name_node->lineno, "" /* file?? */, funcNode->name);
             }
         }
     }

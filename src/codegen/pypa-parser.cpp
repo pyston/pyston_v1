@@ -48,7 +48,6 @@ namespace pyston {
 void location(AST* t, pypa::Ast& a) {
     t->lineno = a.line;
     assert(a.column < 100000);
-    t->col_offset = a.column;
 }
 
 AST_expr* readItem(pypa::AstExpression& e, InternedStringPool& interned_strings);
@@ -303,10 +302,10 @@ AST_arguments* readItem(pypa::AstArguments& a, InternedStringPool& interned_stri
     readVector(ptr->args, a.arguments, interned_strings);
     InternedString kwarg_name = readName(a.kwargs, interned_strings);
     if (kwarg_name.s().size())
-        ptr->kwarg = new AST_Name(kwarg_name, AST_TYPE::Store, -1, -1);
+        ptr->kwarg = new AST_Name(kwarg_name, AST_TYPE::Store, -1);
     InternedString vararg_name = readName(a.args, interned_strings);
     if (vararg_name.s().size())
-        ptr->vararg = new AST_Name(vararg_name, AST_TYPE::Store, -1, -1);
+        ptr->vararg = new AST_Name(vararg_name, AST_TYPE::Store, -1);
     return ptr;
 }
 
@@ -511,12 +510,12 @@ struct expr_dispatcher {
     }
 
     ResultPtr read(pypa::AstName& a) {
-        AST_Name* ptr = new AST_Name(interned_strings.get(a.id), readItem(a.context), a.line, a.column);
+        AST_Name* ptr = new AST_Name(interned_strings.get(a.id), readItem(a.context), a.line);
         return ptr;
     }
 
     ResultPtr read(pypa::AstNone& n) {
-        AST_Name* ptr = new AST_Name(interned_strings.get("None"), AST_TYPE::Load, n.line, n.column);
+        AST_Name* ptr = new AST_Name(interned_strings.get("None"), AST_TYPE::Load, n.line);
         return ptr;
     }
 
@@ -888,7 +887,7 @@ AST_Module* readModule(pypa::AstModule& t) {
 
 void pypaErrorHandler(pypa::Error e) {
     if (e.type != pypa::ErrorType::SyntaxWarning) {
-        raiseSyntaxError(e.message.c_str(), e.cur.line, e.cur.column, e.file_name, std::string());
+        raiseSyntaxError(e.message.c_str(), e.cur.line, e.file_name, std::string());
     }
 }
 

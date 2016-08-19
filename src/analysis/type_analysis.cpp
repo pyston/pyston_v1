@@ -222,8 +222,7 @@ private:
         }
 
         if (VERBOSITY() >= 2 && rtn == UNDEF) {
-            printf("Think %s.%s is undefined, at %d:%d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno,
-                   node->col_offset);
+            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno);
             print_ast(node);
             printf("\n");
         }
@@ -234,8 +233,7 @@ private:
         CompilerType* t = getType(node->value);
         CompilerType* rtn = t->getattrType(node->attr, true);
         if (VERBOSITY() >= 2 && rtn == UNDEF) {
-            printf("Think %s.%s is undefined, at %d:%d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno,
-                   node->col_offset);
+            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno);
             print_ast(node);
             printf("\n");
         }

@@ -136,11 +136,6 @@ private:
         }
     }
 
-    void writeColOffset(uint32_t v) {
-        assert(v < 100000 || v == -1);
-        writeULL(v == -1 ? 0 : v);
-    }
-
     void writeLineno(uint64_t v) { writeULL(v); }
 
     void writeASTMisc(AST* e) {
@@ -181,21 +176,18 @@ private:
         return true;
     }
     virtual bool visit_assert(AST_Assert* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeExpr(node->msg);
         writeExpr(node->test);
         return true;
     }
     virtual bool visit_assign(AST_Assign* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeExprVector(node->targets);
         writeExpr(node->value);
         return true;
     }
     virtual bool visit_augassign(AST_AugAssign* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeByte(node->op_type);
         writeExpr(node->target);
@@ -204,14 +196,12 @@ private:
     }
     virtual bool visit_attribute(AST_Attribute* node) {
         writeString(node->attr);
-        writeColOffset(node->col_offset);
         writeByte(node->ctx_type);
         writeLineno(node->lineno);
         writeExpr(node->value);
         return true;
     }
     virtual bool visit_binop(AST_BinOp* node) {
-        writeColOffset(node->col_offset);
         writeExpr(node->left);
         writeLineno(node->lineno);
         writeByte(node->op_type);
@@ -219,20 +209,17 @@ private:
         return true;
     }
     virtual bool visit_boolop(AST_BoolOp* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeByte(node->op_type);
         writeExprVector(node->values);
         return true;
     }
     virtual bool visit_break(AST_Break* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         return true;
     }
     virtual bool visit_call(AST_Call* node) {
         writeExprVector(node->args);
-        writeColOffset(node->col_offset);
         writeExpr(node->func);
         writeMiscVector(node->keywords);
         writeExpr(node->kwargs);
@@ -241,7 +228,6 @@ private:
         return true;
     }
     virtual bool visit_compare(AST_Compare* node) {
-        writeColOffset(node->col_offset);
         writeExprVector(node->comparators);
         writeExpr(node->left);
         writeLineno(node->lineno);
@@ -261,32 +247,27 @@ private:
     virtual bool visit_classdef(AST_ClassDef* node) {
         writeExprVector(node->bases);
         writeStmtVector(node->body);
-        writeColOffset(node->col_offset);
         writeExprVector(node->decorator_list);
         writeLineno(node->lineno);
         writeString(node->name);
         return true;
     }
     virtual bool visit_continue(AST_Continue* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         return true;
     }
     virtual bool visit_delete(AST_Delete* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeExprVector(node->targets);
         return true;
     }
     virtual bool visit_dict(AST_Dict* node) {
-        writeColOffset(node->col_offset);
         writeExprVector(node->keys);
         writeLineno(node->lineno);
         writeExprVector(node->values);
         return true;
     }
     virtual bool visit_dictcomp(AST_DictComp* node) {
-        writeColOffset(node->col_offset);
         writeMiscVector(node->generators);
         writeExpr(node->key);
         writeLineno(node->lineno);
@@ -296,7 +277,6 @@ private:
     virtual bool visit_ellipsis(AST_Ellipsis* node) { return true; }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) {
         writeStmtVector(node->body);
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeExpr(node->name);
         writeExpr(node->type);
@@ -304,14 +284,12 @@ private:
     }
     virtual bool visit_exec(AST_Exec* node) {
         writeExpr(node->body);
-        writeColOffset(node->col_offset);
         writeExpr(node->globals);
         writeLineno(node->lineno);
         writeExpr(node->locals);
         return true;
     }
     virtual bool visit_expr(AST_Expr* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeExpr(node->value);
         return true;
@@ -322,7 +300,6 @@ private:
     }
     virtual bool visit_for(AST_For* node) {
         writeStmtVector(node->body);
-        writeColOffset(node->col_offset);
         writeExpr(node->iter);
         writeLineno(node->lineno);
         writeStmtVector(node->orelse);
@@ -332,28 +309,24 @@ private:
     virtual bool visit_functiondef(AST_FunctionDef* node) {
         writeASTMisc(node->args);
         writeStmtVector(node->body);
-        writeColOffset(node->col_offset);
         writeExprVector(node->decorator_list);
         writeLineno(node->lineno);
         writeString(node->name);
         return true;
     }
     virtual bool visit_generatorexp(AST_GeneratorExp* node) {
-        writeColOffset(node->col_offset);
         writeExpr(node->elt);
         writeMiscVector(node->generators);
         writeLineno(node->lineno);
         return true;
     }
     virtual bool visit_global(AST_Global* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeStringVector(node->names);
         return true;
     }
     virtual bool visit_if(AST_If* node) {
         writeStmtVector(node->body);
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeStmtVector(node->orelse);
         writeExpr(node->test);
@@ -361,20 +334,17 @@ private:
     }
     virtual bool visit_ifexp(AST_IfExp* node) {
         writeExpr(node->body);
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeExpr(node->orelse);
         writeExpr(node->test);
         return true;
     }
     virtual bool visit_import(AST_Import* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeMiscVector(node->names);
         return true;
     }
     virtual bool visit_importfrom(AST_ImportFrom* node) {
-        writeColOffset(node->col_offset);
         writeULL(node->level);
         writeLineno(node->lineno);
         writeString(node->module);
@@ -393,19 +363,16 @@ private:
     virtual bool visit_lambda(AST_Lambda* node) {
         writeASTMisc(node->args);
         writeExpr(node->body);
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         return true;
     }
     virtual bool visit_list(AST_List* node) {
-        writeColOffset(node->col_offset);
         writeByte(node->ctx_type);
         writeExprVector(node->elts);
         writeLineno(node->lineno);
         return true;
     }
     virtual bool visit_listcomp(AST_ListComp* node) {
-        writeColOffset(node->col_offset);
         writeExpr(node->elt);
         writeMiscVector(node->generators);
         writeLineno(node->lineno);
@@ -416,7 +383,6 @@ private:
         return true;
     }
     virtual bool visit_name(AST_Name* node) {
-        writeColOffset(node->col_offset);
         writeByte(node->ctx_type);
         writeString(node->id);
         writeLineno(node->lineno);
@@ -424,7 +390,6 @@ private:
     }
     virtual bool visit_num(AST_Num* node) {
         writeByte(node->num_type);
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         if (node->num_type == AST_Num::INT) {
             writeULL(node->n_int);
@@ -440,12 +405,10 @@ private:
         return true;
     }
     virtual bool visit_pass(AST_Pass* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         return true;
     }
     virtual bool visit_print(AST_Print* node) {
-        writeColOffset(node->col_offset);
         writeExpr(node->dest);
         writeLineno(node->lineno);
         writeByte(node->nl);
@@ -455,7 +418,6 @@ private:
     virtual bool visit_raise(AST_Raise* node) {
         // "arg0" "arg1" "arg2" are called "type", "inst", and "tback" in the python ast,
         // so that's the order we have to write them:
-        writeColOffset(node->col_offset);
         writeExpr(node->arg1 /*inst*/);
         writeLineno(node->lineno);
         writeExpr(node->arg2 /*tback*/);
@@ -463,25 +425,21 @@ private:
         return true;
     }
     virtual bool visit_repr(AST_Repr* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeExpr(node->value);
         return true;
     }
     virtual bool visit_return(AST_Return* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeExpr(node->value);
         return true;
     }
     virtual bool visit_set(AST_Set* node) {
-        writeColOffset(node->col_offset);
         writeExprVector(node->elts);
         writeLineno(node->lineno);
         return true;
     }
     virtual bool visit_setcomp(AST_SetComp* node) {
-        writeColOffset(node->col_offset);
         writeExpr(node->elt);
         writeMiscVector(node->generators);
         writeLineno(node->lineno);
@@ -495,7 +453,6 @@ private:
     }
     virtual bool visit_str(AST_Str* node) {
         writeByte(node->str_type);
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         if (node->str_type == AST_Str::STR) {
             writeString(node->str_data);
@@ -507,7 +464,6 @@ private:
         return true;
     }
     virtual bool visit_subscript(AST_Subscript* node) {
-        writeColOffset(node->col_offset);
         writeByte(node->ctx_type);
         writeLineno(node->lineno);
         writeSlice(node->slice);
@@ -516,7 +472,6 @@ private:
     }
     virtual bool visit_tryexcept(AST_TryExcept* node) {
         writeStmtVector(node->body);
-        writeColOffset(node->col_offset);
         writeMiscVector(node->handlers);
         writeLineno(node->lineno);
         writeStmtVector(node->orelse);
@@ -524,20 +479,17 @@ private:
     }
     virtual bool visit_tryfinally(AST_TryFinally* node) {
         writeStmtVector(node->body);
-        writeColOffset(node->col_offset);
         writeStmtVector(node->finalbody);
         writeLineno(node->lineno);
         return true;
     }
     virtual bool visit_tuple(AST_Tuple* node) {
-        writeColOffset(node->col_offset);
         writeByte(node->ctx_type);
         writeExprVector(node->elts);
         writeLineno(node->lineno);
         return true;
     }
     virtual bool visit_unaryop(AST_UnaryOp* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeByte(node->op_type);
         writeExpr(node->operand);
@@ -545,7 +497,6 @@ private:
     }
     virtual bool visit_while(AST_While* node) {
         writeStmtVector(node->body);
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeStmtVector(node->orelse);
         writeExpr(node->test);
@@ -553,14 +504,12 @@ private:
     }
     virtual bool visit_with(AST_With* node) {
         writeStmtVector(node->body);
-        writeColOffset(node->col_offset);
         writeExpr(node->context_expr);
         writeLineno(node->lineno);
         writeExpr(node->optional_vars);
         return true;
     }
     virtual bool visit_yield(AST_Yield* node) {
-        writeColOffset(node->col_offset);
         writeLineno(node->lineno);
         writeExpr(node->value);
         return true;

@@ -32,8 +32,7 @@ void raiseExc(STOLEN(Box*) exc_obj) {
 
 // Have a special helper function for syntax errors, since we want to include the location
 // of the syntax error in the traceback, even though it is not part of the execution:
-void raiseSyntaxError(const char* msg, int lineno, int col_offset, llvm::StringRef file, llvm::StringRef func,
-                      bool compiler_error) {
+void raiseSyntaxError(const char* msg, int lineno, llvm::StringRef file, llvm::StringRef func, bool compiler_error) {
     if (compiler_error) {
         // This is how CPython's compiler_error() works:
         assert(file.data()[file.size()] == '\0');
@@ -79,7 +78,7 @@ void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* nod
     // Traceback (most recent call last):
     //  File "../test/tests/future_non_existent.py", line -1, in :
     //    from __future__ import rvalue_references # should cause syntax error
-    raiseSyntaxError(buf, node_at->lineno, node_at->col_offset, file, "");
+    raiseSyntaxError(buf, node_at->lineno, file, "");
 }
 
 void ExcInfo::printExcAndTraceback() const {

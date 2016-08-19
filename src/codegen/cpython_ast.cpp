@@ -100,7 +100,7 @@ public:
     AST_Name* convertToName(identifier ident) {
         if (!ident)
             return NULL;
-        return new AST_Name(convert(ident), AST_TYPE::Store, -1, -1);
+        return new AST_Name(convert(ident), AST_TYPE::Store, -1);
     }
 
     AST_arguments* convert(arguments_ty ident, AST* parent) {
@@ -114,7 +114,7 @@ public:
         if (r->vararg && r->kwarg && (r->vararg->id == r->kwarg->id)) {
             char buf[1024];
             snprintf(buf, sizeof(buf), "duplicate argument '%s' in function definition", r->vararg->id.c_str());
-            raiseSyntaxError(buf, parent->lineno, parent->col_offset, fn, "", true);
+            raiseSyntaxError(buf, parent->lineno, fn, "", true);
         }
 
         std::set<InternedString> seen;
@@ -136,7 +136,7 @@ public:
                 if (seen->find(name_node->id) != seen->end()) {
                     char buf[1024];
                     snprintf(buf, sizeof(buf), "duplicate argument '%s' in function definition", name_node->id.c_str());
-                    raiseSyntaxError(buf, parent->lineno, parent->col_offset, fn, "", true);
+                    raiseSyntaxError(buf, parent->lineno, fn, "", true);
                 }
                 seen->insert(name_node->id);
             } else if (arg->type == AST_TYPE::Tuple) {
@@ -290,7 +290,6 @@ public:
             case Lambda_kind: {
                 auto r = new AST_Lambda();
                 r->lineno = expr->lineno;
-                r->col_offset = expr->col_offset;
                 auto v = expr->v.Lambda;
                 r->args = convert(v.args, r);
                 r->body = convert(v.body);
@@ -493,7 +492,6 @@ public:
 
         auto r = _convert(expr);
         r->lineno = expr->lineno;
-        r->col_offset = expr->col_offset;
         return r;
     }
 
@@ -506,7 +504,6 @@ public:
         r->name = convert(v.name);
         r->body = convert<stmt_ty, AST_stmt*>(v.body);
         r->lineno = eh->lineno;
-        r->col_offset = eh->col_offset;
         return r;
     }
 
@@ -517,7 +514,6 @@ public:
             case FunctionDef_kind: {
                 auto r = new AST_FunctionDef();
                 r->lineno = stmt->lineno;
-                r->col_offset = stmt->col_offset;
                 auto v = stmt->v.FunctionDef;
                 r->name = convert(v.name);
                 r->args = convert(v.args, r);
@@ -692,14 +688,13 @@ public:
             case Break_kind:
                 // This is not really the right place to be handling this, but this whole thing is temporary anyway.
                 if (loop_depth == 0)
-                    raiseSyntaxError("'break' outside loop", stmt->lineno, stmt->col_offset, fn, "", true);
+                    raiseSyntaxError("'break' outside loop", stmt->lineno, fn, "", true);
                 return new AST_Break();
             case Continue_kind:
                 if (loop_depth == 0)
-                    raiseSyntaxError("'continue' not properly in loop", stmt->lineno, stmt->col_offset, fn, "", true);
+                    raiseSyntaxError("'continue' not properly in loop", stmt->lineno, fn, "", true);
                 if (in_finally)
-                    raiseSyntaxError("'continue' not supported inside 'finally' clause", stmt->lineno, stmt->col_offset,
-                                     fn, "", true);
+                    raiseSyntaxError("'continue' not supported inside 'finally' clause", stmt->lineno, fn, "", true);
                 return new AST_Continue();
         };
         // GCC wants this:
@@ -709,7 +704,6 @@ public:
     AST_stmt* convert(stmt_ty stmt) {
         auto r = _convert(stmt);
         r->lineno = stmt->lineno;
-        r->col_offset = stmt->col_offset;
 
         if (stmt->lineno == 0) {
             // So far it looks like these can only be generated for empty lines on the repl
@@ -745,7 +739,6 @@ public:
                 AST_expr* expr = this->convert(mod->v.Expression.body);
                 auto rtn_stmt = new AST_Return;
                 rtn_stmt->lineno = expr->lineno;
-                rtn_stmt->col_offset = expr->col_offset;
                 rtn_stmt->value = expr;
 
                 rtn->body = rtn_stmt;
