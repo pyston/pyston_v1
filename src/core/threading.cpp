@@ -75,50 +75,43 @@ PthreadFastMutex threading_lock;
 // be checked while the threading_lock is held; might not be worth it.
 int num_starting_threads(0);
 
+// TODO: this is a holdover from our GC days, and now there's pretty much nothing left here
+// and it should just get refactored out.
 class ThreadStateInternal {
 private:
-    bool saved;
-    ucontext_t ucontext;
+    bool holds_gil = true;
 
 public:
-    void* stack_start;
-
     pthread_t pthread_id;
-
     PyThreadState* public_thread_state;
 
-    ThreadStateInternal(void* stack_start, pthread_t pthread_id, PyThreadState* tstate)
-        : saved(false), stack_start(stack_start), pthread_id(pthread_id), public_thread_state(tstate) {
+    ThreadStateInternal(pthread_t pthread_id, PyThreadState* tstate)
+        : pthread_id(pthread_id), public_thread_state(tstate) {
         HEAD_LOCK();
+
         tstate->next = interpreter_state.tstate_head;
         interpreter_state.tstate_head = tstate;
         HEAD_UNLOCK();
     }
 
-    void saveCurrent() {
-        assert(!saved);
-        getcontext(&ucontext);
-        saved = true;
-    }
-
-    void popCurrent() {
-        assert(saved);
-        saved = false;
-    }
-
-    bool isValid() { return saved; }
-
-    // This is a quick and dirty way to determine if the current thread holds the gil:
-    // the only way it can't (at least for now) is if it had saved its threadstate.
-    // This only works when looking at a thread that is not actively acquiring or releasing
-    // the GIL, so for now just guard on it only being called for the current thread.
-    // TODO It's pretty brittle to reuse the saved flag like this.
     bool holdsGil() {
         assert(pthread_self() == this->pthread_id);
-        return !saved;
+        return holds_gil;
     }
 
-    ucontext_t* getContext() { return &ucontext; }
+    void takeGil() {
+        assert(pthread_self() == this->pthread_id);
+
+        assert(!holds_gil);
+        holds_gil = true;
+    }
+
+    void releaseGil()  {
+        assert(pthread_self() == this->pthread_id);
+
+        assert(holds_gil);
+        holds_gil = false;
+    }
 };
 static std::unordered_map<pthread_t, ThreadStateInternal*> current_threads;
 static __thread ThreadStateInternal* current_internal_thread_state = 0;
@@ -137,24 +130,7 @@ static void registerThread(bool is_starting_thread) {
 
     LOCK_REGION(&threading_lock);
 
-    pthread_attr_t thread_attrs;
-    int code = pthread_getattr_np(current_thread, &thread_attrs);
-    if (code)
-        err(1, NULL);
-
-    void* stack_start;
-    size_t stack_size;
-    code = pthread_attr_getstack(&thread_attrs, &stack_start, &stack_size);
-    RELEASE_ASSERT(code == 0, "");
-
-    pthread_attr_destroy(&thread_attrs);
-
-#if STACK_GROWS_DOWN
-    void* stack_bottom = static_cast<char*>(stack_start) + stack_size;
-#else
-    void* stack_bottom = stack_start;
-#endif
-    current_internal_thread_state = new ThreadStateInternal(stack_bottom, current_thread, &cur_thread_state);
+    current_internal_thread_state = new ThreadStateInternal(current_thread, &cur_thread_state);
     current_threads[current_thread] = current_internal_thread_state;
 
     if (is_starting_thread)
@@ -270,9 +246,8 @@ static void* _thread_start(void* _arg) {
     Box* arg3 = arg->arg3;
     delete arg;
 
-    registerThread(true);
-
     threading::GLReadRegion _glock;
+    registerThread(true);
     assert(!PyErr_Occurred());
 
     void* rtn = start_func(arg1, arg2, arg3);
@@ -308,50 +283,6 @@ intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg
     return thread_id;
 }
 
-// from https://www.sourceware.org/ml/guile/2000-07/msg00214.html
-static void* find_stack() {
-    FILE* input;
-    char* line;
-    char* s;
-    size_t len;
-    char hex[9];
-    void* start;
-    void* end;
-
-    int dummy;
-
-    input = fopen("/proc/self/maps", "r");
-    if (input == NULL)
-        return NULL;
-
-    len = 0;
-    line = NULL;
-    while (getline(&line, &len, input) != -1) {
-        s = strchr(line, '-');
-        if (s == NULL)
-            return NULL;
-        *s++ = '\0';
-
-        start = (void*)strtoul(line, NULL, 16);
-        end = (void*)strtoul(s, NULL, 16);
-
-        if ((void*)&dummy >= start && (void*)&dummy <= end) {
-            free(line);
-            fclose(input);
-
-#if STACK_GROWS_DOWN
-            return end;
-#else
-            return start;
-#endif
-        }
-    }
-
-    free(line);
-    fclose(input);
-    return NULL; /* not found =^P */
-}
-
 static long main_thread_id;
 
 void registerMainThread() {
@@ -363,7 +294,7 @@ void registerMainThread() {
 
     assert(!interpreter_state.tstate_head);
     assert(!current_internal_thread_state);
-    current_internal_thread_state = new ThreadStateInternal(find_stack(), pthread_self(), &cur_thread_state);
+    current_internal_thread_state = new ThreadStateInternal(pthread_self(), &cur_thread_state);
     current_threads[pthread_self()] = current_internal_thread_state;
 }
 
@@ -408,28 +339,26 @@ bool isMainThread() {
 // It also means that you're not allowed to do that much inside an AllowThreads region...
 // TODO maybe we should let the client decide which way to handle it
 extern "C" void beginAllowThreads() noexcept {
-    // I don't think it matters whether the GL release happens before or after the state
-    // saving; do it before, then, to reduce the amount we hold the GL:
-    releaseGLRead();
-
     {
+        // TODO: I think this lock is no longer needed
         LOCK_REGION(&threading_lock);
 
         assert(current_internal_thread_state);
-        current_internal_thread_state->saveCurrent();
+        current_internal_thread_state->releaseGil();
     }
+
+    releaseGLRead();
 }
 
 extern "C" void endAllowThreads() noexcept {
+    acquireGLRead();
+
     {
         LOCK_REGION(&threading_lock);
 
         assert(current_internal_thread_state);
-        current_internal_thread_state->popCurrent();
+        current_internal_thread_state->takeGil();
     }
-
-
-    acquireGLRead();
 }
 
 #if THREADING_USE_GIL
