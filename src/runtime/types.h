@@ -424,7 +424,7 @@ template <bool Nullable = false> inline void decrefArray(Box** array, int size) 
         for (int i = 0; i < size - 1; i++) {
             Box* cur = next;
             next = array[i + 1];
-            _mm_prefetch(next, _MM_HINT_T0);
+            __builtin_prefetch(next);
             if (Nullable)
                 Py_XDECREF(cur);
             else
