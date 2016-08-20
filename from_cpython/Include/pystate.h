@@ -20,12 +20,13 @@ typedef struct _is {
     struct _is *next;
     struct _ts *tstate_head;
 
+    PyObject *modules;
+    PyObject *builtins;
+
     // Pyston change
     // Note: any changes here need to show up in PyInterpreterState_Clear as well
 #if 0
-    PyObject *modules;
     PyObject *sysdict;
-    PyObject *builtins;
     PyObject *modules_reloading;
 
     PyObject *codec_search_path;

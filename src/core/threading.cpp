@@ -62,7 +62,7 @@ static PyThread_type_lock head_mutex = NULL; /* Protects interp->tstate_head */
 #define HEAD_UNLOCK() /* Nothing */
 #endif
 
-PyInterpreterState interpreter_state;
+static PyInterpreterState interpreter_state;
 
 std::unordered_set<PerThreadSetBase*> PerThreadSetBase::all_instances;
 
@@ -509,10 +509,14 @@ extern "C" void PyInterpreterState_Clear(PyInterpreterState* interp) noexcept {
     // Py_CLEAR(interp->codec_search_path);
     // Py_CLEAR(interp->codec_search_cache);
     // Py_CLEAR(interp->codec_error_registry);
-    // Py_CLEAR(interp->modules);
+    Py_CLEAR(interp->modules);
     // Py_CLEAR(interp->modules_reloading);
     // Py_CLEAR(interp->sysdict);
-    // Py_CLEAR(interp->builtins);
+    Py_CLEAR(interp->builtins);
+}
+
+extern "C" void PyThreadState_DeleteCurrent() noexcept {
+    Py_FatalError("unimplemented");
 }
 
 extern "C" void PyThreadState_Clear(PyThreadState* tstate) noexcept {
