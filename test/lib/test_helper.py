@@ -66,6 +66,8 @@ def run_test(cmd, cwd, expected, env = None):
 
     print
     print "Return code:", errcode
+    assert errcode in (0, 1), "\n\n%s\nTest process crashed" % output
+
     if expected == result:
         print "Received expected output"
     else:
