@@ -36,6 +36,8 @@
 namespace pyston {
 namespace threading {
 
+void _acquireGIL();
+void _releaseGIL();
 
 #ifdef WITH_THREAD
 #include "pythread.h"
@@ -99,14 +101,14 @@ public:
         return holds_gil;
     }
 
-    void takeGil() {
+    void gilTaken() {
         assert(pthread_self() == this->pthread_id);
 
         assert(!holds_gil);
         holds_gil = true;
     }
 
-    void releaseGil()  {
+    void gilReleased() {
         assert(pthread_self() == this->pthread_id);
 
         assert(holds_gil);
@@ -197,7 +199,7 @@ extern "C" PyGILState_STATE PyGILState_Ensure(void) noexcept {
         if (current_internal_thread_state == NULL)
             Py_FatalError("Couldn't create thread-state for new thread");
 
-        acquireGLRead();
+        _acquireGIL();
         return PyGILState_UNLOCKED;
     } else {
         ++cur_thread_state.gilstate_counter;
@@ -246,13 +248,14 @@ static void* _thread_start(void* _arg) {
     Box* arg3 = arg->arg3;
     delete arg;
 
-    threading::GLReadRegion _glock;
+    _acquireGIL();
     registerThread(true);
     assert(!PyErr_Occurred());
 
     void* rtn = start_func(arg1, arg2, arg3);
 
     unregisterThread();
+    _releaseGIL();
 
     return rtn;
 }
@@ -296,6 +299,8 @@ void registerMainThread() {
     assert(!current_internal_thread_state);
     current_internal_thread_state = new ThreadStateInternal(pthread_self(), &cur_thread_state);
     current_threads[pthread_self()] = current_internal_thread_state;
+
+    _acquireGIL();
 }
 
 /* Wait until threading._shutdown completes, provided
@@ -344,27 +349,22 @@ extern "C" void beginAllowThreads() noexcept {
         LOCK_REGION(&threading_lock);
 
         assert(current_internal_thread_state);
-        current_internal_thread_state->releaseGil();
+        current_internal_thread_state->gilReleased();
     }
 
-    releaseGLRead();
+    _releaseGIL();
 }
 
 extern "C" void endAllowThreads() noexcept {
-    acquireGLRead();
+    _acquireGIL();
 
     {
         LOCK_REGION(&threading_lock);
 
         assert(current_internal_thread_state);
-        current_internal_thread_state->takeGil();
+        current_internal_thread_state->gilTaken();
     }
 }
-
-#if THREADING_USE_GIL
-#if THREADING_USE_GRWL
-#error "Can't turn on both the GIL and the GRWL!"
-#endif
 
 static pthread_mutex_t gil = PTHREAD_MUTEX_INITIALIZER;
 
@@ -423,7 +423,7 @@ extern "C" void PyEval_ReInitThreads() noexcept {
     Py_DECREF(threading);
 }
 
-void acquireGLWrite() {
+void _acquireGIL() {
     threads_waiting_on_gil++;
     pthread_mutex_lock(&gil);
     threads_waiting_on_gil--;
@@ -431,7 +431,7 @@ void acquireGLWrite() {
     pthread_cond_signal(&gil_acquired);
 }
 
-void releaseGLWrite() {
+void _releaseGIL() {
     pthread_mutex_unlock(&gil);
 }
 
@@ -457,86 +457,6 @@ void _allowGLReadPreemption() {
     threads_waiting_on_gil--;
     pthread_cond_signal(&gil_acquired);
 }
-#elif THREADING_USE_GRWL
-static pthread_rwlock_t grwl = PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP;
-
-enum class GRWLHeldState {
-    N,
-    R,
-    W,
-};
-static __thread GRWLHeldState grwl_state = GRWLHeldState::N;
-
-static std::atomic<int> writers_waiting(0);
-
-void acquireGLRead() {
-    assert(grwl_state == GRWLHeldState::N);
-    pthread_rwlock_rdlock(&grwl);
-    grwl_state = GRWLHeldState::R;
-}
-
-void releaseGLRead() {
-    assert(grwl_state == GRWLHeldState::R);
-    pthread_rwlock_unlock(&grwl);
-    grwl_state = GRWLHeldState::N;
-}
-
-void acquireGLWrite() {
-    assert(grwl_state == GRWLHeldState::N);
-
-    writers_waiting++;
-    pthread_rwlock_wrlock(&grwl);
-    writers_waiting--;
-
-    grwl_state = GRWLHeldState::W;
-}
-
-void releaseGLWrite() {
-    assert(grwl_state == GRWLHeldState::W);
-    pthread_rwlock_unlock(&grwl);
-    grwl_state = GRWLHeldState::N;
-}
-
-void promoteGL() {
-    Timer _t2("promoting", /*min_usec=*/10000);
-
-    // Note: this is *not* the same semantics as normal promoting, on purpose.
-    releaseGLRead();
-    acquireGLWrite();
-
-    long promote_us = _t2.end();
-    static thread_local StatPerThreadCounter sc_promoting_us("grwl_promoting_us");
-    sc_promoting_us.log(promote_us);
-}
-
-void demoteGL() {
-    releaseGLWrite();
-    acquireGLRead();
-}
-
-static __thread int gl_check_count = 0;
-void allowGLReadPreemption() {
-    assert(grwl_state == GRWLHeldState::R);
-
-    // gl_check_count++;
-    // if (gl_check_count < 10)
-    // return;
-    // gl_check_count = 0;
-
-    if (__builtin_expect(!writers_waiting.load(std::memory_order_relaxed), 1))
-        return;
-
-    Timer _t2("preempted", /*min_usec=*/10000);
-    pthread_rwlock_unlock(&grwl);
-    // The GRWL is a writer-prefered rwlock, so this next statement will block even
-    // if the lock is in read mode:
-    pthread_rwlock_rdlock(&grwl);
-
-    long preempt_us = _t2.end();
-    static thread_local StatPerThreadCounter sc_preempting_us("grwl_preempt_us");
-    sc_preempting_us.log(preempt_us);
-}
-#endif
 
 // We don't support CPython's TLS (yet?)
 extern "C" void PyThread_ReInitTLS(void) noexcept {
