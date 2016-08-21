@@ -274,3 +274,8 @@ from api_test import set_size
 
 s = set([1, 2, 3, 4])
 print(set_size(s))
+
+try:
+    {{}}
+except Exception as e:
+    print e

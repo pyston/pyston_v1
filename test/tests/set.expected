@@ -540,3 +540,4 @@ False
 set([1L]) set([1]) set([1]) set([1L])
 set([1])
 4
+unhashable type: 'dict'
