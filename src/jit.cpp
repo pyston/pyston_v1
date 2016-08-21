@@ -369,7 +369,6 @@ static int main(int argc, char** argv) noexcept {
         const char* fn = NULL;
 
         threading::registerMainThread();
-        threading::acquireGLRead();
 
         Py_SetProgramName(argv[0]);
 
@@ -539,11 +538,6 @@ static int main(int argc, char** argv) noexcept {
         }
 
         threading::finishMainThread();
-
-        // Acquire the GIL to make sure we stop the other threads, since we will tear down
-        // data structures they are potentially running on.
-        // Note: we will purposefully not release the GIL on exiting.
-        threading::promoteGL();
 
         _t.split("Py_Finalize");
 

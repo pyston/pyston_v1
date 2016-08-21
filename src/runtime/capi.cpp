@@ -1483,31 +1483,6 @@ extern "C" void PyEval_InitThreads(void) noexcept {
     // nothing to do here
 }
 
-extern "C" void PyEval_AcquireThread(PyThreadState* tstate) noexcept {
-    Py_FatalError("Unimplemented");
-}
-
-extern "C" void PyEval_ReleaseThread(PyThreadState* tstate) noexcept {
-    Py_FatalError("Unimplemented");
-}
-
-extern "C" PyThreadState* PyThreadState_Get(void) noexcept {
-    if (_PyThreadState_Current == NULL)
-        Py_FatalError("PyThreadState_Get: no current thread");
-
-    return _PyThreadState_Current;
-}
-
-extern "C" PyThreadState* PyEval_SaveThread(void) noexcept {
-    beginAllowThreads();
-    return PyThreadState_GET();
-}
-
-extern "C" void PyEval_RestoreThread(PyThreadState* tstate) noexcept {
-    RELEASE_ASSERT(tstate == PyThreadState_GET(), "");
-    endAllowThreads();
-}
-
 extern "C" BORROWED(struct _frame*) PyEval_GetFrame(void) noexcept {
     Box* frame = NULL;
     try {

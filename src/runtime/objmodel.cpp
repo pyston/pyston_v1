@@ -3967,8 +3967,6 @@ static StatCounter slowpath_pickversion("slowpath_pickversion");
 template <ExceptionStyle S>
 static CompiledFunction* pickVersion(FunctionMetadata* f, int num_output_args, Box* oarg1, Box* oarg2, Box* oarg3,
                                      Box** oargs) {
-    LOCK_REGION(codegen_rwlock.asWrite());
-
     // if always_use_version is set use it even if the exception style does not match.
     // But prefer using the correct style if both are available
     if (f->always_use_version.get(S))

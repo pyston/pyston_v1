@@ -341,30 +341,26 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
 void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     FunctionMetadata* md;
 
-    { // scope for limiting the locked region:
-        LOCK_REGION(codegen_rwlock.asWrite());
+    Timer _t("for compileModule()");
 
-        Timer _t("for compileModule()");
+    const char* fn = PyModule_GetFilename(bm);
+    RELEASE_ASSERT(fn, "");
 
-        const char* fn = PyModule_GetFilename(bm);
-        RELEASE_ASSERT(fn, "");
+    FutureFlags future_flags = getFutureFlags(m->body, fn);
+    ScopingAnalysis* scoping = new ScopingAnalysis(m, true);
 
-        FutureFlags future_flags = getFutureFlags(m->body, fn);
-        ScopingAnalysis* scoping = new ScopingAnalysis(m, true);
+    auto fn_str = boxString(fn);
+    AUTO_DECREF(fn_str);
+    std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, fn_str));
 
-        auto fn_str = boxString(fn);
-        AUTO_DECREF(fn_str);
-        std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, fn_str));
+    static BoxedString* doc_str = getStaticString("__doc__");
+    bm->setattr(doc_str, autoDecref(si->getDocString()), NULL);
 
-        static BoxedString* doc_str = getStaticString("__doc__");
-        bm->setattr(doc_str, autoDecref(si->getDocString()), NULL);
+    static BoxedString* builtins_str = getStaticString("__builtins__");
+    if (!bm->hasattr(builtins_str))
+        bm->setattr(builtins_str, PyModule_GetDict(builtins_module), NULL);
 
-        static BoxedString* builtins_str = getStaticString("__builtins__");
-        if (!bm->hasattr(builtins_str))
-            bm->setattr(builtins_str, PyModule_GetDict(builtins_module), NULL);
-
-        md = new FunctionMetadata(0, false, false, std::move(si));
-    }
+    md = new FunctionMetadata(0, false, false, std::move(si));
 
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_interpreted_module_toplevel");
     Box* r = astInterpretFunction(md, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
@@ -395,8 +391,6 @@ Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
 
 static FunctionMetadata* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_stmt*> body, BoxedString* fn,
                                               PyCompilerFlags* flags) {
-    LOCK_REGION(codegen_rwlock.asWrite());
-
     Timer _t("for evalOrExec()");
 
     ScopingAnalysis* scoping = new ScopingAnalysis(source, false);
@@ -655,8 +649,6 @@ void exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_f
 // TODO we should have logic like this at the CLFunc level that detects that we keep
 // on creating functions with failing speculations, and then stop speculating.
 void CompiledFunction::speculationFailed() {
-    LOCK_REGION(codegen_rwlock.asWrite());
-
     this->times_speculation_failed++;
 
     if (this->times_speculation_failed == 4) {
@@ -735,8 +727,6 @@ ConcreteCompilerType* CompiledFunction::getReturnType() {
 /// The cf must be an active version in its parents FunctionMetadata; the given
 /// version will be replaced by the new version, which will be returned.
 static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel new_effort) {
-    LOCK_REGION(codegen_rwlock.asWrite());
-
     assert(cf->md->versions.size());
 
     assert(cf);
@@ -773,8 +763,6 @@ static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel new_effort) 
 static StatCounter stat_osrexits("num_osr_exits");
 static StatCounter stat_osr_compiles("num_osr_compiles");
 CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
-    LOCK_REGION(codegen_rwlock.asWrite());
-
     assert(exit);
     stat_osrexits.log();
 

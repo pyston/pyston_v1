@@ -795,6 +795,8 @@ static int _check_and_flush(FILE* stream) {
 
 void setupSys() {
     sys_modules_dict = new BoxedDict();
+    PyThreadState_GET()->interp->modules = incref(sys_modules_dict);
+
     constants.push_back(sys_modules_dict);
 
     // This is ok to call here because we've already created the sys_modules_dict

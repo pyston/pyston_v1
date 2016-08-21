@@ -33,9 +33,15 @@
 #include "runtime/objmodel.h" // _printStacktrace
 #include "runtime/types.h"
 
+extern "C" {
+PyThreadState* _PyThreadState_Current;
+}
+
 namespace pyston {
 namespace threading {
 
+void _acquireGIL();
+void _releaseGIL();
 
 #ifdef WITH_THREAD
 #include "pythread.h"
@@ -56,14 +62,9 @@ static PyThread_type_lock head_mutex = NULL; /* Protects interp->tstate_head */
 #define HEAD_UNLOCK() /* Nothing */
 #endif
 
-PyInterpreterState interpreter_state;
+static PyInterpreterState interpreter_state;
 
 std::unordered_set<PerThreadSetBase*> PerThreadSetBase::all_instances;
-
-extern "C" {
-__thread PyThreadState cur_thread_state = { NULL, &interpreter_state, NULL, 0, 1, NULL, NULL, NULL, NULL, 0,
-                                            NULL }; // not sure if we need to explicitly request zero-initialization
-}
 
 PthreadFastMutex threading_lock;
 
@@ -75,50 +76,49 @@ PthreadFastMutex threading_lock;
 // be checked while the threading_lock is held; might not be worth it.
 int num_starting_threads(0);
 
+// TODO: this is a holdover from our GC days, and now there's pretty much nothing left here
+// and it should just get refactored out.
 class ThreadStateInternal {
 private:
-    bool saved;
-    ucontext_t ucontext;
+    bool holds_gil = false;
 
 public:
-    void* stack_start;
-
     pthread_t pthread_id;
-
     PyThreadState* public_thread_state;
 
-    ThreadStateInternal(void* stack_start, pthread_t pthread_id, PyThreadState* tstate)
-        : saved(false), stack_start(stack_start), pthread_id(pthread_id), public_thread_state(tstate) {
+    ThreadStateInternal(pthread_t pthread_id, PyThreadState* tstate)
+        : pthread_id(pthread_id), public_thread_state(tstate) {
         HEAD_LOCK();
+
         tstate->next = interpreter_state.tstate_head;
         interpreter_state.tstate_head = tstate;
         HEAD_UNLOCK();
     }
 
-    void saveCurrent() {
-        assert(!saved);
-        getcontext(&ucontext);
-        saved = true;
-    }
-
-    void popCurrent() {
-        assert(saved);
-        saved = false;
-    }
-
-    bool isValid() { return saved; }
-
-    // This is a quick and dirty way to determine if the current thread holds the gil:
-    // the only way it can't (at least for now) is if it had saved its threadstate.
-    // This only works when looking at a thread that is not actively acquiring or releasing
-    // the GIL, so for now just guard on it only being called for the current thread.
-    // TODO It's pretty brittle to reuse the saved flag like this.
     bool holdsGil() {
         assert(pthread_self() == this->pthread_id);
-        return !saved;
+        return holds_gil;
     }
 
-    ucontext_t* getContext() { return &ucontext; }
+    void gilTaken() {
+        assert(pthread_self() == this->pthread_id);
+
+        assert(!_PyThreadState_Current);
+        _PyThreadState_Current = public_thread_state;
+
+        assert(!holds_gil);
+        holds_gil = true;
+    }
+
+    void gilReleased() {
+        assert(pthread_self() == this->pthread_id);
+
+        assert(_PyThreadState_Current == public_thread_state);
+        _PyThreadState_Current = NULL;
+
+        assert(holds_gil);
+        holds_gil = false;
+    }
 };
 static std::unordered_map<pthread_t, ThreadStateInternal*> current_threads;
 static __thread ThreadStateInternal* current_internal_thread_state = 0;
@@ -137,24 +137,7 @@ static void registerThread(bool is_starting_thread) {
 
     LOCK_REGION(&threading_lock);
 
-    pthread_attr_t thread_attrs;
-    int code = pthread_getattr_np(current_thread, &thread_attrs);
-    if (code)
-        err(1, NULL);
-
-    void* stack_start;
-    size_t stack_size;
-    code = pthread_attr_getstack(&thread_attrs, &stack_start, &stack_size);
-    RELEASE_ASSERT(code == 0, "");
-
-    pthread_attr_destroy(&thread_attrs);
-
-#if STACK_GROWS_DOWN
-    void* stack_bottom = static_cast<char*>(stack_start) + stack_size;
-#else
-    void* stack_bottom = stack_start;
-#endif
-    current_internal_thread_state = new ThreadStateInternal(stack_bottom, current_thread, &cur_thread_state);
+    current_internal_thread_state = new ThreadStateInternal(current_thread, &cur_thread_state);
     current_threads[current_thread] = current_internal_thread_state;
 
     if (is_starting_thread)
@@ -201,6 +184,7 @@ static void tstate_delete_common(PyThreadState* tstate) {
 static void unregisterThread() {
     tstate_delete_common(current_internal_thread_state->public_thread_state);
     PyThreadState_Clear(current_internal_thread_state->public_thread_state);
+    assert(current_internal_thread_state->holdsGil());
 
     {
         pthread_t current_thread = pthread_self();
@@ -210,6 +194,10 @@ static void unregisterThread() {
         if (VERBOSITY() >= 2)
             printf("thread tid=%ld exited\n", current_thread);
     }
+
+    current_internal_thread_state->gilReleased();
+    _releaseGIL();
+
     delete current_internal_thread_state;
     current_internal_thread_state = 0;
 }
@@ -221,7 +209,7 @@ extern "C" PyGILState_STATE PyGILState_Ensure(void) noexcept {
         if (current_internal_thread_state == NULL)
             Py_FatalError("Couldn't create thread-state for new thread");
 
-        acquireGLRead();
+        endAllowThreads();
         return PyGILState_UNLOCKED;
     } else {
         ++cur_thread_state.gilstate_counter;
@@ -241,20 +229,21 @@ extern "C" void PyGILState_Release(PyGILState_STATE oldstate) noexcept {
     --cur_thread_state.gilstate_counter;
     RELEASE_ASSERT(cur_thread_state.gilstate_counter >= 0, "");
 
-    if (oldstate == PyGILState_UNLOCKED) {
-        beginAllowThreads();
-    }
-
     if (cur_thread_state.gilstate_counter == 0) {
         assert(oldstate == PyGILState_UNLOCKED);
         RELEASE_ASSERT(0, "this is currently untested");
         // Pyston change:
         unregisterThread();
+        return;
+    }
+
+    if (oldstate == PyGILState_UNLOCKED) {
+        beginAllowThreads();
     }
 }
 
 extern "C" PyThreadState* PyGILState_GetThisThreadState(void) noexcept {
-    Py_FatalError("unimplemented");
+    return &cur_thread_state;
 }
 
 struct ThreadStartArgs {
@@ -271,8 +260,7 @@ static void* _thread_start(void* _arg) {
     delete arg;
 
     registerThread(true);
-
-    threading::GLReadRegion _glock;
+    endAllowThreads();
     assert(!PyErr_Occurred());
 
     void* rtn = start_func(arg1, arg2, arg3);
@@ -308,50 +296,6 @@ intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg
     return thread_id;
 }
 
-// from https://www.sourceware.org/ml/guile/2000-07/msg00214.html
-static void* find_stack() {
-    FILE* input;
-    char* line;
-    char* s;
-    size_t len;
-    char hex[9];
-    void* start;
-    void* end;
-
-    int dummy;
-
-    input = fopen("/proc/self/maps", "r");
-    if (input == NULL)
-        return NULL;
-
-    len = 0;
-    line = NULL;
-    while (getline(&line, &len, input) != -1) {
-        s = strchr(line, '-');
-        if (s == NULL)
-            return NULL;
-        *s++ = '\0';
-
-        start = (void*)strtoul(line, NULL, 16);
-        end = (void*)strtoul(s, NULL, 16);
-
-        if ((void*)&dummy >= start && (void*)&dummy <= end) {
-            free(line);
-            fclose(input);
-
-#if STACK_GROWS_DOWN
-            return end;
-#else
-            return start;
-#endif
-        }
-    }
-
-    free(line);
-    fclose(input);
-    return NULL; /* not found =^P */
-}
-
 static long main_thread_id;
 
 void registerMainThread() {
@@ -363,8 +307,10 @@ void registerMainThread() {
 
     assert(!interpreter_state.tstate_head);
     assert(!current_internal_thread_state);
-    current_internal_thread_state = new ThreadStateInternal(find_stack(), pthread_self(), &cur_thread_state);
+    current_internal_thread_state = new ThreadStateInternal(pthread_self(), &cur_thread_state);
     current_threads[pthread_self()] = current_internal_thread_state;
+
+    endAllowThreads();
 }
 
 /* Wait until threading._shutdown completes, provided
@@ -408,34 +354,18 @@ bool isMainThread() {
 // It also means that you're not allowed to do that much inside an AllowThreads region...
 // TODO maybe we should let the client decide which way to handle it
 extern "C" void beginAllowThreads() noexcept {
-    // I don't think it matters whether the GL release happens before or after the state
-    // saving; do it before, then, to reduce the amount we hold the GL:
-    releaseGLRead();
+    assert(current_internal_thread_state);
+    current_internal_thread_state->gilReleased();
 
-    {
-        LOCK_REGION(&threading_lock);
-
-        assert(current_internal_thread_state);
-        current_internal_thread_state->saveCurrent();
-    }
+    _releaseGIL();
 }
 
 extern "C" void endAllowThreads() noexcept {
-    {
-        LOCK_REGION(&threading_lock);
+    _acquireGIL();
 
-        assert(current_internal_thread_state);
-        current_internal_thread_state->popCurrent();
-    }
-
-
-    acquireGLRead();
+    assert(current_internal_thread_state);
+    current_internal_thread_state->gilTaken();
 }
-
-#if THREADING_USE_GIL
-#if THREADING_USE_GRWL
-#error "Can't turn on both the GIL and the GRWL!"
-#endif
 
 static pthread_mutex_t gil = PTHREAD_MUTEX_INITIALIZER;
 
@@ -494,7 +424,7 @@ extern "C" void PyEval_ReInitThreads() noexcept {
     Py_DECREF(threading);
 }
 
-void acquireGLWrite() {
+void _acquireGIL() {
     threads_waiting_on_gil++;
     pthread_mutex_lock(&gil);
     threads_waiting_on_gil--;
@@ -502,7 +432,7 @@ void acquireGLWrite() {
     pthread_cond_signal(&gil_acquired);
 }
 
-void releaseGLWrite() {
+void _releaseGIL() {
     pthread_mutex_unlock(&gil);
 }
 
@@ -523,91 +453,15 @@ void _allowGLReadPreemption() {
     if (!threads_waiting_on_gil.load(std::memory_order_seq_cst))
         return;
 
+    current_internal_thread_state->gilReleased();
+
     threads_waiting_on_gil++;
     pthread_cond_wait(&gil_acquired, &gil);
     threads_waiting_on_gil--;
     pthread_cond_signal(&gil_acquired);
+
+    current_internal_thread_state->gilTaken();
 }
-#elif THREADING_USE_GRWL
-static pthread_rwlock_t grwl = PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP;
-
-enum class GRWLHeldState {
-    N,
-    R,
-    W,
-};
-static __thread GRWLHeldState grwl_state = GRWLHeldState::N;
-
-static std::atomic<int> writers_waiting(0);
-
-void acquireGLRead() {
-    assert(grwl_state == GRWLHeldState::N);
-    pthread_rwlock_rdlock(&grwl);
-    grwl_state = GRWLHeldState::R;
-}
-
-void releaseGLRead() {
-    assert(grwl_state == GRWLHeldState::R);
-    pthread_rwlock_unlock(&grwl);
-    grwl_state = GRWLHeldState::N;
-}
-
-void acquireGLWrite() {
-    assert(grwl_state == GRWLHeldState::N);
-
-    writers_waiting++;
-    pthread_rwlock_wrlock(&grwl);
-    writers_waiting--;
-
-    grwl_state = GRWLHeldState::W;
-}
-
-void releaseGLWrite() {
-    assert(grwl_state == GRWLHeldState::W);
-    pthread_rwlock_unlock(&grwl);
-    grwl_state = GRWLHeldState::N;
-}
-
-void promoteGL() {
-    Timer _t2("promoting", /*min_usec=*/10000);
-
-    // Note: this is *not* the same semantics as normal promoting, on purpose.
-    releaseGLRead();
-    acquireGLWrite();
-
-    long promote_us = _t2.end();
-    static thread_local StatPerThreadCounter sc_promoting_us("grwl_promoting_us");
-    sc_promoting_us.log(promote_us);
-}
-
-void demoteGL() {
-    releaseGLWrite();
-    acquireGLRead();
-}
-
-static __thread int gl_check_count = 0;
-void allowGLReadPreemption() {
-    assert(grwl_state == GRWLHeldState::R);
-
-    // gl_check_count++;
-    // if (gl_check_count < 10)
-    // return;
-    // gl_check_count = 0;
-
-    if (__builtin_expect(!writers_waiting.load(std::memory_order_relaxed), 1))
-        return;
-
-    Timer _t2("preempted", /*min_usec=*/10000);
-    pthread_rwlock_unlock(&grwl);
-    // The GRWL is a writer-prefered rwlock, so this next statement will block even
-    // if the lock is in read mode:
-    pthread_rwlock_rdlock(&grwl);
-
-    long preempt_us = _t2.end();
-    static thread_local StatPerThreadCounter sc_preempting_us("grwl_preempt_us");
-    sc_preempting_us.log(preempt_us);
-}
-#endif
 
 // We don't support CPython's TLS (yet?)
 extern "C" void PyThread_ReInitTLS(void) noexcept {
@@ -655,10 +509,14 @@ extern "C" void PyInterpreterState_Clear(PyInterpreterState* interp) noexcept {
     // Py_CLEAR(interp->codec_search_path);
     // Py_CLEAR(interp->codec_search_cache);
     // Py_CLEAR(interp->codec_error_registry);
-    // Py_CLEAR(interp->modules);
+    Py_CLEAR(interp->modules);
     // Py_CLEAR(interp->modules_reloading);
     // Py_CLEAR(interp->sysdict);
-    // Py_CLEAR(interp->builtins);
+    Py_CLEAR(interp->builtins);
+}
+
+extern "C" void PyThreadState_DeleteCurrent() noexcept {
+    Py_FatalError("unimplemented");
 }
 
 extern "C" void PyThreadState_Clear(PyThreadState* tstate) noexcept {
@@ -684,5 +542,38 @@ extern "C" PyThreadState* PyThreadState_Next(PyThreadState* tstate) noexcept {
 }
 
 
+extern "C" void PyEval_AcquireThread(PyThreadState* tstate) noexcept {
+    RELEASE_ASSERT(tstate == &cur_thread_state, "");
+    endAllowThreads();
+}
+
+extern "C" void PyEval_ReleaseThread(PyThreadState* tstate) noexcept {
+    RELEASE_ASSERT(tstate == &cur_thread_state, "");
+    beginAllowThreads();
+}
+
+extern "C" PyThreadState* PyThreadState_Get(void) noexcept {
+    if (_PyThreadState_Current == NULL)
+        Py_FatalError("PyThreadState_Get: no current thread");
+
+    return _PyThreadState_Current;
+}
+
+extern "C" PyThreadState* PyEval_SaveThread(void) noexcept {
+    auto rtn = PyThreadState_GET();
+    assert(rtn);
+    beginAllowThreads();
+    return rtn;
+}
+
+extern "C" void PyEval_RestoreThread(PyThreadState* tstate) noexcept {
+    RELEASE_ASSERT(tstate == &cur_thread_state, "");
+    endAllowThreads();
+}
+
 } // namespace threading
+
+__thread PyThreadState cur_thread_state
+    = { NULL, &threading::interpreter_state, NULL, 0, 1, NULL, NULL, NULL, NULL, 0, NULL };
+
 } // namespace pyston

@@ -25,12 +25,10 @@ namespace pyston {
 class PystonTestEnvironment : public testing::Environment {
     void SetUp() override {
         threading::registerMainThread();
-
-        threading::acquireGLRead();
     }
 
     void TearDown() override {
-        threading::releaseGLRead();
+        // threading::releaseGLRead();
     }
 };
 

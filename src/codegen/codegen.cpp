@@ -37,8 +37,6 @@
 
 namespace pyston {
 
-DS_DEFINE_RWLOCK(codegen_rwlock);
-
 FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs,
                                    std::unique_ptr<SourceInfo> source)
     : code_obj(NULL),

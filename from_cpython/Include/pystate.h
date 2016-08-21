@@ -20,12 +20,13 @@ typedef struct _is {
     struct _is *next;
     struct _ts *tstate_head;
 
+    PyObject *modules;
+    PyObject *builtins;
+
     // Pyston change
     // Note: any changes here need to show up in PyInterpreterState_Clear as well
 #if 0
-    PyObject *modules;
     PyObject *sysdict;
-    PyObject *builtins;
     PyObject *modules_reloading;
 
     PyObject *codec_search_path;
@@ -136,10 +137,7 @@ PyAPI_FUNC(int) PyThreadState_SetAsyncExc(long, PyObject *) PYSTON_NOEXCEPT;
 
 /* Variable and macro for in-line access to current thread state */
 
-// Pyston change: use our internal name for this
-//PyAPI_DATA(PyThreadState *) _PyThreadState_Current;
-PyAPI_DATA(__thread PyThreadState) cur_thread_state;
-#define _PyThreadState_Current (&cur_thread_state)
+PyAPI_DATA(PyThreadState *) _PyThreadState_Current;
 
 #ifdef Py_DEBUG
 #define PyThreadState_GET() PyThreadState_Get()

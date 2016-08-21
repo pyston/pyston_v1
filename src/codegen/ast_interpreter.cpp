@@ -1664,11 +1664,11 @@ Value ASTInterpreter::visit_dict(AST_Dict* node) {
 }
 
 Value ASTInterpreter::visit_set(AST_Set* node) {
+    BoxedSet* set = (BoxedSet*)createSet();
     try {
         // insert the elements in reverse like cpython does
         // important for {1, 1L}
         llvm::SmallVector<RewriterVar*, 8> items;
-        BoxedSet* set = (BoxedSet*)createSet();
         for (auto it = node->elts.rbegin(), it_end = node->elts.rend(); it != it_end; ++it) {
             Value v = visit_expr(*it);
             _setAddStolen(set, v.o);
@@ -1676,7 +1676,8 @@ Value ASTInterpreter::visit_set(AST_Set* node) {
         }
         return Value(set, jit ? jit->emitCreateSet(items) : NULL);
     } catch (ExcInfo e) {
-        RELEASE_ASSERT(0, "this leaks in case of an exception");
+        Py_DECREF(set);
+        throw e;
     }
 }
 

@@ -2376,6 +2376,7 @@ void setupBuiltins() {
     builtins_module = createModule(autoDecref(boxString("__builtin__")), NULL,
                                    "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
                                    "the `nil' object; Ellipsis represents `...' in slices.");
+    PyThreadState_GET()->interp->builtins = incref(builtins_module->getAttrWrapper());
 
     ellipsis_cls
         = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "ellipsis", false, NULL, NULL, false);

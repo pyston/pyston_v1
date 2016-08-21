@@ -3164,6 +3164,17 @@ imp_load_dynamic(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "ss|O!:load_dynamic", &name, &pathname,
                           &PyFile_Type, &fob))
         return NULL;
+
+    // Pyston change: warn if it doesn't look like a pyston-built so.
+    // Some libraries (cffi) want to load things with names that don't even end
+    // in ".so", so allow those through.
+    int len = strlen(name);
+    if (len >= 3 && strcmp(&name[len - 3], ".so") == 0 &&
+        (len < 10 || strcmp(&name[len - 10], ".pyston.so") != 0)) {
+        PyErr_Format(PyExc_ValueError, "Pyston refusing to load a non-pyston .so \"%.200s\"", name);
+        return NULL;
+    }
+
     if (fob) {
         fp = get_file(pathname, fob, "r");
         if (fp == NULL)
