@@ -129,6 +129,7 @@ JitCodeBlock::~JitCodeBlock() {
 
     for (auto&& block : md->source->cfg->blocks) {
         block_patch_locations.erase(block);
+        blocks_aborted.erase(block);
     }
 }
 
