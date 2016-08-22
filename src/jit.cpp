@@ -219,8 +219,6 @@ int handleArg(char code) {
         USE_STRIPPED_STDLIB = true;
     } else if (code == 'b') {
         USE_REGALLOC_BASIC = false;
-    } else if (code == 'x') {
-        ENABLE_PYPA_PARSER = true;
     } else if (code == 'E') {
         Py_IgnoreEnvironmentFlag = 1;
     } else if (code == 'P') {

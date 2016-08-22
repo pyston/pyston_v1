@@ -130,7 +130,6 @@ COMMON_CXXFLAGS += -Woverloaded-virtual
 COMMON_CXXFLAGS += -fexceptions -fno-rtti
 COMMON_CXXFLAGS += -Wno-invalid-offsetof # allow the use of "offsetof", and we'll just have to make sure to only use it legally.
 COMMON_CXXFLAGS += -DENABLE_INTEL_JIT_EVENTS=$(ENABLE_INTEL_JIT_EVENTS)
-COMMON_CXXFLAGS += -I$(DEPS_DIR)/pypa-install/include
 COMMON_CXXFLAGS += -I$(DEPS_DIR)/lz4-install/include
 
 ifeq ($(ENABLE_VALGRIND),0)
@@ -147,7 +146,6 @@ COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$
 
 # Use our "custom linker" that calls gold if available
 COMMON_LDFLAGS := -B$(TOOLS_DIR)/build_system -L/usr/local/lib -lpthread -lm -lunwind -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline -lgmp -lssl -lcrypto -lsqlite3
-COMMON_LDFLAGS += $(DEPS_DIR)/pypa-install/lib/libpypa.a
 COMMON_LDFLAGS += $(DEPS_DIR)/lz4-install/lib/liblz4.a
 
 # Conditionally add libtinfo if available - otherwise nothing will be added
@@ -501,18 +499,6 @@ $(TOOLS_DIR)/publicize_release: $(TOOLS_DIR)/publicize.release.o $(LLVM_RELEASE_
 	$(ECHO) Linking $(TOOLS_DIR)/publicize_release
 	$(VERB) $(CXX) $< $(LDFLAGS_RELEASE) -o $@ -lLLVMBitWriter
 
-$(TOOLS_DIR)/astprint: $(TOOLS_DIR)/astprint.cpp $(BUILD_SYSTEM_DEPS) $(LLVM_DEPS) $(ASTPRINT_OBJS)
-	$(ECHO) Linking $(TOOLS_DIR)/astprint
-	$(VERB) $(CXX) $< -o $@ $(LLVM_LIB_DEPS) $(ASTPRINT_OBJS) $(LDFLAGS) $(STDLIB_SRCS:.cpp=.o) $(CXXFLAGS_DBG)
-
-.PHONY: astprint astcompare
-
-astprint: $(TOOLS_DIR)/astprint
-
-astcompare: astprint
-	$(ECHO) Running libpypa vs CPython AST result comparison test
-	$(TOOLS_DIR)/astprint_test.sh && echo "Success" || echo "Failure"
-
 ## END OF TOOLS
 
 
@@ -777,7 +763,7 @@ check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1
 	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing -t50 $(TEST_DIR)/cpython $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t600 $(TEST_DIR)/integration $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-x -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -t50 -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -t50 -k $(TESTS_DIR) $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-O -a=-S -k $(TESTS_DIR) $(ARGS)
 
 .PHONY: run$1 dbg$1
@@ -1074,7 +1060,7 @@ superlint: plugins/clang_linter.so
 .PHONY: lint_%
 lint_%: %.cpp plugins/clang_linter.so
 	$(ECHO) Linting $<
-	$(VERB) $(CLANG_CXX) -Xclang -load -Xclang plugins/clang_linter.so -Xclang -plugin -Xclang pyston-linter src/runtime/float.cpp $< -c -Isrc/ -Ifrom_cpython/Include -Ibuild/Debug/from_cpython/Include $(shell $(LLVM_BIN_DBG)/llvm-config --cxxflags) $(COMMON_CXXFLAGS) -no-pedantic -Wno-unused-variable -DNVALGRIND -Wno-invalid-offsetof -Wno-mismatched-tags -Wno-unused-function -Wno-unused-private-field -Wno-sign-compare -DLLVMREV=$(LLVM_REVISION) -Ibuild_deps/lz4/lib -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped  -Ibuild_deps/libpypa/src/ -Wno-covered-switch-default -Ibuild/Debug/libunwind/include -Wno-extern-c-compat -Wno-unused-local-typedef -Wno-inconsistent-missing-override
+	$(VERB) $(CLANG_CXX) -Xclang -load -Xclang plugins/clang_linter.so -Xclang -plugin -Xclang pyston-linter src/runtime/float.cpp $< -c -Isrc/ -Ifrom_cpython/Include -Ibuild/Debug/from_cpython/Include $(shell $(LLVM_BIN_DBG)/llvm-config --cxxflags) $(COMMON_CXXFLAGS) -no-pedantic -Wno-unused-variable -DNVALGRIND -Wno-invalid-offsetof -Wno-mismatched-tags -Wno-unused-function -Wno-unused-private-field -Wno-sign-compare -DLLVMREV=$(LLVM_REVISION) -Ibuild_deps/lz4/lib -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped -Ibuild/Debug/libunwind/include -Wno-extern-c-compat -Wno-unused-local-typedef -Wno-inconsistent-missing-override
 
 REFCOUNT_CHECKER_BUILD_PATH := $(CMAKE_DIR_DBG)/plugins/refcount_checker/llvm/bin/refcount_checker
 REFCOUNT_CHECKER_RUN_PATH := $(CMAKE_DIR_DBG)/llvm/bin/refcount_checker

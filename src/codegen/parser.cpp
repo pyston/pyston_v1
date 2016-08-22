@@ -27,7 +27,6 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
-#include "codegen/pypa-parser.h"
 #include "codegen/serialize_ast.h"
 #include "core/ast.h"
 #include "core/options.h"
@@ -1001,11 +1000,6 @@ AST* readASTMisc(BufferedReader* reader) {
 AST_Module* parse_string(const char* code, FutureFlags inherited_flags) {
     inherited_flags &= ~(CO_NESTED | CO_FUTURE_DIVISION);
 
-    if (ENABLE_PYPA_PARSER) {
-        AST_Module* rtn = pypa_parse_string(code, inherited_flags);
-        RELEASE_ASSERT(rtn, "unknown parse error (possibly: '%s'?)", strerror(errno));
-        return rtn;
-    }
     PyCompilerFlags cf;
     cf.cf_flags = inherited_flags;
     ArenaWrapper arena;
@@ -1022,11 +1016,6 @@ AST_Module* parse_string(const char* code, FutureFlags inherited_flags) {
 AST_Module* parse_file(const char* fn, FutureFlags inherited_flags) {
     Timer _t("parsing");
 
-    if (ENABLE_PYPA_PARSER) {
-        AST_Module* rtn = pypa_parse(fn, inherited_flags);
-        RELEASE_ASSERT(rtn, "unknown parse error (possibly: '%s'?)", strerror(errno));
-        return rtn;
-    }
     FileHandle fp(fn, "r");
     PyCompilerFlags cf;
     cf.cf_flags = inherited_flags;
@@ -1084,21 +1073,16 @@ static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, A
     file_data.insert(file_data.end(), (char*)&checksum, (char*)&checksum + CHECKSUM_LENGTH);
     checksum = 0;
 
-    if (ENABLE_PYPA_PARSER) {
-        module = pypa_parse(fn, inherited_flags);
-        RELEASE_ASSERT(module, "unknown parse error");
-    } else {
-        FileHandle fp(fn, "r");
-        PyCompilerFlags cf;
-        cf.cf_flags = inherited_flags;
-        ArenaWrapper arena;
-        assert(arena);
-        mod_ty mod = PyParser_ASTFromFile(fp, fn, Py_file_input, 0, 0, &cf, NULL, arena);
-        if (!mod)
-            throwCAPIException();
-        assert(mod->kind != Interactive_kind);
-        module = static_cast<AST_Module*>(cpythonToPystonAST(mod, fn));
-    }
+    FileHandle fp(fn, "r");
+    PyCompilerFlags cf;
+    cf.cf_flags = inherited_flags;
+    ArenaWrapper arena;
+    assert(arena);
+    mod_ty mod = PyParser_ASTFromFile(fp, fn, Py_file_input, 0, 0, &cf, NULL, arena);
+    if (!mod)
+        throwCAPIException();
+    assert(mod->kind != Interactive_kind);
+    module = static_cast<AST_Module*>(cpythonToPystonAST(mod, fn));
 
     if (!cache_fp)
         return std::vector<char>();
@@ -1123,10 +1107,6 @@ static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, A
 // on the startup time (40ms -> 10ms).
 AST_Module* caching_parse_file(const char* fn, FutureFlags inherited_flags) {
     std::ostringstream oss;
-    if (DEBUG_PARSING) {
-        oss << "caching_parse_file() on " << fn << '\n';
-        fprintf(stderr, "caching_parse_file('%s'), pypa=%d\n", fn, ENABLE_PYPA_PARSER);
-    }
 
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_caching_parse_file");
     static StatCounter us_parsing("us_parsing");

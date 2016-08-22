@@ -22,9 +22,6 @@
 	path = build_deps/libunwind
 	url = https://github.com/pathscale/libunwind.git
 	ignore = all
-[submodule "build_deps/libpypa"]
-	path = build_deps/libpypa
-	url = git://github.com/vinzenz/libpypa.git
 [submodule "build_deps/lz4"]
 	path = build_deps/lz4
 	url = git://github.com/Cyan4973/lz4.git

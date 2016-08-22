@@ -244,10 +244,6 @@ SET_SOURCE_FILES_PROPERTIES(
     ${CMAKE_BINARY_DIR}/build_deps/libunwind/include/libunwind.h PROPERTIES OBJECT_DEPENDS ${CMAKE_SOURCE_DIR}/build_deps/libunwind/pyston_patched
 )
 
-# libpypa
-add_subdirectory(build_deps/libpypa EXCLUDE_FROM_ALL)
-add_dependencies(pypa gitsubmodules)
-
 # lz4
 add_subdirectory(build_deps/lz4/cmake_unofficial EXCLUDE_FROM_ALL)
 add_dependencies(lz4 gitsubmodules)
@@ -317,12 +313,8 @@ add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/linkdeps_dummy.c COMMAND ${CMAKE_C
 add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON> linkdeps_dummy.c)
 # Wrap the stdlib in --whole-archive to force all the symbols to be included and eventually exported
 
-target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m z readline sqlite3 gmp mpfr ssl crypto unwind pypa liblz4 double-conversion util ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES} ${CMAKE_BINARY_DIR}/jemalloc/lib/libjemalloc.a)
+target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m z readline sqlite3 gmp mpfr ssl crypto unwind liblz4 util ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES} ${CMAKE_BINARY_DIR}/jemalloc/lib/libjemalloc.a)
 add_dependencies(pyston libjemalloc)
-
-add_custom_target(astcompare COMMAND ${CMAKE_SOURCE_DIR}/tools/astprint_test.sh
-                  DEPENDS astprint
-                  COMMENT "Running libpypa vs CPython AST result comparison test")
 
 # test
 enable_testing()
@@ -339,9 +331,9 @@ endmacro()
 
 # tests         testname directory arguments
 add_pyston_test(defaults tests --order-by-mtime -t50)
-add_pyston_test(force_llvm tests -a=-n -a=-x -t90)
+add_pyston_test(force_llvm tests -a=-n -t90)
 if(${CMAKE_BUILD_TYPE} STREQUAL "Release")
-  add_pyston_test(max_compilation_tier tests -a=-O -a=-x -t50)
+  add_pyston_test(max_compilation_tier tests -a=-O -t50)
 endif()
 add_pyston_test(defaults cpython --exit-code-only --skip-failing -t100)
 add_pyston_test(defaults integration --exit-code-only --skip-failing -t900)
