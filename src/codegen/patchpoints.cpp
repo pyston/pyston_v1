@@ -382,53 +382,52 @@ int slotSize(ICInfo* bjit_ic_info, int default_size) {
     return suggested_size;
 }
 
-std::unique_ptr<ICSetupInfo> createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size) {
-    return ICSetupInfo::initialize(has_return_value, size, ICSetupInfo::Generic, type_recorder);
+std::unique_ptr<ICSetupInfo> createGenericIC(bool has_return_value, int size) {
+    return ICSetupInfo::initialize(has_return_value, size, ICSetupInfo::Generic);
 }
 
-std::unique_ptr<ICSetupInfo> createGetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
-    return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 1024), ICSetupInfo::Getattr, type_recorder);
+std::unique_ptr<ICSetupInfo> createGetattrIC(ICInfo* bjit_ic_info) {
+    return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 1024), ICSetupInfo::Getattr);
 }
 
-std::unique_ptr<ICSetupInfo> createGetitemIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
-    return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 512), ICSetupInfo::Getitem, type_recorder);
+std::unique_ptr<ICSetupInfo> createGetitemIC(ICInfo* bjit_ic_info) {
+    return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 512), ICSetupInfo::Getitem);
 }
 
-std::unique_ptr<ICSetupInfo> createSetitemIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 512, ICSetupInfo::Setitem, type_recorder);
+std::unique_ptr<ICSetupInfo> createSetitemIC() {
+    return ICSetupInfo::initialize(true, 512, ICSetupInfo::Setitem);
 }
 
-std::unique_ptr<ICSetupInfo> createDelitemIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(false, 512, ICSetupInfo::Delitem, type_recorder);
+std::unique_ptr<ICSetupInfo> createDelitemIC() {
+    return ICSetupInfo::initialize(false, 512, ICSetupInfo::Delitem);
 }
 
-std::unique_ptr<ICSetupInfo> createSetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
-    return ICSetupInfo::initialize(false, slotSize(bjit_ic_info, 1024), ICSetupInfo::Setattr, type_recorder);
+std::unique_ptr<ICSetupInfo> createSetattrIC(ICInfo* bjit_ic_info) {
+    return ICSetupInfo::initialize(false, slotSize(bjit_ic_info, 1024), ICSetupInfo::Setattr);
 }
 
-std::unique_ptr<ICSetupInfo> createDelattrIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(false, 144, ICSetupInfo::Delattr, type_recorder);
+std::unique_ptr<ICSetupInfo> createDelattrIC() {
+    return ICSetupInfo::initialize(false, 144, ICSetupInfo::Delattr);
 }
 
-std::unique_ptr<ICSetupInfo> createCallsiteIC(TypeRecorder* type_recorder, int num_args, ICInfo* bjit_ic_info) {
-    return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 4 * (640 + 48 * num_args)), ICSetupInfo::Callsite,
-                                   type_recorder);
+std::unique_ptr<ICSetupInfo> createCallsiteIC(int num_args, ICInfo* bjit_ic_info) {
+    return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 4 * (640 + 48 * num_args)), ICSetupInfo::Callsite);
 }
 
-std::unique_ptr<ICSetupInfo> createGetGlobalIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 128, ICSetupInfo::GetGlobal, type_recorder);
+std::unique_ptr<ICSetupInfo> createGetGlobalIC() {
+    return ICSetupInfo::initialize(true, 128, ICSetupInfo::GetGlobal);
 }
 
-std::unique_ptr<ICSetupInfo> createBinexpIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info) {
-    return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 2048), ICSetupInfo::Binexp, type_recorder);
+std::unique_ptr<ICSetupInfo> createBinexpIC(ICInfo* bjit_ic_info) {
+    return ICSetupInfo::initialize(true, slotSize(bjit_ic_info, 2048), ICSetupInfo::Binexp);
 }
 
-std::unique_ptr<ICSetupInfo> createNonzeroIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 1024, ICSetupInfo::Nonzero, type_recorder);
+std::unique_ptr<ICSetupInfo> createNonzeroIC() {
+    return ICSetupInfo::initialize(true, 1024, ICSetupInfo::Nonzero);
 }
 
-std::unique_ptr<ICSetupInfo> createHasnextIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 128, ICSetupInfo::Hasnext, type_recorder);
+std::unique_ptr<ICSetupInfo> createHasnextIC() {
+    return ICSetupInfo::initialize(true, 128, ICSetupInfo::Hasnext);
 }
 
 std::unique_ptr<ICSetupInfo> createDeoptIC() {

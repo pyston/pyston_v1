@@ -98,7 +98,7 @@ public:
     }
 
     static std::unique_ptr<ICSetupInfo>
-    initialize(bool has_return_value, int size, ICType type, TypeRecorder* type_recorder,
+    initialize(bool has_return_value, int size, ICType type, TypeRecorder* type_recorder = NULL,
                assembler::RegisterSet allocatable_regs = assembler::RegisterSet::stdAllocatable());
 };
 
@@ -178,18 +178,18 @@ public:
 };
 
 class ICInfo;
-std::unique_ptr<ICSetupInfo> createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size);
-std::unique_ptr<ICSetupInfo> createCallsiteIC(TypeRecorder* type_recorder, int num_args, ICInfo* bjit_ic_info);
-std::unique_ptr<ICSetupInfo> createGetGlobalIC(TypeRecorder* type_recorder);
-std::unique_ptr<ICSetupInfo> createGetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
-std::unique_ptr<ICSetupInfo> createSetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
-std::unique_ptr<ICSetupInfo> createDelattrIC(TypeRecorder* type_recorder);
-std::unique_ptr<ICSetupInfo> createGetitemIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
-std::unique_ptr<ICSetupInfo> createSetitemIC(TypeRecorder* type_recorder);
-std::unique_ptr<ICSetupInfo> createDelitemIC(TypeRecorder* type_recorder);
-std::unique_ptr<ICSetupInfo> createBinexpIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
-std::unique_ptr<ICSetupInfo> createNonzeroIC(TypeRecorder* type_recorder);
-std::unique_ptr<ICSetupInfo> createHasnextIC(TypeRecorder* type_recorder);
+std::unique_ptr<ICSetupInfo> createGenericIC(bool has_return_value, int size);
+std::unique_ptr<ICSetupInfo> createCallsiteIC(int num_args, ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createGetGlobalIC();
+std::unique_ptr<ICSetupInfo> createGetattrIC(ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createSetattrIC(ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createDelattrIC();
+std::unique_ptr<ICSetupInfo> createGetitemIC(ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createSetitemIC();
+std::unique_ptr<ICSetupInfo> createDelitemIC();
+std::unique_ptr<ICSetupInfo> createBinexpIC(ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createNonzeroIC();
+std::unique_ptr<ICSetupInfo> createHasnextIC();
 std::unique_ptr<ICSetupInfo> createDeoptIC();
 
 } // namespace pyston

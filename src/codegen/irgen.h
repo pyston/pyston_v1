@@ -163,20 +163,17 @@ llvm::Value* handlePotentiallyUndefined(ConcreteCompilerVariable* is_defined_var
                                         std::function<llvm::Value*(IREmitter&)> when_defined,
                                         std::function<llvm::Value*(IREmitter&)> when_undefined);
 
-class TypeRecorder;
 class OpInfo {
 private:
     const EffortLevel effort;
-    TypeRecorder* const type_recorder;
     ICInfo* bjit_ic_info;
 
 public:
     const UnwindInfo unw_info;
 
-    OpInfo(EffortLevel effort, TypeRecorder* type_recorder, const UnwindInfo& unw_info, ICInfo* bjit_ic_info)
-        : effort(effort), type_recorder(type_recorder), bjit_ic_info(bjit_ic_info), unw_info(unw_info) {}
+    OpInfo(EffortLevel effort, const UnwindInfo& unw_info, ICInfo* bjit_ic_info)
+        : effort(effort), bjit_ic_info(bjit_ic_info), unw_info(unw_info) {}
 
-    TypeRecorder* getTypeRecorder() const { return type_recorder; }
     ICInfo* getBJitICInfo() const { return bjit_ic_info; }
 
     ExceptionStyle preferredExceptionStyle() const { return unw_info.preferredExceptionStyle(); }
