@@ -288,7 +288,7 @@ add_definitions(${LLVM_DEFINITIONS})
 add_definitions(-DDEFAULT_PYTHON_MAJOR_VERSION=2 -DDEFAULT_PYTHON_MINOR_VERSION=7 -DDEFAULT_PYTHON_MICRO_VERSION=6) # Python 2.7.6
 add_definitions(-DLLVMREV=${LLVMREV})
 
-include_directories(${CMAKE_BINARY_DIR}/from_cpython/Include)
+include_directories(${CMAKE_BINARY_DIR}/include/python2.7)
 include_directories(${LLVM_INCLUDE_DIRS})
 
 find_package(LibLZMA REQUIRED)

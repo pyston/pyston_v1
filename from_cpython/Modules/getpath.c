@@ -91,6 +91,14 @@
  * process to find the installed Python tree.
  */
 
+// Pyston change:
+// In CPython, these are passed via commandline flags:
+#define VERSION "2.7"
+#define PREFIX ""
+#define EXEC_PREFIX ""
+#define VPATH ""
+#define PYTHONPATH ":lib-dynload"
+
 #ifdef __cplusplus
  extern "C" {
 #endif
@@ -117,9 +125,8 @@
 #endif
 
 #ifndef PYTHONPATH
-// Pyston change
-#define PYTHONPATH PREFIX "/from_cpython/Lib:" \
-              EXEC_PREFIX "/from_cpython/Lib/lib-dynload"
+#define PYTHONPATH PREFIX "/lib/python" VERSION ":" \
+              EXEC_PREFIX "/lib/python" VERSION "/lib-dynload"
 #endif
 
 #ifndef LANDMARK
@@ -130,7 +137,7 @@ static char prefix[MAXPATHLEN+1];
 static char exec_prefix[MAXPATHLEN+1];
 static char progpath[MAXPATHLEN+1];
 static char *module_search_path = NULL;
-static char lib_python[] = "from_cpython/Lib"; // Pyston change
+static char lib_python[] = "lib/python" VERSION;
 
 static void
 reduce(char *dir)
@@ -397,7 +404,6 @@ calculate_path(void)
     const char *prog = Py_GetProgramName();
     char argv0_path[MAXPATHLEN+1];
     char zip_path[MAXPATHLEN+1];
-    char lib_pyston_path[MAXPATHLEN+1]; // Pyston change
     int pfound, efound; /* 1 if found; -1 if found build directory */
     char *buf;
     size_t bufsz;
@@ -591,16 +597,6 @@ calculate_path(void)
     bufsz += strlen(zip_path) + 1;
     bufsz += strlen(exec_prefix) + 1;
 
-    // Pyston change: add from_cpython/Lib and lib_pyston
-    // Prefix contains at this point the full path to 'from_cpython/Lib'
-    strcpy(lib_pyston_path, prefix);
-    // go from ./from_cpython/Lib to ./lib_pyston
-    reduce(lib_pyston_path);
-    reduce(lib_pyston_path);
-    joinpath(lib_pyston_path, "lib_pyston");
-    bufsz += strlen(lib_pyston_path) + 1;
-    bufsz += strlen(prefix) + 1;
-
     /* This is the only malloc call in this file */
     buf = (char *)PyMem_Malloc(bufsz);
 
@@ -621,17 +617,7 @@ calculate_path(void)
 
         /* Next is the default zip path */
         strcat(buf, zip_path);
-
-        // Pyston change
-        // add from_cpython/Lib
         strcat(buf, delimiter);
-        strcat(buf, prefix);
-
-        // add lib_pyston
-        strcat(buf, delimiter);
-        strcat(buf, lib_pyston_path);
-        strcat(buf, delimiter);
-
 
         /* Next goes merge of compile-time $PYTHONPATH with
          * dynamically located prefix.
