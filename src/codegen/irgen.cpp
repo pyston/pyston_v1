@@ -1024,7 +1024,7 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel eff
 }
 
 std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, SourceInfo* source,
-                                                        ParamNames* param_names,
+                                                        const ParamNames* param_names,
                                                         const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
                                                         ExceptionStyle exception_style, FunctionSpecialization* spec,
                                                         llvm::StringRef nameprefix) {

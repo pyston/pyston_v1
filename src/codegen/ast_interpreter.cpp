@@ -74,7 +74,7 @@ public:
     static Box* executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at);
 
 private:
-    Value createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
+    Value createFunction(AST* node, AST_arguments* args);
     Value doBinOp(AST_expr* node, Value left, Value right, int op, BinExpType exp_type);
     void doStore(AST_expr* node, STOLEN(Value) value);
     void doStore(AST_Name* name, STOLEN(Value) value);
@@ -272,26 +272,21 @@ void ASTInterpreter::initArguments(BoxedClosure* _closure, BoxedGenerator* _gene
 
     const ParamNames& param_names = getMD()->param_names;
 
-    // make sure the AST_Name nodes are set
-    assert(param_names.args.size() == param_names.arg_names.size());
-    assert(param_names.vararg.empty() == (param_names.vararg_name == NULL));
-    assert(param_names.kwarg.empty() == (param_names.kwarg_name == NULL));
-
     int i = 0;
-    for (auto& name : param_names.arg_names) {
+    for (auto& name : param_names.argsAsName()) {
         doStore(name, Value(incref(getArg(i++, arg1, arg2, arg3, args)), 0));
     }
 
-    if (param_names.vararg_name)
-        doStore(param_names.vararg_name, Value(incref(getArg(i++, arg1, arg2, arg3, args)), 0));
+    if (param_names.has_vararg_name)
+        doStore(param_names.varArgAsName(), Value(incref(getArg(i++, arg1, arg2, arg3, args)), 0));
 
-    if (param_names.kwarg_name) {
+    if (param_names.has_kwarg_name) {
         Box* val = getArg(i++, arg1, arg2, arg3, args);
         if (!val)
             val = createDict();
         else
             Py_INCREF(val);
-        doStore(param_names.kwarg_name, Value(val, 0));
+        doStore(param_names.kwArgAsName(), Value(val, 0));
     }
     assert(i == param_names.totalParameters());
 }
@@ -314,13 +309,9 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset, llvm::DenseSe
     // small optimization: we know that the passed arguments in the entry block are non zero
     if (block == block->cfg->getStartingBlock() && block->predecessors.empty()) {
         auto param_names = getMD()->param_names;
-        for (auto&& arg : param_names.arg_names) {
+        for (auto&& arg : param_names.allArgsAsName()) {
             known_non_null_vregs.insert(arg->vreg);
         }
-        if (param_names.vararg_name)
-            known_non_null_vregs.insert(param_names.vararg_name->vreg);
-        if (param_names.kwarg_name)
-            known_non_null_vregs.insert(param_names.kwarg_name->vreg);
     }
     jit = code_block->newFragment(block, exit_offset, std::move(known_non_null_vregs));
 }
@@ -1131,8 +1122,8 @@ Value ASTInterpreter::visit_return(AST_Return* node) {
     return s;
 }
 
-Value ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
-    FunctionMetadata* md = wrapFunction(node, args, body, source_info);
+Value ASTInterpreter::createFunction(AST* node, AST_arguments* args) {
+    FunctionMetadata* md = wrapFunction(node, args, source_info);
 
     std::vector<Box*> defaults;
     llvm::SmallVector<RewriterVar*, 4> defaults_vars;
@@ -1232,7 +1223,7 @@ Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d));
 
-    Value func = createFunction(node, args, node->body);
+    Value func = createFunction(node, args);
 
     for (int i = decorators.size() - 1; i >= 0; i--) {
         func.o = runtimeCall(autoDecref(decorators[i].o), ArgPassSpec(1), autoDecref(func.o), 0, 0, 0, 0);
@@ -1271,7 +1262,7 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
             closure = created_closure;
         assert(closure);
     }
-    FunctionMetadata* md = wrapFunction(node, nullptr, node->body, source_info);
+    FunctionMetadata* md = wrapFunction(node, nullptr, source_info);
 
     Box* passed_globals = NULL;
     if (!getMD()->source->scoping->areGlobalsFromModule())
@@ -1553,7 +1544,7 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
 
     AUTO_DECREF(func.o);
 
-    std::vector<Box*> args;
+    llvm::SmallVector<Box*, 8> args;
     llvm::SmallVector<RewriterVar*, 8> args_vars;
     args.reserve(node->args.size());
     args_vars.reserve(node->args.size());
@@ -1586,7 +1577,7 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
         args_vars.push_back(v);
     }
 
-    AUTO_DECREF_ARRAY(&args[0], args.size());
+    AUTO_DECREF_ARRAY(args.data(), args.size());
 
     ArgPassSpec argspec(node->args.size(), node->keywords.size(), node->starargs, node->kwargs);
 

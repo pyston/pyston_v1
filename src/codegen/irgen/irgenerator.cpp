@@ -45,7 +45,7 @@ extern "C" void dumpLLVM(void* _v) {
 }
 
 IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, llvm::Function* func, SourceInfo* source_info,
-                       std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc,
+                       std::unique_ptr<PhiAnalysis> phis, const ParamNames* param_names, GCBuilder* gc,
                        llvm::MDNode* func_dbg_info, RefcountTracker* refcount_tracker)
     : md(md),
       cf(cf),
@@ -1617,7 +1617,7 @@ private:
             decorators.push_back(evalExpr(d, unw_info));
         }
 
-        FunctionMetadata* md = wrapFunction(node, nullptr, node->body, irstate->getSourceInfo());
+        FunctionMetadata* md = wrapFunction(node, nullptr, irstate->getSourceInfo());
 
         // TODO duplication with _createFunction:
         llvm::Value* this_closure = NULL;
@@ -1658,9 +1658,8 @@ private:
         return cls;
     }
 
-    CompilerVariable* _createFunction(AST* node, const UnwindInfo& unw_info, AST_arguments* args,
-                                      const std::vector<AST_stmt*>& body) {
-        FunctionMetadata* md = wrapFunction(node, args, body, irstate->getSourceInfo());
+    CompilerVariable* _createFunction(AST* node, const UnwindInfo& unw_info, AST_arguments* args) {
+        FunctionMetadata* md = wrapFunction(node, args, irstate->getSourceInfo());
 
         std::vector<ConcreteCompilerVariable*> defaults;
         for (auto d : args->defaults) {
@@ -1706,7 +1705,7 @@ private:
             decorators.push_back(evalExpr(d, unw_info));
         }
 
-        CompilerVariable* func = _createFunction(node, unw_info, node->args, node->body);
+        CompilerVariable* func = _createFunction(node, unw_info, node->args);
 
         for (int i = decorators.size() - 1; i >= 0; i--) {
             func = decorators[i]->call(emitter, getOpInfoForNode(node, unw_info), ArgPassSpec(1), { func }, NULL);
@@ -2983,16 +2982,17 @@ public:
         assert(python_parameters.size() == param_names.totalParameters());
 
         int i = 0;
-        for (; i < param_names.args.size(); i++) {
-            loadArgument(param_names.arg_names[i], arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
+        for (auto&& arg : param_names.argsAsName()) {
+            loadArgument(arg, arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
+            ++i;
         }
 
-        if (param_names.vararg.size()) {
-            loadArgument(param_names.vararg_name, arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
+        if (param_names.has_vararg_name) {
+            loadArgument(param_names.varArgAsName(), arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
             i++;
         }
 
-        if (param_names.kwarg.size()) {
+        if (param_names.has_kwarg_name) {
             llvm::Value* passed_dict = python_parameters[i];
             emitter.setNullable(passed_dict, true);
 
@@ -3018,7 +3018,7 @@ public:
             emitter.refConsumed(passed_dict, null_check);
             emitter.refConsumed(created_dict, isnull_terminator);
 
-            loadArgument(param_names.kwarg_name, arg_types[i], phi, UnwindInfo::cantUnwind());
+            loadArgument(param_names.kwArgAsName(), arg_types[i], phi, UnwindInfo::cantUnwind());
             i++;
         }
 
@@ -3248,10 +3248,10 @@ IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*
     return new IRGeneratorImpl(irstate, entry_blocks, myblock, types);
 }
 
-FunctionMetadata* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source) {
+FunctionMetadata* wrapFunction(AST* node, AST_arguments* args, SourceInfo* source) {
     // Different compilations of the parent scope of a functiondef should lead
     // to the same FunctionMetadata* being used:
-    static std::unordered_map<AST*, FunctionMetadata*> made;
+    static llvm::DenseMap<AST*, FunctionMetadata*> made;
 
     FunctionMetadata*& md = made[node];
     if (md == NULL) {

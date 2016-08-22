@@ -2829,14 +2829,9 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* s
 #endif
 
             if (b == cfg->getStartingBlock()) {
-                for (auto* name : param_names.arg_names) {
+                for (auto* name : param_names.allArgsAsName()) {
                     name->accept(&visitor);
                 }
-                if (param_names.vararg_name)
-                    param_names.vararg_name->accept(&visitor);
-
-                if (param_names.kwarg_name)
-                    param_names.kwarg_name->accept(&visitor);
             }
 
             for (AST_stmt* stmt : b->body) {

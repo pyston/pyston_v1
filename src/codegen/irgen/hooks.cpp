@@ -56,11 +56,9 @@ namespace pyston {
 
 // TODO terrible place for these!
 ParamNames::ParamNames(AST* ast, InternedStringPool& pool)
-    : takes_param_names(true), vararg_name(NULL), kwarg_name(NULL) {
+    : all_args_contains_names(1), takes_param_names(1), has_vararg_name(0), has_kwarg_name(0) {
     if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef || ast->type == AST_TYPE::Expression
         || ast->type == AST_TYPE::Suite) {
-        kwarg = "";
-        vararg = "";
     } else if (ast->type == AST_TYPE::FunctionDef || ast->type == AST_TYPE::Lambda) {
         AST_arguments* arguments = ast->type == AST_TYPE::FunctionDef ? ast_cast<AST_FunctionDef>(ast)->args
                                                                       : ast_cast<AST_Lambda>(ast)->args;
@@ -68,32 +66,57 @@ ParamNames::ParamNames(AST* ast, InternedStringPool& pool)
             AST_expr* arg = arguments->args[i];
             if (arg->type == AST_TYPE::Name) {
                 AST_Name* name = ast_cast<AST_Name>(arg);
-                arg_names.push_back(name);
-                args.push_back(name->id.s());
+                all_args.emplace_back(name);
             } else {
                 InternedString dot_arg_name = pool.get("." + std::to_string(i));
-                arg_names.push_back(new AST_Name(dot_arg_name, AST_TYPE::Param, arg->lineno, arg->col_offset));
-                args.push_back(dot_arg_name.s());
+                all_args.emplace_back(new AST_Name(dot_arg_name, AST_TYPE::Param, arg->lineno, arg->col_offset));
             }
         }
 
-        vararg_name = arguments->vararg;
-        if (vararg_name)
-            vararg = vararg_name->id.s();
+        auto vararg_name = arguments->vararg;
+        if (vararg_name) {
+            has_vararg_name = 1;
+            all_args.emplace_back(vararg_name);
+        }
 
-        kwarg_name = arguments->kwarg;
-        if (kwarg_name)
-            kwarg = kwarg_name->id.s();
+        auto kwarg_name = arguments->kwarg;
+        if (kwarg_name) {
+            has_kwarg_name = 1;
+            all_args.emplace_back(kwarg_name);
+        }
     } else {
         RELEASE_ASSERT(0, "%d", ast->type);
     }
 }
 
-ParamNames::ParamNames(const std::vector<llvm::StringRef>& args, llvm::StringRef vararg, llvm::StringRef kwarg)
-    : takes_param_names(true), vararg_name(NULL), kwarg_name(NULL) {
-    this->args = args;
-    this->vararg = vararg;
-    this->kwarg = kwarg;
+ParamNames::ParamNames(const std::vector<const char*>& args, const char* vararg, const char* kwarg)
+    : all_args_contains_names(0),
+      takes_param_names(1),
+      has_vararg_name(vararg && *vararg),
+      has_kwarg_name(kwarg && *kwarg) {
+    all_args.reserve(args.size() + has_vararg_name + has_kwarg_name);
+    for (auto&& arg : args) {
+        all_args.emplace_back(arg);
+    }
+    if (has_vararg_name)
+        all_args.emplace_back(vararg);
+    if (has_kwarg_name)
+        all_args.emplace_back(kwarg);
+}
+
+std::vector<const char*> ParamNames::allArgsAsStr() const {
+    std::vector<const char*> ret;
+    ret.reserve(all_args.size());
+    if (all_args_contains_names) {
+        for (auto&& arg : all_args) {
+            ret.push_back(arg.name->id.c_str());
+        }
+    } else {
+        for (auto&& arg : all_args) {
+            ret.push_back(arg.str);
+        }
+    }
+    return ret;
 }
 
 InternedString SourceInfo::mangleName(InternedString id) {
@@ -233,7 +256,7 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
 
     BoxedString* name = source->getName();
 
-    ASSERT(f->versions.size() < 20, "%s %ld", name->c_str(), f->versions.size());
+    ASSERT(f->versions.size() < 20, "%s %u", name->c_str(), f->versions.size());
 
     ExceptionStyle exception_style;
     if (force_exception_style)
@@ -669,14 +692,14 @@ void CompiledFunction::speculationFailed() {
         }
 
         if (!found) {
-            for (auto it = md->osr_versions.begin(); it != md->osr_versions.end(); ++it) {
-                if (it->second == this) {
-                    md->osr_versions.erase(it);
+            md->osr_versions.remove_if([&](const std::pair<const OSREntryDescriptor*, CompiledFunction*>& e) {
+                if (e.second == this) {
                     this->dependent_callsites.invalidateAll();
                     found = true;
-                    break;
+                    return true;
                 }
-            }
+                return false;
+            });
         }
 
         if (!found) {
@@ -701,19 +724,7 @@ CompiledFunction::CompiledFunction(FunctionMetadata* md, FunctionSpecialization*
       times_speculation_failed(0),
       location_map(nullptr) {
     assert((spec != NULL) + (entry_descriptor != NULL) == 1);
-
-#if MOVING_GC
-    assert(all_compiled_functions.count(this) == 0);
-    all_compiled_functions.insert(this);
-#endif
 }
-
-#if MOVING_GC
-CompiledFunction::~CompiledFunction() {
-    assert(all_compiled_functions.count(this) == 1);
-    all_compiled_functions.erase(this);
-}
-#endif
 
 ConcreteCompilerType* CompiledFunction::getReturnType() {
     assert(((bool)spec) ^ ((bool)entry_descriptor));
@@ -752,7 +763,7 @@ static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel new_effort) 
         }
     }
 
-    printf("Couldn't find a version; %ld exist:\n", versions.size());
+    printf("Couldn't find a version; %u exist:\n", versions.size());
     for (auto cf : versions) {
         printf("%p\n", cf);
     }
@@ -770,17 +781,17 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
 
     FunctionMetadata* md = exit->entry->md;
     assert(md);
-    CompiledFunction*& new_cf = md->osr_versions[exit->entry];
-    if (new_cf == NULL) {
-        EffortLevel new_effort = EffortLevel::MAXIMAL;
-        CompiledFunction* compiled
-            = compileFunction(md, NULL, new_effort, exit->entry, true, exit->entry->exception_style);
-        assert(compiled == new_cf);
-
-        stat_osr_compiles.log();
+    for (auto&& osr_functions : md->osr_versions) {
+        if (osr_functions.first == exit->entry)
+            return osr_functions.second;
     }
 
-    return new_cf;
+    EffortLevel new_effort = EffortLevel::MAXIMAL;
+    CompiledFunction* compiled = compileFunction(md, NULL, new_effort, exit->entry, true, exit->entry->exception_style);
+    stat_osr_compiles.log();
+    assert(std::find(md->osr_versions.begin(), md->osr_versions.end(), std::make_pair(exit->entry, compiled))
+           != md->osr_versions.end());
+    return compiled;
 }
 
 void* compilePartialFunc(OSRExit* exit) {

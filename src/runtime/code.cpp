@@ -78,12 +78,8 @@ Box* BoxedCode::varnames(Box* b, void*) noexcept {
         return incref(EmptyTuple);
 
     std::vector<Box*> elts;
-    for (auto sr : param_names.args)
+    for (auto sr : param_names.allArgsAsStr())
         elts.push_back(boxString(sr));
-    if (param_names.vararg.size())
-        elts.push_back(boxString(param_names.vararg));
-    if (param_names.kwarg.size())
-        elts.push_back(boxString(param_names.kwarg));
     auto rtn = BoxedTuple::create(elts.size(), &elts[0]);
     for (auto e : elts)
         Py_DECREF(e);
@@ -95,9 +91,9 @@ Box* BoxedCode::flags(Box* b, void*) noexcept {
     BoxedCode* code = static_cast<BoxedCode*>(b);
 
     int flags = 0;
-    if (code->f->param_names.vararg.size())
+    if (code->f->param_names.has_vararg_name)
         flags |= CO_VARARGS;
-    if (code->f->param_names.kwarg.size())
+    if (code->f->param_names.has_kwarg_name)
         flags |= CO_VARKEYWORDS;
     if (code->f->isGenerator())
         flags |= CO_GENERATOR;

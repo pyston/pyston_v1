@@ -40,22 +40,22 @@ namespace pyston {
 FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs,
                                    std::unique_ptr<SourceInfo> source)
     : code_obj(NULL),
-      num_args(num_args),
-      takes_varargs(takes_varargs),
-      takes_kwargs(takes_kwargs),
       source(std::move(source)),
       param_names(this->source->ast, this->source->getInternedStrings()),
+      takes_varargs(takes_varargs),
+      takes_kwargs(takes_kwargs),
+      num_args(num_args),
       times_interpreted(0),
       internal_callable(NULL, NULL) {
 }
 
 FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
     : code_obj(NULL),
-      num_args(num_args),
-      takes_varargs(takes_varargs),
-      takes_kwargs(takes_kwargs),
       source(nullptr),
       param_names(param_names),
+      takes_varargs(takes_varargs),
+      takes_kwargs(takes_kwargs),
+      num_args(num_args),
       times_interpreted(0),
       internal_callable(NULL, NULL) {
 }
@@ -87,12 +87,12 @@ void FunctionMetadata::addVersion(CompiledFunction* compiled) {
         assert(compiled->spec->arg_types.size() == numReceivedArgs());
         versions.push_back(compiled);
     } else {
-        osr_versions[compiled->entry_descriptor] = compiled;
+        osr_versions.emplace_front(compiled->entry_descriptor, compiled);
     }
 }
 
 SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast, BoxedString* fn)
-    : parent_module(m), scoping(scoping), scope_info(NULL), future_flags(future_flags), ast(ast), cfg(NULL) {
+    : parent_module(m), scoping(scoping), scope_info(NULL), ast(ast), cfg(NULL), future_flags(future_flags) {
     assert(fn);
 
     // TODO: this is a very bad way of handling this:
@@ -271,7 +271,6 @@ GlobalState::GlobalState() : context(llvm::getGlobalContext()), cur_module(NULL)
 llvm::JITEventListener* makeRegistryListener() {
     return new RegistryEventListener();
 }
-
 
 FunctionSpecialization::FunctionSpecialization(ConcreteCompilerType* rtn_type) : rtn_type(rtn_type) {
     accepts_all_inputs = true;
