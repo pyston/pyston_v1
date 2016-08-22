@@ -1,0 +1,29 @@
+From 1296ca8841c3725043d49eff5b589805f95129b3 Mon Sep 17 00:00:00 2001
+From: Marius Wachtler <undingen@gmail.com>
+Date: Mon, 22 Aug 2016 14:34:40 +0100
+Subject: [PATCH] MCJIT: free loaded objects
+
+---
+ lib/ExecutionEngine/MCJIT/MCJIT.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/lib/ExecutionEngine/MCJIT/MCJIT.cpp b/lib/ExecutionEngine/MCJIT/MCJIT.cpp
+index e500d3d..17d2145 100644
+--- a/lib/ExecutionEngine/MCJIT/MCJIT.cpp
++++ b/lib/ExecutionEngine/MCJIT/MCJIT.cpp
+@@ -223,6 +223,12 @@ void MCJIT::finalizeLoadedModules() {
+ 
+   // Set page permissions.
+   MemMgr.finalizeMemory();
++
++  // Pyston change: free loaded objects
++  for (auto &Obj : LoadedObjects)
++    if (Obj)
++      NotifyFreeingObject(*Obj);
++  LoadedObjects.clear();
+ }
+ 
+ // FIXME: Rename this.
+-- 
+1.9.1
+
