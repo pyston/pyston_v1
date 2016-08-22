@@ -148,7 +148,7 @@ class JitFragmentWriter;
 class JitCodeBlock {
 public:
     static constexpr int scratch_size = 256;
-    static constexpr int memory_size = 32768; // must fit the EH frame + generated code
+    static constexpr int memory_size = 6 * 4096; // must fit the EH frame + generated code
     static constexpr int num_stack_args = 2;
 
     // scratch size + space for passing additional args on the stack without having to adjust the SP when calling
