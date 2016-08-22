@@ -366,7 +366,6 @@ ICInfo::~ICInfo() {
     ics_by_return_addr.erase(slowpath_rtn_addr);
     if (node)
         ics_by_ast_node.erase(node);
-    deregisterGCTrackedICInfo(this);
 
     for (auto& slot : slots) {
         // Calling a full clear() might be overkill here, but probably better safe than sorry:
@@ -421,8 +420,6 @@ std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t*
 
     assert(!ics_by_return_addr.count(slowpath_rtn_addr));
     ics_by_return_addr[slowpath_rtn_addr] = icinfo;
-
-    registerGCTrackedICInfo(icinfo);
 
     return std::unique_ptr<ICInfo>(icinfo);
 }

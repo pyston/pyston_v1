@@ -198,11 +198,6 @@ public:
     friend class ICInfo;
 };
 
-inline void registerGCTrackedICInfo(ICInfo* ic) {
-}
-inline void deregisterGCTrackedICInfo(ICInfo* ic) {
-}
-
 class ICSetupInfo;
 struct CompiledFunction;
 std::unique_ptr<ICInfo>
