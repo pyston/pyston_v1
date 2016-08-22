@@ -41,6 +41,10 @@
 namespace pyston {
 
 bool DEBUG_PARSING = false;
+const char* MAGIC = "a\nCR";
+#define MAGIC_STRING_LENGTH 4
+#define LENGTH_LENGTH sizeof(int)
+#define CHECKSUM_LENGTH 1
 
 class BufferedReader {
 private:
@@ -1029,33 +1033,16 @@ AST_Module* parse_file(const char* fn, FutureFlags inherited_flags) {
     return rtn;
 }
 
-const char* getMagic() {
-    if (ENABLE_PYPA_PARSER)
-        return "a\ncR";
-    else
-        return "a\nCR";
-}
-
-#define MAGIC_STRING_LENGTH 4
-#define LENGTH_LENGTH sizeof(int)
-#define CHECKSUM_LENGTH 1
-
 // Does at least one of: returns a valid file_data vector, or fills in 'module'
 static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, AST_Module*& module,
                                   FutureFlags inherited_flags) {
     inherited_flags &= ~(CO_NESTED | CO_FUTURE_DIVISION);
     FileHandle cache_fp(cache_fn.c_str(), "w");
 
-    if (DEBUG_PARSING) {
-        fprintf(stderr, "_reparse('%s', '%s'), pypa=%d\n", fn, cache_fn.c_str(), ENABLE_PYPA_PARSER);
-        fprintf(stderr, "writing magic string: %d %d %d %d\n", getMagic()[0], getMagic()[1], getMagic()[2],
-                getMagic()[3]);
-    }
-
     std::vector<char> file_data;
     if (cache_fp)
-        fwrite(getMagic(), 1, MAGIC_STRING_LENGTH, cache_fp);
-    file_data.insert(file_data.end(), getMagic(), getMagic() + MAGIC_STRING_LENGTH);
+        fwrite(MAGIC, 1, MAGIC_STRING_LENGTH, cache_fp);
+    file_data.insert(file_data.end(), MAGIC, MAGIC + MAGIC_STRING_LENGTH);
 
     int checksum_start = file_data.size();
 
@@ -1162,12 +1149,12 @@ AST_Module* caching_parse_file(const char* fn, FutureFlags inherited_flags) {
         }
 
         if (good) {
-            if (strncmp(&file_data[0], getMagic(), MAGIC_STRING_LENGTH) != 0) {
+            if (strncmp(&file_data[0], MAGIC, MAGIC_STRING_LENGTH) != 0) {
                 oss << "magic string did not match\n";
                 if (VERBOSITY() >= 2 || tries == MAX_TRIES) {
                     fprintf(stderr, "Warning: corrupt or non-Pyston .pyc file found; ignoring\n");
                     fprintf(stderr, "%d %d %d %d\n", file_data[0], file_data[1], file_data[2], file_data[3]);
-                    fprintf(stderr, "%d %d %d %d\n", getMagic()[0], getMagic()[1], getMagic()[2], getMagic()[3]);
+                    fprintf(stderr, "%d %d %d %d\n", MAGIC[0], MAGIC[1], MAGIC[2], MAGIC[3]);
                 }
                 good = false;
             }
