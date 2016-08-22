@@ -758,24 +758,15 @@ IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRG
     return new IREmitterImpl(irstate, curblock, irgenerator);
 }
 
-static std::unordered_map<AST_expr*, std::vector<BoxedString*>*> made_keyword_storage;
 std::vector<BoxedString*>* getKeywordNameStorage(AST_Call* node) {
-    auto it = made_keyword_storage.find(node);
-    if (it != made_keyword_storage.end())
-        return it->second;
-
-    auto rtn = new std::vector<BoxedString*>();
-    made_keyword_storage.insert(it, std::make_pair(node, rtn));
-
-    // Only add the keywords to the array the first time, since
-    // the later times we will hit the cache which will have the
-    // keyword names already populated:
-    if (!rtn->size()) {
-        for (auto kw : node->keywords)
-            rtn->push_back(kw->arg.getBox());
+    if (!node->keywords_names) {
+        node->keywords_names = llvm::make_unique<std::vector<BoxedString*>>();
+        for (auto kw : node->keywords) {
+            node->keywords_names->push_back(kw->arg.getBox());
+        }
     }
 
-    return rtn;
+    return node->keywords_names.get();
 }
 
 const std::string CREATED_CLOSURE_NAME = "#created_closure";
