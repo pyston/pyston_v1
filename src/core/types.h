@@ -443,7 +443,7 @@ private:
 public:
     BoxedModule* parent_module;
     ScopingAnalysis* scoping;
-    ScopeInfo* scope_info;
+    std::unique_ptr<ScopeInfo> scope_info;
     AST* ast;
     CFG* cfg;
     FutureFlags future_flags;

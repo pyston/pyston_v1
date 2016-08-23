@@ -903,13 +903,13 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
         ScopeNameUsage* usage = sorted_usages[i];
         AST* node = usage->node;
 
-        ScopeInfo* parent_info = this->scopes[(usage->parent == NULL) ? this->parent_module : usage->parent->node];
+        ScopeInfo* parent_info
+            = this->scopes[(usage->parent == NULL) ? this->parent_module : usage->parent->node].get();
 
         switch (node->type) {
             case AST_TYPE::ClassDef: {
-                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage, usage->node, true /* usesNameLookup */,
-                                                             globals_from_module);
-                this->scopes[node] = scopeInfo;
+                this->scopes[node] = llvm::make_unique<ScopeInfoBase>(parent_info, usage, usage->node,
+                                                                      true /* usesNameLookup */, globals_from_module);
                 break;
             }
             case AST_TYPE::FunctionDef:
@@ -917,10 +917,9 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             case AST_TYPE::GeneratorExp:
             case AST_TYPE::DictComp:
             case AST_TYPE::SetComp: {
-                ScopeInfoBase* scopeInfo
-                    = new ScopeInfoBase(parent_info, usage, usage->node,
-                                        usage->hasNameForcingSyntax() /* usesNameLookup */, globals_from_module);
-                this->scopes[node] = scopeInfo;
+                this->scopes[node] = llvm::make_unique<ScopeInfoBase>(
+                    parent_info, usage, usage->node, usage->hasNameForcingSyntax() /* usesNameLookup */,
+                    globals_from_module);
                 break;
             }
             default:
@@ -934,14 +933,15 @@ InternedStringPool& ScopingAnalysis::getInternedStrings() {
     return *interned_strings;
 }
 
-ScopeInfo* ScopingAnalysis::analyzeSubtree(AST* node) {
+std::unique_ptr<ScopeInfo> ScopingAnalysis::analyzeSubtree(AST* node) {
     NameUsageMap usages;
     usages[node] = new ScopeNameUsage(node, NULL, this);
     NameCollectorVisitor::collect(node, &usages, this);
 
     processNameUsages(&usages);
 
-    ScopeInfo* rtn = scopes[node];
+    std::unique_ptr<ScopeInfo> rtn = std::move(scopes[node]);
+    // scopes.erase(node);
     assert(rtn);
     return rtn;
 }
@@ -959,17 +959,17 @@ void ScopingAnalysis::registerScopeReplacement(AST* original_node, AST* new_node
     scope_replacements[new_node] = original_node;
 }
 
-ScopeInfo* ScopingAnalysis::getScopeInfoForNode(AST* node) {
+std::unique_ptr<ScopeInfo> ScopingAnalysis::getScopeInfoForNode(AST* node) {
     assert(node);
 
     auto it = scope_replacements.find(node);
     if (it != scope_replacements.end())
         node = it->second;
 
-    auto rtn = scopes.find(node);
-    if (rtn != scopes.end()) {
-        assert(rtn->second);
-        return rtn->second;
+    if (scopes.count(node)) {
+        std::unique_ptr<ScopeInfo> rtn = std::move(scopes[node]);
+        assert(rtn);
+        return rtn;
     }
 
     return analyzeSubtree(node);
@@ -993,10 +993,10 @@ ScopingAnalysis::ScopingAnalysis(AST* ast, bool globals_from_module)
 
     if (globals_from_module) {
         assert(ast->type == AST_TYPE::Module);
-        scopes[ast] = new ModuleScopeInfo();
+        scopes[ast] = llvm::make_unique<ModuleScopeInfo>();
         parent_module = static_cast<AST_Module*>(ast);
     } else {
-        scopes[ast] = new EvalExprScopeInfo(ast, globals_from_module);
+        scopes[ast] = llvm::make_unique<EvalExprScopeInfo>(ast, globals_from_module);
     }
 }
 }

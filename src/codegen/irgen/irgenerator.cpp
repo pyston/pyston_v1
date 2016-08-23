@@ -375,11 +375,6 @@ ScopeInfo* IRGenState::getScopeInfo() {
     return getSourceInfo()->getScopeInfo();
 }
 
-ScopeInfo* IRGenState::getScopeInfoForNode(AST* node) {
-    auto source = getSourceInfo();
-    return source->scoping->getScopeInfoForNode(node);
-}
-
 llvm::Value* IRGenState::getGlobals() {
     assert(globals);
     return globals;
@@ -1576,8 +1571,7 @@ private:
     CompilerVariable* evalMakeClass(AST_MakeClass* mkclass, const UnwindInfo& unw_info) {
         assert(mkclass->type == AST_TYPE::MakeClass && mkclass->class_def->type == AST_TYPE::ClassDef);
         AST_ClassDef* node = mkclass->class_def;
-        ScopeInfo* scope_info = irstate->getScopeInfoForNode(node);
-        assert(scope_info);
+
 
         std::vector<CompilerVariable*> bases;
         for (auto b : node->bases) {
@@ -1594,6 +1588,8 @@ private:
         }
 
         FunctionMetadata* md = wrapFunction(node, nullptr, irstate->getSourceInfo());
+        ScopeInfo* scope_info = md->source->getScopeInfo();
+        assert(scope_info);
 
         // TODO duplication with _createFunction:
         llvm::Value* this_closure = NULL;
@@ -1644,19 +1640,7 @@ private:
             defaults.push_back(converted);
         }
 
-        bool takes_closure;
-        // Optimization: when compiling a module, it's nice to not have to run analyses into the
-        // entire module's source code.
-        // If we call getScopeInfoForNode, that will trigger an analysis of that function tree,
-        // but we're only using it here to figure out if that function takes a closure.
-        // Top level functions never take a closure, so we can skip the analysis.
-        if (irstate->getSourceInfo()->ast->type == AST_TYPE::Module)
-            takes_closure = false;
-        else {
-            takes_closure = irstate->getScopeInfoForNode(node)->takesClosure();
-        }
-
-        bool is_generator = md->source->is_generator;
+        bool takes_closure = md->source->scope_info->takesClosure();
 
         llvm::Value* this_closure = NULL;
         if (takes_closure) {

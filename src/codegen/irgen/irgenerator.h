@@ -119,7 +119,6 @@ public:
     PhiAnalysis* getPhis() { return phis.get(); }
 
     ScopeInfo* getScopeInfo();
-    ScopeInfo* getScopeInfoForNode(AST* node);
 
     llvm::MDNode* getFuncDbgInfo() { return func_dbg_info; }
 

@@ -1159,19 +1159,7 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args) {
     u.d.ptr = &defaults[0];
     u.d.s = defaults.size() - 1;
 
-    bool takes_closure;
-    source_info->scoping->getScopeInfoForNode(node);
-
-    // Optimization: when compiling a module, it's nice to not have to run analyses into the
-    // entire module's source code.
-    // If we call getScopeInfoForNode, that will trigger an analysis of that function tree,
-    // but we're only using it here to figure out if that function takes a closure.
-    // Top level functions never take a closure, so we can skip the analysis.
-    if (source_info->ast->type == AST_TYPE::Module)
-        takes_closure = false;
-    else {
-        takes_closure = source_info->scoping->getScopeInfoForNode(node)->takesClosure();
-    }
+    bool takes_closure = md->source->getScopeInfo()->takesClosure();
 
     BoxedClosure* closure = 0;
     RewriterVar* closure_var = NULL;
@@ -1238,8 +1226,7 @@ Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
 Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     abortJITing();
     AST_ClassDef* node = mkclass->class_def;
-    ScopeInfo* scope_info = source_info->scoping->getScopeInfoForNode(node);
-    assert(scope_info);
+
 
     BoxedTuple* basesTuple = BoxedTuple::create(node->bases.size());
     AUTO_DECREF(basesTuple);
@@ -1253,6 +1240,11 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d).o);
 
+    FunctionMetadata* md = wrapFunction(node, nullptr, source_info);
+
+    ScopeInfo* scope_info = md->source->getScopeInfo();
+    assert(scope_info);
+
     BoxedClosure* closure = NULL;
     if (scope_info->takesClosure()) {
         if (this->scope_info->passesThroughClosure())
@@ -1261,7 +1253,6 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
             closure = created_closure;
         assert(closure);
     }
-    FunctionMetadata* md = wrapFunction(node, nullptr, source_info);
 
     Box* passed_globals = NULL;
     if (!getMD()->source->scoping->areGlobalsFromModule())

@@ -183,9 +183,8 @@ Box* SourceInfo::getDocString() {
 }
 
 ScopeInfo* SourceInfo::getScopeInfo() {
-    if (!scope_info)
-        scope_info = scoping->getScopeInfoForNode(ast);
-    return scope_info;
+    assert(scope_info);
+    return scope_info.get();
 }
 
 LivenessAnalysis* SourceInfo::getLiveness() {

@@ -151,13 +151,13 @@ public:
     typedef llvm::DenseMap<AST*, ScopeNameUsage*> NameUsageMap;
 
 private:
-    llvm::DenseMap<AST*, ScopeInfo*> scopes;
+    llvm::DenseMap<AST*, std::unique_ptr<ScopeInfo>> scopes;
     AST_Module* parent_module;
     InternedStringPool* interned_strings;
 
     llvm::DenseMap<AST*, AST*> scope_replacements;
 
-    ScopeInfo* analyzeSubtree(AST* node);
+    std::unique_ptr<ScopeInfo> analyzeSubtree(AST* node);
     void processNameUsages(NameUsageMap* usages);
 
     bool globals_from_module;
@@ -173,7 +173,7 @@ public:
     void registerScopeReplacement(AST* original_node, AST* new_node);
 
     ScopingAnalysis(AST* ast, bool globals_from_module);
-    ScopeInfo* getScopeInfoForNode(AST* node);
+    std::unique_ptr<ScopeInfo> getScopeInfoForNode(AST* node);
 
     InternedStringPool& getInternedStrings();
     bool areGlobalsFromModule() { return globals_from_module; }

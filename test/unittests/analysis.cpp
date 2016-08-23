@@ -36,13 +36,13 @@ TEST_F(AnalysisTest, augassign) {
     assert(module->body[0]->type == AST_TYPE::FunctionDef);
     AST_FunctionDef* func = static_cast<AST_FunctionDef*>(module->body[0]);
 
-    ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
-    ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("a")) == ScopeInfo::VarScopeType::GLOBAL);
-    ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("b")) == ScopeInfo::VarScopeType::GLOBAL);
-
     FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
 
     SourceInfo* si = new SourceInfo(createModule(boxString("augassign"), fn.c_str()), scoping, future_flags, func, boxString(fn));
+
+    ScopeInfo* scope_info = si->getScopeInfo();
+    ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("a")) == ScopeInfo::VarScopeType::GLOBAL);
+    ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("b")) == ScopeInfo::VarScopeType::GLOBAL);
 
     ParamNames param_names(si->ast, si->getInternedStrings());
     CFG* cfg = computeCFG(si, param_names);
@@ -72,9 +72,9 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
 
     FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
 
-    ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
     std::unique_ptr<SourceInfo> si(new SourceInfo(createModule(boxString("osr" + std::to_string((is_osr << 1) + i_maybe_undefined)),
                     fn.c_str()), scoping, future_flags, func, boxString(fn)));
+    ScopeInfo* scope_info = si->getScopeInfo();
     FunctionMetadata* clfunc = new FunctionMetadata(0, false, false, std::move(si));
 
     CFG* cfg = computeCFG(clfunc->source.get(), clfunc->param_names);
