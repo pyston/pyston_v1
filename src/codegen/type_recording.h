@@ -44,8 +44,6 @@ public:
     friend Box* recordType(TypeRecorder*, Box*);
 };
 
-TypeRecorder* getTypeRecorderForNode(AST* node);
-
 BoxedClass* predictClassFor(AST* node);
 }
 

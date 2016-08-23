@@ -179,6 +179,7 @@ public:
     RewriterVar* cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location loc = Location::any());
     RewriterVar* toBool(Location loc = Location::any());
 
+    RefType getType() const { return reftype; }
     RewriterVar* setType(RefType type);
     RewriterVar* setNullable(bool nullable) {
         this->nullable = nullable;

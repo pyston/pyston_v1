@@ -14,20 +14,11 @@
 
 #include "codegen/type_recording.h"
 
-#include <unordered_map>
-
+#include "asm_writing/icinfo.h"
 #include "core/options.h"
 #include "core/types.h"
 
 namespace pyston {
-
-static std::unordered_map<AST*, std::unique_ptr<TypeRecorder>> type_recorders;
-TypeRecorder* getTypeRecorderForNode(AST* node) {
-    std::unique_ptr<TypeRecorder>& r = type_recorders[node];
-    if (r == NULL)
-        r = llvm::make_unique<TypeRecorder>();
-    return r.get();
-}
 
 Box* recordType(TypeRecorder* self, Box* obj) {
     // The baseline JIT directly generates machine code for this function inside JitFragmentWriter::_emitRecordType.
@@ -52,11 +43,11 @@ Box* recordType(TypeRecorder* self, Box* obj) {
 }
 
 BoxedClass* predictClassFor(AST* node) {
-    auto it = type_recorders.find(node);
-    if (it == type_recorders.end())
+    ICInfo* ic = ICInfo::getICInfoForNode(node);
+    if (!ic || !ic->getTypeRecorder())
         return NULL;
 
-    return it->second->predict();
+    return ic->getTypeRecorder()->predict();
 }
 
 BoxedClass* TypeRecorder::predict() {

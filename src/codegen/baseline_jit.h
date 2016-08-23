@@ -251,6 +251,7 @@ private:
         StackInfo stack_info;
         AST* node;
         std::vector<Location> decref_infos;
+        std::unique_ptr<TypeRecorder> type_recorder;
     };
 
     llvm::SmallVector<PPInfo, 8> pp_infos;
@@ -349,13 +350,13 @@ private:
     RewriterVar* emitCallWithAllocatedArgs(void* func_addr, const llvm::ArrayRef<RewriterVar*> args,
                                            const llvm::ArrayRef<RewriterVar*> additional_uses);
     std::pair<RewriterVar*, RewriterAction*> emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args,
-                                                        unsigned short pp_size, AST* ast_node = NULL,
-                                                        TypeRecorder* type_recorder = NULL,
+                                                        unsigned short pp_size, bool should_record_type = false,
+                                                        AST* ast_node = NULL,
                                                         llvm::ArrayRef<RewriterVar*> additional_uses = {});
 
     static void assertNameDefinedHelper(const char* id);
-    static Box* callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, TypeRecorder* type_recorder,
-                               Box** args, std::vector<BoxedString*>* keyword_names);
+    static Box* callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, Box** args,
+                               std::vector<BoxedString*>* keyword_names);
     static Box* createDictHelper(uint64_t num, Box** keys, Box** values);
     static Box* createListHelper(uint64_t num, Box** data);
     static Box* createSetHelper(uint64_t num, Box** data);
@@ -364,15 +365,14 @@ private:
     static BORROWED(Box*) hasnextHelper(Box* b);
     static BORROWED(Box*) nonzeroHelper(Box* b);
     static BORROWED(Box*) notHelper(Box* b);
-    static Box* runtimeCallHelper(Box* obj, ArgPassSpec argspec, TypeRecorder* type_recorder, Box** args,
-                                  std::vector<BoxedString*>* keyword_names);
+    static Box* runtimeCallHelper(Box* obj, ArgPassSpec argspec, Box** args, std::vector<BoxedString*>* keyword_names);
 
     void _emitGetLocal(RewriterVar* val_var, const char* name);
     void _emitJump(CFGBlock* b, RewriterVar* block_next, ExitInfo& exit_info);
     void _emitOSRPoint();
     void _emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args, unsigned short pp_size,
                      AST* ast_node, llvm::ArrayRef<RewriterVar*> vars_to_bump);
-    void _emitRecordType(RewriterVar* type_recorder_var, RewriterVar* obj_cls_var);
+    void _emitRecordType(RewriterVar* obj_cls_var);
     void _emitReturn(RewriterVar* v);
     void _emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val_constant, CFGBlock* next_block,
                        RewriterVar* false_path);

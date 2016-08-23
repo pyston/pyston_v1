@@ -65,19 +65,13 @@ public:
     };
 
 private:
-    ICSetupInfo(ICType type, int size, bool has_return_value, TypeRecorder* type_recorder,
-                assembler::RegisterSet allocatable_regs)
-        : type(type),
-          size(size),
-          has_return_value(has_return_value),
-          type_recorder(type_recorder),
-          allocatable_regs(allocatable_regs) {}
+    ICSetupInfo(ICType type, int size, bool has_return_value, assembler::RegisterSet allocatable_regs)
+        : type(type), size(size), has_return_value(has_return_value), allocatable_regs(allocatable_regs) {}
 
 public:
     const ICType type;
     const int size;
     const bool has_return_value;
-    TypeRecorder* const type_recorder;
     assembler::RegisterSet allocatable_regs;
 
     int totalSize() const;
@@ -97,9 +91,9 @@ public:
         return llvm::CallingConv::C;
     }
 
-    static std::unique_ptr<ICSetupInfo>
-    initialize(bool has_return_value, int size, ICType type, TypeRecorder* type_recorder = NULL,
-               assembler::RegisterSet allocatable_regs = assembler::RegisterSet::stdAllocatable());
+    static std::unique_ptr<ICSetupInfo> initialize(bool has_return_value, int size, ICType type,
+                                                   assembler::RegisterSet allocatable_regs
+                                                   = assembler::RegisterSet::stdAllocatable());
 };
 
 struct PatchpointInfo {

@@ -45,10 +45,8 @@ int ICSetupInfo::totalSize() const {
 static std::vector<std::pair<std::unique_ptr<PatchpointInfo>, void* /* addr of func to call */>> new_patchpoints;
 
 std::unique_ptr<ICSetupInfo> ICSetupInfo::initialize(bool has_return_value, int size, ICType type,
-                                                     TypeRecorder* type_recorder,
                                                      assembler::RegisterSet allocatable_regs) {
-    auto rtn
-        = std::unique_ptr<ICSetupInfo>(new ICSetupInfo(type, size, has_return_value, type_recorder, allocatable_regs));
+    auto rtn = std::unique_ptr<ICSetupInfo>(new ICSetupInfo(type, size, has_return_value, allocatable_regs));
 
 
     // We use size == CALL_ONLY_SIZE to imply that the call isn't patchable
@@ -431,7 +429,7 @@ std::unique_ptr<ICSetupInfo> createHasnextIC() {
 }
 
 std::unique_ptr<ICSetupInfo> createDeoptIC() {
-    return ICSetupInfo::initialize(true, 0, ICSetupInfo::Deopt, NULL);
+    return ICSetupInfo::initialize(true, 0, ICSetupInfo::Deopt);
 }
 
 } // namespace pyston

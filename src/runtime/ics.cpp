@@ -249,8 +249,7 @@ RuntimeIC::RuntimeIC(void* func_addr, int total_size) {
 
         // printf("Allocated runtime IC at %p\n", addr);
 
-        std::unique_ptr<ICSetupInfo> setup_info(
-            ICSetupInfo::initialize(true, patchable_size, ICSetupInfo::Generic, NULL));
+        std::unique_ptr<ICSetupInfo> setup_info(ICSetupInfo::initialize(true, patchable_size, ICSetupInfo::Generic));
         uint8_t* pp_start = (uint8_t*)addr + PROLOGUE_SIZE;
         uint8_t* pp_end = pp_start + patchable_size + CALL_SIZE;
 
