@@ -1160,8 +1160,7 @@ Value ASTInterpreter::createFunction(AST* node, AST_arguments* args) {
     u.d.s = defaults.size() - 1;
 
     bool takes_closure;
-    if (!LAZY_SCOPING_ANALYSIS)
-        source_info->scoping->getScopeInfoForNode(node);
+    source_info->scoping->getScopeInfoForNode(node);
 
     // Optimization: when compiling a module, it's nice to not have to run analyses into the
     // entire module's source code.
