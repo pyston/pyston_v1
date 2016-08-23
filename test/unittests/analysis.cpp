@@ -31,7 +31,7 @@ TEST_F(AnalysisTest, augassign) {
     AST_Module* module = caching_parse_file(fn.c_str(), 0);
     assert(module);
 
-    ScopingAnalysis *scoping = new ScopingAnalysis(module, true);
+    auto scoping = std::make_shared<ScopingAnalysis>(module, true);
 
     assert(module->body[0]->type == AST_TYPE::FunctionDef);
     AST_FunctionDef* func = static_cast<AST_FunctionDef*>(module->body[0]);
@@ -65,7 +65,7 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     AST_Module* module = caching_parse_file(fn.c_str(), 0);
     assert(module);
 
-    ScopingAnalysis *scoping = new ScopingAnalysis(module, true);
+    auto scoping = std::make_shared<ScopingAnalysis>(module, true);
 
     assert(module->body[0]->type == AST_TYPE::FunctionDef);
     AST_FunctionDef* func = static_cast<AST_FunctionDef*>(module->body[0]);

@@ -91,7 +91,8 @@ void FunctionMetadata::addVersion(CompiledFunction* compiled) {
     }
 }
 
-SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast, BoxedString* fn)
+SourceInfo::SourceInfo(BoxedModule* m, std::shared_ptr<ScopingAnalysis> scoping, FutureFlags future_flags, AST* ast,
+                       BoxedString* fn)
     : parent_module(m),
       scoping(scoping),
       scope_info(scoping->getScopeInfoForNode(ast)),

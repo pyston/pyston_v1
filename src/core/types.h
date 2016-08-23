@@ -442,7 +442,7 @@ private:
 
 public:
     BoxedModule* parent_module;
-    ScopingAnalysis* scoping;
+    std::shared_ptr<ScopingAnalysis> scoping;
     std::unique_ptr<ScopeInfo> scope_info;
     AST* ast;
     CFG* cfg;
@@ -464,7 +464,8 @@ public:
 
     Box* getDocString();
 
-    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast, BoxedString* fn);
+    SourceInfo(BoxedModule* m, std::shared_ptr<ScopingAnalysis> scoping, FutureFlags future_flags, AST* ast,
+               BoxedString* fn);
     ~SourceInfo();
 };
 

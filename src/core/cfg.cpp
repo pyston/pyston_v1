@@ -247,7 +247,7 @@ private:
     FutureFlags future_flags;
     CFG* cfg;
     CFGBlock* curblock;
-    ScopingAnalysis* scoping_analysis;
+    ScopingAnalysis& scoping_analysis;
     std::vector<ContInfo> continuations;
     std::vector<ExcBlockInfo> exc_handlers;
 
@@ -257,7 +257,7 @@ private:
 
 public:
     CFGVisitor(SourceInfo* source, AST_TYPE::AST_TYPE root_type, FutureFlags future_flags,
-               ScopingAnalysis* scoping_analysis, CFG* cfg)
+               ScopingAnalysis& scoping_analysis, CFG* cfg)
         : source(source),
           root_type(root_type),
           future_flags(future_flags),
@@ -1039,7 +1039,7 @@ private:
         func->args = new AST_arguments();
         func->args->vararg = NULL;
         func->args->kwarg = NULL;
-        scoping_analysis->registerScopeReplacement(node, func); // critical bit
+        scoping_analysis.registerScopeReplacement(node, func); // critical bit
         return new AST_MakeFunction(func);
     }
 
@@ -1212,7 +1212,7 @@ private:
         def->body = { stmt };
         def->args = remapArguments(node->args);
 
-        scoping_analysis->registerScopeReplacement(node, def);
+        scoping_analysis.registerScopeReplacement(node, def);
 
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeFunction(def));
@@ -1651,7 +1651,7 @@ public:
         for (auto expr : node->bases)
             def->bases.push_back(remapExpr(expr));
 
-        scoping_analysis->registerScopeReplacement(node, def);
+        scoping_analysis.registerScopeReplacement(node, def);
 
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeClass(def));
@@ -1672,7 +1672,7 @@ public:
             def->decorator_list.push_back(remapExpr(expr));
         def->args = remapArguments(node->args);
 
-        scoping_analysis->registerScopeReplacement(node, def);
+        scoping_analysis.registerScopeReplacement(node, def);
 
         auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeFunction(def));
@@ -2854,9 +2854,7 @@ CFG* computeCFG(SourceInfo* source, const ParamNames& param_names) {
 
     CFG* rtn = new CFG();
 
-    ScopingAnalysis* scoping_analysis = source->scoping;
-
-    CFGVisitor visitor(source, source->ast->type, source->future_flags, scoping_analysis, rtn);
+    CFGVisitor visitor(source, source->ast->type, source->future_flags, *source->scoping, rtn);
 
     bool skip_first = false;
 

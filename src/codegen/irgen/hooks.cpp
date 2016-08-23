@@ -369,11 +369,11 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     RELEASE_ASSERT(fn, "");
 
     FutureFlags future_flags = getFutureFlags(m->body, fn);
-    ScopingAnalysis* scoping = new ScopingAnalysis(m, true);
+    std::shared_ptr<ScopingAnalysis> scoping = std::make_shared<ScopingAnalysis>(m, true);
 
     auto fn_str = boxString(fn);
     AUTO_DECREF(fn_str);
-    std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, fn_str));
+    std::unique_ptr<SourceInfo> si(new SourceInfo(bm, std::move(scoping), future_flags, m, fn_str));
 
     static BoxedString* doc_str = getStaticString("__doc__");
     bm->setattr(doc_str, autoDecref(si->getDocString()), NULL);
@@ -415,7 +415,7 @@ static FunctionMetadata* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_st
                                               PyCompilerFlags* flags) {
     Timer _t("for evalOrExec()");
 
-    ScopingAnalysis* scoping = new ScopingAnalysis(source, false);
+    auto scoping = std::make_shared<ScopingAnalysis>(source, false);
 
     // `my_future_flags` are the future flags enabled in the exec's code.
     // `caller_future_flags` are the future flags of the source that the exec statement is in.
@@ -428,10 +428,9 @@ static FunctionMetadata* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_st
         flags->cf_flags = future_flags;
     }
 
-    std::unique_ptr<SourceInfo> si(new SourceInfo(getCurrentModule(), scoping, future_flags, source, fn));
+    std::unique_ptr<SourceInfo> si(new SourceInfo(getCurrentModule(), std::move(scoping), future_flags, source, fn));
 
-    FunctionMetadata* md = new FunctionMetadata(0, false, false, std::move(si));
-    return md;
+    return new FunctionMetadata(0, false, false, std::move(si));
 }
 
 static FunctionMetadata* compileExec(AST_Module* parsedModule, BoxedString* fn, PyCompilerFlags* flags) {
