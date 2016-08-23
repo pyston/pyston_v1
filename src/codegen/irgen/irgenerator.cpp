@@ -758,24 +758,15 @@ IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRG
     return new IREmitterImpl(irstate, curblock, irgenerator);
 }
 
-static std::unordered_map<AST_expr*, std::vector<BoxedString*>*> made_keyword_storage;
 std::vector<BoxedString*>* getKeywordNameStorage(AST_Call* node) {
-    auto it = made_keyword_storage.find(node);
-    if (it != made_keyword_storage.end())
-        return it->second;
-
-    auto rtn = new std::vector<BoxedString*>();
-    made_keyword_storage.insert(it, std::make_pair(node, rtn));
-
-    // Only add the keywords to the array the first time, since
-    // the later times we will hit the cache which will have the
-    // keyword names already populated:
-    if (!rtn->size()) {
-        for (auto kw : node->keywords)
-            rtn->push_back(kw->arg.getBox());
+    if (!node->keywords_names) {
+        node->keywords_names = llvm::make_unique<std::vector<BoxedString*>>();
+        for (auto kw : node->keywords) {
+            node->keywords_names->push_back(kw->arg.getBox());
+        }
     }
 
-    return rtn;
+    return node->keywords_names.get();
 }
 
 const std::string CREATED_CLOSURE_NAME = "#created_closure";
@@ -843,25 +834,10 @@ private:
     OpInfo getOpInfoForNode(AST* ast, const UnwindInfo& unw_info) {
         assert(ast);
 
-        EffortLevel effort = irstate->getEffortLevel();
-        // This is the only place we create type recorders for the llvm tier;
-        // if we are ok with never doing that there's a bunch of code that could
-        // be removed.
-        bool record_types = false;
-
-        TypeRecorder* type_recorder;
-        if (record_types) {
-            type_recorder = getTypeRecorderForNode(ast);
-        } else {
-            type_recorder = NULL;
-        }
-
-        return OpInfo(irstate->getEffortLevel(), type_recorder, unw_info, ICInfo::getICInfoForNode(ast));
+        return OpInfo(irstate->getEffortLevel(), unw_info, ICInfo::getICInfoForNode(ast));
     }
 
-    OpInfo getEmptyOpInfo(const UnwindInfo& unw_info) {
-        return OpInfo(irstate->getEffortLevel(), NULL, unw_info, NULL);
-    }
+    OpInfo getEmptyOpInfo(const UnwindInfo& unw_info) { return OpInfo(irstate->getEffortLevel(), unw_info, NULL); }
 
     void createExprTypeGuard(llvm::Value* check_val, AST* node, llvm::Value* node_value, AST_stmt* current_statement) {
         assert(check_val->getType() == g.i1);
@@ -1320,7 +1296,7 @@ private:
 
         bool do_patchpoint = ENABLE_ICGETGLOBALS;
         if (do_patchpoint) {
-            auto pp = createGetGlobalIC(getOpInfoForNode(node, unw_info).getTypeRecorder());
+            auto pp = createGetGlobalIC();
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(irstate->getGlobals());
@@ -2012,7 +1988,7 @@ private:
 
         bool do_patchpoint = ENABLE_ICSETITEMS;
         if (do_patchpoint) {
-            auto pp = createSetitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
+            auto pp = createSetitemIC();
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(target);
@@ -2043,7 +2019,7 @@ private:
             // patchpoints if it couldn't.
             bool do_patchpoint = ENABLE_ICSETITEMS;
             if (do_patchpoint) {
-                auto pp = createSetitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
+                auto pp = createSetitemIC();
 
                 std::vector<llvm::Value*> llvm_args;
                 llvm_args.push_back(converted_target->getValue());
@@ -2173,7 +2149,7 @@ private:
 
             bool do_patchpoint = ENABLE_ICDELITEMS;
             if (do_patchpoint) {
-                auto pp = createDelitemIC(getEmptyOpInfo(unw_info).getTypeRecorder());
+                auto pp = createDelitemIC();
 
                 std::vector<llvm::Value*> llvm_args;
                 llvm_args.push_back(converted_target->getValue());

@@ -246,7 +246,7 @@ public:
         bool do_patchpoint = ENABLE_ICSETATTRS;
         llvm::Instruction* inst;
         if (do_patchpoint) {
-            auto pp = createSetattrIC(info.getTypeRecorder(), info.getBJitICInfo());
+            auto pp = createSetattrIC(info.getBJitICInfo());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
@@ -269,7 +269,7 @@ public:
         bool do_patchpoint = false;
 
         if (do_patchpoint) {
-            auto pp = createDelattrIC(info.getTypeRecorder());
+            auto pp = createDelattrIC();
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
@@ -316,7 +316,7 @@ public:
         bool do_patchpoint = ENABLE_ICGENERICS;
         llvm::Value* rtn;
         if (do_patchpoint) {
-            auto pp = createGenericIC(info.getTypeRecorder(), true, 256);
+            auto pp = createGenericIC(true, 256);
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
@@ -350,7 +350,7 @@ public:
                                        : emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED);
                 llvm::Value* r = NULL;
                 if (do_patchpoint) {
-                    auto pp = createGetitemIC(info.getTypeRecorder(), info.getBJitICInfo());
+                    auto pp = createGetitemIC(info.getBJitICInfo());
                     llvm::Instruction* uncasted = emitter.createIC(
                         std::move(pp),
                         (void*)(target_exception_style == CAPI ? pyston::apply_slice : pyston::applySlice),
@@ -377,7 +377,7 @@ public:
 
         llvm::Value* rtn;
         if (do_patchpoint) {
-            auto pp = createGetitemIC(info.getTypeRecorder(), info.getBJitICInfo());
+            auto pp = createGetitemIC(info.getBJitICInfo());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
@@ -428,7 +428,7 @@ public:
 
         // var has __iter__()
         emitter.setCurrentBasicBlock(bb_has_iter);
-        auto pp = createGenericIC(info.getTypeRecorder(), true, 128);
+        auto pp = createGenericIC(true, 128);
         llvm::Instruction* uncasted = emitter.createIC(std::move(pp), (void*)pyston::createBoxedIterWrapperIfNeeded,
                                                        { converted_iter_call->getValue() }, info.unw_info);
         llvm::Value* value_has_iter = createAfter<llvm::IntToPtrInst>(uncasted, uncasted, g.llvm_value_type_ptr, "");
@@ -440,7 +440,7 @@ public:
         // TODO: we could create a patchpoint if this turns out to be hot
         emitter.setCurrentBasicBlock(bb_no_iter);
 
-        auto pp2 = createGenericIC(info.getTypeRecorder(), true, 128);
+        auto pp2 = createGenericIC(true, 128);
         llvm::Instruction* value_no_iter
             = emitter.createIC(std::move(pp2), (void*)getiterHelper, { var->getValue() }, info.unw_info);
         value_no_iter = createAfter<llvm::IntToPtrInst>(value_no_iter, value_no_iter, g.llvm_value_type_ptr, "");
@@ -483,7 +483,7 @@ public:
         }
 
         if (do_patchpoint) {
-            auto pp = createBinexpIC(info.getTypeRecorder(), info.getBJitICInfo());
+            auto pp = createBinexpIC(info.getBJitICInfo());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
@@ -571,7 +571,7 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
 
     bool do_patchpoint = ENABLE_ICGETATTRS;
     if (do_patchpoint) {
-        auto pp = createGetattrIC(info.getTypeRecorder(), info.getBJitICInfo());
+        auto pp = createGetattrIC(info.getBJitICInfo());
 
         std::vector<llvm::Value*> llvm_args;
         llvm_args.push_back(var->getValue());
@@ -674,7 +674,7 @@ _call(IREmitter& emitter, const OpInfo& info, llvm::Value* func, ExceptionStyle 
     if (do_patchpoint) {
         assert(func_addr);
 
-        auto pp = createCallsiteIC(info.getTypeRecorder(), args.size(), info.getBJitICInfo());
+        auto pp = createCallsiteIC(args.size(), info.getBJitICInfo());
 
         llvm::Instruction* uncasted = emitter.createIC(std::move(pp), func_addr, llvm_args, info.unw_info,
                                                        target_exception_style, getNullPtr(g.llvm_value_type_ptr));
@@ -782,7 +782,7 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
     bool do_patchpoint = ENABLE_ICNONZEROS;
     llvm::Value* rtn_val;
     if (do_patchpoint) {
-        auto pp = createNonzeroIC(info.getTypeRecorder());
+        auto pp = createNonzeroIC();
 
         std::vector<llvm::Value*> llvm_args;
         llvm_args.push_back(var->getValue());
@@ -802,7 +802,7 @@ ConcreteCompilerVariable* UnknownType::unaryop(IREmitter& emitter, const OpInfo&
     llvm::Value* rtn = NULL;
     bool do_patchpoint = ENABLE_ICGENERICS;
     if (do_patchpoint) {
-        auto pp = createGenericIC(info.getTypeRecorder(), true, 256);
+        auto pp = createGenericIC(true, 256);
 
         std::vector<llvm::Value*> llvm_args;
         llvm_args.push_back(converted->getValue());
@@ -824,7 +824,7 @@ ConcreteCompilerVariable* UnknownType::hasnext(IREmitter& emitter, const OpInfo&
     do_patchpoint = false; // we are currently using runtime ics for this
     llvm::Value* rtn_val;
     if (do_patchpoint) {
-        auto pp = createHasnextIC(info.getTypeRecorder());
+        auto pp = createHasnextIC();
 
         std::vector<llvm::Value*> llvm_args;
         llvm_args.push_back(var->getValue());

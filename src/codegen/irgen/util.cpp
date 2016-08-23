@@ -32,67 +32,6 @@
 
 namespace pyston {
 
-/*
-static std::string getStringName(std::string strvalue) {
-    std::ostringstream name_os;
-    name_os << "str";
-    name_os << g.global_string_table.size();
-    name_os << '_';
-    for (int i = 0; i < strvalue.size(); i++) {
-        if (isalnum(strvalue[i]))
-            name_os << strvalue[i];
-    }
-    return name_os.str();
-}
-
-// Gets a reference (creating if necessary) to a global string constant with the given value.
-// The return type will be a char array.
-static llvm::Constant* getStringConstant(const std::string &str) {
-    if (g.global_string_table.find(str) != g.global_string_table.end()) {
-        llvm::GlobalVariable *gv = g.global_string_table[str];
-        llvm::Constant *rtn = g.cur_module->getOrInsertGlobal(gv->getName(), gv->getType()->getElementType());
-        return rtn;
-    }
-
-    int len = str.size();
-    std::vector<llvm::Constant*> chars;
-    for (int i = 0; i < len; i++) {
-        chars.push_back(llvm::ConstantInt::get(g.i8, str[i]));
-    }
-    llvm::ArrayType *at = llvm::ArrayType::get(g.i8, len);
-    llvm::Constant *val = llvm::ConstantArray::get(at, llvm::ArrayRef<llvm::Constant*>(chars));
-    llvm::GlobalVariable *gv = new llvm::GlobalVariable(*g.cur_module, at, true, llvm::GlobalValue::ExternalLinkage,
-val, getStringName(str));
-    g.global_string_table[str] = gv;
-    return gv;
-}
-*/
-
-std::unordered_map<std::string, const char*> strings;
-
-/*
-// Returns a llvm::Constant char* to a global string constant
-llvm::Constant* getStringConstantPtr(llvm::StringRef str) {
-    const char* c;
-    if (strings.count(str)) {
-        c = strings[str];
-    } else {
-        char* buf = (char*)malloc(str.size() + 1);
-        memcpy(buf, str.c_str(), str.size());
-        buf[str.size()] = '\0';
-
-        strings[str] = buf;
-        c = buf;
-    }
-    return embedRelocatablePtr(c, g.i8->getPointerTo());
-}
-
-// Returns a llvm::Constant char* to a global string constant
-llvm::Constant* getStringConstantPtr(llvm::StringRef str) {
-    return getStringConstantPtr(std::string(str, strlen(str) + 1));
-}
-*/
-
 // Sometimes we want to embed pointers into the emitted code, usually to link the emitted code
 // to some associated compiler-level data structure.
 // It's slightly easier to emit them as integers (there are primitive integer constants but not pointer constants),

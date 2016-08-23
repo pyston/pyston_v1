@@ -2879,13 +2879,7 @@ template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void
         rewriter->getArg(0)->setType(RefType::BORROWED);
         rewriter->getArg(1)->setType(RefType::BORROWED);
 
-        Location dest;
-        TypeRecorder* recorder = rewriter->getTypeRecorder();
-        if (recorder)
-            dest = Location::forArg(1);
-        else
-            dest = rewriter->getReturnDestination();
-        GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), dest);
+        GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
         val = getattrInternal<S>(obj, attr, &rewrite_args);
 
         if (rewrite_args.isSuccessful()) {
@@ -2914,15 +2908,8 @@ template <ExceptionStyle S> Box* _getattrEntry(Box* obj, BoxedString* attr, void
             }
 
             if (return_convention == ReturnConvention::HAS_RETURN
-                || (S == CAPI && return_convention == ReturnConvention::CAPI_RETURN)) {
-                if (recorder) {
-                    rtn = rewriter->call(false, (void*)recordType,
-                                         rewriter->loadConst((intptr_t)recorder, Location::forArg(0)), rtn);
-                    recordType(recorder, val);
-                }
-
+                || (S == CAPI && return_convention == ReturnConvention::CAPI_RETURN))
                 rewriter->commitReturning(rtn);
-            }
         }
     } else {
         val = getattrInternal<S>(obj, attr);

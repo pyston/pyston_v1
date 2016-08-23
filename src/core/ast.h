@@ -353,6 +353,9 @@ public:
     std::vector<AST_expr*> args;
     std::vector<AST_keyword*> keywords;
 
+    // used during execution stores all keyword names
+    std::unique_ptr<std::vector<BoxedString*>> keywords_names;
+
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 

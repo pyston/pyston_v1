@@ -65,19 +65,13 @@ public:
     };
 
 private:
-    ICSetupInfo(ICType type, int size, bool has_return_value, TypeRecorder* type_recorder,
-                assembler::RegisterSet allocatable_regs)
-        : type(type),
-          size(size),
-          has_return_value(has_return_value),
-          type_recorder(type_recorder),
-          allocatable_regs(allocatable_regs) {}
+    ICSetupInfo(ICType type, int size, bool has_return_value, assembler::RegisterSet allocatable_regs)
+        : type(type), size(size), has_return_value(has_return_value), allocatable_regs(allocatable_regs) {}
 
 public:
     const ICType type;
     const int size;
     const bool has_return_value;
-    TypeRecorder* const type_recorder;
     assembler::RegisterSet allocatable_regs;
 
     int totalSize() const;
@@ -97,9 +91,9 @@ public:
         return llvm::CallingConv::C;
     }
 
-    static std::unique_ptr<ICSetupInfo>
-    initialize(bool has_return_value, int size, ICType type, TypeRecorder* type_recorder,
-               assembler::RegisterSet allocatable_regs = assembler::RegisterSet::stdAllocatable());
+    static std::unique_ptr<ICSetupInfo> initialize(bool has_return_value, int size, ICType type,
+                                                   assembler::RegisterSet allocatable_regs
+                                                   = assembler::RegisterSet::stdAllocatable());
 };
 
 struct PatchpointInfo {
@@ -178,18 +172,18 @@ public:
 };
 
 class ICInfo;
-std::unique_ptr<ICSetupInfo> createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size);
-std::unique_ptr<ICSetupInfo> createCallsiteIC(TypeRecorder* type_recorder, int num_args, ICInfo* bjit_ic_info);
-std::unique_ptr<ICSetupInfo> createGetGlobalIC(TypeRecorder* type_recorder);
-std::unique_ptr<ICSetupInfo> createGetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
-std::unique_ptr<ICSetupInfo> createSetattrIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
-std::unique_ptr<ICSetupInfo> createDelattrIC(TypeRecorder* type_recorder);
-std::unique_ptr<ICSetupInfo> createGetitemIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
-std::unique_ptr<ICSetupInfo> createSetitemIC(TypeRecorder* type_recorder);
-std::unique_ptr<ICSetupInfo> createDelitemIC(TypeRecorder* type_recorder);
-std::unique_ptr<ICSetupInfo> createBinexpIC(TypeRecorder* type_recorder, ICInfo* bjit_ic_info);
-std::unique_ptr<ICSetupInfo> createNonzeroIC(TypeRecorder* type_recorder);
-std::unique_ptr<ICSetupInfo> createHasnextIC(TypeRecorder* type_recorder);
+std::unique_ptr<ICSetupInfo> createGenericIC(bool has_return_value, int size);
+std::unique_ptr<ICSetupInfo> createCallsiteIC(int num_args, ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createGetGlobalIC();
+std::unique_ptr<ICSetupInfo> createGetattrIC(ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createSetattrIC(ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createDelattrIC();
+std::unique_ptr<ICSetupInfo> createGetitemIC(ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createSetitemIC();
+std::unique_ptr<ICSetupInfo> createDelitemIC();
+std::unique_ptr<ICSetupInfo> createBinexpIC(ICInfo* bjit_ic_info);
+std::unique_ptr<ICSetupInfo> createNonzeroIC();
+std::unique_ptr<ICSetupInfo> createHasnextIC();
 std::unique_ptr<ICSetupInfo> createDeoptIC();
 
 } // namespace pyston

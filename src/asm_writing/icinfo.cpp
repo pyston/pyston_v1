@@ -23,6 +23,7 @@
 #include "asm_writing/assembler.h"
 #include "asm_writing/mc_writer.h"
 #include "codegen/patchpoints.h"
+#include "codegen/type_recording.h"
 #include "codegen/unwinding.h"
 #include "core/common.h"
 #include "core/options.h"
@@ -339,14 +340,12 @@ static llvm::DenseMap<AST*, ICInfo*> ics_by_ast_node;
 
 ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int size,
                llvm::CallingConv::ID calling_conv, LiveOutSet _live_outs, assembler::GenericRegister return_register,
-               TypeRecorder* type_recorder, std::vector<Location> ic_global_decref_locations,
-               assembler::RegisterSet allocatable_registers)
+               std::vector<Location> ic_global_decref_locations, assembler::RegisterSet allocatable_registers)
     : next_slot_to_try(0),
       stack_info(stack_info),
       calling_conv(calling_conv),
       live_outs(std::move(_live_outs)),
       return_register(return_register),
-      type_recorder(type_recorder),
       retry_in(0),
       retry_backoff(1),
       times_rewritten(0),
@@ -416,7 +415,7 @@ std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t*
 
     ICInfo* icinfo
         = new ICInfo(start_addr, slowpath_rtn_addr, continue_addr, stack_info, ic->size, ic->getCallingConvention(),
-                     std::move(live_outs), return_register, ic->type_recorder, decref_info, ic->allocatable_regs);
+                     std::move(live_outs), return_register, decref_info, ic->allocatable_regs);
 
     assert(!ics_by_return_addr.count(slowpath_rtn_addr));
     ics_by_return_addr[slowpath_rtn_addr] = icinfo;
@@ -487,9 +486,10 @@ ICInfo* ICInfo::getICInfoForNode(AST* node) {
         return it->second;
     return NULL;
 }
-void ICInfo::associateNodeWithICInfo(AST* node) {
+void ICInfo::associateNodeWithICInfo(AST* node, std::unique_ptr<TypeRecorder> type_recorder) {
     assert(!this->node);
     this->node = node;
+    this->type_recorder = std::move(type_recorder);
     ics_by_ast_node[node] = this;
 }
 void ICInfo::appendDecrefInfosTo(std::vector<DecrefInfo>& dest_decref_infos) {

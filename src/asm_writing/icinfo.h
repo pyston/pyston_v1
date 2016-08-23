@@ -93,7 +93,7 @@ private:
     const llvm::CallingConv::ID calling_conv;
     LiveOutSet live_outs;
     const assembler::GenericRegister return_register;
-    TypeRecorder* const type_recorder;
+    std::unique_ptr<TypeRecorder> type_recorder;
     int retry_in, retry_backoff;
     int times_rewritten;
     assembler::RegisterSet allocatable_registers;
@@ -113,7 +113,7 @@ private:
 public:
     ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int size,
            llvm::CallingConv::ID calling_conv, LiveOutSet live_outs, assembler::GenericRegister return_register,
-           TypeRecorder* type_recorder, std::vector<Location> ic_global_decref_locations,
+           std::vector<Location> ic_global_decref_locations,
            assembler::RegisterSet allocatable_registers = assembler::RegisterSet::stdAllocatable());
     ~ICInfo();
     void* const start_addr, *const slowpath_rtn_addr, *const continue_addr;
@@ -123,6 +123,7 @@ public:
 
     llvm::CallingConv::ID getCallingConvention() { return calling_conv; }
     const LiveOutSet& getLiveOuts() { return live_outs; }
+    TypeRecorder* getTypeRecorder() { return type_recorder.get(); }
 
     std::unique_ptr<ICSlotRewrite> startRewrite(const char* debug_name);
     void invalidate(ICSlotInfo* entry);
@@ -145,7 +146,7 @@ public:
     friend class ICSlotRewrite;
 
     static ICInfo* getICInfoForNode(AST* node);
-    void associateNodeWithICInfo(AST* node);
+    void associateNodeWithICInfo(AST* node, std::unique_ptr<TypeRecorder> type_recorder);
 
     void appendDecrefInfosTo(std::vector<DecrefInfo>& dest_decref_infos);
 };
@@ -179,7 +180,7 @@ public:
     ICInfo* getICInfo() { return ic_entry->ic; }
     int getSlotSize() { return ic_entry->size; }
     uint8_t* getSlotStart() { return ic_entry->start_addr; }
-    TypeRecorder* getTypeRecorder() { return getICInfo()->type_recorder; }
+    TypeRecorder* getTypeRecorder() { return getICInfo()->getTypeRecorder(); }
     assembler::GenericRegister returnRegister() { return getICInfo()->return_register; }
     int getScratchSize() { return getICInfo()->stack_info.scratch_size; }
     int getScratchRspOffset() {
