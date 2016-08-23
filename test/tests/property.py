@@ -1,6 +1,3 @@
-# I think pypa has an issue parsing decorator expressions if they aren't simple names
-# https://github.com/vinzenz/libpypa/issues/15
-
 class C(object):
     def fget(self):
         return 5

@@ -10,7 +10,6 @@ The CPython tests I've included fail for various reasons. Recurring issues inclu
 - missing `__name__` attributes on capifuncs
 - missing `sys.__stdout__` attribute
 - `serialize_ast.cpp`: `writeColOffset: assert(v < 100000 || v == -1)` gets tripped
-- `pypa-parser.cpp`: readName: `assert(e.type == pypa::AstType::Name)`
 - `src/runtime/util.cpp`: `parseSlice`: `assert(isSubclass(start->cls, int_cls) || start->cls == none_cls)`
 
 ## List of files & why they're failing

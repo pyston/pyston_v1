@@ -2362,21 +2362,6 @@ public:
 
     bool visit_tryexcept(AST_TryExcept* node) override {
         assert(curblock);
-
-        // The pypa parser will generate a tryexcept node inside a try-finally block with
-        // no except clauses
-        if (node->handlers.size() == 0) {
-            assert(ENABLE_PYPA_PARSER);
-            assert(node->orelse.size() == 0);
-
-            for (AST_stmt* subnode : node->body) {
-                subnode->accept(this);
-                if (!curblock)
-                    break;
-            }
-            return true;
-        }
-
         assert(node->handlers.size() > 0);
 
         CFGBlock* exc_handler_block = cfg->addDeferredBlock();

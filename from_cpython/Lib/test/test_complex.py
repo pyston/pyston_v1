@@ -474,10 +474,8 @@ class ComplexTest(unittest.TestCase):
         self.assertEqual(repr(complex(0, -INF)), "-infj")
         self.assertEqual(repr(complex(0, NAN)), "nanj")
 
-    # Pyston change: This is a libpypa bug, waiting for upstream fix it
-    # please refer libpypa#47
-    # def test_neg(self):
-    #     self.assertEqual(-(1+6j), -1-6j)
+    def test_neg(self):
+        self.assertEqual(-(1+6j), -1-6j)
 
     def test_file(self):
         a = 3.33+4.43j

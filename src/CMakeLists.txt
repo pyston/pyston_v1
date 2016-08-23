@@ -7,7 +7,6 @@ set_source_files_properties(jit.cpp PROPERTIES COMPILE_DEFINITIONS "GITREV=${GIT
 
 include_directories(${CMAKE_BINARY_DIR})
 include_directories(${CMAKE_BINARY_DIR}/build_deps/libunwind/include)
-include_directories(${CMAKE_SOURCE_DIR}/build_deps/libpypa/src)
 include_directories(${CMAKE_SOURCE_DIR}/build_deps/lz4/lib)
 
 if(ENABLE_GPERFTOOLS)
@@ -60,7 +59,6 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		codegen/patchpoints.cpp
 		codegen/profiling/dumprof.cpp
 		codegen/profiling/profiling.cpp
-		codegen/pypa-parser.cpp
 		codegen/runtime_hooks.cpp
 		codegen/serialize_ast.cpp
 		codegen/stackmaps.cpp
@@ -109,10 +107,10 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/util.cpp
 		)
 
-add_dependencies(PYSTON_OBJECTS copy_stdlib libunwind_patched libunwind pypa ${LLVM_LIBS})
+add_dependencies(PYSTON_OBJECTS copy_stdlib libunwind_patched libunwind ${LLVM_LIBS})
 
 add_library(PYSTON_MAIN_OBJECT OBJECT jit.cpp)
-add_dependencies(PYSTON_MAIN_OBJECT copy_stdlib libunwind_patched libunwind pypa liblz4 ${LLVM_LIBS})
+add_dependencies(PYSTON_MAIN_OBJECT copy_stdlib libunwind_patched libunwind liblz4 ${LLVM_LIBS})
 
 # build stdlib
 add_subdirectory(runtime/inline)
