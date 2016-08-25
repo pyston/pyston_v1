@@ -1,6 +1,6 @@
 # Copy any changed stdlib files to the destination:
-file(GLOB_RECURSE STDLIB_SRCS Lib/ "*.py")
-file(GLOB_RECURSE STD_INCLUDES Include/ "*.h")
+file(GLOB_RECURSE STDLIB_SRCS Lib/*.py)
+file(GLOB_RECURSE STD_INCLUDES Include/*.h)
 set(STDLIB_TARGETS "")
 foreach(STDLIB_FILE ${STDLIB_SRCS})
     file(RELATIVE_PATH FN_REL ${CMAKE_SOURCE_DIR}/from_cpython/Lib ${STDLIB_FILE})
@@ -9,7 +9,7 @@ foreach(STDLIB_FILE ${STDLIB_SRCS})
     add_custom_command(OUTPUT ${TARGET} COMMAND
                        ${CMAKE_COMMAND} -E copy_if_different ${STDLIB_FILE} ${TARGET}
                        DEPENDS ${STDLIB_FILE}
-                       COMMENT "Copying ${FN_REL}"
+                       COMMENT "Copying Python stdlib ${FN_REL}"
                        )
     set(STDLIB_TARGETS ${STDLIB_TARGETS} ${TARGET})
 
@@ -23,7 +23,7 @@ foreach(STDLIB_FILE ${STD_INCLUDES})
     add_custom_command(OUTPUT ${TARGET} COMMAND
                        ${CMAKE_COMMAND} -E copy_if_different ${STDLIB_FILE} ${TARGET}
                        DEPENDS ${STDLIB_FILE}
-                       COMMENT "Copying ${FN_REL}"
+                       COMMENT "Copying Python header ${FN_REL}"
                        )
     set(STDLIB_TARGETS ${STDLIB_TARGETS} ${TARGET})
 
@@ -142,7 +142,7 @@ file(GLOB_RECURSE STDPYTHON_SRCS Python
     _warnings.c
     )
 
-# compile specified files in from_cpython/Python
+# compile specified files in from_cpython/Parser
 file(GLOB_RECURSE STDPARSER_SRCS Parser
     acceler.c
     grammar1.c
