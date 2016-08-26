@@ -299,7 +299,6 @@ ADD_PROFILE_FLAGS()
 
 include(sysconfigdata)
 
-add_subdirectory(lib_pyston)
 add_subdirectory(from_cpython)
 add_subdirectory(src)
 add_subdirectory(test/test_extension)
@@ -351,7 +350,7 @@ add_custom_target(check-format ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_
 add_custom_target(lint ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 
 # check
-add_custom_target(check-deps DEPENDS pyston copy_stdlib copy_libpyston clang-format ext_cpython ext_pyston unittests sharedmods)
+add_custom_target(check-deps DEPENDS pyston copy_stdlib clang-format ext_cpython ext_pyston unittests sharedmods)
 add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS check-deps)
 
 # {run,dbg,perf,memcheck,memleaks,cachegrind}_TESTNAME

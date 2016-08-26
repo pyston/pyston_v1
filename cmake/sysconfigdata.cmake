@@ -8,7 +8,7 @@ if (${ENABLE_REF_DEBUG})
     set(EXT_BUILD_FLAGS "-DPy_REF_DEBUG -DPYMALLOC_DEBUG -DPy_TRACE_REFS ${EXT_BUILD_FLAGS}")
 endif()
 
-configure_file(lib_pyston/_sysconfigdata.py.in lib/python2.7/_sysconfigdata.py)
+configure_file(cmake/_sysconfigdata.py.in lib/python2.7/_sysconfigdata.py)
 
 # CMake sucks: it has no idea that configure-generated files can be installed.
 # Just tell it to install whatever file is at that particular location, and rely on

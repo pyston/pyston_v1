@@ -180,7 +180,6 @@ add_custom_command(OUTPUT ${STDMODULES}
                    DEPENDS
                        pyston
                        copy_stdlib
-                       copy_libpyston
                        Modules/_multiprocessing/multiprocessing.c
                        Modules/_multiprocessing/semaphore.c
                        Modules/_multiprocessing/socket_connection.c

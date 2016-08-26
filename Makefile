@@ -654,10 +654,10 @@ CMAKE_SHAREDMODS := sharedmods ext_pyston
 
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
-	$(NINJA) -C $(CMAKE_DIR_DBG) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_DBG) pyston copy_stdlib $(CMAKE_SHAREDMODS) $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_DBG)/pyston $@
 pyston_release: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(CMAKE_DIR_RELEASE) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_RELEASE) pyston copy_stdlib $(CMAKE_SHAREDMODS) $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_RELEASE)/pyston $@
 
 CMAKE_SETUP_GCC := $(CMAKE_DIR_GCC)/build.ninja
@@ -667,7 +667,7 @@ $(CMAKE_SETUP_GCC):
 	cd $(CMAKE_DIR_GCC); CC='$(GCC)' CXX='$(GPP)' cmake $(COMMON_CMAKE_OPTIONS) -DCMAKE_BUILD_TYPE=Debug
 .PHONY: pyston_gcc
 pyston_gcc: $(CMAKE_SETUP_GCC)
-	$(NINJA) -C $(CMAKE_DIR_GCC) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_GCC) pyston copy_stdlib $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_GCC)/pyston $@
 
 CMAKE_SETUP_RELEASE_GCC := $(CMAKE_DIR_RELEASE_GCC)/build.ninja
@@ -677,7 +677,7 @@ $(CMAKE_SETUP_RELEASE_GCC):
 	cd $(CMAKE_DIR_RELEASE_GCC); CC='$(GCC)' CXX='$(GPP)' cmake $(COMMON_CMAKE_OPTIONS)  -DCMAKE_BUILD_TYPE=Release
 .PHONY: pyston_release_gcc
 pyston_release_gcc: $(CMAKE_SETUP_RELEASE_GCC)
-	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC) pyston copy_stdlib $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_RELEASE_GCC)/pyston $@
 
 
@@ -689,7 +689,7 @@ $(CMAKE_SETUP_RELEASE_GCC_PGO):
 	cd $(CMAKE_DIR_RELEASE_GCC_PGO); CC='$(GCC)' CXX='$(GPP)' cmake $(COMMON_CMAKE_OPTIONS) -DCMAKE_BUILD_TYPE=Release -DENABLE_PGO=ON -DPROFILE_STATE=use
 .PHONY: pyston_release_gcc_pgo
 pyston_release_gcc_pgo: $(CMAKE_SETUP_RELEASE_GCC_PGO) $(CMAKE_DIR_RELEASE_GCC_PGO)/.trained
-	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC_PGO) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC_PGO) pyston copy_stdlib $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_RELEASE_GCC_PGO)/pyston $@
 
 CMAKE_SETUP_RELEASE_GCC_PGO_INSTRUMENTED := $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED)/build.ninja
@@ -700,7 +700,7 @@ $(CMAKE_SETUP_RELEASE_GCC_PGO_INSTRUMENTED):
 
 .PHONY: pyston_release_gcc_pgo_instrumented
 pyston_release_gcc_pgo_instrumented: $(CMAKE_SETUP_RELEASE_GCC_PGO_INSTRUMENTED)
-	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED) pyston copy_stdlib copy_libpyston $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
+	$(NINJA) -C $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED) pyston copy_stdlib $(CMAKE_SHAREDMODS) ext_cpython $(NINJAFLAGS)
 	ln -sf $(CMAKE_DIR_RELEASE_GCC_PGO_INSTRUMENTED)/pyston $@
 
 PROFILE_TARGET := ./pyston $(SRC_DIR)/minibenchmarks/combined.py
