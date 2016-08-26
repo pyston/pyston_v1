@@ -33,7 +33,6 @@ python_exe = os.path.abspath(ENV_NAME + "/bin/python")
 
 sys.path.append(SQLALCHEMY_DIR + "/lib")
 sys.path.insert(0, SQLALCHEMY_DIR)
-sys.path.append(ENV_NAME + "/site-packages")
 sys.path.append(ENV_NAME + "/lib/python2.7/site-packages")
 
 os.chdir(SQLALCHEMY_DIR)
