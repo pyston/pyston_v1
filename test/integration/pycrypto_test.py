@@ -33,7 +33,7 @@ print "-- Installing pycrypto"
 subprocess.check_call([sys.executable, "setup.py", "install", "--prefix=install"], stdout=devnull)
 
 print "-- Testing pycrypto"
-sys.path.append("install/site-packages")
+sys.path.append("install/lib/python2.7/site-packages")
 
 test_string = "test string".ljust(16)
 

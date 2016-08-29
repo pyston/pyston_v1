@@ -17,7 +17,7 @@ create_virtenv(ENV_NAME,
                 "markupsafe == 0.23"]
                , force_create = True)
 
-sys.path.append(ENV_NAME + "/site-packages")
+sys.path.append(ENV_NAME + "/lib/python2.7/site-packages")
 
 from flask import Flask, Markup
 from jinja2 import Template 

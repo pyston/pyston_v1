@@ -16,7 +16,7 @@ subprocess.check_call(["wget", url], cwd=ENV_NAME)
 subprocess.check_call(["tar", "-zxf", "avro-1.7.7.tar.gz"], cwd=ENV_NAME)
 
 env = os.environ
-env["PYTHONPATH"] = os.path.abspath(os.path.join(ENV_NAME, "site-packages"))
+env["PYTHONPATH"] = os.path.abspath(os.path.join(ENV_NAME, "lib/python2.7/site-packages"))
 
 # this tests also fail when run in cpython with nose.
 # pytest makes two of this work but we can't currently run pytest...

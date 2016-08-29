@@ -1,7 +1,3 @@
-# This file is originally from CPython 2.7, with modifications for Pyston
-# We should probably create a pyston-specific version instead of modifying the
-# CPython one.
-
 """Provide access to Python's configuration information.  The specific
 configuration variables available depend heavily on the platform and
 configuration.  The values may be retrieved using
@@ -68,9 +64,6 @@ def get_python_version():
 
 
 def get_python_inc(plat_specific=0, prefix=None):
-    # Pyston change: this is the way we layout things internally:
-    return os.path.join(sys.prefix, "from_cpython/Include")
-
     """Return the directory containing installed Python header files.
 
     If 'plat_specific' is false (the default), this is the path to the
@@ -126,17 +119,12 @@ def get_python_lib(plat_specific=0, standard_lib=0, prefix=None):
         prefix = plat_specific and EXEC_PREFIX or PREFIX
 
     if os.name == "posix":
-        # Pyston change
-        # libpython = os.path.join(prefix,
-        #                         "lib", "python" + get_python_version())
         libpython = os.path.join(prefix,
-                                 "from_cpython", "Lib")
+                                 "lib", "python" + get_python_version())
         if standard_lib:
             return libpython
         else:
-            # Pyston change
-            # return os.path.join(libpython, "site-packages")
-            return os.path.join(prefix, "site-packages")
+            return os.path.join(libpython, "site-packages")
 
     elif os.name == "nt":
         if standard_lib:

@@ -1,20 +1,34 @@
 # Copy any changed stdlib files to the destination:
-file(GLOB_RECURSE STDLIB_SRCS Lib/ "*.py")
-file(GLOB_RECURSE STD_INCLUDES Include/ "*.h")
+file(GLOB_RECURSE STDLIB_SRCS Lib/*.py)
+file(GLOB_RECURSE STD_INCLUDES Include/*.h)
 set(STDLIB_TARGETS "")
-foreach(STDLIB_FILE ${STDLIB_SRCS} ${STD_INCLUDES})
-    file(RELATIVE_PATH FN_REL ${CMAKE_SOURCE_DIR} ${STDLIB_FILE})
-    set(TARGET ${CMAKE_BINARY_DIR}/${FN_REL})
+foreach(STDLIB_FILE ${STDLIB_SRCS})
+    file(RELATIVE_PATH FN_REL ${CMAKE_SOURCE_DIR}/from_cpython/Lib ${STDLIB_FILE})
+    set(TARGET ${CMAKE_BINARY_DIR}/lib/python2.7/${FN_REL})
 
     add_custom_command(OUTPUT ${TARGET} COMMAND
                        ${CMAKE_COMMAND} -E copy_if_different ${STDLIB_FILE} ${TARGET}
                        DEPENDS ${STDLIB_FILE}
-                       COMMENT "Copying ${FN_REL}"
+                       COMMENT "Copying Python stdlib ${FN_REL}"
                        )
     set(STDLIB_TARGETS ${STDLIB_TARGETS} ${TARGET})
 
     get_filename_component(DIR ${FN_REL} DIRECTORY)
-    install(FILES ${STDLIB_FILE} DESTINATION ${DIR})
+    install(FILES ${STDLIB_FILE} DESTINATION lib/python2.7/${DIR})
+endforeach(STDLIB_FILE)
+foreach(STDLIB_FILE ${STD_INCLUDES})
+    file(RELATIVE_PATH FN_REL ${CMAKE_SOURCE_DIR}/from_cpython/Include ${STDLIB_FILE})
+    set(TARGET ${CMAKE_BINARY_DIR}/include/python2.7/${FN_REL})
+
+    add_custom_command(OUTPUT ${TARGET} COMMAND
+                       ${CMAKE_COMMAND} -E copy_if_different ${STDLIB_FILE} ${TARGET}
+                       DEPENDS ${STDLIB_FILE}
+                       COMMENT "Copying Python header ${FN_REL}"
+                       )
+    set(STDLIB_TARGETS ${STDLIB_TARGETS} ${TARGET})
+
+    get_filename_component(DIR ${FN_REL} DIRECTORY)
+    install(FILES ${STDLIB_FILE} DESTINATION include/python2.7/${DIR})
 endforeach(STDLIB_FILE)
 add_custom_target(copy_stdlib ALL DEPENDS ${STDLIB_TARGETS})
 
@@ -128,7 +142,7 @@ file(GLOB_RECURSE STDPYTHON_SRCS Python
     _warnings.c
     )
 
-# compile specified files in from_cpython/Python
+# compile specified files in from_cpython/Parser
 file(GLOB_RECURSE STDPARSER_SRCS Parser
     acceler.c
     grammar1.c
@@ -144,29 +158,28 @@ add_library(FROM_CPYTHON OBJECT ${STDMODULE_SRCS} ${STDOBJECT_SRCS} ${STDPYTHON_
 add_dependencies(FROM_CPYTHON copy_stdlib)
 
 set(STDMODULES
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/bz2.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/cmath.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/cPickle.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_ctypes.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_curses.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_elementtree.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/future_builtins.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/grp.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_locale.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/mmap.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/_multiprocessing.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/parser.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/pyexpat.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/readline.pyston.so
-    ${CMAKE_BINARY_DIR}/from_cpython/Lib/termios.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/bz2.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/cmath.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/cPickle.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/_ctypes.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/_curses.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/_elementtree.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/future_builtins.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/grp.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/_locale.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/mmap.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/_multiprocessing.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/parser.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/pyexpat.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/readline.pyston.so
+    ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/termios.pyston.so
 )
 
 add_custom_command(OUTPUT ${STDMODULES}
-    COMMAND ${CMAKE_BINARY_DIR}/pyston setup.py build --build-lib ${CMAKE_BINARY_DIR}/from_cpython/Lib
+    COMMAND ${CMAKE_BINARY_DIR}/pyston setup.py build --build-lib ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload
                    DEPENDS
                        pyston
                        copy_stdlib
-                       copy_libpyston
                        Modules/_multiprocessing/multiprocessing.c
                        Modules/_multiprocessing/semaphore.c
                        Modules/_multiprocessing/socket_connection.c
@@ -193,6 +206,6 @@ add_custom_command(OUTPUT ${STDMODULES}
 		       Modules/cPickle.c
                        Modules/parsermodule.c
                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-add_custom_target(sharedmods ALL DEPENDS ${CMAKE_BINARY_DIR}/from_cpython/Lib/_multiprocessing.pyston.so)
+add_custom_target(sharedmods ALL DEPENDS ${CMAKE_BINARY_DIR}/lib/python2.7/lib-dynload/_multiprocessing.pyston.so)
 
-install(FILES ${STDMODULES} DESTINATION from_cpython/Lib)
+install(FILES ${STDMODULES} DESTINATION lib/python2.7/lib-dynload)
