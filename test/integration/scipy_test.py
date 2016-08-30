@@ -59,17 +59,18 @@ PYTHON_EXE = os.path.abspath(ENV_NAME + "/bin/python")
 CYTHON_DIR = os.path.abspath(os.path.join(SRC_DIR, "cython"))
 NUMPY_DIR = os.path.abspath(os.path.join(SRC_DIR, "numpy"))
 SCIPY_DIR = os.path.abspath(os.path.join(SRC_DIR, "scipy"))
+SKLEARN_DIR = os.path.abspath(os.path.join(SRC_DIR, "scikit-learn"))
 
 print_progress_header("Setting up Cython...")
 if not os.path.exists(CYTHON_DIR):
 
-    url = "https://github.com/cython/cython"
-    subprocess.check_call(["git", "clone", "--depth", "1", "--branch", "0.24", url], cwd=SRC_DIR)
+    url = "git@github.com:Daetalus/cython.git"
+    subprocess.check_call(["git", "clone", "-b", "pyston_patch", url], cwd=SRC_DIR)
 
-    if USE_CUSTOM_PATCHES:
-        PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "Cython-0.24.patch"))
-        subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=CYTHON_DIR)
-        print ">>> Applied Cython patch"
+    # if USE_CUSTOM_PATCHES:
+    #     PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "Cython-0.24.patch"))
+    #     subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=CYTHON_DIR)
+    #     print ">>> Applied Cython patch"
 
     try:
         subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=CYTHON_DIR)
@@ -81,6 +82,7 @@ else:
 
 env = os.environ
 CYTHON_BIN_DIR = os.path.abspath(os.path.join(ENV_NAME + "/bin"))
+env['NPY_NUM_BUILD_JOBS'] = '8'
 env["PATH"] = CYTHON_BIN_DIR + ":" + env["PATH"]
 
 print_progress_header("Cloning up NumPy...")
@@ -120,11 +122,20 @@ except:
     subprocess.check_call(["rm", "-rf", SCIPY_DIR + "/dist"])
     raise
 
-scip_test = "import scipy; scipy.test(verbose=2)"
+if not os.path.exists(SKLEARN_DIR):
+    print_progress_header("Cloning up Scikit-learn...")
+    url = "git@github.com:scikit-learn/scikit-learn.git"
+    subprocess.check_call(["git", "clone", url], cwd=SRC_DIR)
+else:
+    print ">>> Scikit-learn already installed."
 
-print_progress_header("Running SciPy test suite...")
-expected = [{'ran': 20391}]
-run_test([PYTHON_EXE, "-c", scip_test], cwd=CYTHON_DIR, expected=expected)
+try:
+    print_progress_header("Build scikit-learn inplace...")
+    subprocess.check_call([PYTHON_EXE, "setup.py", "build_ext", "--inplace"], cwd=SKLEARN_DIR, env=env)
+except:
+    subprocess.check_call(["rm", "-rf", SCIPY_DIR + "/build"])
+    raise
+
 
 print
 print "PASSED"
