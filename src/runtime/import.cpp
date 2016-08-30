@@ -181,7 +181,7 @@ BoxedModule* importCExtension(BoxedString* full_name, const std::string& last_na
 
 #ifdef Py_REF_DEBUG
     // if we load a foreign C extension we can't check that _Py_RefTotal == 0
-    if (!llvm::StringRef(path).endswith("from_cpython/Lib/" + last_name + ".pyston.so"))
+    if (!llvm::StringRef(path).endswith("lib/python2.7/lib-dynload/" + last_name + ".pyston.so"))
         imported_foreign_cextension = true;
 #endif
 
