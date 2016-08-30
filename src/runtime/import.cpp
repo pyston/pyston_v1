@@ -138,23 +138,16 @@ extern "C" Box* import(int level, Box* from_imports, llvm::StringRef module_name
 
 BoxedModule* importCExtension(BoxedString* full_name, const std::string& last_name, const std::string& path) {
     void* handle = dlopen(path.c_str(), RTLD_NOW);
-    if (!handle) {
-        const char* s = dlerror();
-        // raiseExcHelper(ImportError, "%s", dlerror());
-        fprintf(stderr, "%s\n", s);
-        exit(1);
-    }
+    if (!handle)
+        raiseExcHelper(ImportError, "%s", dlerror());
     assert(handle);
 
     std::string initname = "init" + last_name;
     void (*init)() = (void (*)())dlsym(handle, initname.c_str());
 
     char* error;
-    if ((error = dlerror()) != NULL) {
-        // raiseExcHelper(ImportError, "%s", error);
-        fprintf(stderr, "%s\n", error);
-        exit(1);
-    }
+    if ((error = dlerror()) != NULL)
+        raiseExcHelper(ImportError, "%s", error);
 
     assert(init);
 
