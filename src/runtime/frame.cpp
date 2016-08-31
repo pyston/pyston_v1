@@ -163,7 +163,7 @@ public:
         assert(hasExited());
     }
 
-    DEFAULT_CLASS(frame_cls);
+    DEFAULT_CLASS_SIMPLE(frame_cls, true);
 
     static BORROWED(Box*) boxFrame(FrameInfo* fi) {
         if (fi->frame_obj == NULL)

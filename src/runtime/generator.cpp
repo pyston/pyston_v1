@@ -434,7 +434,8 @@ extern "C" BoxedGenerator* createGenerator(BoxedFunctionBase* function, Box* arg
 static uint64_t* generator_timer_counter = Stats::getStatCounter("us_timer_generator_toplevel");
 #endif
 extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args)
-    : function(function),
+    : weakreflist(NULL),
+      function(function),
       arg1(arg1),
       arg2(arg2),
       arg3(arg3),
@@ -442,6 +443,7 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
       entryExited(false),
       running(false),
       returnValue(nullptr),
+      iterated_from__hasnext__(false),
       exception(nullptr, nullptr, nullptr),
       context(nullptr),
       returnContext(nullptr),

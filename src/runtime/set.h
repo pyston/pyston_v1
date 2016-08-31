@@ -31,11 +31,11 @@ public:
     Set s;
     Box** weakreflist; /* List of weak references */
 
-    BoxedSet() __attribute__((visibility("default"))) {}
+    BoxedSet() __attribute__((visibility("default"))) : weakreflist(NULL) {}
 
     template <typename T> __attribute__((visibility("default"))) BoxedSet(T&& s) : s(std::forward<T>(s)) {}
 
-    DEFAULT_CLASS(set_cls);
+    DEFAULT_CLASS_SIMPLE(set_cls, true);
 
     static void dealloc(Box* b) noexcept;
     static int traverse(Box* self, visitproc visit, void* arg) noexcept;

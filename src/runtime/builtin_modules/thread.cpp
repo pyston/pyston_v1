@@ -126,7 +126,7 @@ private:
 public:
     BoxedThreadLock() { lock_lock = PyThread_allocate_lock(); }
 
-    DEFAULT_CLASS(thread_lock_cls);
+    DEFAULT_CLASS_SIMPLE(thread_lock_cls, false);
 
     static Box* acquire(Box* _self, Box* _waitflag) {
         RELEASE_ASSERT(_self->cls == thread_lock_cls, "");

@@ -27,7 +27,7 @@ public:
     int pos;
     BoxedTupleIterator(BoxedTuple* t);
 
-    DEFAULT_CLASS(tuple_iterator_cls);
+    DEFAULT_CLASS_SIMPLE(tuple_iterator_cls, true);
 
     static void dealloc(BoxedTupleIterator* o) noexcept {
         PyObject_GC_UnTrack(o);

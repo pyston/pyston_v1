@@ -1116,7 +1116,7 @@ public:
     BoxedBuiltinFunctionOrMethod(FunctionMetadata* f, const char* name, std::initializer_list<Box*> defaults,
                                  BoxedClosure* closure = NULL, const char* doc = NULL);
 
-    DEFAULT_CLASS(builtin_function_or_method_cls);
+    DEFAULT_CLASS_SIMPLE(builtin_function_or_method_cls, true);
 };
 
 extern "C" void _PyModule_Clear(PyObject*) noexcept;
@@ -1268,7 +1268,7 @@ public:
     void* stack_begin;
     FrameInfo* top_caller_frame_info; // The FrameInfo that called into this generator.
 
-    // For abandoned-generator collection -- WIP
+    // For abandoned-generator collection
     FrameInfo* paused_frame_info; // The FrameInfo the generator was on when it called yield (or NULL if the generator
                                   // hasn't started or has exited).
 
@@ -1281,7 +1281,7 @@ public:
 
     BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
-    DEFAULT_CLASS(generator_cls);
+    DEFAULT_CLASS_SIMPLE(generator_cls, true);
 };
 
 Box* objectSetattr(Box* obj, Box* attr, Box* value);

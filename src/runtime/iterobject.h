@@ -76,7 +76,7 @@ public:
 
     BoxedIterWrapper(Box* iter) : iter(iter), next(NULL) { Py_INCREF(iter); }
 
-    DEFAULT_CLASS(iterwrapper_cls);
+    DEFAULT_CLASS_SIMPLE(iterwrapper_cls, true);
 
     static void dealloc(BoxedIterWrapper* o) noexcept {
         PyObject_GC_UnTrack(o);

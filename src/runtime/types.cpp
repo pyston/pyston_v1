@@ -2265,14 +2265,13 @@ private:
 public:
     AttrWrapperIter(AttrWrapper* aw);
 
-    DEFAULT_CLASS(attrwrapperiter_cls);
+    DEFAULT_CLASS_SIMPLE(attrwrapperiter_cls, false);
 
     static Box* hasnext(Box* _self);
     static Box* next(Box* _self);
     static Box* next_capi(Box* _self) noexcept;
 
     static void dealloc(Box* b) noexcept;
-    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
 };
 
 // A dictionary-like wrapper around the attributes array.
