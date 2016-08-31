@@ -35,7 +35,7 @@ public:
         Py_XINCREF(name);
     }
 
-    DEFAULT_CLASS(code_cls);
+    DEFAULT_CLASS_SIMPLE(code_cls, false);
 
     // These need to be static functions rather than methods because function
     // pointers could point to them.
@@ -48,7 +48,6 @@ public:
     static Box* varnames(Box* b, void*) noexcept;
     static Box* flags(Box* b, void*) noexcept;
 
-    static int traverse(Box* self, visitproc visit, void* arg) noexcept;
     static void dealloc(Box* b) noexcept;
 };
 }

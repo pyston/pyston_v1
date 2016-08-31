@@ -38,7 +38,7 @@ public:
         Py_INCREF(obj_type);
     }
 
-    DEFAULT_CLASS(super_cls);
+    DEFAULT_CLASS_SIMPLE(super_cls, true);
 
     static void dealloc(Box* b) noexcept {
         BoxedSuper* self = (BoxedSuper*)b;

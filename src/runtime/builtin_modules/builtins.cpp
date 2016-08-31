@@ -1318,7 +1318,7 @@ public:
         Py_XINCREF(idx_long);
     }
 
-    DEFAULT_CLASS(enumerate_cls);
+    DEFAULT_CLASS_SIMPLE(enumerate_cls, true);
 
     static Box* new_(Box* cls, Box* obj, Box* start) {
         RELEASE_ASSERT(cls == enumerate_cls, "");

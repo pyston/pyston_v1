@@ -37,7 +37,7 @@ public:
         Py_XINCREF(module);
     }
 
-    DEFAULT_CLASS(capifunc_cls);
+    DEFAULT_CLASS_SIMPLE(capifunc_cls, true);
 
     PyCFunction getFunction() { return method_def->ml_meth; }
 

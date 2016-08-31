@@ -163,7 +163,7 @@ public:
         assert(hasExited());
     }
 
-    DEFAULT_CLASS(frame_cls);
+    DEFAULT_CLASS_SIMPLE(frame_cls, true);
 
     static BORROWED(Box*) boxFrame(FrameInfo* fi) {
         if (fi->frame_obj == NULL)
@@ -271,6 +271,12 @@ extern "C" void deinitFrame(FrameInfo* frame_info) noexcept {
         PyErr_Clear();
     }
 
+    if (frame_info->exc.type) {
+        Py_CLEAR(frame_info->exc.type);
+        Py_CLEAR(frame_info->exc.value);
+        Py_CLEAR(frame_info->exc.traceback);
+    }
+
     assert(cur_thread_state.frame_info == frame_info);
     cur_thread_state.frame_info = frame_info->back;
     BoxedFrame* frame = frame_info->frame_obj;
@@ -288,12 +294,6 @@ extern "C" void deinitFrame(FrameInfo* frame_info) noexcept {
     decrefArray<true>(frame_info->vregs, num_vregs);
 
     Py_CLEAR(frame_info->boxedLocals);
-
-    if (frame_info->exc.type) {
-        Py_CLEAR(frame_info->exc.type);
-        Py_CLEAR(frame_info->exc.value);
-        Py_CLEAR(frame_info->exc.traceback);
-    }
 
     Py_CLEAR(frame_info->globals);
 

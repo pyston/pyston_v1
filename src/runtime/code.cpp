@@ -100,17 +100,8 @@ Box* BoxedCode::flags(Box* b, void*) noexcept {
     return boxInt(flags);
 }
 
-int BoxedCode::traverse(Box* self, visitproc visit, void* arg) noexcept {
-    BoxedCode* o = static_cast<BoxedCode*>(self);
-    Py_VISIT(o->_filename);
-    Py_VISIT(o->_name);
-    return 0;
-}
-
 void BoxedCode::dealloc(Box* b) noexcept {
     BoxedCode* o = static_cast<BoxedCode*>(b);
-
-    PyObject_GC_UnTrack(o);
 
     Py_XDECREF(o->_filename);
     Py_XDECREF(o->_name);
@@ -210,9 +201,8 @@ extern "C" int PyCode_HasFreeVars(PyCodeObject* _code) noexcept {
 }
 
 void setupCode() {
-    code_cls
-        = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedCode), false, "code", false,
-                             (destructor)BoxedCode::dealloc, NULL, true, (traverseproc)BoxedCode::traverse, NOCLEAR);
+    code_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedCode), false, "code", false,
+                                  (destructor)BoxedCode::dealloc, NULL, false, (traverseproc)NULL, NOCLEAR);
 
     code_cls->giveAttrBorrowed("__new__", Py_None); // Hacky way of preventing users from instantiating this
 

@@ -59,7 +59,7 @@ public:
 
     friend class BoxedXrangeIterator;
 
-    DEFAULT_CLASS(xrange_cls);
+    DEFAULT_CLASS_SIMPLE(xrange_cls, false);
 };
 
 class BoxedXrangeIterator : public Box {
@@ -87,7 +87,7 @@ public:
         cur = start;
     }
 
-    DEFAULT_CLASS(xrange_iterator_cls);
+    DEFAULT_CLASS_SIMPLE(xrange_iterator_cls, true);
 
     static llvm_compat_bool xrangeIteratorHasnextUnboxed(Box* s) __attribute__((visibility("default"))) {
         assert(s->cls == xrange_iterator_cls);

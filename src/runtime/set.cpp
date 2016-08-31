@@ -61,7 +61,7 @@ public:
 
     BoxedSetIterator(BoxedSet* s) : s(s), it(s->s.begin()), size(s->s.size()) { Py_INCREF(s); }
 
-    DEFAULT_CLASS(set_iterator_cls);
+    DEFAULT_CLASS_SIMPLE(set_iterator_cls, true);
 
     bool hasNext() { return it != s->s.end(); }
 
