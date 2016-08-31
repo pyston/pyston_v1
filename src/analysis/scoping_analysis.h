@@ -19,6 +19,7 @@
 
 #include "core/common.h"
 #include "core/stringpool.h"
+#include "core/types.h"
 
 namespace pyston {
 
@@ -26,16 +27,6 @@ class AST;
 class AST_Module;
 class AST_Expression;
 class AST_Suite;
-
-// Each closure has an array (fixed-size for that particular scope) of variables
-// and a parent pointer to a parent closure. To look up a variable from the passed-in
-// closure (i.e., DEREF), you just need to know (i) how many parents up to go and
-// (ii) what offset into the array to find the variable. This struct stores that
-// information. You can query the ScopeInfo with a name to get this info.
-struct DerefInfo {
-    size_t num_parents_from_passed_closure;
-    size_t offset;
-};
 
 class ScopeInfo {
 public:
@@ -155,25 +146,14 @@ private:
     AST_Module* parent_module;
     InternedStringPool* interned_strings;
 
-    llvm::DenseMap<AST*, AST*> scope_replacements;
-
-    std::unique_ptr<ScopeInfo> analyzeSubtree(AST* node);
+    void analyzeSubtree(AST* node);
     void processNameUsages(NameUsageMap* usages);
 
     bool globals_from_module;
 
 public:
-    // The scope-analysis is done before any CFG-ization is done,
-    // but many of the queries will be done post-CFG-ization.
-    // The CFG process can replace scope AST nodes with others (ex:
-    // generator expressions with generator functions), so we need to
-    // have a way of mapping the original analysis with the new queries.
-    // This is a hook for the CFG process to register when it has replaced
-    // a scope-node with a different node.
-    void registerScopeReplacement(AST* original_node, AST* new_node);
-
     ScopingAnalysis(AST* ast, bool globals_from_module);
-    std::unique_ptr<ScopeInfo> getScopeInfoForNode(AST* node);
+    ScopeInfo* getScopeInfoForNode(AST* node);
 
     InternedStringPool& getInternedStrings();
     bool areGlobalsFromModule() { return globals_from_module; }

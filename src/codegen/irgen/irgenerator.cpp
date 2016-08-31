@@ -70,12 +70,12 @@ IRGenState::~IRGenState() {
 }
 
 llvm::Value* IRGenState::getPassedClosure() {
-    assert(getScopeInfo()->takesClosure());
+    assert(getScopeInfo().takesClosure());
     assert(passed_closure);
     return passed_closure;
 }
 llvm::Value* IRGenState::getCreatedClosure() {
-    assert(getScopeInfo()->createsClosure());
+    assert(getScopeInfo().createsClosure());
     assert(created_closure);
     return created_closure;
 }
@@ -86,12 +86,12 @@ llvm::Value* IRGenState::getPassedGenerator() {
 }
 
 void IRGenState::setPassedClosure(llvm::Value* v) {
-    assert(getScopeInfo()->takesClosure());
+    assert(getScopeInfo().takesClosure());
     assert(!passed_closure);
     passed_closure = v;
 }
 void IRGenState::setCreatedClosure(llvm::Value* v) {
-    assert(getScopeInfo()->createsClosure());
+    assert(getScopeInfo().createsClosure());
     assert(!created_closure);
     created_closure = v;
 }
@@ -265,13 +265,13 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         this->globals = builder.CreateLoad(getGlobalsGep(builder, frame_info_arg));
         getRefcounts()->setType(this->globals, RefType::BORROWED);
 
-        if (getScopeInfo()->usesNameLookup()) {
+        if (getScopeInfo().usesNameLookup()) {
             // load frame_info.boxedLocals
             this->boxed_locals = builder.CreateLoad(getBoxedLocalsGep(builder, this->frame_info));
             getRefcounts()->setType(this->boxed_locals, RefType::BORROWED);
         }
 
-        if (getScopeInfo()->takesClosure()) {
+        if (getScopeInfo().takesClosure()) {
             passed_closure = builder.CreateLoad(getPassedClosureGep(builder, frame_info_arg));
             getRefcounts()->setType(passed_closure, RefType::BORROWED);
             this->setPassedClosure(passed_closure);
@@ -305,7 +305,7 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         llvm::Value* boxed_locals_gep = getBoxedLocalsGep(builder, al);
         builder.CreateStore(getNullPtr(g.llvm_value_type_ptr), boxed_locals_gep);
 
-        if (getScopeInfo()->usesNameLookup()) {
+        if (getScopeInfo().usesNameLookup()) {
             // frame_info.boxedLocals = createDict()
             // (Since this can call into the GC, we have to initialize it to NULL first as we did above.)
             this->boxed_locals = builder.CreateCall(g.funcs.createDict);
@@ -356,7 +356,7 @@ llvm::Value* IRGenState::getFrameInfoVar() {
 }
 
 llvm::Value* IRGenState::getBoxedLocalsVar() {
-    assert(getScopeInfo()->usesNameLookup());
+    assert(getScopeInfo().usesNameLookup());
     assert(this->boxed_locals != NULL);
     return this->boxed_locals;
 }
@@ -371,8 +371,8 @@ llvm::Value* IRGenState::getStmtVar() {
     return stmt;
 }
 
-ScopeInfo* IRGenState::getScopeInfo() {
-    return getSourceInfo()->getScopeInfo();
+const ScopingResults& IRGenState::getScopeInfo() {
+    return getSourceInfo()->scoping;
 }
 
 llvm::Value* IRGenState::getGlobals() {
@@ -381,7 +381,7 @@ llvm::Value* IRGenState::getGlobals() {
 }
 
 llvm::Value* IRGenState::getGlobalsIfCustom() {
-    if (source_info->scoping->areGlobalsFromModule())
+    if (source_info->scoping.areGlobalsFromModule())
         return getNullPtr(g.llvm_value_type_ptr);
     return getGlobals();
 }
@@ -863,14 +863,6 @@ private:
         emitter.getBuilder()->SetInsertPoint(curblock);
     }
 
-    template <typename T> InternedString internString(T&& s) {
-        return irstate->getSourceInfo()->getInternedStrings().get(std::forward<T>(s));
-    }
-
-    // InternedString getIsDefinedName(InternedString name) {
-    // return pyston::getIsDefinedName(name, irstate->getSourceInfo()->getInternedStrings());
-    //}
-
     CompilerVariable* evalAttribute(AST_Attribute* node, const UnwindInfo& unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);
 
@@ -1314,21 +1306,22 @@ private:
     }
 
     CompilerVariable* evalName(AST_Name* node, const UnwindInfo& unw_info) {
-        auto scope_info = irstate->getScopeInfo();
+        auto&& scope_info = irstate->getScopeInfo();
 
         bool is_kill = irstate->getLiveness()->isKill(node, myblock);
         assert(!is_kill || node->id.s()[0] == '#');
 
-        ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(node->id);
+        ScopeInfo::VarScopeType vst = node->lookup_type;
+        assert(vst != ScopeInfo::VarScopeType::UNKNOWN);
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             assert(!is_kill);
             return _getGlobal(node, unw_info);
         } else if (vst == ScopeInfo::VarScopeType::DEREF) {
             assert(!is_kill);
-            assert(scope_info->takesClosure());
+            assert(scope_info.takesClosure());
 
             // This is the information on how to look up the variable in the closure object.
-            DerefInfo deref_info = scope_info->getDerefInfo(node->id);
+            DerefInfo deref_info = scope_info.getDerefInfo(node);
 
             // This code is basically:
             // closure = created_closure;
@@ -1587,17 +1580,17 @@ private:
             decorators.push_back(evalExpr(d, unw_info));
         }
 
-        FunctionMetadata* md = wrapFunction(node, nullptr, irstate->getSourceInfo());
-        ScopeInfo* scope_info = md->source->getScopeInfo();
-        assert(scope_info);
+        FunctionMetadata* md = node->md;
+        assert(md);
+        const ScopingResults& scope_info = md->source->scoping;
 
         // TODO duplication with _createFunction:
         llvm::Value* this_closure = NULL;
-        if (scope_info->takesClosure()) {
-            if (irstate->getScopeInfo()->createsClosure()) {
+        if (scope_info.takesClosure()) {
+            if (irstate->getScopeInfo().createsClosure()) {
                 this_closure = irstate->getCreatedClosure();
             } else {
-                assert(irstate->getScopeInfo()->passesThroughClosure());
+                assert(irstate->getScopeInfo().passesThroughClosure());
                 this_closure = irstate->getPassedClosure();
             }
             assert(this_closure);
@@ -1607,7 +1600,7 @@ private:
         // one reason to do this is to pass the closure through if necessary,
         // but since the classdef can't create its own closure, shouldn't need to explicitly
         // create that scope to pass the closure through.
-        assert(irstate->getSourceInfo()->scoping->areGlobalsFromModule());
+        assert(irstate->getSourceInfo()->scoping.areGlobalsFromModule());
         CompilerVariable* func = makeFunction(emitter, md, this_closure, irstate->getGlobalsIfCustom(), {});
 
         CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(0), {}, NULL);
@@ -1630,8 +1623,9 @@ private:
         return cls;
     }
 
-    CompilerVariable* _createFunction(AST* node, const UnwindInfo& unw_info, AST_arguments* args) {
-        FunctionMetadata* md = wrapFunction(node, args, irstate->getSourceInfo());
+    CompilerVariable* _createFunction(AST_FunctionDef* node, const UnwindInfo& unw_info, AST_arguments* args) {
+        FunctionMetadata* md = node->md;
+        assert(md);
 
         std::vector<ConcreteCompilerVariable*> defaults;
         for (auto d : args->defaults) {
@@ -1640,14 +1634,14 @@ private:
             defaults.push_back(converted);
         }
 
-        bool takes_closure = md->source->scope_info->takesClosure();
+        bool takes_closure = md->source->scoping.takesClosure();
 
         llvm::Value* this_closure = NULL;
         if (takes_closure) {
-            if (irstate->getScopeInfo()->createsClosure()) {
+            if (irstate->getScopeInfo().createsClosure()) {
                 this_closure = irstate->getCreatedClosure();
             } else {
-                assert(irstate->getScopeInfo()->passesThroughClosure());
+                assert(irstate->getScopeInfo().passesThroughClosure());
                 this_closure = irstate->getPassedClosure();
             }
             assert(this_closure);
@@ -1889,16 +1883,20 @@ private:
     }
 
     // only updates symbol_table if we're *not* setting a global
-    void _doSet(int vreg, InternedString name, ScopeInfo::VarScopeType vst, CompilerVariable* val,
-                const UnwindInfo& unw_info) {
-        assert(name.s() != "None");
-        assert(name.s() != FRAME_INFO_PTR_NAME);
+    void _doSet(AST_Name* node, CompilerVariable* val, const UnwindInfo& unw_info) {
+        assert(node->id.s() != "None");
+        assert(node->id.s() != FRAME_INFO_PTR_NAME);
         assert(val->getType()->isUsable());
 
+        auto vst = node->lookup_type;
+        assert(vst != ScopeInfo::VarScopeType::UNKNOWN);
         assert(vst != ScopeInfo::VarScopeType::DEREF);
 
+        auto name = node->id;
+        auto vreg = node->vreg;
+
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-            if (irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
+            if (irstate->getSourceInfo()->scoping.areGlobalsFromModule()) {
                 auto parent_module = irstate->getGlobals();
                 ConcreteCompilerVariable* module = new ConcreteCompilerVariable(MODULE, parent_module);
                 module->setattr(emitter, getEmptyOpInfo(unw_info), name.getBox(), val);
@@ -1928,7 +1926,7 @@ private:
             bool maybe_was_undefined = popDefinedVar(vreg, true);
 
             if (vst == ScopeInfo::VarScopeType::CLOSURE) {
-                size_t offset = irstate->getScopeInfo()->getClosureOffset(name);
+                size_t offset = irstate->getScopeInfo().getClosureOffset(node);
 
                 // This is basically `closure->elts[offset] = val;`
                 llvm::Value* gep = getClosureElementGep(emitter, irstate->getCreatedClosure(), offset);
@@ -1946,15 +1944,6 @@ private:
             auto&& get_llvm_val = [&]() { return val->makeConverted(emitter, UNKNOWN)->getValue(); };
             _setVRegIfUserVisible(vreg, get_llvm_val, prev, maybe_was_undefined);
         }
-    }
-
-    void _doSet(AST_Name* name, CompilerVariable* val, const UnwindInfo& unw_info) {
-        auto scope_info = irstate->getScopeInfo();
-        auto vst = name->lookup_type;
-        if (vst == ScopeInfo::VarScopeType::UNKNOWN)
-            vst = scope_info->getScopeTypeOfName(name->id);
-        assert(vst != ScopeInfo::VarScopeType::DEREF);
-        _doSet(name->vreg, name->id, vst, val, unw_info);
     }
 
     void _doSetattr(AST_Attribute* target, CompilerVariable* val, const UnwindInfo& unw_info) {
@@ -2159,8 +2148,8 @@ private:
             return;
         }
 
-        auto scope_info = irstate->getScopeInfo();
-        ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
+        ScopeInfo::VarScopeType vst = target->lookup_type;
+        assert(vst != ScopeInfo::VarScopeType::UNKNOWN);
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             // Can't use delattr since the errors are different:
             emitter.createCall2(unw_info, g.funcs.delGlobal, irstate->getGlobals(),
@@ -2636,7 +2625,7 @@ private:
 
         SourceInfo* source = irstate->getSourceInfo();
         auto cfg = source->cfg;
-        ScopeInfo* scope_info = irstate->getScopeInfo();
+        auto&& scope_info = irstate->getScopeInfo();
 
         int num_vregs = symbol_table.numVregs();
         for (int vreg = 0; vreg < num_vregs; vreg++) {
@@ -2650,9 +2639,6 @@ private:
                 popDefinedVar(vreg, true);
                 symbol_table[vreg] = NULL;
             } else if (irstate->getPhis()->isRequiredAfter(vreg, myblock)) {
-                assert(!cfg->getVRegInfo().vregHasName(vreg)
-                       || scope_info->getScopeTypeOfName(cfg->getVRegInfo().getName(vreg))
-                              != ScopeInfo::VarScopeType::GLOBAL);
                 ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(vreg, myblock);
                 assert(phi_type->isUsable());
                 // printf("Converting %s from %s to %s\n", p.first.c_str(),
@@ -2678,7 +2664,6 @@ private:
             auto name = irstate->getCFG()->getVRegInfo().getName(vreg);
             if (VERBOSITY() >= 3)
                 printf("phi will be required for %s\n", name.c_str());
-            assert(scope_info->getScopeTypeOfName(name) != ScopeInfo::VarScopeType::GLOBAL);
             CompilerVariable*& cur = symbol_table[vreg];
 
             if (cur != NULL) {
@@ -2732,11 +2717,11 @@ public:
             if (source->is_generator)
                 stackmap_args.push_back(irstate->getPassedGenerator());
 
-            auto scoping = source->getScopeInfo();
-            if (scoping->takesClosure())
+            auto&& scoping = source->scoping;
+            if (scoping.takesClosure())
                 stackmap_args.push_back(irstate->getPassedClosure());
 
-            if (scoping->createsClosure())
+            if (scoping.createsClosure())
                 stackmap_args.push_back(irstate->getCreatedClosure());
 
             typedef std::pair<InternedString, CompilerVariable*> Entry;
@@ -2837,8 +2822,6 @@ public:
         assert(name.s() != PASSED_CLOSURE_NAME);
         assert(name.s() != PASSED_GENERATOR_NAME);
         assert(name.s()[0] != '!');
-        ASSERT(irstate->getScopeInfo()->getScopeTypeOfName(name) != ScopeInfo::VarScopeType::GLOBAL, "%s",
-               name.c_str());
 
         int vreg = irstate->getSourceInfo()->cfg->getVRegInfo().getVReg(name);
         giveLocalSymbol(vreg, var);
@@ -2866,7 +2849,7 @@ public:
     void doFunctionEntry(const ParamNames& param_names, const std::vector<ConcreteCompilerType*>& arg_types) override {
         assert(param_names.totalParameters() == arg_types.size());
 
-        auto scope_info = irstate->getScopeInfo();
+        auto&& scope_info = irstate->getScopeInfo();
 
         // TODO: move this to irgen.cpp?
 
@@ -2875,7 +2858,7 @@ public:
 
         llvm::Value* passed_closure_or_null;
 
-        if (scope_info->takesClosure()) {
+        if (scope_info.takesClosure()) {
             passed_closure_or_null = AI;
             irstate->setPassedClosure(passed_closure_or_null);
             ++AI;
@@ -2892,7 +2875,7 @@ public:
             ++AI;
         }
 
-        if (!irstate->getSourceInfo()->scoping->areGlobalsFromModule()) {
+        if (!irstate->getSourceInfo()->scoping.areGlobalsFromModule()) {
             globals = AI;
             emitter.setType(globals, RefType::BORROWED);
             ++AI;
@@ -2904,9 +2887,9 @@ public:
 
         irstate->setupFrameInfoVar(passed_closure_or_null, globals);
 
-        if (scope_info->createsClosure()) {
+        if (scope_info.createsClosure()) {
             auto created_closure = emitter.getBuilder()->CreateCall2(
-                g.funcs.createClosure, passed_closure_or_null, getConstantInt(scope_info->getClosureSize(), g.i64));
+                g.funcs.createClosure, passed_closure_or_null, getConstantInt(scope_info.getClosureSize(), g.i64));
             irstate->setCreatedClosure(created_closure);
             emitter.setType(created_closure, RefType::OWNED);
         }
@@ -3206,22 +3189,5 @@ std::tuple<llvm::Value*, llvm::Value*, llvm::Value*> createLandingpad(llvm::Basi
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                                CFGBlock* myblock, TypeAnalysis* types) {
     return new IRGeneratorImpl(irstate, entry_blocks, myblock, types);
-}
-
-FunctionMetadata* wrapFunction(AST* node, AST_arguments* args, SourceInfo* source) {
-    // Different compilations of the parent scope of a functiondef should lead
-    // to the same FunctionMetadata* being used:
-    static llvm::DenseMap<AST*, FunctionMetadata*> made;
-
-    FunctionMetadata*& md = made[node];
-    if (md == NULL) {
-        std::unique_ptr<SourceInfo> si(
-            new SourceInfo(source->parent_module, source->scoping, source->future_flags, node, source->getFn()));
-        if (args)
-            md = new FunctionMetadata(args->args.size(), args->vararg, args->kwarg, std::move(si));
-        else
-            md = new FunctionMetadata(0, false, false, std::move(si));
-    }
-    return md;
 }
 }

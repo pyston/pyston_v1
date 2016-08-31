@@ -4771,7 +4771,7 @@ static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, Box
         }
     }
 
-    assert((globals == NULL) == (!chosen_cf->md->source || chosen_cf->md->source->scoping->areGlobalsFromModule()));
+    assert((globals == NULL) == (!chosen_cf->md->source || chosen_cf->md->source->scoping.areGlobalsFromModule()));
 
     Box* maybe_args[3];
     int nmaybe_args = 0;

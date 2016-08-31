@@ -118,7 +118,7 @@ public:
     LivenessAnalysis* getLiveness() { return source_info->getLiveness(); }
     PhiAnalysis* getPhis() { return phis.get(); }
 
-    ScopeInfo* getScopeInfo();
+    const ScopingResults& getScopeInfo();
 
     llvm::MDNode* getFuncDbgInfo() { return func_dbg_info; }
 
@@ -204,7 +204,6 @@ IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRG
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                                CFGBlock* myblock, TypeAnalysis* types);
 
-FunctionMetadata* wrapFunction(AST* node, AST_arguments* args, SourceInfo* source);
 std::vector<BoxedString*>* getKeywordNameStorage(AST_Call* node);
 }
 

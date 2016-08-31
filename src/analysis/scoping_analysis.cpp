@@ -24,6 +24,28 @@
 
 namespace pyston {
 
+ScopingResults::ScopingResults(ScopeInfo* scope_info, bool globals_from_module)
+    : are_locals_from_module(scope_info->areLocalsFromModule()),
+      are_globals_from_module(globals_from_module),
+      creates_closure(scope_info->createsClosure()),
+      takes_closure(scope_info->takesClosure()),
+      passes_through_closure(scope_info->passesThroughClosure()),
+      uses_name_lookup(scope_info->usesNameLookup()),
+      closure_size(creates_closure ? scope_info->getClosureSize() : 0) {
+    deref_info = scope_info->getAllDerefVarsAndInfo();
+}
+
+DerefInfo ScopingResults::getDerefInfo(AST_Name* node) const {
+    assert(node->lookup_type == ScopeInfo::VarScopeType::DEREF);
+    assert(node->deref_info.offset != INT_MAX);
+    return node->deref_info;
+}
+size_t ScopingResults::getClosureOffset(AST_Name* node) const {
+    assert(node->lookup_type == ScopeInfo::VarScopeType::CLOSURE);
+    assert(node->closure_offset != -1);
+    return node->closure_offset;
+}
+
 class YieldVisitor : public NoopASTVisitor {
 public:
     AST* starting_node;
@@ -933,46 +955,22 @@ InternedStringPool& ScopingAnalysis::getInternedStrings() {
     return *interned_strings;
 }
 
-std::unique_ptr<ScopeInfo> ScopingAnalysis::analyzeSubtree(AST* node) {
+void ScopingAnalysis::analyzeSubtree(AST* node) {
     NameUsageMap usages;
     usages[node] = new ScopeNameUsage(node, NULL, this);
     NameCollectorVisitor::collect(node, &usages, this);
 
     processNameUsages(&usages);
-
-    std::unique_ptr<ScopeInfo> rtn = std::move(scopes[node]);
-    // scopes.erase(node);
-    assert(rtn);
-    return rtn;
 }
 
-void ScopingAnalysis::registerScopeReplacement(AST* original_node, AST* new_node) {
-    assert(scope_replacements.count(original_node) == 0);
-    assert(scope_replacements.count(new_node) == 0);
-    assert(scopes.count(new_node) == 0);
-
-#ifndef NDEBUG
-    // NULL this out just to make sure it doesn't get accessed:
-    scopes[new_node] = NULL;
-#endif
-
-    scope_replacements[new_node] = original_node;
-}
-
-std::unique_ptr<ScopeInfo> ScopingAnalysis::getScopeInfoForNode(AST* node) {
+ScopeInfo* ScopingAnalysis::getScopeInfoForNode(AST* node) {
     assert(node);
 
-    auto it = scope_replacements.find(node);
-    if (it != scope_replacements.end())
-        node = it->second;
+    if (!scopes.count(node))
+        analyzeSubtree(node);
 
-    if (scopes.count(node)) {
-        std::unique_ptr<ScopeInfo> rtn = std::move(scopes[node]);
-        assert(rtn);
-        return rtn;
-    }
-
-    return analyzeSubtree(node);
+    assert(scopes.count(node));
+    return scopes[node].get();
 }
 
 ScopingAnalysis::ScopingAnalysis(AST* ast, bool globals_from_module)
