@@ -1022,12 +1022,15 @@ public:
 class AST_MakeFunction : public AST_expr {
 public:
     AST_FunctionDef* function_def;
+    class BoxedCode* code = NULL;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_MakeFunction(AST_FunctionDef* fd)
-        : AST_expr(AST_TYPE::MakeFunction, fd->lineno, fd->col_offset), function_def(fd) {}
+
+    AST_MakeFunction(AST_FunctionDef* fd, BoxedCode* code = NULL)
+        : AST_expr(AST_TYPE::MakeFunction, fd->lineno, fd->col_offset), function_def(fd), code(code) {}
+    ~AST_MakeFunction();
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::MakeFunction;
 };
@@ -1035,11 +1038,14 @@ public:
 class AST_MakeClass : public AST_expr {
 public:
     AST_ClassDef* class_def;
+    class BoxedCode* code = NULL;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_MakeClass(AST_ClassDef* cd) : AST_expr(AST_TYPE::MakeClass, cd->lineno, cd->col_offset), class_def(cd) {}
+    AST_MakeClass(AST_ClassDef* cd, BoxedCode* code)
+        : AST_expr(AST_TYPE::MakeClass, cd->lineno, cd->col_offset), class_def(cd), code(code) {}
+    ~AST_MakeClass();
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::MakeClass;
 };
@@ -1448,7 +1454,7 @@ public:
 // This is useful for analyses that care more about the constituent nodes than the
 // exact tree structure; ex, finding all "global" directives.
 void flatten(const llvm::SmallVector<AST_stmt*, 4>& roots, std::vector<AST*>& output, bool expand_scopes);
-void flatten(AST_expr* root, std::vector<AST*>& output, bool expand_scopes);
+void flatten(AST* root, std::vector<AST*>& output, bool expand_scopes);
 // Similar to the flatten() function, but filters for a specific type of ast nodes:
 template <class T, class R> void findNodes(const R& roots, std::vector<T*>& output, bool expand_scopes) {
     std::vector<AST*> flattened;

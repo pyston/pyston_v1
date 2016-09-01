@@ -106,6 +106,13 @@ void BoxedCode::dealloc(Box* b) noexcept {
     Py_XDECREF(o->_filename);
     Py_XDECREF(o->_name);
 
+    if (o->f) {
+        // assert(md->code_obj == b);
+        o->f->setCode(NULL);
+        delete o->f;
+        o->f = NULL;
+    }
+
     o->cls->tp_free(o);
 }
 

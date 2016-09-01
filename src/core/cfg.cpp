@@ -260,7 +260,7 @@ public:
     // For example if we convert a generator expression into a function, the new function
     // should get passed as 'ast', but the original generator expression should get
     // passed as 'orig_node' so that the scoping analysis can know what we're talking about.
-    void runRecursively(AST* ast, AST_arguments* args, AST* orig_node);
+    BoxedCode* runRecursively(AST* ast, AST_arguments* args, AST* orig_node);
 };
 
 static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
@@ -1204,7 +1204,7 @@ private:
                                    y->lineno = node->lineno;
                                    insert_point->push_back(makeExpr(y));
                                });
-        cfgizer->runRecursively(func->function_def, func->function_def->args, node);
+        func->code = cfgizer->runRecursively(func->function_def, func->function_def->args, node);
 
         InternedString func_var_name = nodeName();
         pushAssign(func_var_name, func);
@@ -1251,7 +1251,7 @@ private:
         rtn->lineno = node->lineno;
         func->function_def->body.push_back(rtn);
 
-        cfgizer->runRecursively(func->function_def, func->function_def->args, node);
+        func->code = cfgizer->runRecursively(func->function_def, func->function_def->args, node);
 
         InternedString func_var_name = nodeName();
         pushAssign(func_var_name, func);
@@ -1325,10 +1325,10 @@ private:
         def->body = { stmt };
         def->args = remapArguments(node->args);
 
-        cfgizer->runRecursively(def, def->args, node);
+        BoxedCode* code = cfgizer->runRecursively(def, def->args, node);
 
         auto tmp = nodeName();
-        pushAssign(tmp, new AST_MakeFunction(def));
+        pushAssign(tmp, new AST_MakeFunction(def, code));
 
         return makeLoad(tmp, def, /* is_kill */ false);
     }
@@ -1764,10 +1764,10 @@ public:
         for (auto expr : node->bases)
             def->bases.push_back(remapExpr(expr));
 
-        cfgizer->runRecursively(def, nullptr, node);
+        BoxedCode* code = cfgizer->runRecursively(def, nullptr, node);
 
         auto tmp = nodeName();
-        pushAssign(tmp, new AST_MakeClass(def));
+        pushAssign(tmp, new AST_MakeClass(def, code));
         pushAssign(scoping->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, 0, true));
 
         return true;
@@ -1785,10 +1785,10 @@ public:
             def->decorator_list.push_back(remapExpr(expr));
         def->args = remapArguments(node->args);
 
-        cfgizer->runRecursively(def, node->args, node);
+        BoxedCode* code = cfgizer->runRecursively(def, node->args, node);
 
         auto tmp = nodeName();
-        pushAssign(tmp, new AST_MakeFunction(def));
+        pushAssign(tmp, new AST_MakeFunction(def, code));
         pushAssign(scoping->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, node->col_offset, true));
 
         return true;
@@ -3287,7 +3287,7 @@ InternedStringPool& stringpoolForAST(AST* ast) {
     RELEASE_ASSERT(0, "%d", ast->type);
 }
 
-void ModuleCFGProcessor::runRecursively(AST* ast, AST_arguments* args, AST* orig_node) {
+BoxedCode* ModuleCFGProcessor::runRecursively(AST* ast, AST_arguments* args, AST* orig_node) {
     ScopeInfo* scope_info = scoping.getScopeInfoForNode(orig_node);
     std::unique_ptr<SourceInfo> si(
         new SourceInfo(bm, ScopingResults(scope_info, scoping.areGlobalsFromModule()), future_flags, ast, fn));
@@ -3299,15 +3299,19 @@ void ModuleCFGProcessor::runRecursively(AST* ast, AST_arguments* args, AST* orig
     si->cfg = computeCFG(si.get(), param_names, scope_info, this);
 
     FunctionMetadata* md;
+    BoxedCode* code = NULL;
     if (args)
-        md = new FunctionMetadata(args->args.size(), args->vararg, args->kwarg, std::move(si), std::move(param_names));
+        std::tie(md, code) = FunctionMetadata::createFromSource(args->args.size(), args->vararg, args->kwarg,
+                                                                std::move(si), std::move(param_names));
     else
-        md = new FunctionMetadata(0, false, false, std::move(si), std::move(param_names));
+        std::tie(md, code) = FunctionMetadata::createFromSource(0, false, false, std::move(si), std::move(param_names));
     metadataForAST(ast) = md;
+    return code;
 }
 
-void computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn, BoxedModule* bm) {
-    ModuleCFGProcessor(ast, globals_from_module, future_flags, fn, bm).runRecursively(ast, nullptr, ast);
+BoxedCode* computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn,
+                          BoxedModule* bm) {
+    return ModuleCFGProcessor(ast, globals_from_module, future_flags, fn, bm).runRecursively(ast, nullptr, ast);
 }
 
 void printCFG(CFG* cfg) {

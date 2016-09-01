@@ -562,6 +562,12 @@ public:
                                         Box**, const std::vector<BoxedString*>*> InternalCallable;
     InternalCallable internal_callable;
 
+    static std::pair<FunctionMetadata*, BoxedCode*> createFromSource(int num_args, bool takes_varargs,
+                                                                     bool takes_kwargs,
+                                                                     std::unique_ptr<SourceInfo> source,
+                                                                     ParamNames param_names);
+
+
     FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source,
                      ParamNames param_names);
     FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs,
@@ -570,6 +576,7 @@ public:
 
     int numReceivedArgs() { return num_args + takes_varargs + takes_kwargs; }
 
+    void setCode(BoxedCode* code);
     BORROWED(BoxedCode*) getCode();
 
     bool isGenerator() const {

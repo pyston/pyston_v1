@@ -371,9 +371,6 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, llvm::Arra
     }
 }
 
-BoxedFunction::BoxedFunction(FunctionMetadata* md) : BoxedFunction(md, {}) {
-}
-
 BoxedFunction::BoxedFunction(FunctionMetadata* md, llvm::ArrayRef<Box*> defaults, BoxedClosure* closure, Box* globals,
                              bool can_change_defaults)
     : BoxedFunctionBase(md, defaults, closure, globals, can_change_defaults) {
@@ -384,6 +381,7 @@ BoxedFunction::BoxedFunction(FunctionMetadata* md, llvm::ArrayRef<Box*> defaults
     if (md->source) {
         assert(!this->name);
         this->name = incref(static_cast<BoxedString*>(md->source->getName()));
+        this->code = incref(md->getCode());
     }
 }
 
@@ -428,6 +426,8 @@ static void functionDtor(Box* b) {
         auto parent_module = self->md->source->parent_module;
         Py_DECREF(parent_module);
     }
+    if (b->cls == function_cls)
+        Py_XDECREF(((BoxedFunction*)b)->code);
     Py_XDECREF(self->defaults);
 
     self->cls->tp_free(self);
@@ -441,6 +441,7 @@ static int func_traverse(BoxedFunction* f, visitproc visit, void* arg) noexcept 
     Py_VISIT(f->doc);
     Py_VISIT(f->name);
     Py_VISIT(f->closure);
+    Py_VISIT(f->code);
 
     if (f->md->source) {
         Py_VISIT(f->md->source->parent_module);
@@ -1685,7 +1686,9 @@ static Box* builtin_function_or_method_name(Box* b, void*) noexcept {
 static Box* function_code(Box* self, void*) noexcept {
     assert(self->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
-    return incref(func->md->getCode());
+    if (!func->code)
+        func->code = incref(func->md->getCode());
+    return incref(func->code);
 }
 
 extern "C" PyObject* PyFunction_GetCode(PyObject* func) noexcept {
@@ -1708,7 +1711,9 @@ static int function_set_code(Box* self, Box* v, void*) noexcept {
     RELEASE_ASSERT(!func->md->internal_callable.get<CXX>() && !func->md->internal_callable.get<CAPI>(),
                    "this could cause invalidation issues");
 
+    AUTO_XDECREF(func->code);
     func->md = code->f;
+    func->code = incref(code);
     func->dependent_ics.invalidateAll();
 
     return 0;

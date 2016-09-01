@@ -333,7 +333,8 @@ public:
 FunctionMetadata*& metadataForAST(AST* ast);
 InternedStringPool& stringpoolForAST(AST* ast);
 
-void computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn, BoxedModule* bm);
+BoxedCode* computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn,
+                          BoxedModule* bm);
 void printCFG(CFG* cfg);
 }
 
