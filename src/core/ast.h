@@ -400,7 +400,7 @@ public:
     std::vector<AST_stmt*> body;
     InternedString name;
 
-    FunctionMetadata* md;
+    BoxedCode* code;
 
     AST_ClassDef() : AST_stmt(AST_TYPE::ClassDef) {}
 
@@ -511,7 +511,7 @@ public:
     // this should be an expr but we convert it into a AST_Return(AST_expr) to make the code simpler
     AST_stmt* body;
 
-    FunctionMetadata* md;
+    BoxedCode* code;
 
     virtual void accept(ASTVisitor* v);
 
@@ -553,7 +553,7 @@ public:
     InternedString name; // if the name is not set this is a lambda
     AST_arguments* args;
 
-    FunctionMetadata* md;
+    BoxedCode* code;
 
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
@@ -710,7 +710,7 @@ public:
     // no lineno, col_offset attributes
     std::vector<AST_stmt*> body;
 
-    FunctionMetadata* md;
+    BoxedCode* code;
 
     virtual void accept(ASTVisitor* v);
 

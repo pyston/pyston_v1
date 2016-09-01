@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-#include "runtime/code.h"
 
 #include <sstream>
 
+#include "codegen/baseline_jit.h"
 #include "core/ast.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
@@ -31,7 +31,7 @@ BORROWED(Box*) BoxedCode::name(Box* b, void*) noexcept {
     BoxedCode* code = static_cast<BoxedCode*>(b);
     if (code->_name)
         return code->_name;
-    return code->f->source->getName();
+    return code->source->getName();
 }
 
 Box* BoxedCode::co_name(Box* b, void* arg) noexcept {
@@ -43,7 +43,7 @@ BORROWED(Box*) BoxedCode::filename(Box* b, void*) noexcept {
     BoxedCode* code = static_cast<BoxedCode*>(b);
     if (code->_filename)
         return code->_filename;
-    return code->f->source->getFn();
+    return code->source->getFn();
 }
 
 Box* BoxedCode::co_filename(Box* b, void* arg) noexcept {
@@ -53,27 +53,26 @@ Box* BoxedCode::co_filename(Box* b, void* arg) noexcept {
 Box* BoxedCode::firstlineno(Box* b, void*) noexcept {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
-    FunctionMetadata* md = code->f;
 
-    if (!md || !md->source)
+    if (!code || !code->source)
         return boxInt(code->_firstline);
 
-    if (md->source->ast->lineno == (uint32_t)-1)
+    if (code->source->ast->lineno == (uint32_t)-1)
         return boxInt(-1);
 
-    return boxInt(md->source->ast->lineno);
+    return boxInt(code->source->ast->lineno);
 }
 
 Box* BoxedCode::argcount(Box* b, void*) noexcept {
     RELEASE_ASSERT(b->cls == code_cls, "");
-    return boxInt(static_cast<BoxedCode*>(b)->f->num_args);
+    return boxInt(static_cast<BoxedCode*>(b)->num_args);
 }
 
 Box* BoxedCode::varnames(Box* b, void*) noexcept {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
 
-    auto& param_names = code->f->param_names;
+    auto& param_names = code->param_names;
     if (!param_names.takes_param_names)
         return incref(EmptyTuple);
 
@@ -91,11 +90,11 @@ Box* BoxedCode::flags(Box* b, void*) noexcept {
     BoxedCode* code = static_cast<BoxedCode*>(b);
 
     int flags = 0;
-    if (code->f->param_names.has_vararg_name)
+    if (code->param_names.has_vararg_name)
         flags |= CO_VARARGS;
-    if (code->f->param_names.has_kwarg_name)
+    if (code->param_names.has_kwarg_name)
         flags |= CO_VARKEYWORDS;
-    if (code->f->isGenerator())
+    if (code->isGenerator())
         flags |= CO_GENERATOR;
     return boxInt(flags);
 }
@@ -109,9 +108,19 @@ void BoxedCode::dealloc(Box* b) noexcept {
     o->cls->tp_free(o);
 }
 
-FunctionMetadata* metadataFromCode(Box* code) {
-    assert(code->cls == code_cls);
-    return static_cast<BoxedCode*>(code)->f;
+
+// The dummy constructor for PyCode_New:
+BoxedCode::BoxedCode(Box* filename, Box* name, int firstline)
+    : _filename(filename),
+      _name(name),
+      _firstline(firstline),
+      param_names(ParamNames::empty()),
+      takes_varargs(false),
+      takes_kwargs(false),
+      num_args(0),
+      internal_callable(nullptr, nullptr) {
+    Py_XINCREF(filename);
+    Py_XINCREF(name);
 }
 
 extern "C" PyCodeObject* PyCode_New(int argcount, int nlocals, int stacksize, int flags, PyObject* code,
@@ -197,13 +206,10 @@ extern "C" BORROWED(PyObject*) PyCode_GetName(PyCodeObject* op) noexcept {
 
 extern "C" int PyCode_HasFreeVars(PyCodeObject* _code) noexcept {
     BoxedCode* code = (BoxedCode*)_code;
-    return code->f->source->scoping.takesClosure() ? 1 : 0;
+    return code->source->scoping.takesClosure() ? 1 : 0;
 }
 
 void setupCode() {
-    code_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedCode), false, "code", false,
-                                  (destructor)BoxedCode::dealloc, NULL, false, (traverseproc)NULL, NOCLEAR);
-
     code_cls->giveAttrBorrowed("__new__", Py_None); // Hacky way of preventing users from instantiating this
 
     code_cls->giveAttrDescriptor("co_name", BoxedCode::co_name, NULL);

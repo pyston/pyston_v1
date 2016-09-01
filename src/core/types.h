@@ -147,6 +147,7 @@ class Box;
 class BoxedClass;
 class BoxedModule;
 class BoxedFunctionBase;
+class BoxedCode;
 
 class ICGetattr;
 struct ICSlotInfo;
@@ -162,7 +163,6 @@ class AST_stmt;
 class PhiAnalysis;
 class LivenessAnalysis;
 
-class FunctionMetadata;
 class OSREntryDescriptor;
 
 // Pyston's internal calling convention is to pass around arguments in as unprocessed a form as possible,
@@ -367,7 +367,7 @@ extern std::vector<Box*> late_constants; // constants that should be freed after
 struct CompiledFunction {
 private:
 public:
-    FunctionMetadata* md;
+    BoxedCode* code_obj;
 
     // Some compilation settings:
     EffortLevel effort;
@@ -411,7 +411,7 @@ public:
     // List of metadata objects for ICs inside this compilation
     std::vector<std::unique_ptr<ICInfo>> ics;
 
-    CompiledFunction(FunctionMetadata* func, FunctionSpecialization* spec, void* code, EffortLevel effort,
+    CompiledFunction(BoxedCode* code_obj, FunctionSpecialization* spec, void* code, EffortLevel effort,
                      ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor);
 
     ConcreteCompilerType* getReturnType();
@@ -514,106 +514,10 @@ public:
 typedef llvm::TinyPtrVector<CompiledFunction*> FunctionList;
 struct CallRewriteArgs;
 
-// A BoxedCode is our implementation of the Python "code" object (such as function.func_code).
-// It is implemented as a wrapper around a FunctionMetadata.
-class BoxedCode;
-
-// FunctionMetadata corresponds to metadata about a function definition.  If the same 'def foo():' block gets
-// executed multiple times, there will only be a single FunctionMetadata, even though multiple function objects
-// will get created from it.
-// FunctionMetadata objects can also be created to correspond to C/C++ runtime functions, via FunctionMetadata::create.
-//
-// FunctionMetadata objects also keep track of any machine code that we have available for this function.
-class FunctionMetadata {
-private:
-    // The Python-level "code" object corresponding to this FunctionMetadata.  We store it in the FunctionMetadata
-    // so that multiple attempts to translate from FunctionMetadata->BoxedCode will always return the same
-    // BoxedCode object.
-    // Callers should use getCode()
-    BoxedCode* code_obj;
-
-public:
-    std::unique_ptr<SourceInfo> source; // source can be NULL for functions defined in the C/C++ runtime
-
-    const ParamNames param_names;
-    const bool takes_varargs, takes_kwargs;
-    const int num_args;
-
-    FunctionList
-        versions; // any compiled versions along with their type parameters; in order from most preferred to least
-    ExceptionSwitchable<CompiledFunction*>
-        always_use_version; // if this version is set, always use it (for unboxed cases)
-    std::forward_list<std::pair<const OSREntryDescriptor*, CompiledFunction*>> osr_versions;
-
-    // Profiling counter:
-    int propagated_cxx_exceptions = 0;
-
-    // For use by the interpreter/baseline jit:
-    int times_interpreted;
-    long bjit_num_inside = 0;
-    std::vector<std::unique_ptr<JitCodeBlock>> code_blocks;
-    ICInvalidator dependent_interp_callsites;
-
-    // Functions can provide an "internal" version, which will get called instead
-    // of the normal dispatch through the functionlist.
-    // This can be used to implement functions which know how to rewrite themselves,
-    // such as typeCall.
-    typedef ExceptionSwitchableFunction<Box*, BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*,
-                                        Box**, const std::vector<BoxedString*>*> InternalCallable;
-    InternalCallable internal_callable;
-
-    FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source,
-                     ParamNames param_names);
-    FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs,
-                     const ParamNames& param_names = ParamNames::empty());
-    ~FunctionMetadata();
-
-    int numReceivedArgs() { return num_args + takes_varargs + takes_kwargs; }
-
-    BORROWED(BoxedCode*) getCode();
-
-    bool isGenerator() const {
-        if (source)
-            return source->is_generator;
-        return false;
-    }
-
-    // These functions add new compiled "versions" (or, instantiations) of this FunctionMetadata.  The first
-    // form takes a CompiledFunction* directly, and the second forms (meant for use by the C++ runtime) take
-    // some raw parameters and will create the CompiledFunction behind the scenes.
-    void addVersion(CompiledFunction* compiled);
-    void addVersion(void* f, ConcreteCompilerType* rtn_type, ExceptionStyle exception_style = CXX);
-    void addVersion(void* f, ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types,
-                    ExceptionStyle exception_style = CXX);
-
-    // Helper function, meant for the C++ runtime, which allocates a FunctionMetadata object and calls addVersion
-    // once to it.
-    static FunctionMetadata* create(void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs,
-                                    bool takes_kwargs, const ParamNames& param_names = ParamNames::empty(),
-                                    ExceptionStyle exception_style = CXX) {
-        assert(!param_names.takes_param_names || nargs == param_names.numNormalArgs());
-        assert(takes_varargs || !param_names.has_vararg_name);
-        assert(takes_kwargs || !param_names.has_kwarg_name);
-
-        FunctionMetadata* fmd = new FunctionMetadata(nargs, takes_varargs, takes_kwargs, param_names);
-        fmd->addVersion(f, rtn_type, exception_style);
-        return fmd;
-    }
-
-    static FunctionMetadata* create(void* f, ConcreteCompilerType* rtn_type, int nargs,
-                                    const ParamNames& param_names = ParamNames::empty(),
-                                    ExceptionStyle exception_style = CXX) {
-        return create(f, rtn_type, nargs, false, false, param_names, exception_style);
-    }
-
-    // tries to free the bjit allocated code. returns true on success
-    bool tryDeallocatingTheBJitCode();
-};
-
 
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
-CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* spec, EffortLevel effort,
+CompiledFunction* compileFunction(BoxedCode* code, FunctionSpecialization* spec, EffortLevel effort,
                                   const OSREntryDescriptor* entry, bool force_exception_style = false,
                                   ExceptionStyle forced_exception_style = CXX);
 EffortLevel initialEffort();
@@ -1153,7 +1057,8 @@ struct FrameInfo {
     BORROWED(Box*) globals;
 
     FrameInfo* back;
-    FunctionMetadata* md;
+    // TODO does this need to be owned?  how does cpython do it?
+    BORROWED(BoxedCode*) code;
 
     BORROWED(Box*) updateBoxedLocals();
 
@@ -1174,7 +1079,7 @@ struct FrameInfo {
           stmt(0),
           globals(0),
           back(0),
-          md(0) {}
+          code(0) {}
 };
 
 // callattr() takes a number of flags and arguments, and for performance we pack them into a single register:

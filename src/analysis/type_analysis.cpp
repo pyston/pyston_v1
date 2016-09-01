@@ -870,7 +870,7 @@ TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& arg_names, const std::v
 
 TypeAnalysis* doTypeAnalysis(const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
                              TypeAnalysis::SpeculationLevel speculation) {
-    auto cfg = entry_descriptor->md->source->cfg;
+    auto cfg = entry_descriptor->code->source->cfg;
     auto&& vreg_info = cfg->getVRegInfo();
     TypeMap initial_types(vreg_info.getTotalNumOfVRegs());
 

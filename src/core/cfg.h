@@ -330,7 +330,7 @@ public:
     iterator end() const { return iterator(*this, this->v.size()); }
 };
 
-FunctionMetadata*& metadataForAST(AST* ast);
+BoxedCode*& codeForAST(AST* ast);
 InternedStringPool& stringpoolForAST(AST* ast);
 
 void computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn, BoxedModule* bm);

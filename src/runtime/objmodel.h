@@ -201,7 +201,7 @@ Box* processDescriptor(Box* obj, Box* inst, Box* owner);
 Box* processDescriptorOrNull(Box* obj, Box* inst, Box* owner);
 
 template <ExceptionStyle S, Rewritable rewritable>
-Box* callCLFunc(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
+Box* callCLFunc(BoxedCode* code, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3,
                 Box** oargs) noexcept(S == CAPI);
 

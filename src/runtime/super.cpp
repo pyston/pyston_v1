@@ -252,13 +252,13 @@ void setupSuper() {
         = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSuper), false, "super", true,
                              (destructor)BoxedSuper::dealloc, NULL, true, (traverseproc)BoxedSuper::traverse, NOCLEAR);
 
-    // super_cls->giveAttr("__getattribute__", new BoxedFunction(FunctionMetadata::create((void*)superGetattribute,
+    // super_cls->giveAttr("__getattribute__", new BoxedFunction(BoxedCode::create((void*)superGetattribute,
     // UNKNOWN, 2)));
-    super_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)superRepr, STR, 1)));
+    super_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)superRepr, STR, 1)));
 
-    super_cls->giveAttr(
-        "__init__", new BoxedFunction(FunctionMetadata::create((void*)superInit, UNKNOWN, 3, false, false), { NULL }));
-    super_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)superGet<CXX>, UNKNOWN, 3)));
+    super_cls->giveAttr("__init__",
+                        new BoxedFunction(BoxedCode::create((void*)superInit, UNKNOWN, 3, false, false), { NULL }));
+    super_cls->giveAttr("__get__", new BoxedFunction(BoxedCode::create((void*)superGet<CXX>, UNKNOWN, 3)));
 
     super_cls->giveAttrMember("__thisclass__", T_OBJECT, offsetof(BoxedSuper, type));
     super_cls->giveAttrMember("__self__", T_OBJECT, offsetof(BoxedSuper, obj));
