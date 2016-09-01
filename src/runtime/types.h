@@ -1078,8 +1078,8 @@ class BoxedCode : public Box {
 public:
     std::unique_ptr<SourceInfo> source; // source can be NULL for functions defined in the C/C++ runtime
 
-    Box* _filename = nullptr;
-    Box* _name = nullptr;
+    BoxedString* filename = nullptr;
+    BoxedString* name = nullptr;
     int _firstline;
 
     const ParamNames param_names;
@@ -1110,12 +1110,13 @@ public:
     InternalCallable internal_callable;
 
     BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source,
-              ParamNames param_names);
-    BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names = ParamNames::empty());
+              ParamNames param_names, BoxedString* filename);
+    BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names = ParamNames::empty(),
+              BoxedString* filename = nullptr);
     ~BoxedCode();
 
     // The dummy constructor for PyCode_New:
-    BoxedCode(Box* filename, Box* name, int firstline);
+    BoxedCode(BoxedString* filename, BoxedString* name, int firstline);
 
     DEFAULT_CLASS_SIMPLE(code_cls, false);
 
@@ -1161,8 +1162,8 @@ public:
 
     // These need to be static functions rather than methods because function
     // pointers could point to them.
-    static BORROWED(Box*) name(Box* b, void*) noexcept;
-    static BORROWED(Box*) filename(Box* b, void*) noexcept;
+    // static BORROWED(Box*) name(Box* b, void*) noexcept;
+    // static BORROWED(Box*) filename(Box* b, void*) noexcept;
     static Box* co_name(Box* b, void*) noexcept;
     static Box* co_filename(Box* b, void*) noexcept;
     static Box* firstlineno(Box* b, void*) noexcept;

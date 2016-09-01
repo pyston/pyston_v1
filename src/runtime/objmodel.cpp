@@ -4011,15 +4011,7 @@ static CompiledFunction* pickVersion(BoxedCode* code, int num_output_args, Box* 
 }
 
 static llvm::StringRef getFunctionName(BoxedCode* code) {
-    if (code->source)
-        return code->source->getName()->s();
-    else if (code->versions.size()) {
-        return "<builtin function>";
-        // std::ostringstream oss;
-        // oss << "<function at " << code->versions[0]->code << ">";
-        // return oss.str();
-    }
-    return "<unknown function>";
+    return code->name->s();
 }
 
 // A hacky little class that lets us save on some parameter size.

@@ -69,33 +69,6 @@ llvm::ArrayRef<AST_stmt*> SourceInfo::getBody() const {
     };
 }
 
-BORROWED(BoxedString*) SourceInfo::getFn() {
-    assert(fn->ob_refcnt >= 1);
-    return fn;
-}
-
-BORROWED(BoxedString*) SourceInfo::getName() noexcept {
-    assert(ast);
-
-    static BoxedString* lambda_name = getStaticString("<lambda>");
-    static BoxedString* module_name = getStaticString("<module>");
-
-    switch (ast->type) {
-        case AST_TYPE::ClassDef:
-            return ast_cast<AST_ClassDef>(ast)->name.getBox();
-        case AST_TYPE::FunctionDef:
-            if (ast_cast<AST_FunctionDef>(ast)->name != InternedString())
-                return ast_cast<AST_FunctionDef>(ast)->name.getBox();
-            return lambda_name;
-        case AST_TYPE::Module:
-        case AST_TYPE::Expression:
-        case AST_TYPE::Suite:
-            return module_name;
-        default:
-            RELEASE_ASSERT(0, "%d", ast->type);
-    }
-}
-
 Box* SourceInfo::getDocString() {
     auto body = getBody();
     if (body.size() > 0 && body[0]->type == AST_TYPE::Expr
@@ -172,7 +145,7 @@ CompiledFunction* compileFunction(BoxedCode* code, FunctionSpecialization* spec,
     SourceInfo* source = code->source.get();
     assert(source);
 
-    BoxedString* name = source->getName();
+    BoxedString* name = code->name;
 
     ASSERT(code->versions.size() < 20, "%s %u", name->c_str(), code->versions.size());
 
@@ -201,7 +174,7 @@ CompiledFunction* compileFunction(BoxedCode* code, FunctionSpecialization* spec,
         RELEASE_ASSERT((int)effort < sizeof(colors) / sizeof(colors[0]), "");
 
         if (spec) {
-            ss << "\033[" << colors[(int)effort] << ";1mJIT'ing " << source->getFn()->s() << ":" << name->s()
+            ss << "\033[" << colors[(int)effort] << ";1mJIT'ing " << code->filename->s() << ":" << name->s()
                << " with signature (";
             for (int i = 0; i < spec->arg_types.size(); i++) {
                 if (i > 0)
@@ -212,7 +185,7 @@ CompiledFunction* compileFunction(BoxedCode* code, FunctionSpecialization* spec,
             ss << ") -> ";
             ss << spec->rtn_type->debugName();
         } else {
-            ss << "\033[" << colors[(int)effort] << ";1mDoing OSR-entry partial compile of " << source->getFn()->s()
+            ss << "\033[" << colors[(int)effort] << ";1mDoing OSR-entry partial compile of " << code->filename->s()
                << ":" << name->s() << ", starting with backedge to block " << entry_descriptor->backedge->target->idx;
         }
         ss << " at effort level " << (int)effort << " with exception style "
@@ -243,7 +216,7 @@ CompiledFunction* compileFunction(BoxedCode* code, FunctionSpecialization* spec,
     static StatCounter us_compiling("us_compiling");
     us_compiling.log(us);
     if (VERBOSITY() >= 1 && us > 100000) {
-        printf("Took %ldms to compile %s::%s (effort %d)!\n", us / 1000, source->getFn()->c_str(), name->c_str(),
+        printf("Took %ldms to compile %s::%s (effort %d)!\n", us / 1000, code->filename->c_str(), name->c_str(),
                (int)effort);
     }
 

@@ -263,7 +263,7 @@ public:
     void runRecursively(AST* ast, AST_arguments* args, AST* orig_node);
 };
 
-static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
+static CFG* computeCFG(BoxedString* fn, SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
                        ModuleCFGProcessor* cfgizer);
 
 // A class that crawls the AST of a single function and computes the CFG
@@ -343,6 +343,7 @@ private:
 
     // ---------- Member fields ----------
 private:
+    BoxedString* filename;
     SourceInfo* source;
     InternedStringPool& stringpool;
     ScopeInfo* scoping;
@@ -360,12 +361,14 @@ private:
 
     unsigned int next_var_index = 0;
 
-    friend CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeInfo*, ModuleCFGProcessor*);
+    friend CFG* computeCFG(BoxedString* fn, SourceInfo* source, const ParamNames& param_names, ScopeInfo*,
+                           ModuleCFGProcessor*);
 
 public:
-    CFGVisitor(SourceInfo* source, InternedStringPool& stringpool, ScopeInfo* scoping, AST_TYPE::AST_TYPE root_type,
-               FutureFlags future_flags, CFG* cfg, ModuleCFGProcessor* cfgizer)
-        : source(source),
+    CFGVisitor(BoxedString* filename, SourceInfo* source, InternedStringPool& stringpool, ScopeInfo* scoping,
+               AST_TYPE::AST_TYPE root_type, FutureFlags future_flags, CFG* cfg, ModuleCFGProcessor* cfgizer)
+        : filename(filename),
+          source(source),
           stringpool(stringpool),
           scoping(scoping),
           root_type(root_type),
@@ -459,8 +462,7 @@ private:
             }
         }
 
-        raiseSyntaxError("'continue' not properly in loop", value->lineno, value->col_offset, source->getFn()->s(), "",
-                         true);
+        raiseSyntaxError("'continue' not properly in loop", value->lineno, value->col_offset, filename->s(), "", true);
     }
 
     void doBreak(AST* value) {
@@ -477,7 +479,7 @@ private:
             }
         }
 
-        raiseSyntaxError("'break' outside loop", value->lineno, value->col_offset, source->getFn()->s(), "", true);
+        raiseSyntaxError("'break' outside loop", value->lineno, value->col_offset, filename->s(), "", true);
     }
 
     AST_expr* callNonzero(AST_expr* e) {
@@ -2959,7 +2961,7 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names) {
 }
 
 
-static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
+static CFG* computeCFG(BoxedString* filename, SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
                        ModuleCFGProcessor* cfgizer) {
     STAT_TIMER(t0, "us_timer_computecfg", 0);
 
@@ -2968,7 +2970,7 @@ static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeI
     CFG* rtn = new CFG();
 
     auto&& stringpool = cfgizer->stringpool;
-    CFGVisitor visitor(source, stringpool, scoping, source->ast->type, source->future_flags, rtn, cfgizer);
+    CFGVisitor visitor(filename, source, stringpool, scoping, source->ast->type, source->future_flags, rtn, cfgizer);
 
     bool skip_first = false;
 
@@ -3091,7 +3093,6 @@ static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeI
         if (b->predecessors.size() == 0) {
             if (b != rtn->getStartingBlock()) {
                 rtn->print();
-                printf("%s\n", source->getName()->c_str());
             }
             ASSERT(b == rtn->getStartingBlock(), "%d", b->idx);
         }
@@ -3290,19 +3291,19 @@ InternedStringPool& stringpoolForAST(AST* ast) {
 void ModuleCFGProcessor::runRecursively(AST* ast, AST_arguments* args, AST* orig_node) {
     ScopeInfo* scope_info = scoping.getScopeInfoForNode(orig_node);
     std::unique_ptr<SourceInfo> si(
-        new SourceInfo(bm, ScopingResults(scope_info, scoping.areGlobalsFromModule()), future_flags, ast, fn));
+        new SourceInfo(bm, ScopingResults(scope_info, scoping.areGlobalsFromModule()), future_flags, ast));
     ParamNames param_names(ast, stringpool);
 
     for (auto e : param_names.allArgsAsName())
         fillScopingInfo(e, scope_info);
 
-    si->cfg = computeCFG(si.get(), param_names, scope_info, this);
+    si->cfg = computeCFG(fn, si.get(), param_names, scope_info, this);
 
     BoxedCode* code;
     if (args)
-        code = new BoxedCode(args->args.size(), args->vararg, args->kwarg, std::move(si), std::move(param_names));
+        code = new BoxedCode(args->args.size(), args->vararg, args->kwarg, std::move(si), std::move(param_names), fn);
     else
-        code = new BoxedCode(0, false, false, std::move(si), std::move(param_names));
+        code = new BoxedCode(0, false, false, std::move(si), std::move(param_names), fn);
 
     // XXX very bad!  Should properly track this:
     constants.push_back(code);

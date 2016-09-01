@@ -91,7 +91,7 @@ public:
     CFG* getCFG() { return getSourceInfo()->cfg; }
 
     CompiledFunction* getCurFunction() { return cf; }
-    BoxedCode* getMD() { return code; }
+    BoxedCode* getCode() { return code; }
 
     ExceptionStyle getExceptionStyle() { return cf->exception_style; }
 

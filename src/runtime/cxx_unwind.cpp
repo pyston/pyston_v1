@@ -361,7 +361,7 @@ static void print_frame(unw_cursor_t* cursor, const unw_proc_info_t* pip) {
     if (frame_type == INTERPRETED && cf && cur_stmt) {
         auto source = cf->code_obj->source.get();
         // FIXME: dup'ed from lineInfoForFrame
-        LineInfo line(cur_stmt->lineno, cur_stmt->col_offset, source->getFn(), source->getName());
+        LineInfo line(cur_stmt->lineno, cur_stmt->col_offset, cf->code_obj->filename, cf->code_obj->name);
         printf("      File \"%s\", line %d, in %s\n", line.file->c_str(), line.line, line.func->c_str());
     }
 }

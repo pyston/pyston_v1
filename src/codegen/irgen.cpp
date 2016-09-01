@@ -988,14 +988,14 @@ static void computeBlockSetClosure(BlockSet& blocks) {
     }
 }
 // returns a pointer to the function-info mdnode
-static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::string origname) {
+static llvm::MDNode* setupDebugInfo(BoxedCode* code, llvm::Function* f, std::string origname) {
     int lineno = 0;
-    if (source->ast)
-        lineno = source->ast->lineno;
+    if (code->source->ast)
+        lineno = code->source->ast->lineno;
 
     llvm::DIBuilder builder(*g.cur_module);
 
-    BoxedString* fn = source->getFn();
+    BoxedString* fn = code->filename;
     std::string dir = "";
     std::string producer = "pyston; git rev " STRINGIFY(GITREV);
 
@@ -1102,7 +1102,7 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(BoxedCode* code, SourceI
 
     // g.func_registry.registerFunction(f, g.cur_module);
 
-    llvm::MDNode* dbg_funcinfo = setupDebugInfo(source, f, nameprefix);
+    llvm::MDNode* dbg_funcinfo = setupDebugInfo(code, f, nameprefix);
 
     irgen_us += _t2.split();
 

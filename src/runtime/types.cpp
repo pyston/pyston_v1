@@ -378,13 +378,8 @@ BoxedFunction::BoxedFunction(BoxedCode* code, llvm::ArrayRef<Box*> defaults, Box
                              bool can_change_defaults)
     : BoxedFunctionBase(code, defaults, closure, globals, can_change_defaults) {
 
-    // TODO eventually we want this to assert(f->source), I think, but there are still
-    // some builtin functions that are BoxedFunctions but really ought to be a type that
-    // we don't have yet.
-    if (code->source) {
-        assert(!this->name);
-        this->name = incref(static_cast<BoxedString*>(code->source->getName()));
-    }
+    assert(!this->name);
+    this->name = incref(code->name);
 }
 
 BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(BoxedCode* code, const char* name, const char* doc)

@@ -490,9 +490,7 @@ static const LineInfo lineInfoForFrameInfo(FrameInfo* frame_info) {
     auto* code = frame_info->code;
     assert(code);
 
-    auto source = code->source.get();
-
-    return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->getFn(), source->getName());
+    return LineInfo(current_stmt->lineno, current_stmt->col_offset, code->filename, code->name);
 }
 
 // A class that converts a C stack trace to a Python stack trace.
@@ -1073,7 +1071,7 @@ std::string getCurrentPythonLine() {
 
         auto current_stmt = frame_info->stmt;
 
-        stream << source->getFn()->c_str() << ":" << current_stmt->lineno;
+        stream << code->filename->c_str() << ":" << current_stmt->lineno;
         return stream.str();
     }
     return "unknown:-1";

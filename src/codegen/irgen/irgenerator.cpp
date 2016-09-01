@@ -213,7 +213,7 @@ template <typename Builder> static llvm::Value* getGlobalsGep(Builder& builder, 
     return builder.CreateConstInBoundsGEP2_32(v, 0, 7);
 }
 
-template <typename Builder> static llvm::Value* getMDGep(Builder& builder, llvm::Value* v) {
+template <typename Builder> static llvm::Value* getCodeGep(Builder& builder, llvm::Value* v) {
     static_assert(offsetof(FrameInfo, code) == 72 + 16, "");
     return builder.CreateConstInBoundsGEP2_32(v, 0, 9);
 }
@@ -330,8 +330,8 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         builder.CreateStore(vregs, getVRegsGep(builder, al));
         builder.CreateStore(getConstantInt(num_user_visible_vregs, g.i32), getNumVRegsGep(builder, al));
         builder.CreateStore(
-            getRefcounts()->setType(embedRelocatablePtr(getMD(), g.llvm_code_type_ptr), RefType::BORROWED),
-            getMDGep(builder, al));
+            getRefcounts()->setType(embedRelocatablePtr(getCode(), g.llvm_code_type_ptr), RefType::BORROWED),
+            getCodeGep(builder, al));
 
         this->frame_info = al;
         this->globals = passed_globals;
@@ -1709,8 +1709,8 @@ private:
             // I think it's better to just not generate bad speculations:
             if (rtn->canConvertTo(speculated_type)) {
                 auto source = irstate->getSourceInfo();
-                printf("On %s:%d, function %s:\n", source->getFn()->c_str(), source->getBody()[0]->lineno,
-                       source->getName()->c_str());
+                printf("On %s:%d, function %s:\n", irstate->getCode()->filename->c_str(), source->getBody()[0]->lineno,
+                       irstate->getCode()->name->c_str());
                 irstate->getSourceInfo()->cfg->print();
             }
             RELEASE_ASSERT(!rtn->canConvertTo(speculated_type), "%s %s", rtn->getType()->debugName().c_str(),
@@ -2337,7 +2337,7 @@ private:
 
         // Emitting the actual OSR:
         emitter.getBuilder()->SetInsertPoint(onramp);
-        OSREntryDescriptor* entry = OSREntryDescriptor::create(irstate->getMD(), osr_key, irstate->getExceptionStyle());
+        OSREntryDescriptor* entry = OSREntryDescriptor::create(irstate->getCode(), osr_key, irstate->getExceptionStyle());
         OSRExit* exit = new OSRExit(entry);
         llvm::Value* partial_func = emitter.getBuilder()->CreateCall(g.funcs.compilePartialFunc,
                                                                      embedRelocatablePtr(exit, g.i8->getPointerTo()));

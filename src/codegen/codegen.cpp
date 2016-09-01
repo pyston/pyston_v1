@@ -36,27 +36,6 @@
 
 namespace pyston {
 
-BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source,
-                     ParamNames param_names)
-    : source(std::move(source)),
-      param_names(std::move(param_names)),
-      takes_varargs(takes_varargs),
-      takes_kwargs(takes_kwargs),
-      num_args(num_args),
-      times_interpreted(0),
-      internal_callable(NULL, NULL) {
-}
-
-BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
-    : source(nullptr),
-      param_names(param_names),
-      takes_varargs(takes_varargs),
-      takes_kwargs(takes_kwargs),
-      num_args(num_args),
-      times_interpreted(0),
-      internal_callable(NULL, NULL) {
-}
-
 void BoxedCode::addVersion(CompiledFunction* compiled) {
     assert(compiled);
     assert((compiled->spec != NULL) + (compiled->entry_descriptor != NULL) == 1);
@@ -79,15 +58,8 @@ void BoxedCode::addVersion(CompiledFunction* compiled) {
     }
 }
 
-SourceInfo::SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, AST* ast, BoxedString* fn)
+SourceInfo::SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, AST* ast)
     : parent_module(m), scoping(std::move(scoping)), ast(ast), cfg(NULL), future_flags(future_flags) {
-    assert(fn);
-
-    // TODO: this is a very bad way of handling this:
-    incref(fn);
-    late_constants.push_back(fn);
-
-    this->fn = fn;
 
     switch (ast->type) {
         case AST_TYPE::ClassDef:

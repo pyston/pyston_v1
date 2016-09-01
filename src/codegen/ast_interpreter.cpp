@@ -297,7 +297,7 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset, llvm::DenseSe
         code_block = code_blocks[code_blocks.size() - 1].get();
 
     if (!code_block || code_block->shouldCreateNewBlock()) {
-        code_blocks.push_back(llvm::make_unique<JitCodeBlock>(getCode(), source_info->getName()->s()));
+        code_blocks.push_back(llvm::make_unique<JitCodeBlock>(getCode(), getCode()->name->s()));
         code_block = code_blocks[code_blocks.size() - 1].get();
         exit_offset = 0;
     }
@@ -1002,7 +1002,7 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
 #endif
 
     if (0) {
-        printf("%20s % 2d ", source_info->getName()->c_str(), current_block->idx);
+        printf("%20s % 2d ", getCode()->name->c_str(), current_block->idx);
         print_ast(node);
         printf("\n");
     }

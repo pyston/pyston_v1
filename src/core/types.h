@@ -486,7 +486,6 @@ public:
 // Data about a single textual function definition.
 class SourceInfo {
 private:
-    BoxedString* fn; // equivalent of code.co_filename
     std::unique_ptr<LivenessAnalysis> liveness_info;
 
 public:
@@ -499,15 +498,11 @@ public:
 
     LivenessAnalysis* getLiveness();
 
-    // does not throw CXX or CAPI exceptions:
-    BORROWED(BoxedString*) getName() noexcept;
-    BORROWED(BoxedString*) getFn();
-
     llvm::ArrayRef<AST_stmt*> getBody() const;
 
     Box* getDocString();
 
-    SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, AST* ast, BoxedString* fn);
+    SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, AST* ast);
     ~SourceInfo();
 };
 

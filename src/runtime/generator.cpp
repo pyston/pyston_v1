@@ -531,7 +531,7 @@ Box* generator_name(Box* _self, void* context) noexcept {
     assert(isSubclass(_self->cls, generator_cls));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(_self);
 
-    return incref(self->function->code->source->getName());
+    return incref(self->function->code->name);
 }
 
 extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {
