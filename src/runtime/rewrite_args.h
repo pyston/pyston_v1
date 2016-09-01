@@ -140,7 +140,7 @@ public:
     void assertReturnConvention(ReturnConvention required_convention) {
         assert(isSuccessful());
         ASSERT(this->out_return_convention == required_convention, "user asked for convention %d but got %d",
-               required_convention, this->out_return_convention);
+               static_cast<int>(required_convention), static_cast<int>((this->out_return_convention)));
 #ifndef NDEBUG
         return_convention_checked = true;
 #endif

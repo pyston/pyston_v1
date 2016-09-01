@@ -351,7 +351,7 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
             break;
         }
         default:
-            RELEASE_ASSERT(0, "%d", effort);
+            RELEASE_ASSERT(0, "%d", static_cast<int>(effort));
     }
 
     // free the bjit code if this is not a OSR compilation
