@@ -323,7 +323,13 @@ private:
 
 public:
     template <typename Functor> SmallFunction(Functor&& f) noexcept {
-        static_assert(std::has_trivial_copy_constructor<typename std::remove_reference<Functor>::type>::value,
+// workaround missing "is_trivially_copy_constructible" in g++ < 5.0
+#if __GNUG__ && __GNUC__ < 5
+#define IS_TRIVIALLY_COPY_CONSTRUCTIBLE(T) std::has_trivial_copy_constructor<T>::value
+#else
+#define IS_TRIVIALLY_COPY_CONSTRUCTIBLE(T) std::is_trivially_copy_constructible<T>::value
+#endif
+        static_assert(IS_TRIVIALLY_COPY_CONSTRUCTIBLE(typename std::remove_reference<Functor>::type),
                       "SmallFunction currently only works with simple types");
         static_assert(std::is_trivially_destructible<typename std::remove_reference<Functor>::type>::value,
                       "SmallFunction currently only works with simple types");

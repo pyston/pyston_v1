@@ -258,7 +258,7 @@ private:
                     assert(name->vreg == -1);
                     // skip
                 } else {
-                    RELEASE_ASSERT(0, "%d", name->lookup_type);
+                    RELEASE_ASSERT(0, "%d", static_cast<int>(name->lookup_type));
                 }
                 break;
             }
