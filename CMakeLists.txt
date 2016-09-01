@@ -187,6 +187,7 @@ set(LIBUNWIND_PATCHES
   ${CMAKE_SOURCE_DIR}/libunwind_patches/0001-pyston-add-lots-of-comments.patch
   ${CMAKE_SOURCE_DIR}/libunwind_patches/0002-pyston-stop-x86_64-setcontext-restoring-uninitialize.patch
   ${CMAKE_SOURCE_DIR}/libunwind_patches/0003-use-a-sorted-array-for-registered-objects-and-do-a-b.patch
+  ${CMAKE_SOURCE_DIR}/libunwind_patches/0004-disable-libunwind-doc-generation.patch
   ${CMAKE_SOURCE_DIR}/libunwind_patches/9999-is-patched-marker.patch
 )
 

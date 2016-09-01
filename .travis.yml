@@ -51,7 +51,6 @@ addons:
     - libtool
     - ninja-build
     - python-dev
-    - texlive-extra-utils
     - libcurl4-openssl-dev
     - libxml2-dev 
     - libxslt1-dev

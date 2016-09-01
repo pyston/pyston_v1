@@ -1,0 +1,29 @@
+From 6ec1c9e847dda96f0acda8d63681cbd50f5d2e2b Mon Sep 17 00:00:00 2001
+From: Boxiang Sun <daetalusun@gmail.com>
+Date: Wed, 31 Aug 2016 17:00:49 +0800
+Subject: [PATCH] disable libunwind doc generation.
+
+Currently we don't need libunwind to generate documentation. This can
+avoid to force use install texlive.
+---
+ doc/Makefile.am | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/doc/Makefile.am b/doc/Makefile.am
+index 2534066..3a516c3 100644
+--- a/doc/Makefile.am
++++ b/doc/Makefile.am
+@@ -49,8 +49,8 @@ EXTRA_DIST = NOTES libunwind.trans					\
+ 	_U_dyn_cancel.tex						\
+ 	$(man3_MANS)
+ 
+-L2M	= latex2man
+-L2P	= pdflatex
++L2M	= echo
++L2P	= echo
+ L2M_CMD	= $(L2M) -t $(srcdir)/libunwind.trans
+ L2H_CMD	= $(L2M) -H -t $(srcdir)/libunwind.trans
+ 
+-- 
+1.9.1
+
