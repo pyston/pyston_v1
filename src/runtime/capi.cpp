@@ -1769,11 +1769,10 @@ extern "C" int PyNumber_CoerceEx(PyObject** pv, PyObject** pw) noexcept {
 }
 
 void setupCAPI() {
-    capifunc_cls->giveAttr(
-        "__repr__", new BoxedFunction(FunctionMetadata::create((void*)BoxedCApiFunction::__repr__<CXX>, UNKNOWN, 1)));
+    capifunc_cls->giveAttr("__repr__",
+                           new BoxedFunction(BoxedCode::create((void*)BoxedCApiFunction::__repr__<CXX>, UNKNOWN, 1)));
 
-    auto capi_call
-        = new BoxedFunction(FunctionMetadata::create((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, true, true));
+    auto capi_call = new BoxedFunction(BoxedCode::create((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, true, true));
     capifunc_cls->giveAttr("__call__", capi_call);
     capifunc_cls->tpp_call.capi_val = BoxedCApiFunction::tppCall<CAPI>;
     capifunc_cls->tpp_call.cxx_val = BoxedCApiFunction::tppCall<CXX>;

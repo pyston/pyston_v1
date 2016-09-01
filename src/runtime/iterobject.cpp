@@ -210,11 +210,11 @@ void setupIter() {
                                      (destructor)BoxedSeqIter::dealloc, NULL, true,
                                      (traverseproc)BoxedSeqIter::traverse, NOCLEAR);
 
-    seqiter_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)seqiterNext, UNKNOWN, 1)));
-    FunctionMetadata* hasnext = FunctionMetadata::create((void*)seqiterHasnextUnboxed, BOOL, 1);
+    seqiter_cls->giveAttr("next", new BoxedFunction(BoxedCode::create((void*)seqiterNext, UNKNOWN, 1)));
+    BoxedCode* hasnext = BoxedCode::create((void*)seqiterHasnextUnboxed, BOOL, 1);
     hasnext->addVersion((void*)seqiterHasnext, BOXED_BOOL);
     seqiter_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
-    seqiter_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)seqiterIter, UNKNOWN, 1)));
+    seqiter_cls->giveAttr("__iter__", new BoxedFunction(BoxedCode::create((void*)seqiterIter, UNKNOWN, 1)));
 
     seqiter_cls->freeze();
     seqiter_cls->tpp_hasnext = seqiterHasnextUnboxed;
@@ -225,10 +225,10 @@ void setupIter() {
                                         (destructor)BoxedSeqIter::dealloc, NULL, true,
                                         (traverseproc)BoxedSeqIter::traverse, NOCLEAR);
 
-    seqreviter_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)seqiterNext, UNKNOWN, 1)));
+    seqreviter_cls->giveAttr("next", new BoxedFunction(BoxedCode::create((void*)seqiterNext, UNKNOWN, 1)));
     seqreviter_cls->giveAttr("__hasnext__",
-                             new BoxedFunction(FunctionMetadata::create((void*)seqreviterHasnext, BOXED_BOOL, 1)));
-    seqreviter_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)seqiterIter, UNKNOWN, 1)));
+                             new BoxedFunction(BoxedCode::create((void*)seqreviterHasnext, BOXED_BOOL, 1)));
+    seqreviter_cls->giveAttr("__iter__", new BoxedFunction(BoxedCode::create((void*)seqiterIter, UNKNOWN, 1)));
 
     seqreviter_cls->freeze();
     seqreviter_cls->tp_iter = PyObject_SelfIter;
@@ -238,9 +238,9 @@ void setupIter() {
                                          false, (destructor)BoxedIterWrapper::dealloc, NULL, true,
                                          (traverseproc)BoxedIterWrapper::traverse, NOCLEAR);
 
-    iterwrapper_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)iterwrapperNext, UNKNOWN, 1)));
+    iterwrapper_cls->giveAttr("next", new BoxedFunction(BoxedCode::create((void*)iterwrapperNext, UNKNOWN, 1)));
     iterwrapper_cls->giveAttr("__hasnext__",
-                              new BoxedFunction(FunctionMetadata::create((void*)iterwrapperHasnext, BOXED_BOOL, 1)));
+                              new BoxedFunction(BoxedCode::create((void*)iterwrapperHasnext, BOXED_BOOL, 1)));
 
     iterwrapper_cls->freeze();
     iterwrapper_cls->tpp_hasnext = iterwrapperHasnextUnboxed;

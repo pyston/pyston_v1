@@ -592,16 +592,16 @@ extern "C" PyObject* PyStaticMethod_New(PyObject* callable) noexcept {
 void setupDescr() {
     property_cls->instances_are_nonzero = true;
 
-    property_cls->giveAttr("__init__", new BoxedFunction(FunctionMetadata::create(
-                                                             (void*)propertyInit, UNKNOWN, 5, false, false,
-                                                             ParamNames({ "", "fget", "fset", "fdel", "doc" }, "", "")),
-                                                         { Py_None, Py_None, Py_None, NULL }));
-    property_cls->giveAttr("__get__", new BoxedFunction(FunctionMetadata::create((void*)propertyGet, UNKNOWN, 3)));
-    property_cls->giveAttr("__set__", new BoxedFunction(FunctionMetadata::create((void*)propertySet, UNKNOWN, 3)));
-    property_cls->giveAttr("__delete__", new BoxedFunction(FunctionMetadata::create((void*)propertyDel, UNKNOWN, 2)));
-    property_cls->giveAttr("getter", new BoxedFunction(FunctionMetadata::create((void*)propertyGetter, UNKNOWN, 2)));
-    property_cls->giveAttr("setter", new BoxedFunction(FunctionMetadata::create((void*)propertySetter, UNKNOWN, 2)));
-    property_cls->giveAttr("deleter", new BoxedFunction(FunctionMetadata::create((void*)propertyDeleter, UNKNOWN, 2)));
+    property_cls->giveAttr(
+        "__init__", new BoxedFunction(BoxedCode::create((void*)propertyInit, UNKNOWN, 5, false, false,
+                                                        ParamNames({ "", "fget", "fset", "fdel", "doc" }, "", "")),
+                                      { Py_None, Py_None, Py_None, NULL }));
+    property_cls->giveAttr("__get__", new BoxedFunction(BoxedCode::create((void*)propertyGet, UNKNOWN, 3)));
+    property_cls->giveAttr("__set__", new BoxedFunction(BoxedCode::create((void*)propertySet, UNKNOWN, 3)));
+    property_cls->giveAttr("__delete__", new BoxedFunction(BoxedCode::create((void*)propertyDel, UNKNOWN, 2)));
+    property_cls->giveAttr("getter", new BoxedFunction(BoxedCode::create((void*)propertyGetter, UNKNOWN, 2)));
+    property_cls->giveAttr("setter", new BoxedFunction(BoxedCode::create((void*)propertySetter, UNKNOWN, 2)));
+    property_cls->giveAttr("deleter", new BoxedFunction(BoxedCode::create((void*)propertyDeleter, UNKNOWN, 2)));
     property_cls->giveAttrMember("fget", T_OBJECT, offsetof(BoxedProperty, prop_get));
     property_cls->giveAttrMember("fset", T_OBJECT, offsetof(BoxedProperty, prop_set));
     property_cls->giveAttrMember("fdel", T_OBJECT, offsetof(BoxedProperty, prop_del));
@@ -609,22 +609,20 @@ void setupDescr() {
     property_cls->freeze();
 
     staticmethod_cls->giveAttrMember("__func__", T_OBJECT, offsetof(BoxedStaticmethod, sm_callable));
+    staticmethod_cls->giveAttr("__init__",
+                               new BoxedFunction(BoxedCode::create((void*)staticmethodInit, UNKNOWN, 5, false, false),
+                                                 { Py_None, Py_None, Py_None, Py_None }));
     staticmethod_cls->giveAttr(
-        "__init__", new BoxedFunction(FunctionMetadata::create((void*)staticmethodInit, UNKNOWN, 5, false, false),
-                                      { Py_None, Py_None, Py_None, Py_None }));
-    staticmethod_cls->giveAttr(
-        "__get__",
-        new BoxedFunction(FunctionMetadata::create((void*)staticmethodGet, UNKNOWN, 3, false, false), { Py_None }));
+        "__get__", new BoxedFunction(BoxedCode::create((void*)staticmethodGet, UNKNOWN, 3, false, false), { Py_None }));
     staticmethod_cls->freeze();
 
 
     classmethod_cls->giveAttrMember("__func__", T_OBJECT, offsetof(BoxedClassmethod, cm_callable));
+    classmethod_cls->giveAttr("__init__",
+                              new BoxedFunction(BoxedCode::create((void*)classmethodInit, UNKNOWN, 5, false, false),
+                                                { Py_None, Py_None, Py_None, Py_None }));
     classmethod_cls->giveAttr(
-        "__init__", new BoxedFunction(FunctionMetadata::create((void*)classmethodInit, UNKNOWN, 5, false, false),
-                                      { Py_None, Py_None, Py_None, Py_None }));
-    classmethod_cls->giveAttr(
-        "__get__",
-        new BoxedFunction(FunctionMetadata::create((void*)classmethodGet, UNKNOWN, 3, false, false), { Py_None }));
+        "__get__", new BoxedFunction(BoxedCode::create((void*)classmethodGet, UNKNOWN, 3, false, false), { Py_None }));
     classmethod_cls->freeze();
 
     PyType_Ready(&PyGetSetDescr_Type);

@@ -1026,7 +1026,7 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel eff
     return os.str();
 }
 
-std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, SourceInfo* source,
+std::pair<CompiledFunction*, llvm::Function*> doCompile(BoxedCode* code, SourceInfo* source,
                                                         const ParamNames* param_names,
                                                         const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
                                                         ExceptionStyle exception_style, FunctionSpecialization* spec,
@@ -1090,7 +1090,7 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
         llvm_arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
     }
 
-    CompiledFunction* cf = new CompiledFunction(md, spec, NULL, effort, exception_style, entry_descriptor);
+    CompiledFunction* cf = new CompiledFunction(code, spec, NULL, effort, exception_style, entry_descriptor);
 
     // Make sure that the instruction memory keeps the module object alive.
     // TODO: implement this for real
@@ -1139,7 +1139,7 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
 
     RefcountTracker refcounter;
 
-    IRGenState irstate(md, cf, f, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo, &refcounter);
+    IRGenState irstate(code, cf, f, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo, &refcounter);
 
     emitBBs(&irstate, types, entry_descriptor, blocks);
     assert(!llvm::verifyFunction(*f, &llvm::errs()));

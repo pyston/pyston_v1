@@ -55,7 +55,6 @@ void force() {
     FORCE(boxFloat);
     FORCE(unboxFloat);
     FORCE(createFunctionFromMetadata);
-    FORCE(getFunctionMetadata);
     FORCE(boxInstanceMethod);
     FORCE(boxBool);
     FORCE(boxBoolNegated);

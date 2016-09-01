@@ -161,7 +161,7 @@ static void compileIR(CompiledFunction* cf, llvm::Function* func, EffortLevel ef
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
 // The codegen_lock needs to be held in W mode before calling this function:
-CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* spec, EffortLevel effort,
+CompiledFunction* compileFunction(BoxedCode* code, FunctionSpecialization* spec, EffortLevel effort,
                                   const OSREntryDescriptor* entry_descriptor, bool force_exception_style,
                                   ExceptionStyle forced_exception_style) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_compileFunction");
@@ -169,12 +169,12 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
 
     assert((entry_descriptor != NULL) + (spec != NULL) == 1);
 
-    SourceInfo* source = f->source.get();
+    SourceInfo* source = code->source.get();
     assert(source);
 
     BoxedString* name = source->getName();
 
-    ASSERT(f->versions.size() < 20, "%s %u", name->c_str(), f->versions.size());
+    ASSERT(code->versions.size() < 20, "%s %u", name->c_str(), code->versions.size());
 
     ExceptionStyle exception_style;
     if (force_exception_style)
@@ -183,7 +183,7 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
         exception_style = CAPI;
     else if (name->s() == "next")
         exception_style = CAPI;
-    else if (f->propagated_cxx_exceptions >= 100)
+    else if (code->propagated_cxx_exceptions >= 100)
         exception_style = CAPI;
     else
         exception_style = CXX;
@@ -234,10 +234,10 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
     CompiledFunction* cf = NULL;
     llvm::Function* func = NULL;
     std::tie(cf, func)
-        = doCompile(f, source, &f->param_names, entry_descriptor, effort, exception_style, spec, name->s());
+        = doCompile(code, source, &code->param_names, entry_descriptor, effort, exception_style, spec, name->s());
     compileIR(cf, func, effort);
 
-    f->addVersion(cf);
+    code->addVersion(cf);
 
     long us = _t.end();
     static StatCounter us_compiling("us_compiling");
@@ -271,7 +271,7 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
 
     // free the bjit code if this is not a OSR compilation
     if (!entry_descriptor)
-        f->tryDeallocatingTheBJitCode();
+        code->tryDeallocatingTheBJitCode();
 
     return cf;
 }
@@ -285,28 +285,28 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     FutureFlags future_flags = getFutureFlags(m->body, fn);
     computeAllCFGs(m, /* globals_from_module */ true, future_flags, autoDecref(boxString(fn)), bm);
 
-    FunctionMetadata* md = metadataForAST(m);
-    assert(md);
+    BoxedCode* code = codeForAST(m);
+    assert(code);
 
     static BoxedString* doc_str = getStaticString("__doc__");
-    bm->setattr(doc_str, autoDecref(md->source->getDocString()), NULL);
+    bm->setattr(doc_str, autoDecref(code->source->getDocString()), NULL);
 
     static BoxedString* builtins_str = getStaticString("__builtins__");
     if (!bm->hasattr(builtins_str))
         bm->setattr(builtins_str, PyModule_GetDict(builtins_module), NULL);
 
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_interpreted_module_toplevel");
-    Box* r = astInterpretFunction(md, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    Box* r = astInterpretFunction(code, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     assert(r == Py_None);
     Py_DECREF(r);
 }
 
-Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
-    RELEASE_ASSERT(!md->source->scoping.areGlobalsFromModule(), "");
+Box* evalOrExec(BoxedCode* code, Box* globals, Box* boxedLocals) {
+    RELEASE_ASSERT(!code->source->scoping.areGlobalsFromModule(), "");
 
     assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 
-    Box* doc_string = md->source->getDocString();
+    Box* doc_string = code->source->getDocString();
     if (doc_string != Py_None) {
         static BoxedString* doc_box = getStaticString("__doc__");
         setGlobal(boxedLocals, doc_box, doc_string);
@@ -314,11 +314,11 @@ Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
         Py_DECREF(doc_string);
     }
 
-    return astInterpretFunctionEval(md, globals, boxedLocals);
+    return astInterpretFunctionEval(code, globals, boxedLocals);
 }
 
-static FunctionMetadata* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_stmt*> body, BoxedString* fn,
-                                              PyCompilerFlags* flags) {
+static BoxedCode* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_stmt*> body, BoxedString* fn,
+                                       PyCompilerFlags* flags) {
     Timer _t("for evalOrExec()");
 
     // `my_future_flags` are the future flags enabled in the exec's code.
@@ -333,14 +333,14 @@ static FunctionMetadata* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_st
     }
 
     computeAllCFGs(source, /* globals_from_module */ false, future_flags, fn, getCurrentModule());
-    return metadataForAST(source);
+    return codeForAST(source);
 }
 
-static FunctionMetadata* compileExec(AST_Module* parsedModule, BoxedString* fn, PyCompilerFlags* flags) {
+static BoxedCode* compileExec(AST_Module* parsedModule, BoxedString* fn, PyCompilerFlags* flags) {
     return compileForEvalOrExec(parsedModule, parsedModule->body, fn, flags);
 }
 
-static FunctionMetadata* compileEval(AST_Expression* parsedExpr, BoxedString* fn, PyCompilerFlags* flags) {
+static BoxedCode* compileEval(AST_Expression* parsedExpr, BoxedString* fn, PyCompilerFlags* flags) {
     return compileForEvalOrExec(parsedExpr, parsedExpr->body, fn, flags);
 }
 
@@ -349,20 +349,20 @@ extern "C" PyCodeObject* PyAST_Compile(struct _mod* _mod, const char* filename, 
     try {
         mod_ty mod = _mod;
         AST* parsed = cpythonToPystonAST(mod, filename);
-        FunctionMetadata* md = NULL;
+        BoxedCode* code = NULL;
         switch (mod->kind) {
             case Module_kind:
             case Interactive_kind:
                 if (parsed->type != AST_TYPE::Module) {
                     raiseExcHelper(TypeError, "expected Module node, got %s", AST_TYPE::stringify(parsed->type));
                 }
-                md = compileExec(static_cast<AST_Module*>(parsed), autoDecref(boxString(filename)), flags);
+                code = compileExec(static_cast<AST_Module*>(parsed), autoDecref(boxString(filename)), flags);
                 break;
             case Expression_kind:
                 if (parsed->type != AST_TYPE::Expression) {
                     raiseExcHelper(TypeError, "expected Expression node, got %s", AST_TYPE::stringify(parsed->type));
                 }
-                md = compileEval(static_cast<AST_Expression*>(parsed), autoDecref(boxString(filename)), flags);
+                code = compileEval(static_cast<AST_Expression*>(parsed), autoDecref(boxString(filename)), flags);
                 break;
             case Suite_kind:
                 PyErr_SetString(PyExc_SystemError, "suite should not be possible");
@@ -372,7 +372,7 @@ extern "C" PyCodeObject* PyAST_Compile(struct _mod* _mod, const char* filename, 
                 return NULL;
         }
 
-        return (PyCodeObject*)incref(md->getCode());
+        return (PyCodeObject*)incref(code);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -390,7 +390,7 @@ extern "C" int PyEval_MergeCompilerFlags(PyCompilerFlags* cf) noexcept {
         const int codeflags = current_frame->f_code->co_flags;
     */
 
-    FunctionMetadata* caller_cl = getTopPythonFunction();
+    BoxedCode* caller_cl = getTopPythonFunction();
     if (caller_cl != NULL) {
         assert(caller_cl->source != NULL);
         FutureFlags caller_future_flags = caller_cl->source->future_flags;
@@ -460,7 +460,7 @@ static void pickGlobalsAndLocals(Box*& globals, Box*& locals) {
 extern "C" PyObject* PyEval_EvalCode(PyCodeObject* co, PyObject* globals, PyObject* locals) noexcept {
     try {
         pickGlobalsAndLocals(globals, locals);
-        return evalOrExec(metadataFromCode((Box*)co), globals, locals);
+        return evalOrExec((BoxedCode*)co, globals, locals);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -578,14 +578,14 @@ void CompiledFunction::speculationFailed() {
     if (this->times_speculation_failed == 4) {
         // printf("Killing %p because it failed too many speculations\n", this);
 
-        FunctionMetadata* md = this->md;
-        assert(md);
-        assert(this != md->always_use_version.get(exception_style));
+        BoxedCode* code = this->code_obj;
+        assert(code);
+        assert(this != code->always_use_version.get(exception_style));
 
         bool found = false;
-        for (int i = 0; i < md->versions.size(); i++) {
-            if (md->versions[i] == this) {
-                md->versions.erase(md->versions.begin() + i);
+        for (int i = 0; i < code->versions.size(); i++) {
+            if (code->versions[i] == this) {
+                code->versions.erase(code->versions.begin() + i);
                 this->dependent_callsites.invalidateAll();
                 found = true;
                 break;
@@ -593,7 +593,7 @@ void CompiledFunction::speculationFailed() {
         }
 
         if (!found) {
-            md->osr_versions.remove_if([&](const std::pair<const OSREntryDescriptor*, CompiledFunction*>& e) {
+            code->osr_versions.remove_if([&](const std::pair<const OSREntryDescriptor*, CompiledFunction*>& e) {
                 if (e.second == this) {
                     this->dependent_callsites.invalidateAll();
                     found = true;
@@ -604,8 +604,8 @@ void CompiledFunction::speculationFailed() {
         }
 
         if (!found) {
-            for (int i = 0; i < md->versions.size(); i++) {
-                printf("%p\n", md->versions[i]);
+            for (int i = 0; i < code->versions.size(); i++) {
+                printf("%p\n", code->versions[i]);
             }
         }
         RELEASE_ASSERT(found, "");
@@ -613,9 +613,9 @@ void CompiledFunction::speculationFailed() {
 }
 
 std::unordered_set<CompiledFunction*> all_compiled_functions;
-CompiledFunction::CompiledFunction(FunctionMetadata* md, FunctionSpecialization* spec, void* code, EffortLevel effort,
+CompiledFunction::CompiledFunction(BoxedCode* code_obj, FunctionSpecialization* spec, void* code, EffortLevel effort,
                                    ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor)
-    : md(md),
+    : code_obj(code_obj),
       effort(effort),
       exception_style(exception_style),
       spec(spec),
@@ -636,27 +636,27 @@ ConcreteCompilerType* CompiledFunction::getReturnType() {
 }
 
 /// Reoptimizes the given function version at the new effort level.
-/// The cf must be an active version in its parents FunctionMetadata; the given
+/// The cf must be an active version in its parents BoxedCode; the given
 /// version will be replaced by the new version, which will be returned.
 static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel new_effort) {
-    assert(cf->md->versions.size());
+    assert(cf->code_obj->versions.size());
 
     assert(cf);
     assert(cf->entry_descriptor == NULL && "We can't reopt an osr-entry compile!");
     assert(cf->spec);
 
-    FunctionMetadata* md = cf->md;
-    assert(md);
+    BoxedCode* code = cf->code_obj;
+    assert(code);
 
     assert(new_effort > cf->effort);
 
-    FunctionList& versions = md->versions;
+    FunctionList& versions = code->versions;
     for (int i = 0; i < versions.size(); i++) {
         if (versions[i] == cf) {
             versions.erase(versions.begin() + i);
 
             // this pushes the new CompiledVersion to the back of the version list
-            CompiledFunction* new_cf = compileFunction(md, cf->spec, new_effort, NULL, true, cf->exception_style);
+            CompiledFunction* new_cf = compileFunction(code, cf->spec, new_effort, NULL, true, cf->exception_style);
 
             cf->dependent_callsites.invalidateAll();
 
@@ -680,18 +680,19 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
 
     // if (VERBOSITY("irgen") >= 1) printf("In compilePartialFunc, handling %p\n", exit);
 
-    FunctionMetadata* md = exit->entry->md;
-    assert(md);
-    for (auto&& osr_functions : md->osr_versions) {
+    BoxedCode* code = exit->entry->code;
+    assert(code);
+    for (auto&& osr_functions : code->osr_versions) {
         if (osr_functions.first == exit->entry)
             return osr_functions.second;
     }
 
     EffortLevel new_effort = EffortLevel::MAXIMAL;
-    CompiledFunction* compiled = compileFunction(md, NULL, new_effort, exit->entry, true, exit->entry->exception_style);
+    CompiledFunction* compiled
+        = compileFunction(code, NULL, new_effort, exit->entry, true, exit->entry->exception_style);
     stat_osr_compiles.log();
-    assert(std::find(md->osr_versions.begin(), md->osr_versions.end(), std::make_pair(exit->entry, compiled))
-           != md->osr_versions.end());
+    assert(std::find(code->osr_versions.begin(), code->osr_versions.end(), std::make_pair(exit->entry, compiled))
+           != code->osr_versions.end());
     return compiled;
 }
 
@@ -709,7 +710,7 @@ extern "C" CompiledFunction* reoptCompiledFuncInternal(CompiledFunction* cf) {
     stat_reopt.log();
 
     assert(cf->effort < EffortLevel::MAXIMAL);
-    assert(cf->md->versions.size());
+    assert(cf->code_obj->versions.size());
 
     EffortLevel new_effort = EffortLevel::MAXIMAL;
 
@@ -724,9 +725,9 @@ extern "C" char* reoptCompiledFunc(CompiledFunction* cf) {
     return (char*)new_cf->code;
 }
 
-void FunctionMetadata::addVersion(void* f, ConcreteCompilerType* rtn_type, ExceptionStyle exception_style) {
+void BoxedCode::addVersion(void* f, ConcreteCompilerType* rtn_type, ExceptionStyle exception_style) {
     std::vector<ConcreteCompilerType*> arg_types(numReceivedArgs(), UNKNOWN);
-    return FunctionMetadata::addVersion(f, rtn_type, arg_types, exception_style);
+    return BoxedCode::addVersion(f, rtn_type, arg_types, exception_style);
 }
 
 static ConcreteCompilerType* processType(ConcreteCompilerType* type) {
@@ -734,8 +735,8 @@ static ConcreteCompilerType* processType(ConcreteCompilerType* type) {
     return type;
 }
 
-void FunctionMetadata::addVersion(void* f, ConcreteCompilerType* rtn_type,
-                                  const std::vector<ConcreteCompilerType*>& arg_types, ExceptionStyle exception_style) {
+void BoxedCode::addVersion(void* f, ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types,
+                           ExceptionStyle exception_style) {
     assert(arg_types.size() == numReceivedArgs());
 #ifndef NDEBUG
     for (ConcreteCompilerType* t : arg_types)
@@ -746,7 +747,7 @@ void FunctionMetadata::addVersion(void* f, ConcreteCompilerType* rtn_type,
     addVersion(new CompiledFunction(this, spec, f, EffortLevel::MAXIMAL, exception_style, NULL));
 }
 
-bool FunctionMetadata::tryDeallocatingTheBJitCode() {
+bool BoxedCode::tryDeallocatingTheBJitCode() {
     // we can only delete the code object if we are not executing it currently
     assert(bjit_num_inside >= 0);
     if (bjit_num_inside != 0) {

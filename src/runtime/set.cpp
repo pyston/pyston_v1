@@ -950,25 +950,25 @@ void setupSet() {
     set_iterator_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedSetIterator), false, "setiterator",
                                           false, (destructor)BoxedSetIterator::dealloc, NULL, true,
                                           (traverseproc)BoxedSetIterator::traverse, NOCLEAR);
-    set_iterator_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create(
-                                               (void*)setiteratorIter, typeFromClass(set_iterator_cls), 1)));
+    set_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(BoxedCode::create((void*)setiteratorIter, typeFromClass(set_iterator_cls), 1)));
     set_iterator_cls->giveAttr("__hasnext__",
-                               new BoxedFunction(FunctionMetadata::create((void*)setiteratorHasnext, BOXED_BOOL, 1)));
-    set_iterator_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)setiteratorNext, UNKNOWN, 1)));
+                               new BoxedFunction(BoxedCode::create((void*)setiteratorHasnext, BOXED_BOOL, 1)));
+    set_iterator_cls->giveAttr("next", new BoxedFunction(BoxedCode::create((void*)setiteratorNext, UNKNOWN, 1)));
     set_iterator_cls->giveAttr("__length_hint__",
-                               new BoxedFunction(FunctionMetadata::create((void*)setiteratorLength, BOXED_INT, 1)));
+                               new BoxedFunction(BoxedCode::create((void*)setiteratorLength, BOXED_INT, 1)));
     set_iterator_cls->freeze();
     set_iterator_cls->tp_iternext = setiter_next;
     set_iterator_cls->tp_iter = PyObject_SelfIter;
 
     set_cls->giveAttr("__new__",
-                      new BoxedFunction(FunctionMetadata::create((void*)setNew, UNKNOWN, 2, false, true), { NULL }));
+                      new BoxedFunction(BoxedCode::create((void*)setNew, UNKNOWN, 2, false, true), { NULL }));
     set_cls->giveAttr("__init__",
-                      new BoxedFunction(FunctionMetadata::create((void*)setInit, UNKNOWN, 2, false, true), { NULL }));
+                      new BoxedFunction(BoxedCode::create((void*)setInit, UNKNOWN, 2, false, true), { NULL }));
     frozenset_cls->giveAttr(
-        "__new__", new BoxedFunction(FunctionMetadata::create((void*)frozensetNew, UNKNOWN, 2, false, true), { NULL }));
+        "__new__", new BoxedFunction(BoxedCode::create((void*)frozensetNew, UNKNOWN, 2, false, true), { NULL }));
 
-    Box* set_repr_func = new BoxedFunction(FunctionMetadata::create((void*)setRepr, STR, 1));
+    Box* set_repr_func = new BoxedFunction(BoxedCode::create((void*)setRepr, STR, 1));
     set_cls->giveAttrBorrowed("__repr__", set_repr_func);
     frozenset_cls->giveAttr("__repr__", set_repr_func);
 
@@ -988,11 +988,11 @@ void setupSet() {
     v_fu.push_back(UNKNOWN);
 
     auto add = [&](const char* name, void* func) {
-        auto func_obj = new BoxedFunction(FunctionMetadata::create((void*)func, UNKNOWN, 2, false, false));
+        auto func_obj = new BoxedFunction(BoxedCode::create((void*)func, UNKNOWN, 2, false, false));
         set_cls->giveAttrBorrowed(name, func_obj);
         frozenset_cls->giveAttr(name, func_obj);
         /*
-        FunctionMetadata* func_obj = FunctionMetadata::create(2, false, false);
+        BoxedCode* func_obj = BoxedCode::create(2, false, false);
         addRTFunction(func_obj, (void*)func, SET, v_ss);
         addRTFunction(func_obj, (void*)func, SET, v_sf);
         addRTFunction(func_obj, (void*)func, FROZENSET, v_fs);
@@ -1012,70 +1012,70 @@ void setupSet() {
     add("__iand__", (void*)setIAnd);
 
     set_cls->giveAttr("__iter__",
-                      new BoxedFunction(FunctionMetadata::create((void*)setIter, typeFromClass(set_iterator_cls), 1)));
+                      new BoxedFunction(BoxedCode::create((void*)setIter, typeFromClass(set_iterator_cls), 1)));
     frozenset_cls->giveAttrBorrowed("__iter__", set_cls->getattr(getStaticString("__iter__")));
 
-    set_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)setLen, BOXED_INT, 1)));
+    set_cls->giveAttr("__len__", new BoxedFunction(BoxedCode::create((void*)setLen, BOXED_INT, 1)));
     frozenset_cls->giveAttrBorrowed("__len__", set_cls->getattr(getStaticString("__len__")));
 
-    set_cls->giveAttr("__contains__", new BoxedFunction(FunctionMetadata::create((void*)setContains, BOXED_BOOL, 2)));
+    set_cls->giveAttr("__contains__", new BoxedFunction(BoxedCode::create((void*)setContains, BOXED_BOOL, 2)));
     frozenset_cls->giveAttrBorrowed("__contains__", set_cls->getattr(getStaticString("__contains__")));
 
-    set_cls->giveAttr("__cmp__", new BoxedFunction(FunctionMetadata::create((void*)setNocmp, NONE, 2)));
-    frozenset_cls->giveAttr("__cmp__", new BoxedFunction(FunctionMetadata::create((void*)setNocmp, NONE, 2)));
-    set_cls->giveAttr("__eq__", new BoxedFunction(FunctionMetadata::create((void*)setEq, BOXED_BOOL, 2)));
+    set_cls->giveAttr("__cmp__", new BoxedFunction(BoxedCode::create((void*)setNocmp, NONE, 2)));
+    frozenset_cls->giveAttr("__cmp__", new BoxedFunction(BoxedCode::create((void*)setNocmp, NONE, 2)));
+    set_cls->giveAttr("__eq__", new BoxedFunction(BoxedCode::create((void*)setEq, BOXED_BOOL, 2)));
     frozenset_cls->giveAttrBorrowed("__eq__", set_cls->getattr(getStaticString("__eq__")));
-    set_cls->giveAttr("__ne__", new BoxedFunction(FunctionMetadata::create((void*)setNe, BOXED_BOOL, 2)));
+    set_cls->giveAttr("__ne__", new BoxedFunction(BoxedCode::create((void*)setNe, BOXED_BOOL, 2)));
     frozenset_cls->giveAttrBorrowed("__ne__", set_cls->getattr(getStaticString("__ne__")));
-    set_cls->giveAttr("__le__", new BoxedFunction(FunctionMetadata::create((void*)setLe, BOXED_BOOL, 2)));
+    set_cls->giveAttr("__le__", new BoxedFunction(BoxedCode::create((void*)setLe, BOXED_BOOL, 2)));
     frozenset_cls->giveAttrBorrowed("__le__", set_cls->getattr(getStaticString("__le__")));
-    set_cls->giveAttr("__lt__", new BoxedFunction(FunctionMetadata::create((void*)setLt, BOXED_BOOL, 2)));
+    set_cls->giveAttr("__lt__", new BoxedFunction(BoxedCode::create((void*)setLt, BOXED_BOOL, 2)));
     frozenset_cls->giveAttrBorrowed("__lt__", set_cls->getattr(getStaticString("__lt__")));
-    set_cls->giveAttr("__ge__", new BoxedFunction(FunctionMetadata::create((void*)setGe, BOXED_BOOL, 2)));
+    set_cls->giveAttr("__ge__", new BoxedFunction(BoxedCode::create((void*)setGe, BOXED_BOOL, 2)));
     frozenset_cls->giveAttrBorrowed("__ge__", set_cls->getattr(getStaticString("__ge__")));
-    set_cls->giveAttr("__gt__", new BoxedFunction(FunctionMetadata::create((void*)setGt, BOXED_BOOL, 2)));
+    set_cls->giveAttr("__gt__", new BoxedFunction(BoxedCode::create((void*)setGt, BOXED_BOOL, 2)));
     frozenset_cls->giveAttrBorrowed("__gt__", set_cls->getattr(getStaticString("__gt__")));
 
-    set_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)setNonzero, BOXED_BOOL, 1)));
+    set_cls->giveAttr("__nonzero__", new BoxedFunction(BoxedCode::create((void*)setNonzero, BOXED_BOOL, 1)));
     frozenset_cls->giveAttrBorrowed("__nonzero__", set_cls->getattr(getStaticString("__nonzero__")));
 
-    frozenset_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)setHash, BOXED_INT, 1)));
+    frozenset_cls->giveAttr("__hash__", new BoxedFunction(BoxedCode::create((void*)setHash, BOXED_INT, 1)));
     set_cls->giveAttrBorrowed("__hash__", Py_None);
 
-    set_cls->giveAttr("add", new BoxedFunction(FunctionMetadata::create((void*)setAdd, NONE, 2)));
-    set_cls->giveAttr("remove", new BoxedFunction(FunctionMetadata::create((void*)setRemove, NONE, 2)));
-    set_cls->giveAttr("discard", new BoxedFunction(FunctionMetadata::create((void*)setDiscard, NONE, 2)));
+    set_cls->giveAttr("add", new BoxedFunction(BoxedCode::create((void*)setAdd, NONE, 2)));
+    set_cls->giveAttr("remove", new BoxedFunction(BoxedCode::create((void*)setRemove, NONE, 2)));
+    set_cls->giveAttr("discard", new BoxedFunction(BoxedCode::create((void*)setDiscard, NONE, 2)));
 
-    set_cls->giveAttr("clear", new BoxedFunction(FunctionMetadata::create((void*)setClear, NONE, 1)));
-    set_cls->giveAttr("update", new BoxedFunction(FunctionMetadata::create((void*)setUpdate, NONE, 1, true, false)));
-    set_cls->giveAttr("union", new BoxedFunction(FunctionMetadata::create((void*)setUnion, UNKNOWN, 1, true, false)));
+    set_cls->giveAttr("clear", new BoxedFunction(BoxedCode::create((void*)setClear, NONE, 1)));
+    set_cls->giveAttr("update", new BoxedFunction(BoxedCode::create((void*)setUpdate, NONE, 1, true, false)));
+    set_cls->giveAttr("union", new BoxedFunction(BoxedCode::create((void*)setUnion, UNKNOWN, 1, true, false)));
     frozenset_cls->giveAttrBorrowed("union", set_cls->getattr(getStaticString("union")));
     set_cls->giveAttr("intersection",
-                      new BoxedFunction(FunctionMetadata::create((void*)setIntersection, UNKNOWN, 1, true, false)));
+                      new BoxedFunction(BoxedCode::create((void*)setIntersection, UNKNOWN, 1, true, false)));
     frozenset_cls->giveAttrBorrowed("intersection", set_cls->getattr(getStaticString("intersection")));
-    set_cls->giveAttr("intersection_update", new BoxedFunction(FunctionMetadata::create((void*)setIntersectionUpdate,
-                                                                                        UNKNOWN, 1, true, false)));
+    set_cls->giveAttr("intersection_update",
+                      new BoxedFunction(BoxedCode::create((void*)setIntersectionUpdate, UNKNOWN, 1, true, false)));
     set_cls->giveAttr("difference",
-                      new BoxedFunction(FunctionMetadata::create((void*)setDifference, UNKNOWN, 1, true, false)));
+                      new BoxedFunction(BoxedCode::create((void*)setDifference, UNKNOWN, 1, true, false)));
     frozenset_cls->giveAttrBorrowed("difference", set_cls->getattr(getStaticString("difference")));
     set_cls->giveAttr("difference_update",
-                      new BoxedFunction(FunctionMetadata::create((void*)setDifferenceUpdate, UNKNOWN, 1, true, false)));
-    set_cls->giveAttr("symmetric_difference", new BoxedFunction(FunctionMetadata::create((void*)setSymmetricDifference,
-                                                                                         UNKNOWN, 2, false, false)));
+                      new BoxedFunction(BoxedCode::create((void*)setDifferenceUpdate, UNKNOWN, 1, true, false)));
+    set_cls->giveAttr("symmetric_difference",
+                      new BoxedFunction(BoxedCode::create((void*)setSymmetricDifference, UNKNOWN, 2, false, false)));
     frozenset_cls->giveAttrBorrowed("symmetric_difference", set_cls->getattr(getStaticString("symmetric_difference")));
     set_cls->giveAttr(
         "symmetric_difference_update",
-        new BoxedFunction(FunctionMetadata::create((void*)setSymmetricDifferenceUpdate, UNKNOWN, 2, false, false)));
-    set_cls->giveAttr("issubset", new BoxedFunction(FunctionMetadata::create((void*)setIssubset, UNKNOWN, 2)));
+        new BoxedFunction(BoxedCode::create((void*)setSymmetricDifferenceUpdate, UNKNOWN, 2, false, false)));
+    set_cls->giveAttr("issubset", new BoxedFunction(BoxedCode::create((void*)setIssubset, UNKNOWN, 2)));
     frozenset_cls->giveAttrBorrowed("issubset", set_cls->getattr(getStaticString("issubset")));
-    set_cls->giveAttr("issuperset", new BoxedFunction(FunctionMetadata::create((void*)setIssuperset, UNKNOWN, 2)));
+    set_cls->giveAttr("issuperset", new BoxedFunction(BoxedCode::create((void*)setIssuperset, UNKNOWN, 2)));
     frozenset_cls->giveAttrBorrowed("issuperset", set_cls->getattr(getStaticString("issuperset")));
-    set_cls->giveAttr("isdisjoint", new BoxedFunction(FunctionMetadata::create((void*)setIsdisjoint, UNKNOWN, 2)));
+    set_cls->giveAttr("isdisjoint", new BoxedFunction(BoxedCode::create((void*)setIsdisjoint, UNKNOWN, 2)));
     frozenset_cls->giveAttrBorrowed("isdisjoint", set_cls->getattr(getStaticString("isdisjoint")));
 
-    set_cls->giveAttr("copy", new BoxedFunction(FunctionMetadata::create((void*)setCopy, UNKNOWN, 1)));
-    frozenset_cls->giveAttr("copy", new BoxedFunction(FunctionMetadata::create((void*)frozensetCopy, UNKNOWN, 1)));
-    set_cls->giveAttr("pop", new BoxedFunction(FunctionMetadata::create((void*)setPop, UNKNOWN, 1)));
+    set_cls->giveAttr("copy", new BoxedFunction(BoxedCode::create((void*)setCopy, UNKNOWN, 1)));
+    frozenset_cls->giveAttr("copy", new BoxedFunction(BoxedCode::create((void*)frozensetCopy, UNKNOWN, 1)));
+    set_cls->giveAttr("pop", new BoxedFunction(BoxedCode::create((void*)setPop, UNKNOWN, 1)));
 
     add_methods(set_cls, set_methods);
     add_methods(frozenset_cls, frozenset_methods);

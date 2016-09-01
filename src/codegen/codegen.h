@@ -75,7 +75,7 @@ struct GlobalState {
     llvm::Type* llvm_opaque_type;
     llvm::Type* llvm_boxedstring_type_ptr, *llvm_dict_type_ptr, *llvm_aststmt_type_ptr, *llvm_astexpr_type_ptr;
     llvm::Type* llvm_frame_info_type;
-    llvm::Type* llvm_functionmetadata_type_ptr, *llvm_closure_type_ptr, *llvm_generator_type_ptr;
+    llvm::Type* llvm_code_type_ptr, *llvm_closure_type_ptr, *llvm_generator_type_ptr;
     llvm::Type* llvm_module_type_ptr, *llvm_bool_type_ptr;
     llvm::Type* llvm_excinfo_type;
     llvm::Type* i1, *i8, *i8_ptr, *i32, *i64, *void_, *double_;

@@ -40,6 +40,7 @@ class BoxedFile;
 class BoxedClosure;
 class BoxedGenerator;
 class BoxedLong;
+class BoxedCode;
 
 void setupInt();
 void setupFloat();
@@ -151,9 +152,8 @@ extern "C" Box* decodeUTF8StringPtr(llvm::StringRef s);
 extern "C" inline void listAppendInternal(Box* self, Box* v) __attribute__((visibility("default")));
 extern "C" inline void listAppendInternalStolen(Box* self, Box* v) __attribute__((visibility("default")));
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
-extern "C" Box* createFunctionFromMetadata(FunctionMetadata* f, BoxedClosure* closure, Box* globals,
+extern "C" Box* createFunctionFromMetadata(BoxedCode* code, BoxedClosure* closure, Box* globals,
                                            std::initializer_list<Box*> defaults) noexcept;
-extern "C" FunctionMetadata* getFunctionMetadata(Box* b);
 extern "C" Box* createUserClass(BoxedString* name, Box* base, Box* attr_dict);
 extern "C" double unboxFloat(Box* b);
 extern "C" Box* createDict();
@@ -1068,11 +1068,116 @@ public:
 };
 static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
 
+// BoxedCode corresponds to metadata about a function definition.  If the same 'def foo():' block gets
+// executed multiple times, there will only be a single BoxedCode, even though multiple function objects
+// will get created from it.
+// BoxedCode objects can also be created to correspond to C/C++ runtime functions, via BoxedCode::create.
+//
+// BoxedCode objects also keep track of any machine code that we have available for this function.
+class BoxedCode : public Box {
+public:
+    std::unique_ptr<SourceInfo> source; // source can be NULL for functions defined in the C/C++ runtime
+
+    Box* _filename = nullptr;
+    Box* _name = nullptr;
+    int _firstline;
+
+    const ParamNames param_names;
+    const bool takes_varargs, takes_kwargs;
+    const int num_args;
+
+    FunctionList
+        versions; // any compiled versions along with their type parameters; in order from most preferred to least
+    ExceptionSwitchable<CompiledFunction*>
+        always_use_version; // if this version is set, always use it (for unboxed cases)
+    std::forward_list<std::pair<const OSREntryDescriptor*, CompiledFunction*>> osr_versions;
+
+    // Profiling counter:
+    int propagated_cxx_exceptions = 0;
+
+    // For use by the interpreter/baseline jit:
+    int times_interpreted;
+    long bjit_num_inside = 0;
+    std::vector<std::unique_ptr<JitCodeBlock>> code_blocks;
+    ICInvalidator dependent_interp_callsites;
+
+    // Functions can provide an "internal" version, which will get called instead
+    // of the normal dispatch through the functionlist.
+    // This can be used to implement functions which know how to rewrite themselves,
+    // such as typeCall.
+    typedef ExceptionSwitchableFunction<Box*, BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*,
+                                        Box**, const std::vector<BoxedString*>*> InternalCallable;
+    InternalCallable internal_callable;
+
+    BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source,
+              ParamNames param_names);
+    BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names = ParamNames::empty());
+    ~BoxedCode();
+
+    // The dummy constructor for PyCode_New:
+    BoxedCode(Box* filename, Box* name, int firstline);
+
+    DEFAULT_CLASS_SIMPLE(code_cls, false);
+
+
+    int numReceivedArgs() { return num_args + takes_varargs + takes_kwargs; }
+
+    bool isGenerator() const {
+        if (source)
+            return source->is_generator;
+        return false;
+    }
+
+    // These functions add new compiled "versions" (or, instantiations) of this BoxedCode.  The first
+    // form takes a CompiledFunction* directly, and the second forms (meant for use by the C++ runtime) take
+    // some raw parameters and will create the CompiledFunction behind the scenes.
+    void addVersion(CompiledFunction* compiled);
+    void addVersion(void* f, ConcreteCompilerType* rtn_type, ExceptionStyle exception_style = CXX);
+    void addVersion(void* f, ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types,
+                    ExceptionStyle exception_style = CXX);
+
+    // Helper function, meant for the C++ runtime, which allocates a BoxedCode object and calls addVersion
+    // once to it.
+    static BoxedCode* create(void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs, bool takes_kwargs,
+                             const ParamNames& param_names = ParamNames::empty(),
+                             ExceptionStyle exception_style = CXX) {
+        assert(!param_names.takes_param_names || nargs == param_names.numNormalArgs());
+        assert(takes_varargs || !param_names.has_vararg_name);
+        assert(takes_kwargs || !param_names.has_kwarg_name);
+
+        BoxedCode* code = new BoxedCode(nargs, takes_varargs, takes_kwargs, param_names);
+        code->addVersion(f, rtn_type, exception_style);
+        return code;
+    }
+
+    static BoxedCode* create(void* f, ConcreteCompilerType* rtn_type, int nargs,
+                             const ParamNames& param_names = ParamNames::empty(),
+                             ExceptionStyle exception_style = CXX) {
+        return create(f, rtn_type, nargs, false, false, param_names, exception_style);
+    }
+
+    // tries to free the bjit allocated code. returns true on success
+    bool tryDeallocatingTheBJitCode();
+
+    // These need to be static functions rather than methods because function
+    // pointers could point to them.
+    static BORROWED(Box*) name(Box* b, void*) noexcept;
+    static BORROWED(Box*) filename(Box* b, void*) noexcept;
+    static Box* co_name(Box* b, void*) noexcept;
+    static Box* co_filename(Box* b, void*) noexcept;
+    static Box* firstlineno(Box* b, void*) noexcept;
+    static Box* argcount(Box* b, void*) noexcept;
+    static Box* varnames(Box* b, void*) noexcept;
+    static Box* flags(Box* b, void*) noexcept;
+
+    static void dealloc(Box* b) noexcept;
+};
+
 class BoxedFunctionBase : public Box {
 public:
     Box** weakreflist;
 
-    FunctionMetadata* md;
+    BoxedCode* code;
 
     // TODO these should really go in BoxedFunction but it's annoying because they don't get
     // initializd until after BoxedFunctionBase's constructor is run which means they could have
@@ -1091,11 +1196,12 @@ public:
     BoxedString* name; // __name__ (should be here or in one of the derived classes?)
     Box* doc;          // __doc__
 
-    BoxedFunctionBase(FunctionMetadata* md, llvm::ArrayRef<Box*> defaults, BoxedClosure* closure = NULL,
+    BoxedFunctionBase(STOLEN(BoxedCode*) code, llvm::ArrayRef<Box*> defaults, BoxedClosure* closure = NULL,
                       Box* globals = NULL, bool can_change_defaults = false);
 
     ParamReceiveSpec getParamspec() {
-        return ParamReceiveSpec(md->num_args, defaults ? defaults->size() : 0, md->takes_varargs, md->takes_kwargs);
+        return ParamReceiveSpec(code->num_args, defaults ? defaults->size() : 0, code->takes_varargs,
+                                code->takes_kwargs);
     }
 };
 
@@ -1103,8 +1209,8 @@ class BoxedFunction : public BoxedFunctionBase {
 public:
     HCAttrs attrs;
 
-    BoxedFunction(FunctionMetadata* md);
-    BoxedFunction(FunctionMetadata* md, llvm::ArrayRef<Box*> defaults, BoxedClosure* closure = NULL,
+    BoxedFunction(STOLEN(BoxedCode*) code);
+    BoxedFunction(STOLEN(BoxedCode*) code, llvm::ArrayRef<Box*> defaults, BoxedClosure* closure = NULL,
                   Box* globals = NULL, bool can_change_defaults = false);
 
     DEFAULT_CLASS(function_cls);
@@ -1112,8 +1218,8 @@ public:
 
 class BoxedBuiltinFunctionOrMethod : public BoxedFunctionBase {
 public:
-    BoxedBuiltinFunctionOrMethod(FunctionMetadata* f, const char* name, const char* doc = NULL);
-    BoxedBuiltinFunctionOrMethod(FunctionMetadata* f, const char* name, std::initializer_list<Box*> defaults,
+    BoxedBuiltinFunctionOrMethod(STOLEN(BoxedCode*) code, const char* name, const char* doc = NULL);
+    BoxedBuiltinFunctionOrMethod(STOLEN(BoxedCode*) code, const char* name, std::initializer_list<Box*> defaults,
                                  BoxedClosure* closure = NULL, const char* doc = NULL);
 
     DEFAULT_CLASS_SIMPLE(builtin_function_or_method_cls, true);
@@ -1284,6 +1390,8 @@ public:
     DEFAULT_CLASS_SIMPLE(generator_cls, true);
 };
 
+
+
 Box* objectSetattr(Box* obj, Box* attr, Box* value);
 
 BORROWED(Box*) unwrapAttrWrapper(Box* b);
@@ -1309,8 +1417,6 @@ AST* unboxAst(Box* b);
 // Classes created in Python get this automatically, but builtin types (including extension types)
 // are supposed to add one themselves.  type_cls and function_cls do this, for example.
 extern Box* dict_descr;
-
-FunctionMetadata* metadataFromCode(Box* code);
 
 BORROWED(Box*) getFrame(FrameInfo* frame_info);
 BORROWED(Box*) getFrame(int depth);
