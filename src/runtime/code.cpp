@@ -197,7 +197,7 @@ extern "C" BORROWED(PyObject*) PyCode_GetName(PyCodeObject* op) noexcept {
 
 extern "C" int PyCode_HasFreeVars(PyCodeObject* _code) noexcept {
     BoxedCode* code = (BoxedCode*)_code;
-    return code->f->source->getScopeInfo()->takesClosure() ? 1 : 0;
+    return code->f->source->scoping.takesClosure() ? 1 : 0;
 }
 
 void setupCode() {
