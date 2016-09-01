@@ -837,9 +837,9 @@ ConcreteCompilerVariable* UnknownType::hasnext(IREmitter& emitter, const OpInfo&
     return boolFromI1(emitter, rtn_val);
 }
 
-CompilerVariable* makeFunction(IREmitter& emitter, FunctionMetadata* f, llvm::Value* closure, llvm::Value* globals,
+CompilerVariable* makeFunction(IREmitter& emitter, BoxedCode* code, llvm::Value* closure, llvm::Value* globals,
                                const std::vector<ConcreteCompilerVariable*>& defaults) {
-    // Unlike the FunctionMetadata*, which can be shared between recompilations, the Box* around it
+    // Unlike the BoxedCode*, which can be shared between recompilations, the Box* around it
     // should be created anew every time the functiondef is encountered
 
     ConcreteCompilerVariable* convertedClosure = NULL;
@@ -872,8 +872,8 @@ CompilerVariable* makeFunction(IREmitter& emitter, FunctionMetadata* f, llvm::Va
     // emitter.createCall().
     llvm::Instruction* boxed = emitter.getBuilder()->CreateCall(
         g.funcs.createFunctionFromMetadata,
-        std::vector<llvm::Value*>{ embedRelocatablePtr(f, g.llvm_functionmetadata_type_ptr), closure, globals, scratch,
-                                   getConstantInt(defaults.size(), g.i64) });
+        std::vector<llvm::Value*>{ emitter.setType(embedRelocatablePtr(code, g.llvm_code_type_ptr), RefType::BORROWED),
+                                   closure, globals, scratch, getConstantInt(defaults.size(), g.i64) });
     emitter.setType(boxed, RefType::OWNED);
 
     // The refcounter needs to know that this call "uses" the arguments that got passed via scratch.
@@ -946,12 +946,12 @@ public:
 
     static CompilerType* fromRT(BoxedFunction* rtfunc, bool stripfirst) {
         std::vector<Sig*> sigs;
-        FunctionMetadata* md = rtfunc->md;
+        BoxedCode* code = rtfunc->code;
 
         assert(!rtfunc->can_change_defaults);
 
-        for (int i = 0; i < md->versions.size(); i++) {
-            CompiledFunction* cf = md->versions[i];
+        for (int i = 0; i < code->versions.size(); i++) {
+            CompiledFunction* cf = code->versions[i];
 
             FunctionSpecialization* fspec = cf->spec;
 
@@ -1865,14 +1865,14 @@ public:
         // but I don't think we should be running into that case.
         RELEASE_ASSERT(!rtattr_func->can_change_defaults, "could handle this but unexpected");
 
-        FunctionMetadata* md = rtattr_func->md;
-        assert(md);
+        BoxedCode* code = rtattr_func->code;
+        assert(code);
 
         ParamReceiveSpec paramspec = rtattr_func->getParamspec();
-        if (md->takes_varargs || paramspec.takes_kwargs)
+        if (code->takes_varargs || paramspec.takes_kwargs)
             return NULL;
 
-        RELEASE_ASSERT(paramspec.num_args == md->numReceivedArgs(), "");
+        RELEASE_ASSERT(paramspec.num_args == code->numReceivedArgs(), "");
         RELEASE_ASSERT(args.size() + 1 >= paramspec.num_args - paramspec.num_defaults
                            && args.size() + 1 <= paramspec.num_args,
                        "%d", info.unw_info.current_stmt->lineno);
@@ -1881,9 +1881,9 @@ public:
         CompiledFunction* best_exception_mismatch = NULL;
         bool found = false;
         // TODO have to find the right version.. similar to resolveclfunc?
-        for (int i = 0; i < md->versions.size(); i++) {
-            cf = md->versions[i];
-            assert(cf->spec->arg_types.size() == md->numReceivedArgs());
+        for (int i = 0; i < code->versions.size(); i++) {
+            cf = code->versions[i];
+            assert(cf->spec->arg_types.size() == code->numReceivedArgs());
 
             bool fits = true;
             for (int j = 0; j < args.size(); j++) {
@@ -1915,7 +1915,7 @@ public:
         RELEASE_ASSERT(cf->code, "");
 
         std::vector<llvm::Type*> arg_types;
-        RELEASE_ASSERT(paramspec.num_args == md->numReceivedArgs(), "");
+        RELEASE_ASSERT(paramspec.num_args == code->numReceivedArgs(), "");
         for (int i = 0; i < paramspec.num_args; i++) {
             // TODO support passing unboxed values as arguments
             assert(cf->spec->arg_types[i]->llvmType() == g.llvm_value_type_ptr);
@@ -1930,7 +1930,7 @@ public:
         llvm::FunctionType* ft = llvm::FunctionType::get(cf->spec->rtn_type->llvmType(), arg_types, false);
 
         llvm::Value* linked_function;
-        if (cf->md->source) // for JITed functions we need to make the desination address relocatable.
+        if (cf->code_obj->source) // for JITed functions we need to make the desination address relocatable.
             linked_function = embedRelocatablePtr(cf->code, ft->getPointerTo());
         else
             linked_function = embedConstantPtr(cf->code, ft->getPointerTo());

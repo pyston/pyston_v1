@@ -20,6 +20,7 @@
 
 #include "core/cfg.h"
 #include "core/stringpool.h"
+#include "runtime/types.h"
 
 namespace llvm {
 class Function;
@@ -32,25 +33,25 @@ struct StackMap;
 
 class OSREntryDescriptor {
 private:
-    OSREntryDescriptor(FunctionMetadata* md, AST_Jump* backedge, ExceptionStyle exception_style)
-        : md(md),
+    OSREntryDescriptor(BoxedCode* code, AST_Jump* backedge, ExceptionStyle exception_style)
+        : code(code),
           backedge(backedge),
           exception_style(exception_style),
-          args(md->source->cfg->getVRegInfo().getTotalNumOfVRegs()),
-          potentially_undefined(md->source->cfg->getVRegInfo().getTotalNumOfVRegs()) {
-        assert(md);
+          args(code->source->cfg->getVRegInfo().getTotalNumOfVRegs()),
+          potentially_undefined(code->source->cfg->getVRegInfo().getTotalNumOfVRegs()) {
+        assert(code);
     }
 
 public:
-    FunctionMetadata* md;
+    BoxedCode* code;
     AST_Jump* const backedge;
     ExceptionStyle exception_style;
     typedef VRegMap<ConcreteCompilerType*> ArgMap;
     ArgMap args;
     VRegSet potentially_undefined;
 
-    static OSREntryDescriptor* create(FunctionMetadata* md, AST_Jump* backedge, ExceptionStyle exception_style) {
-        return new OSREntryDescriptor(md, backedge, exception_style);
+    static OSREntryDescriptor* create(BoxedCode* code, AST_Jump* backedge, ExceptionStyle exception_style) {
+        return new OSREntryDescriptor(code, backedge, exception_style);
     }
 };
 

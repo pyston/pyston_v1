@@ -3260,16 +3260,16 @@ static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeI
     return rtn;
 }
 
-FunctionMetadata*& metadataForAST(AST* ast) {
+BoxedCode*& codeForAST(AST* ast) {
     switch (ast->type) {
         case AST_TYPE::Expression:
-            return ast_cast<AST_Expression>(ast)->md;
+            return ast_cast<AST_Expression>(ast)->code;
         case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->md;
+            return ast_cast<AST_FunctionDef>(ast)->code;
         case AST_TYPE::ClassDef:
-            return ast_cast<AST_ClassDef>(ast)->md;
+            return ast_cast<AST_ClassDef>(ast)->code;
         case AST_TYPE::Module:
-            return ast_cast<AST_Module>(ast)->md;
+            return ast_cast<AST_Module>(ast)->code;
         default:
             break;
     }
@@ -3298,12 +3298,16 @@ void ModuleCFGProcessor::runRecursively(AST* ast, AST_arguments* args, AST* orig
 
     si->cfg = computeCFG(si.get(), param_names, scope_info, this);
 
-    FunctionMetadata* md;
+    BoxedCode* code;
     if (args)
-        md = new FunctionMetadata(args->args.size(), args->vararg, args->kwarg, std::move(si), std::move(param_names));
+        code = new BoxedCode(args->args.size(), args->vararg, args->kwarg, std::move(si), std::move(param_names));
     else
-        md = new FunctionMetadata(0, false, false, std::move(si), std::move(param_names));
-    metadataForAST(ast) = md;
+        code = new BoxedCode(0, false, false, std::move(si), std::move(param_names));
+
+    // XXX very bad!  Should properly track this:
+    constants.push_back(code);
+
+    codeForAST(ast) = code;
 }
 
 void computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn, BoxedModule* bm) {

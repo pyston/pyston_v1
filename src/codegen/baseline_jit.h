@@ -168,7 +168,7 @@ private:
         uint8_t* get() { return addr; }
     };
 
-    FunctionMetadata* md;
+    BoxedCode* code;
     // the memory block contains the EH frame directly followed by the generated machine code.
     MemoryManager memory;
     int entry_offset;
@@ -183,7 +183,7 @@ private:
 
 
 public:
-    JitCodeBlock(FunctionMetadata* md, llvm::StringRef name);
+    JitCodeBlock(BoxedCode* code, llvm::StringRef name);
     ~JitCodeBlock();
 
     std::unique_ptr<JitFragmentWriter> newFragment(CFGBlock* block, int patch_jump_offset,
@@ -214,7 +214,7 @@ private:
 
     static constexpr int min_patch_size = 13;
 
-    FunctionMetadata* md;
+    BoxedCode* code;
     CFGBlock* block;
     int code_offset; // offset inside the JitCodeBlock to the start of this block
 
@@ -257,7 +257,7 @@ private:
     llvm::SmallVector<PPInfo, 8> pp_infos;
 
 public:
-    JitFragmentWriter(FunctionMetadata* md, CFGBlock* block, std::unique_ptr<ICInfo> ic_info,
+    JitFragmentWriter(BoxedCode* code, CFGBlock* block, std::unique_ptr<ICInfo> ic_info,
                       std::unique_ptr<ICSlotRewrite> rewrite, int code_offset, int num_bytes_overlapping,
                       void* entry_code, JitCodeBlock& code_block, llvm::DenseSet<int> known_non_null_vregs);
     ~JitFragmentWriter();

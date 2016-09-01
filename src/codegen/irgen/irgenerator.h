@@ -59,9 +59,9 @@ extern const std::string FRAME_INFO_PTR_NAME;
 // TODO this probably shouldn't be here
 class IRGenState {
 private:
-    // Note: due to some not-yet-fixed behavior, cf->md is NULL will only get set to point
-    // to md at the end of irgen.
-    FunctionMetadata* md;
+    // Note: due to some not-yet-fixed behavior, cf->code_obj is NULL will only get set to point
+    // to code_obj at the end of irgen.
+    BoxedCode* code;
     CompiledFunction* cf;
     llvm::Function* func;
     SourceInfo* source_info;
@@ -83,7 +83,7 @@ private:
     int scratch_size;
 
 public:
-    IRGenState(FunctionMetadata* md, CompiledFunction* cf, llvm::Function* func, SourceInfo* source_info,
+    IRGenState(BoxedCode* code, CompiledFunction* cf, llvm::Function* func, SourceInfo* source_info,
                std::unique_ptr<PhiAnalysis> phis, const ParamNames* param_names, GCBuilder* gc,
                llvm::MDNode* func_dbg_info, RefcountTracker* refcount_tracker);
     ~IRGenState();
@@ -91,7 +91,7 @@ public:
     CFG* getCFG() { return getSourceInfo()->cfg; }
 
     CompiledFunction* getCurFunction() { return cf; }
-    FunctionMetadata* getMD() { return md; }
+    BoxedCode* getMD() { return code; }
 
     ExceptionStyle getExceptionStyle() { return cf->exception_style; }
 

@@ -32,15 +32,13 @@
 #include "core/ast.h"
 #include "core/cfg.h"
 #include "core/util.h"
-#include "runtime/code.h"
 #include "runtime/types.h"
 
 namespace pyston {
 
-FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs,
-                                   std::unique_ptr<SourceInfo> source, ParamNames param_names)
-    : code_obj(NULL),
-      source(std::move(source)),
+BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source,
+                     ParamNames param_names)
+    : source(std::move(source)),
       param_names(std::move(param_names)),
       takes_varargs(takes_varargs),
       takes_kwargs(takes_kwargs),
@@ -49,9 +47,8 @@ FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_
       internal_callable(NULL, NULL) {
 }
 
-FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
-    : code_obj(NULL),
-      source(nullptr),
+BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
+    : source(nullptr),
       param_names(param_names),
       takes_varargs(takes_varargs),
       takes_kwargs(takes_kwargs),
@@ -60,19 +57,10 @@ FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_
       internal_callable(NULL, NULL) {
 }
 
-BORROWED(BoxedCode*) FunctionMetadata::getCode() {
-    if (!code_obj) {
-        code_obj = new BoxedCode(this);
-        // FunctionMetadatas don't currently participate in GC.  They actually never get freed currently.
-        constants.push_back(code_obj);
-    }
-    return code_obj;
-}
-
-void FunctionMetadata::addVersion(CompiledFunction* compiled) {
+void BoxedCode::addVersion(CompiledFunction* compiled) {
     assert(compiled);
     assert((compiled->spec != NULL) + (compiled->entry_descriptor != NULL) == 1);
-    assert(compiled->md);
+    assert(compiled->code_obj);
     assert(compiled->code);
 
     if (compiled->entry_descriptor == NULL) {
