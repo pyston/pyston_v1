@@ -23,6 +23,7 @@
 
 namespace pyston {
 
+class ScopeInfo;
 class CFGBlock;
 class BoxedClass;
 class AST_expr;
@@ -46,9 +47,9 @@ public:
 
 TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& param_names,
                              const std::vector<ConcreteCompilerType*>& arg_types, EffortLevel effort,
-                             TypeAnalysis::SpeculationLevel speculation);
+                             TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info);
 TypeAnalysis* doTypeAnalysis(const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
-                             TypeAnalysis::SpeculationLevel speculation);
+                             TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info);
 }
 
 #endif

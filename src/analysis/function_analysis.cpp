@@ -214,8 +214,10 @@ class DefinednessBBAnalyzer : public BBAnalyzer<DefinednessAnalysis::DefinitionL
 private:
     typedef DefinednessAnalysis::DefinitionLevel DefinitionLevel;
 
+    ScopeInfo* scope_info;
+
 public:
-    DefinednessBBAnalyzer() {}
+    DefinednessBBAnalyzer(ScopeInfo* scope_info) : scope_info(scope_info) {}
 
     virtual DefinitionLevel merge(DefinitionLevel from, DefinitionLevel into) const {
         assert(from != DefinitionLevel::Unknown);
@@ -372,7 +374,8 @@ void DefinednessBBAnalyzer::processBB(Map& starting, CFGBlock* block) const {
     }
 }
 
-void DefinednessAnalysis::run(VRegMap<DefinednessAnalysis::DefinitionLevel> initial_map, CFGBlock* initial_block) {
+void DefinednessAnalysis::run(VRegMap<DefinednessAnalysis::DefinitionLevel> initial_map, CFGBlock* initial_block,
+                              ScopeInfo* scope_info) {
     Timer _t("DefinednessAnalysis()", 10);
 
     // Don't run this twice:
@@ -383,8 +386,8 @@ void DefinednessAnalysis::run(VRegMap<DefinednessAnalysis::DefinitionLevel> init
     assert(initial_map.numVregs() == nvregs);
 
     auto&& vreg_info = cfg->getVRegInfo();
-    computeFixedPoint(std::move(initial_map), initial_block, DefinednessBBAnalyzer(), false, defined_at_beginning,
-                      defined_at_end);
+    computeFixedPoint(std::move(initial_map), initial_block, DefinednessBBAnalyzer(scope_info), false,
+                      defined_at_beginning, defined_at_end);
 
     for (const auto& p : defined_at_end) {
         assert(p.second.numVregs() == nvregs);
@@ -395,6 +398,14 @@ void DefinednessAnalysis::run(VRegMap<DefinednessAnalysis::DefinitionLevel> init
         // required.resize(nvregs, /* value= */ false);
 
         for (int vreg = 0; vreg < nvregs; vreg++) {
+#ifndef NDEBUG
+            if (vreg_info.vregHasName(vreg)) {
+                ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(vreg_info.getName(vreg));
+                ASSERT(vst != ScopeInfo::VarScopeType::GLOBAL && vst != ScopeInfo::VarScopeType::NAME, "%s",
+                       vreg_info.getName(vreg).c_str());
+            }
+#endif
+
             auto status = p.second[vreg];
             // assert(p.second.count(name));
             // auto status = p.second.find(name)->second;
@@ -420,7 +431,7 @@ const VRegSet& DefinednessAnalysis::getDefinedVregsAtEnd(CFGBlock* block) {
 }
 
 PhiAnalysis::PhiAnalysis(VRegMap<DefinednessAnalysis::DefinitionLevel> initial_map, CFGBlock* initial_block,
-                         bool initials_need_phis, LivenessAnalysis* liveness)
+                         bool initials_need_phis, LivenessAnalysis* liveness, ScopeInfo* scope_info)
     : definedness(), empty_set(initial_map.numVregs()), liveness(liveness) {
     auto cfg = initial_block->cfg;
     auto&& vreg_info = cfg->getVRegInfo();
@@ -432,7 +443,7 @@ PhiAnalysis::PhiAnalysis(VRegMap<DefinednessAnalysis::DefinitionLevel> initial_m
     int num_vregs = initial_map.numVregs();
     assert(num_vregs == vreg_info.getTotalNumOfVRegs());
 
-    definedness.run(std::move(initial_map), initial_block);
+    definedness.run(std::move(initial_map), initial_block, scope_info);
 
     Timer _t("PhiAnalysis()", 10);
 
@@ -523,7 +534,8 @@ std::unique_ptr<LivenessAnalysis> computeLivenessInfo(CFG* cfg) {
     return std::unique_ptr<LivenessAnalysis>(new LivenessAnalysis(cfg));
 }
 
-std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames& args, CFG* cfg, LivenessAnalysis* liveness) {
+std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames& args, CFG* cfg, LivenessAnalysis* liveness,
+                                                 ScopeInfo* scope_info) {
     static StatCounter counter("num_phi_analysis");
     counter.log();
 
@@ -550,11 +562,11 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames& args, CFG* cf
     assert(initial_map.numVregs() == vreg_info.getTotalNumOfVRegs());
 
     return std::unique_ptr<PhiAnalysis>(
-        new PhiAnalysis(std::move(initial_map), cfg->getStartingBlock(), false, liveness));
+        new PhiAnalysis(std::move(initial_map), cfg->getStartingBlock(), false, liveness, scope_info));
 }
 
-std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor* entry_descriptor,
-                                                 LivenessAnalysis* liveness) {
+std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor* entry_descriptor, LivenessAnalysis* liveness,
+                                                 ScopeInfo* scope_info) {
     static StatCounter counter("num_phi_analysis");
     counter.log();
 
@@ -576,6 +588,6 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor* entry
     }
 
     return std::unique_ptr<PhiAnalysis>(
-        new PhiAnalysis(std::move(initial_map), entry_descriptor->backedge->target, true, liveness));
+        new PhiAnalysis(std::move(initial_map), entry_descriptor->backedge->target, true, liveness, scope_info));
 }
 }

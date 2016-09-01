@@ -31,25 +31,21 @@ TEST_F(AnalysisTest, augassign) {
     AST_Module* module = caching_parse_file(fn.c_str(), 0);
     assert(module);
 
-    FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
-
-    auto scoping = std::make_shared<ScopingAnalysis>(module, true);
-    computeAllCFGs(module, true, future_flags, boxString(fn), NULL);
+    ScopingAnalysis *scoping = new ScopingAnalysis(module, true);
 
     assert(module->body[0]->type == AST_TYPE::FunctionDef);
     AST_FunctionDef* func = static_cast<AST_FunctionDef*>(module->body[0]);
 
     ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
-
-    ASSERT_NE(scope_info->getScopeTypeOfName(module->interned_strings->get("a")), ScopeInfo::VarScopeType::GLOBAL);
+    ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("a")) == ScopeInfo::VarScopeType::GLOBAL);
     ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("b")) == ScopeInfo::VarScopeType::GLOBAL);
 
-    ParamNames param_names(func, *module->interned_strings.get());
+    FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
 
-    // Hack to get at the cfg:
-    auto node = module->md->source->cfg->blocks[0]->body[0];
-    CFG* cfg = ast_cast<AST_MakeFunction>(ast_cast<AST_Assign>(node)->value)->function_def->md->source->cfg;
+    SourceInfo* si = new SourceInfo(createModule(boxString("augassign"), fn.c_str()), scoping, future_flags, func, boxString(fn));
 
+    ParamNames param_names(si->ast, si->getInternedStrings());
+    CFG* cfg = computeCFG(si, param_names);
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
     auto&& vregs = cfg->getVRegInfo();
 
@@ -61,7 +57,7 @@ TEST_F(AnalysisTest, augassign) {
             ASSERT_TRUE(liveness->isLiveAtEnd(vregs.getVReg(module->interned_strings->get("a")), block));
     }
 
-    std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(ParamNames(func, *module->interned_strings.get()), cfg, liveness.get());
+    std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(ParamNames(func, si->getInternedStrings()), cfg, liveness.get(), scope_info);
 }
 
 void doOsrTest(bool is_osr, bool i_maybe_undefined) {
@@ -69,22 +65,20 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     AST_Module* module = caching_parse_file(fn.c_str(), 0);
     assert(module);
 
-    ParamNames param_names(module, *module->interned_strings.get());
+    ScopingAnalysis *scoping = new ScopingAnalysis(module, true);
 
     assert(module->body[0]->type == AST_TYPE::FunctionDef);
     AST_FunctionDef* func = static_cast<AST_FunctionDef*>(module->body[0]);
 
-    auto scoping = std::make_shared<ScopingAnalysis>(module, true);
-    ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
-
     FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
 
-    computeAllCFGs(module, true, future_flags, boxString(fn), NULL);
+    ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
+    std::unique_ptr<SourceInfo> si(new SourceInfo(createModule(boxString("osr" + std::to_string((is_osr << 1) + i_maybe_undefined)),
+                    fn.c_str()), scoping, future_flags, func, boxString(fn)));
+    FunctionMetadata* clfunc = new FunctionMetadata(0, false, false, std::move(si));
 
-    // Hack to get at the cfg:
-    auto node = module->md->source->cfg->blocks[0]->body[0];
-    auto md = ast_cast<AST_MakeFunction>(ast_cast<AST_Assign>(node)->value)->function_def->md;
-    CFG* cfg = md->source->cfg;
+    CFG* cfg = computeCFG(clfunc->source.get(), clfunc->param_names);
+    clfunc->source->cfg = cfg;
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
 
     // cfg->print();
@@ -107,16 +101,16 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
 
     if (is_osr) {
         int vreg = vregs.getVReg(i_str);
-        OSREntryDescriptor* entry_descriptor = OSREntryDescriptor::create(md, backedge, CXX);
+        OSREntryDescriptor* entry_descriptor = OSREntryDescriptor::create(clfunc, backedge, CXX);
         // need to set it to non-null
         ConcreteCompilerType* fake_type = (ConcreteCompilerType*)1;
         entry_descriptor->args[vreg] = fake_type;
         if (i_maybe_undefined)
             entry_descriptor->potentially_undefined.set(vreg);
         entry_descriptor->args[vregs.getVReg(iter_str)] = fake_type;
-        phis = computeRequiredPhis(entry_descriptor, liveness.get());
+        phis = computeRequiredPhis(entry_descriptor, liveness.get(), scope_info);
     } else {
-        phis = computeRequiredPhis(ParamNames(func, *module->interned_strings), cfg, liveness.get());
+        phis = computeRequiredPhis(ParamNames(func, clfunc->source->getInternedStrings()), cfg, liveness.get(), scope_info);
     }
 
     // First, verify that we require phi nodes for the block we enter into.

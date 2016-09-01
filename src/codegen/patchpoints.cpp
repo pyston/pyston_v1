@@ -98,9 +98,9 @@ void PatchpointInfo::parseLocationMap(StackMap::Record* r, LocationMap* map) {
     auto&& source = parentFunction()->md->source;
     if (source->is_generator)
         map->generator.locations.push_back(parse_type(GENERATOR));
-    if (source->scoping.takesClosure())
+    if (source->getScopeInfo()->takesClosure())
         map->passed_closure.locations.push_back(parse_type(CLOSURE));
-    if (source->scoping.createsClosure())
+    if (source->getScopeInfo()->createsClosure())
         map->created_closure.locations.push_back(parse_type(CLOSURE));
 
     for (FrameVarInfo& frame_var : frame_info_desc.vars) {

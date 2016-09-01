@@ -400,8 +400,6 @@ public:
     std::vector<AST_stmt*> body;
     InternedString name;
 
-    FunctionMetadata* md;
-
     AST_ClassDef() : AST_stmt(AST_TYPE::ClassDef) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ClassDef;
@@ -511,8 +509,6 @@ public:
     // this should be an expr but we convert it into a AST_Return(AST_expr) to make the code simpler
     AST_stmt* body;
 
-    FunctionMetadata* md;
-
     virtual void accept(ASTVisitor* v);
 
     AST_Expression(std::unique_ptr<InternedStringPool> interned_strings)
@@ -552,8 +548,6 @@ public:
     std::vector<AST_expr*> decorator_list;
     InternedString name; // if the name is not set this is a lambda
     AST_arguments* args;
-
-    FunctionMetadata* md;
 
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
@@ -710,8 +704,6 @@ public:
     // no lineno, col_offset attributes
     std::vector<AST_stmt*> body;
 
-    FunctionMetadata* md;
-
     virtual void accept(ASTVisitor* v);
 
     AST_Module(std::unique_ptr<InternedStringPool> interned_strings)
@@ -744,16 +736,11 @@ public:
     // different bytecodes.
     ScopeInfo::VarScopeType lookup_type;
 
-    // These are only valid for lookup_type == FAST or CLOSURE
     // The interpreter and baseline JIT store variables with FAST and CLOSURE scopes in an array (vregs) this specifies
     // the zero based index of this variable inside the vregs array. If uninitialized it's value is -1.
     int vreg;
-    bool is_kill = false;
 
-    // Only valid for lookup_type == DEREF:
-    DerefInfo deref_info = DerefInfo({ INT_MAX, INT_MAX });
-    // Only valid for lookup_type == CLOSURE:
-    int closure_offset = -1;
+    bool is_kill = false;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
@@ -1134,7 +1121,7 @@ public:
 };
 
 template <typename T> T* ast_cast(AST* node) {
-    ASSERT(!node || node->type == T::TYPE, "%d", node ? node->type : 0);
+    assert(!node || node->type == T::TYPE);
     return static_cast<T*>(node);
 }
 

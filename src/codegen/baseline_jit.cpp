@@ -372,8 +372,14 @@ RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar
     return r;
 }
 
-RewriterVar* JitFragmentWriter::emitDeref(AST_Name* name) {
-    return call(false, (void*)ASTInterpreterJitInterface::derefHelper, getInterp(), imm(name))->setType(RefType::OWNED);
+RewriterVar* JitFragmentWriter::emitDeref(InternedString s) {
+    return call(false, (void*)ASTInterpreterJitInterface::derefHelper, getInterp(),
+#ifndef NDEBUG
+                imm(asUInt(s).first), imm(asUInt(s).second))
+#else
+                imm(asUInt(s)))
+#endif
+        ->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitExceptionMatches(RewriterVar* v, RewriterVar* cls) {
@@ -385,22 +391,20 @@ RewriterVar* JitFragmentWriter::emitGetAttr(RewriterVar* obj, BoxedString* s, AS
         .first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitGetBlockLocal(AST_Name* name) {
-    auto s = name->id;
-    auto vreg = name->vreg;
+RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString s, int vreg) {
     auto it = local_syms.find(s);
     if (it == local_syms.end()) {
-        auto r = emitGetLocal(name);
+        auto r = emitGetLocal(s, vreg);
         assert(r->reftype == RefType::OWNED);
-        emitSetBlockLocal(name, r);
+        emitSetBlockLocal(s, vreg, r);
         return r;
     }
     return it->second;
 }
 
-void JitFragmentWriter::emitKillTemporary(AST_Name* name) {
-    if (!local_syms.count(name->id))
-        emitSetLocal(name, false, imm(nullptr));
+void JitFragmentWriter::emitKillTemporary(InternedString s, int vreg) {
+    if (!local_syms.count(s))
+        emitSetLocal(s, vreg, false, imm(nullptr));
 }
 
 RewriterVar* JitFragmentWriter::emitGetBoxedLocal(BoxedString* s) {
@@ -432,11 +436,9 @@ RewriterVar* JitFragmentWriter::emitGetItem(AST_expr* node, RewriterVar* value, 
         .first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitGetLocal(AST_Name* name) {
+RewriterVar* JitFragmentWriter::emitGetLocal(InternedString s, int vreg) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitGetLocal start");
-    auto vreg = name->vreg;
-    auto s = name->id;
     assert(vreg >= 0);
     // TODO Can we use BORROWED here? Not sure if there are cases when we can't rely on borrowing the ref
     // from the vregs array.  Safer like this.
@@ -684,16 +686,14 @@ void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedStrin
     attr->refConsumed(rtn.second);
 }
 
-void JitFragmentWriter::emitSetBlockLocal(AST_Name* name, STOLEN(RewriterVar*) v) {
+void JitFragmentWriter::emitSetBlockLocal(InternedString s, int vreg, STOLEN(RewriterVar*) v) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitSetBlockLocal() start");
-    auto vreg = name->vreg;
-    auto s = name->id;
-    RewriterVar* prev = local_syms[name->id];
+    RewriterVar* prev = local_syms[s];
     // if we never set this sym before in this BB and the symbol gets accessed in several blocks clear it because it
     // could have been set in a previous block.
     if (!prev && !block->cfg->getVRegInfo().isBlockLocalVReg(vreg))
-        emitSetLocal(name, false, imm(nullptr)); // clear out the vreg
+        emitSetLocal(s, vreg, false, imm(nullptr)); // clear out the vreg
     local_syms[s] = v;
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitSetBlockLocal() end");
@@ -728,13 +728,18 @@ void JitFragmentWriter::emitSetItemName(BoxedString* s, RewriterVar* v) {
     emitSetItem(emitGetBoxedLocals(), imm(s), v);
 }
 
-void JitFragmentWriter::emitSetLocal(AST_Name* name, bool set_closure, STOLEN(RewriterVar*) v) {
+void JitFragmentWriter::emitSetLocal(InternedString s, int vreg, bool set_closure, STOLEN(RewriterVar*) v) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitSetLocal() start");
-    auto vreg = name->vreg;
     assert(vreg >= 0);
     if (set_closure) {
-        call(false, (void*)ASTInterpreterJitInterface::setLocalClosureHelper, getInterp(), imm(name), v);
+        call(false, (void*)ASTInterpreterJitInterface::setLocalClosureHelper, getInterp(), imm(vreg),
+#ifndef NDEBUG
+             imm(asUInt(s).first), imm(asUInt(s).second),
+#else
+             imm(asUInt(s)),
+#endif
+             v);
         v->refConsumed();
     } else {
         // TODO With definedness analysis, we could know whether we needed to emit an decref/xdecref/neither.
