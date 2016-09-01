@@ -283,7 +283,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     RELEASE_ASSERT(fn, "");
 
     FutureFlags future_flags = getFutureFlags(m->body, fn);
-    computeAllCFGs(m, /* globals_from_module */ true, future_flags, autoDecref(boxString(fn)), bm);
+    BoxedCode* code = computeAllCFGs(m, /* globals_from_module */ true, future_flags, autoDecref(boxString(fn)), bm);
+    AUTO_DECREF((Box*)code);
 
     FunctionMetadata* md = metadataForAST(m);
     assert(md);
@@ -317,8 +318,8 @@ Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
     return astInterpretFunctionEval(md, globals, boxedLocals);
 }
 
-static FunctionMetadata* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_stmt*> body, BoxedString* fn,
-                                              PyCompilerFlags* flags) {
+static BoxedCode* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_stmt*> body, BoxedString* fn,
+                                       PyCompilerFlags* flags) {
     Timer _t("for evalOrExec()");
 
     // `my_future_flags` are the future flags enabled in the exec's code.
@@ -332,15 +333,14 @@ static FunctionMetadata* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_st
         flags->cf_flags = future_flags;
     }
 
-    computeAllCFGs(source, /* globals_from_module */ false, future_flags, fn, getCurrentModule());
-    return metadataForAST(source);
+    return computeAllCFGs(source, /* globals_from_module */ false, future_flags, fn, getCurrentModule());
 }
 
-static FunctionMetadata* compileExec(AST_Module* parsedModule, BoxedString* fn, PyCompilerFlags* flags) {
+static BoxedCode* compileExec(AST_Module* parsedModule, BoxedString* fn, PyCompilerFlags* flags) {
     return compileForEvalOrExec(parsedModule, parsedModule->body, fn, flags);
 }
 
-static FunctionMetadata* compileEval(AST_Expression* parsedExpr, BoxedString* fn, PyCompilerFlags* flags) {
+static BoxedCode* compileEval(AST_Expression* parsedExpr, BoxedString* fn, PyCompilerFlags* flags) {
     return compileForEvalOrExec(parsedExpr, parsedExpr->body, fn, flags);
 }
 
@@ -349,20 +349,20 @@ extern "C" PyCodeObject* PyAST_Compile(struct _mod* _mod, const char* filename, 
     try {
         mod_ty mod = _mod;
         AST* parsed = cpythonToPystonAST(mod, filename);
-        FunctionMetadata* md = NULL;
+        BoxedCode* code = NULL;
         switch (mod->kind) {
             case Module_kind:
             case Interactive_kind:
                 if (parsed->type != AST_TYPE::Module) {
                     raiseExcHelper(TypeError, "expected Module node, got %s", AST_TYPE::stringify(parsed->type));
                 }
-                md = compileExec(static_cast<AST_Module*>(parsed), autoDecref(boxString(filename)), flags);
+                code = compileExec(static_cast<AST_Module*>(parsed), autoDecref(boxString(filename)), flags);
                 break;
             case Expression_kind:
                 if (parsed->type != AST_TYPE::Expression) {
                     raiseExcHelper(TypeError, "expected Expression node, got %s", AST_TYPE::stringify(parsed->type));
                 }
-                md = compileEval(static_cast<AST_Expression*>(parsed), autoDecref(boxString(filename)), flags);
+                code = compileEval(static_cast<AST_Expression*>(parsed), autoDecref(boxString(filename)), flags);
                 break;
             case Suite_kind:
                 PyErr_SetString(PyExc_SystemError, "suite should not be possible");
@@ -372,7 +372,7 @@ extern "C" PyCodeObject* PyAST_Compile(struct _mod* _mod, const char* filename, 
                 return NULL;
         }
 
-        return (PyCodeObject*)incref(md->getCode());
+        return (PyCodeObject*)code;
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -747,6 +747,9 @@ void FunctionMetadata::addVersion(void* f, ConcreteCompilerType* rtn_type,
 }
 
 bool FunctionMetadata::tryDeallocatingTheBJitCode() {
+    if (code_blocks.empty())
+        return true;
+
     // we can only delete the code object if we are not executing it currently
     assert(bjit_num_inside >= 0);
     if (bjit_num_inside != 0) {

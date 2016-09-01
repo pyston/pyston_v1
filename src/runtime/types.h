@@ -1102,9 +1102,9 @@ public:
 class BoxedFunction : public BoxedFunctionBase {
 public:
     HCAttrs attrs;
+    BoxedCode* code = NULL;
 
-    BoxedFunction(FunctionMetadata* md);
-    BoxedFunction(FunctionMetadata* md, llvm::ArrayRef<Box*> defaults, BoxedClosure* closure = NULL,
+    BoxedFunction(FunctionMetadata* md, llvm::ArrayRef<Box*> defaults = {}, BoxedClosure* closure = NULL,
                   Box* globals = NULL, bool can_change_defaults = false);
 
     DEFAULT_CLASS(function_cls);
