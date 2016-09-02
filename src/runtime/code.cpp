@@ -108,7 +108,7 @@ void BoxedCode::dealloc(Box* b) noexcept {
     Py_XDECREF(o->name);
     Py_XDECREF(o->_doc);
 
-    o->source.std::remove_reference<decltype(o->source)>::type::~type();
+    o->source.reset(nullptr);
 
     o->cls->tp_free(o);
 }
