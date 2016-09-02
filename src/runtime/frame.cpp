@@ -83,7 +83,7 @@ public:
         auto f = static_cast<BoxedFrame*>(obj);
 
         if (!f->_code)
-            f->_code = incref((Box*)f->frame_info->md->getCode());
+            f->_code = incref((Box*)f->frame_info->code);
 
         return f->_code;
     }

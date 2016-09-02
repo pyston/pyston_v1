@@ -1137,74 +1137,88 @@ void setupDict() {
     dict_cls->tp_compare = (cmpfunc)dict_compare;
     dict_cls->tp_richcompare = dict_richcompare;
 
-    dict_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)dictLen, BOXED_INT, 1)));
-    dict_cls->giveAttr("__new__", new BoxedFunction(FunctionMetadata::create((void*)dictNew, UNKNOWN, 1, true, true)));
-    dict_cls->giveAttr("__init__", new BoxedFunction(FunctionMetadata::create((void*)dictInit, NONE, 1, true, true)));
-    dict_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)dictRepr, STR, 1)));
+    dict_cls->giveAttr("__len__", new BoxedFunction(BoxedCode::create((void*)dictLen, BOXED_INT, 1, "dict.__len__")));
+    dict_cls->giveAttr("__new__",
+                       new BoxedFunction(BoxedCode::create((void*)dictNew, UNKNOWN, 1, true, true, "dict.__new__")));
+    dict_cls->giveAttr("__init__",
+                       new BoxedFunction(BoxedCode::create((void*)dictInit, NONE, 1, true, true, "dict.__init__")));
+    dict_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)dictRepr, STR, 1, "dict.__repr__")));
 
-    dict_cls->giveAttr("__eq__", new BoxedFunction(FunctionMetadata::create((void*)dictEq, UNKNOWN, 2)));
-    dict_cls->giveAttr("__ne__", new BoxedFunction(FunctionMetadata::create((void*)dictNe, UNKNOWN, 2)));
+    dict_cls->giveAttr("__eq__", new BoxedFunction(BoxedCode::create((void*)dictEq, UNKNOWN, 2, "dict.__eq__")));
+    dict_cls->giveAttr("__ne__", new BoxedFunction(BoxedCode::create((void*)dictNe, UNKNOWN, 2, "dict.__ne__")));
     dict_cls->giveAttr("__hash__", incref(Py_None));
-    dict_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)dictIterKeys,
-                                                                              typeFromClass(dictiterkey_cls), 1)));
+    dict_cls->giveAttr("__iter__", new BoxedFunction(BoxedCode::create(
+                                       (void*)dictIterKeys, typeFromClass(dictiterkey_cls), 1, "dict.__iter__")));
 
-    dict_cls->giveAttr("update", new BoxedFunction(FunctionMetadata::create((void*)dictUpdate, NONE, 1, true, true)));
+    dict_cls->giveAttr("update",
+                       new BoxedFunction(BoxedCode::create((void*)dictUpdate, NONE, 1, true, true, "dict.update")));
 
-    dict_cls->giveAttr("clear", new BoxedFunction(FunctionMetadata::create((void*)dictClear, NONE, 1)));
-    dict_cls->giveAttr("copy", new BoxedFunction(FunctionMetadata::create((void*)dictCopy, DICT, 1)));
+    dict_cls->giveAttr("clear", new BoxedFunction(BoxedCode::create((void*)dictClear, NONE, 1, "dict.clear")));
+    dict_cls->giveAttr("copy", new BoxedFunction(BoxedCode::create((void*)dictCopy, DICT, 1, "dict.copy")));
 
-    dict_cls->giveAttr("has_key", new BoxedFunction(FunctionMetadata::create((void*)dictContains, BOXED_BOOL, 2)));
-    dict_cls->giveAttr("items", new BoxedFunction(FunctionMetadata::create((void*)dictItems, LIST, 1)));
-    dict_cls->giveAttr("iteritems", new BoxedFunction(FunctionMetadata::create((void*)dictIterItems,
-                                                                               typeFromClass(dictiteritem_cls), 1)));
+    dict_cls->giveAttr("has_key",
+                       new BoxedFunction(BoxedCode::create((void*)dictContains, BOXED_BOOL, 2, "dict.has_key")));
+    dict_cls->giveAttr("items", new BoxedFunction(BoxedCode::create((void*)dictItems, LIST, 1, "dict.items")));
+    dict_cls->giveAttr("iteritems", new BoxedFunction(BoxedCode::create(
+                                        (void*)dictIterItems, typeFromClass(dictiteritem_cls), 1, "dict.iteritems")));
 
-    dict_cls->giveAttr("values", new BoxedFunction(FunctionMetadata::create((void*)dictValues, LIST, 1)));
-    dict_cls->giveAttr("itervalues", new BoxedFunction(FunctionMetadata::create((void*)dictIterValues,
-                                                                                typeFromClass(dictitervalue_cls), 1)));
+    dict_cls->giveAttr("values", new BoxedFunction(BoxedCode::create((void*)dictValues, LIST, 1, "dict.values")));
+    dict_cls->giveAttr("itervalues",
+                       new BoxedFunction(BoxedCode::create((void*)dictIterValues, typeFromClass(dictitervalue_cls), 1,
+                                                           "dict.itervalues")));
 
-    dict_cls->giveAttr("keys", new BoxedFunction(FunctionMetadata::create((void*)dictKeys, LIST, 1)));
+    dict_cls->giveAttr("keys", new BoxedFunction(BoxedCode::create((void*)dictKeys, LIST, 1, "dict.keys")));
     dict_cls->giveAttrBorrowed("iterkeys", dict_cls->getattr(autoDecref(internStringMortal("__iter__"))));
 
-    dict_cls->giveAttr("pop",
-                       new BoxedFunction(FunctionMetadata::create((void*)dictPop, UNKNOWN, 3, false, false), { NULL }));
-    dict_cls->giveAttr("popitem", new BoxedFunction(FunctionMetadata::create((void*)dictPopitem, BOXED_TUPLE, 1)));
+    dict_cls->giveAttr(
+        "pop", new BoxedFunction(BoxedCode::create((void*)dictPop, UNKNOWN, 3, false, false, "dict.pop"), { NULL }));
+    dict_cls->giveAttr("popitem",
+                       new BoxedFunction(BoxedCode::create((void*)dictPopitem, BOXED_TUPLE, 1, "dict.popitem")));
 
-    auto* fromkeys_func
-        = new BoxedFunction(FunctionMetadata::create((void*)dictFromkeys, DICT, 3, false, false), { Py_None });
+    auto* fromkeys_func = new BoxedFunction(
+        BoxedCode::create((void*)dictFromkeys, DICT, 3, false, false, "dict.fromkeys"), { Py_None });
     dict_cls->giveAttr("fromkeys", boxInstanceMethod(dict_cls, fromkeys_func, dict_cls));
     Py_DECREF(fromkeys_func);
 
-    dict_cls->giveAttr("viewkeys", new BoxedFunction(FunctionMetadata::create((void*)dictViewKeys, UNKNOWN, 1)));
-    dict_cls->giveAttr("viewvalues", new BoxedFunction(FunctionMetadata::create((void*)dictViewValues, UNKNOWN, 1)));
-    dict_cls->giveAttr("viewitems", new BoxedFunction(FunctionMetadata::create((void*)dictViewItems, UNKNOWN, 1)));
+    dict_cls->giveAttr("viewkeys",
+                       new BoxedFunction(BoxedCode::create((void*)dictViewKeys, UNKNOWN, 1, "dict.viewkeys")));
+    dict_cls->giveAttr("viewvalues",
+                       new BoxedFunction(BoxedCode::create((void*)dictViewValues, UNKNOWN, 1, "dict.viewvalues")));
+    dict_cls->giveAttr("viewitems",
+                       new BoxedFunction(BoxedCode::create((void*)dictViewItems, UNKNOWN, 1, "dict.viewitems")));
 
     dict_cls->giveAttr(
-        "get", new BoxedFunction(FunctionMetadata::create((void*)dictGet, UNKNOWN, 3, false, false), { Py_None }));
+        "get", new BoxedFunction(BoxedCode::create((void*)dictGet, UNKNOWN, 3, false, false, "dict.get"), { Py_None }));
 
-    dict_cls->giveAttr(
-        "setdefault",
-        new BoxedFunction(FunctionMetadata::create((void*)dictSetdefault, UNKNOWN, 3, false, false), { Py_None }));
+    dict_cls->giveAttr("setdefault", new BoxedFunction(BoxedCode::create((void*)dictSetdefault, UNKNOWN, 3, false,
+                                                                         false, "dict.setdefault"),
+                                                       { Py_None }));
 
-    auto dict_getitem = FunctionMetadata::create((void*)dictGetitem<CXX>, UNKNOWN, 2, ParamNames::empty(), CXX);
+    auto dict_getitem
+        = BoxedCode::create((void*)dictGetitem<CXX>, UNKNOWN, 2, "dict.__getitem__", "", ParamNames::empty(), CXX);
     dict_getitem->addVersion((void*)dictGetitem<CAPI>, UNKNOWN, CAPI);
     dict_cls->giveAttr("__getitem__", new BoxedFunction(dict_getitem));
-    dict_cls->giveAttr("__setitem__", new BoxedFunction(FunctionMetadata::create((void*)dictSetitem, NONE, 3)));
-    dict_cls->giveAttr("__delitem__", new BoxedFunction(FunctionMetadata::create((void*)dictDelitem, UNKNOWN, 2)));
-    dict_cls->giveAttr("__contains__", new BoxedFunction(FunctionMetadata::create((void*)dictContains, BOXED_BOOL, 2)));
+    dict_cls->giveAttr("__setitem__",
+                       new BoxedFunction(BoxedCode::create((void*)dictSetitem, NONE, 3, "dict.__setitem__")));
+    dict_cls->giveAttr("__delitem__",
+                       new BoxedFunction(BoxedCode::create((void*)dictDelitem, UNKNOWN, 2, "dict.__delitem__")));
+    dict_cls->giveAttr("__contains__",
+                       new BoxedFunction(BoxedCode::create((void*)dictContains, BOXED_BOOL, 2, "dict.__contains__")));
 
-    dict_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)dictNonzero, BOXED_BOOL, 1)));
+    dict_cls->giveAttr("__nonzero__",
+                       new BoxedFunction(BoxedCode::create((void*)dictNonzero, BOXED_BOOL, 1, "dict.__nonzero__")));
 
     add_operators(dict_cls);
     dict_cls->freeze();
 
     // create the dictonary iterator types
     for (BoxedClass* iter_type : { dictiterkey_cls, dictitervalue_cls, dictiteritem_cls }) {
-        FunctionMetadata* hasnext = FunctionMetadata::create((void*)dictIterHasnextUnboxed, BOOL, 1);
+        BoxedCode* hasnext = BoxedCode::create((void*)dictIterHasnextUnboxed, BOOL, 1, "dict.__hasnext__");
         hasnext->addVersion((void*)dictIterHasnext, BOXED_BOOL);
         iter_type->giveAttr("__hasnext__", new BoxedFunction(hasnext));
-        iter_type->giveAttr(
-            "__iter__", new BoxedFunction(FunctionMetadata::create((void*)dictIterIter, typeFromClass(iter_type), 1)));
-        iter_type->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)dictIterNext, UNKNOWN, 1)));
+        iter_type->giveAttr("__iter__", new BoxedFunction(BoxedCode::create((void*)dictIterIter,
+                                                                            typeFromClass(iter_type), 1, "__iter__")));
+        iter_type->giveAttr("next", new BoxedFunction(BoxedCode::create((void*)dictIterNext, UNKNOWN, 1, "next")));
         iter_type->freeze();
         iter_type->tp_iter = PyObject_SelfIter;
         iter_type->tp_iternext = dictiter_next;

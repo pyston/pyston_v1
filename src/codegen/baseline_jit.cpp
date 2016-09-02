@@ -80,8 +80,8 @@ JitCodeBlock::MemoryManager::~MemoryManager() {
     addr = NULL;
 }
 
-JitCodeBlock::JitCodeBlock(FunctionMetadata* md, llvm::StringRef name)
-    : md(md),
+JitCodeBlock::JitCodeBlock(BoxedCode* code, llvm::StringRef name)
+    : code(code),
       entry_offset(0),
       a(memory.get() + sizeof(eh_info), code_size),
       is_currently_writing(false),
@@ -91,7 +91,7 @@ JitCodeBlock::JitCodeBlock(FunctionMetadata* md, llvm::StringRef name)
     static StatCounter num_jit_total_bytes("num_baselinejit_total_bytes");
     num_jit_total_bytes.log(memory_size);
 
-    uint8_t* code = a.curInstPointer();
+    uint8_t* code_ptr = a.curInstPointer();
 
     // emit prolog
     a.push(assembler::RBP);
@@ -113,12 +113,12 @@ JitCodeBlock::JitCodeBlock(FunctionMetadata* md, llvm::StringRef name)
     void* eh_frame_addr = memory.get();
     memcpy(eh_frame_addr, eh_info, eh_frame_size);
 
-    register_eh_info.updateAndRegisterFrameFromTemplate((uint64_t)code, code_size, (uint64_t)eh_frame_addr,
+    register_eh_info.updateAndRegisterFrameFromTemplate((uint64_t)code_ptr, code_size, (uint64_t)eh_frame_addr,
                                                         eh_frame_size);
 
     static int num_block = 0;
     auto unique_name = ("bjit_" + name + "_" + llvm::Twine(num_block++)).str();
-    g.func_addr_registry.registerFunction(unique_name, code, code_size, NULL);
+    g.func_addr_registry.registerFunction(unique_name, code_ptr, code_size, NULL);
 }
 
 JitCodeBlock::~JitCodeBlock() {
@@ -127,7 +127,7 @@ JitCodeBlock::~JitCodeBlock() {
         g.func_addr_registry.deregisterFunction(a.getStartAddr());
     register_eh_info.deregisterFrame();
 
-    for (auto&& block : md->source->cfg->blocks) {
+    for (auto&& block : code->source->cfg->blocks) {
         block_patch_locations.erase(block);
         blocks_aborted.erase(block);
     }
@@ -154,7 +154,7 @@ std::unique_ptr<JitFragmentWriter> JitCodeBlock::newFragment(CFGBlock* block, in
     std::unique_ptr<ICSlotRewrite> rewrite = ic_info->startRewrite("");
 
     return std::unique_ptr<JitFragmentWriter>(
-        new JitFragmentWriter(md, block, std::move(ic_info), std::move(rewrite), fragment_offset, patch_jump_offset,
+        new JitFragmentWriter(code, block, std::move(ic_info), std::move(rewrite), fragment_offset, patch_jump_offset,
                               a.getStartAddr(), *this, std::move(known_non_null_vregs)));
 }
 
@@ -176,13 +176,13 @@ void JitCodeBlock::fragmentFinished(int bytes_written, int num_bytes_overlapping
     pp_ic_infos.clear();
 }
 
-JitFragmentWriter::JitFragmentWriter(FunctionMetadata* md, CFGBlock* block, std::unique_ptr<ICInfo> ic_info,
+JitFragmentWriter::JitFragmentWriter(BoxedCode* code, CFGBlock* block, std::unique_ptr<ICInfo> ic_info,
                                      std::unique_ptr<ICSlotRewrite> rewrite, int code_offset, int num_bytes_overlapping,
                                      void* entry_code, JitCodeBlock& code_block,
                                      llvm::DenseSet<int> known_non_null_vregs)
     : ICInfoManager(std::move(ic_info)),
       Rewriter(std::move(rewrite), 0, {}, /* needs_invalidation_support = */ false),
-      md(md),
+      code(code),
       block(block),
       code_offset(code_offset),
       exit_info(),
@@ -207,11 +207,11 @@ JitFragmentWriter::JitFragmentWriter(FunctionMetadata* md, CFGBlock* block, std:
         comment("BJIT: JitFragmentWriter() end");
 
     // this makes sure that we can't delete the code blocks while we are inside JitFragmentWriter
-    ++md->bjit_num_inside;
+    ++code->bjit_num_inside;
 }
 
 JitFragmentWriter::~JitFragmentWriter() {
-    --md->bjit_num_inside;
+    --code->bjit_num_inside;
 }
 
 RewriterVar* JitFragmentWriter::getInterp() {

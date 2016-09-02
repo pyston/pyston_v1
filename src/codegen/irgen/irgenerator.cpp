@@ -44,10 +44,10 @@ extern "C" void dumpLLVM(void* _v) {
     v->dump();
 }
 
-IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, llvm::Function* func, SourceInfo* source_info,
+IRGenState::IRGenState(BoxedCode* code, CompiledFunction* cf, llvm::Function* func, SourceInfo* source_info,
                        std::unique_ptr<PhiAnalysis> phis, const ParamNames* param_names, GCBuilder* gc,
                        llvm::MDNode* func_dbg_info, RefcountTracker* refcount_tracker)
-    : md(md),
+    : code(code),
       cf(cf),
       func(func),
       source_info(source_info),
@@ -63,7 +63,7 @@ IRGenState::IRGenState(FunctionMetadata* md, CompiledFunction* cf, llvm::Functio
       stmt(NULL),
       scratch_size(0) {
     assert(func);
-    assert(cf->md->source.get() == source_info); // I guess this is duplicate now
+    assert(cf->code_obj->source.get() == source_info); // I guess this is duplicate now
 }
 
 IRGenState::~IRGenState() {
@@ -213,8 +213,8 @@ template <typename Builder> static llvm::Value* getGlobalsGep(Builder& builder, 
     return builder.CreateConstInBoundsGEP2_32(v, 0, 7);
 }
 
-template <typename Builder> static llvm::Value* getMDGep(Builder& builder, llvm::Value* v) {
-    static_assert(offsetof(FrameInfo, md) == 72 + 16, "");
+template <typename Builder> static llvm::Value* getCodeGep(Builder& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, code) == 72 + 16, "");
     return builder.CreateConstInBoundsGEP2_32(v, 0, 9);
 }
 
@@ -329,7 +329,9 @@ void IRGenState::setupFrameInfoVar(llvm::Value* passed_closure, llvm::Value* pas
         // set frame_info.vregs
         builder.CreateStore(vregs, getVRegsGep(builder, al));
         builder.CreateStore(getConstantInt(num_user_visible_vregs, g.i32), getNumVRegsGep(builder, al));
-        builder.CreateStore(embedRelocatablePtr(getMD(), g.llvm_functionmetadata_type_ptr), getMDGep(builder, al));
+        builder.CreateStore(
+            getRefcounts()->setType(embedRelocatablePtr(getCode(), g.llvm_code_type_ptr), RefType::BORROWED),
+            getCodeGep(builder, al));
 
         this->frame_info = al;
         this->globals = passed_globals;
@@ -986,7 +988,7 @@ private:
                 assert(node->args.size() == 1);
                 assert(node->args[0]->type == AST_TYPE::Name);
 
-                RELEASE_ASSERT(irstate->getSourceInfo()->ast->type == AST_TYPE::Module,
+                RELEASE_ASSERT(irstate->getSourceInfo()->ast_type == AST_TYPE::Module,
                                "import * not supported in functions (yet)");
 
                 CompilerVariable* module = evalExpr(node->args[0], unw_info);
@@ -1580,9 +1582,9 @@ private:
             decorators.push_back(evalExpr(d, unw_info));
         }
 
-        FunctionMetadata* md = node->md;
-        assert(md);
-        const ScopingResults& scope_info = md->source->scoping;
+        BoxedCode* code = node->code;
+        assert(code);
+        const ScopingResults& scope_info = code->source->scoping;
 
         // TODO duplication with _createFunction:
         llvm::Value* this_closure = NULL;
@@ -1601,7 +1603,7 @@ private:
         // but since the classdef can't create its own closure, shouldn't need to explicitly
         // create that scope to pass the closure through.
         assert(irstate->getSourceInfo()->scoping.areGlobalsFromModule());
-        CompilerVariable* func = makeFunction(emitter, md, this_closure, irstate->getGlobalsIfCustom(), {});
+        CompilerVariable* func = makeFunction(emitter, code, this_closure, irstate->getGlobalsIfCustom(), {});
 
         CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(0), {}, NULL);
 
@@ -1624,8 +1626,8 @@ private:
     }
 
     CompilerVariable* _createFunction(AST_FunctionDef* node, const UnwindInfo& unw_info, AST_arguments* args) {
-        FunctionMetadata* md = node->md;
-        assert(md);
+        BoxedCode* code = node->code;
+        assert(code);
 
         std::vector<ConcreteCompilerVariable*> defaults;
         for (auto d : args->defaults) {
@@ -1634,7 +1636,7 @@ private:
             defaults.push_back(converted);
         }
 
-        bool takes_closure = md->source->scoping.takesClosure();
+        bool takes_closure = code->source->scoping.takesClosure();
 
         llvm::Value* this_closure = NULL;
         if (takes_closure) {
@@ -1647,7 +1649,7 @@ private:
             assert(this_closure);
         }
 
-        CompilerVariable* func = makeFunction(emitter, md, this_closure, irstate->getGlobalsIfCustom(), defaults);
+        CompilerVariable* func = makeFunction(emitter, code, this_closure, irstate->getGlobalsIfCustom(), defaults);
 
         return func;
     }
@@ -1707,8 +1709,8 @@ private:
             // I think it's better to just not generate bad speculations:
             if (rtn->canConvertTo(speculated_type)) {
                 auto source = irstate->getSourceInfo();
-                printf("On %s:%d, function %s:\n", source->getFn()->c_str(), source->getBody()[0]->lineno,
-                       source->getName()->c_str());
+                printf("On %s:%d, function %s:\n", irstate->getCode()->filename->c_str(),
+                       irstate->getCode()->firstlineno, irstate->getCode()->name->c_str());
                 irstate->getSourceInfo()->cfg->print();
             }
             RELEASE_ASSERT(!rtn->canConvertTo(speculated_type), "%s %s", rtn->getType()->debugName().c_str(),
@@ -2335,7 +2337,7 @@ private:
 
         // Emitting the actual OSR:
         emitter.getBuilder()->SetInsertPoint(onramp);
-        OSREntryDescriptor* entry = OSREntryDescriptor::create(irstate->getMD(), osr_key, irstate->getExceptionStyle());
+        OSREntryDescriptor* entry = OSREntryDescriptor::create(irstate->getCode(), osr_key, irstate->getExceptionStyle());
         OSRExit* exit = new OSRExit(entry);
         llvm::Value* partial_func = emitter.getBuilder()->CreateCall(g.funcs.compilePartialFunc,
                                                                      embedRelocatablePtr(exit, g.i8->getPointerTo()));

@@ -66,7 +66,7 @@ extern "C" Box* executeInnerAndSetupFrame(ASTInterpreter& interpreter, CFGBlock*
  */
 class ASTInterpreter {
 public:
-    ASTInterpreter(FunctionMetadata* md, Box** vregs, FrameInfo* deopt_frame_info = NULL);
+    ASTInterpreter(BoxedCode* code, Box** vregs, FrameInfo* deopt_frame_info = NULL);
 
     void initArguments(BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
@@ -169,7 +169,7 @@ public:
 
     void setCurrentStatement(AST_stmt* stmt) { frame_info.stmt = stmt; }
 
-    FunctionMetadata* getMD() { return frame_info.md; }
+    BoxedCode* getCode() { return frame_info.code; }
     FrameInfo* getFrameInfo() { return &frame_info; }
     BoxedClosure* getPassedClosure() { return frame_info.passed_closure; }
     Box** getVRegs() { return vregs; }
@@ -224,11 +224,11 @@ void ASTInterpreter::setGlobals(Box* globals) {
     this->frame_info.globals = incref(globals);
 }
 
-ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, FrameInfo* deopt_frame_info)
+ASTInterpreter::ASTInterpreter(BoxedCode* code, Box** vregs, FrameInfo* deopt_frame_info)
     : current_block(0),
       frame_info(ExcInfo(NULL, NULL, NULL)),
       edgecount(0),
-      source_info(md->source.get()),
+      source_info(code->source.get()),
       scope_info(source_info->scoping),
       phis(NULL),
       vregs(vregs),
@@ -254,7 +254,7 @@ ASTInterpreter::ASTInterpreter(FunctionMetadata* md, Box** vregs, FrameInfo* deo
     }
 
     frame_info.vregs = vregs;
-    frame_info.md = md;
+    frame_info.code = code;
     frame_info.num_vregs = getVRegInfo().getNumOfCrossBlockVRegs();
 }
 
@@ -266,7 +266,7 @@ void ASTInterpreter::initArguments(BoxedClosure* _closure, BoxedGenerator* _gene
     if (scope_info.createsClosure())
         created_closure = createClosure(_closure, scope_info.getClosureSize());
 
-    const ParamNames& param_names = getMD()->param_names;
+    const ParamNames& param_names = getCode()->param_names;
 
     int i = 0;
     for (auto& name : param_names.argsAsName()) {
@@ -291,20 +291,20 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset, llvm::DenseSe
     assert(ENABLE_BASELINEJIT);
     assert(!jit);
 
-    auto& code_blocks = getMD()->code_blocks;
+    auto& code_blocks = getCode()->code_blocks;
     JitCodeBlock* code_block = NULL;
     if (!code_blocks.empty())
         code_block = code_blocks[code_blocks.size() - 1].get();
 
     if (!code_block || code_block->shouldCreateNewBlock()) {
-        code_blocks.push_back(llvm::make_unique<JitCodeBlock>(getMD(), source_info->getName()->s()));
+        code_blocks.push_back(llvm::make_unique<JitCodeBlock>(getCode(), getCode()->name->s()));
         code_block = code_blocks[code_blocks.size() - 1].get();
         exit_offset = 0;
     }
 
     // small optimization: we know that the passed arguments in the entry block are non zero
     if (block == block->cfg->getStartingBlock() && block->predecessors.empty()) {
-        auto param_names = getMD()->param_names;
+        auto param_names = getCode()->param_names;
         for (auto&& arg : param_names.allArgsAsName()) {
             known_non_null_vregs.insert(arg->vreg);
         }
@@ -341,7 +341,7 @@ void ASTInterpreter::finishJITing(CFGBlock* continue_block) {
 }
 
 Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
-    auto& num_inside = getMD()->bjit_num_inside;
+    auto& num_inside = getCode()->bjit_num_inside;
     try {
         UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_baseline_jitted_code");
         ++num_inside;
@@ -400,7 +400,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
         interpreter.next_block = start_block;
     }
 
-    if (ENABLE_BASELINEJIT && interpreter.getMD()->times_interpreted >= REOPT_THRESHOLD_INTERPRETER)
+    if (ENABLE_BASELINEJIT && interpreter.getCode()->times_interpreted >= REOPT_THRESHOLD_INTERPRETER)
         interpreter.should_jit = true;
 
     while (interpreter.next_block) {
@@ -478,7 +478,7 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
     ScopeInfo::VarScopeType vst = node->lookup_type;
     if (vst == ScopeInfo::VarScopeType::GLOBAL) {
         if (jit)
-            jit->emitSetGlobal(name.getBox(), value, getMD()->source->scoping.areGlobalsFromModule());
+            jit->emitSetGlobal(name.getBox(), value, getCode()->source->scoping.areGlobalsFromModule());
         setGlobal(frame_info.globals, name.getBox(), value.o);
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
         if (jit)
@@ -713,7 +713,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
         // we may have started JITing because the OSR thresholds got triggered in this case we don't want to jit
         // additional blocks ouside of the loop if the function is cold.
-        if (getMD()->times_interpreted < REOPT_THRESHOLD_INTERPRETER)
+        if (getCode()->times_interpreted < REOPT_THRESHOLD_INTERPRETER)
             should_jit = false;
     }
 
@@ -744,7 +744,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     ast_osrs.log();
 
     LivenessAnalysis* liveness = source_info->getLiveness();
-    std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(getMD()->param_names, source_info->cfg, liveness);
+    std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(getCode()->param_names, source_info->cfg, liveness);
 
     llvm::SmallVector<int, 16> dead_vregs;
 
@@ -758,7 +758,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     }
 
     const OSREntryDescriptor* found_entry = nullptr;
-    for (auto& p : getMD()->osr_versions) {
+    for (auto& p : getCode()->osr_versions) {
         if (p.first->backedge != node)
             continue;
 
@@ -803,7 +803,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     }
 
     if (found_entry == nullptr) {
-        OSREntryDescriptor* entry = OSREntryDescriptor::create(getMD(), node, CXX);
+        OSREntryDescriptor* entry = OSREntryDescriptor::create(getCode(), node, CXX);
 
         // TODO can we just get rid of this?
         for (auto&& p : sorted_symbol_table) {
@@ -929,7 +929,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args.size() == 1);
         assert(node->args[0]->type == AST_TYPE::Name);
 
-        RELEASE_ASSERT(source_info->ast->type == AST_TYPE::Module || source_info->ast->type == AST_TYPE::Suite,
+        RELEASE_ASSERT(source_info->ast_type == AST_TYPE::Module || source_info->ast_type == AST_TYPE::Suite,
                        "import * not supported in functions");
 
         Value module = visit_expr(node->args[0]);
@@ -1002,7 +1002,7 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
 #endif
 
     if (0) {
-        printf("%20s % 2d ", source_info->getName()->c_str(), current_block->idx);
+        printf("%20s % 2d ", getCode()->name->c_str(), current_block->idx);
         print_ast(node);
         printf("\n");
     }
@@ -1114,8 +1114,8 @@ Value ASTInterpreter::visit_return(AST_Return* node) {
 }
 
 Value ASTInterpreter::createFunction(AST_FunctionDef* node, AST_arguments* args) {
-    FunctionMetadata* md = node->md;
-    assert(md);
+    BoxedCode* code = node->code;
+    assert(code);
 
     std::vector<Box*> defaults;
     llvm::SmallVector<RewriterVar*, 4> defaults_vars;
@@ -1151,7 +1151,7 @@ Value ASTInterpreter::createFunction(AST_FunctionDef* node, AST_arguments* args)
     u.d.ptr = &defaults[0];
     u.d.s = defaults.size() - 1;
 
-    bool takes_closure = md->source->scoping.takesClosure();
+    bool takes_closure = code->source->scoping.takesClosure();
 
     BoxedClosure* closure = 0;
     RewriterVar* closure_var = NULL;
@@ -1171,7 +1171,7 @@ Value ASTInterpreter::createFunction(AST_FunctionDef* node, AST_arguments* args)
 
     Box* passed_globals = NULL;
     RewriterVar* passed_globals_var = NULL;
-    if (!getMD()->source->scoping.areGlobalsFromModule()) {
+    if (!getCode()->source->scoping.areGlobalsFromModule()) {
         passed_globals = frame_info.globals;
         if (jit)
             passed_globals_var = jit->getInterp()->getAttr(offsetof(ASTInterpreter, frame_info.globals));
@@ -1183,12 +1183,13 @@ Value ASTInterpreter::createFunction(AST_FunctionDef* node, AST_arguments* args)
             closure_var = jit->imm(0ul);
         if (!passed_globals_var)
             passed_globals_var = jit->imm(0ul);
-        rtn.var = jit->call(false, (void*)createFunctionFromMetadata, { jit->imm(md), closure_var, passed_globals_var,
+        // TODO: have to track this GC ref
+        rtn.var = jit->call(false, (void*)createFunctionFromMetadata, { jit->imm(code), closure_var, passed_globals_var,
                                                                         defaults_var, jit->imm(args->defaults.size()) },
                             {}, defaults_vars)->setType(RefType::OWNED);
     }
 
-    rtn.o = createFunctionFromMetadata(md, closure, passed_globals, u.il);
+    rtn.o = createFunctionFromMetadata(code, closure, passed_globals, u.il);
 
     return rtn;
 }
@@ -1232,10 +1233,10 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d).o);
 
-    FunctionMetadata* md = node->md;
-    assert(md);
+    BoxedCode* code = node->code;
+    assert(code);
 
-    const ScopingResults& scope_info = md->source->scoping;
+    const ScopingResults& scope_info = code->source->scoping;
 
     BoxedClosure* closure = NULL;
     if (scope_info.takesClosure()) {
@@ -1247,10 +1248,10 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     }
 
     Box* passed_globals = NULL;
-    if (!getMD()->source->scoping.areGlobalsFromModule())
+    if (!getCode()->source->scoping.areGlobalsFromModule())
         passed_globals = frame_info.globals;
-    Box* attrDict = runtimeCall(autoDecref(createFunctionFromMetadata(md, closure, passed_globals, {})), ArgPassSpec(0),
-                                0, 0, 0, 0, 0);
+    Box* attrDict = runtimeCall(autoDecref(createFunctionFromMetadata(code, closure, passed_globals, {})),
+                                ArgPassSpec(0), 0, 0, 0, 0, 0);
     AUTO_DECREF(attrDict);
 
     Box* classobj = createUserClass(node->name.getBox(), basesTuple, attrDict);
@@ -1950,18 +1951,18 @@ extern "C" Box* executeInnerFromASM(ASTInterpreter& interpreter, CFGBlock* start
     return rtn;
 }
 
-Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
-                          Box* arg3, Box** args) {
+Box* astInterpretFunction(BoxedCode* code, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2, Box* arg3,
+                          Box** args) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_interpreter");
 
-    SourceInfo* source_info = md->source.get();
+    SourceInfo* source_info = code->source.get();
 
     assert((!globals) == source_info->scoping.areGlobalsFromModule());
     bool can_reopt = ENABLE_REOPT && !FORCE_INTERPRETER;
 
     if (unlikely(can_reopt
-                 && (FORCE_OPTIMIZE || !ENABLE_INTERPRETER || md->times_interpreted > REOPT_THRESHOLD_BASELINE))) {
-        md->times_interpreted = 0;
+                 && (FORCE_OPTIMIZE || !ENABLE_INTERPRETER || code->times_interpreted > REOPT_THRESHOLD_BASELINE))) {
+        code->times_interpreted = 0;
 
         // EffortLevel new_effort = EffortLevel::MODERATE;
         EffortLevel new_effort = EffortLevel::MAXIMAL; // always use max opt (disabled moderate opt tier)
@@ -1969,10 +1970,10 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
             new_effort = EffortLevel::MAXIMAL;
 
         std::vector<ConcreteCompilerType*> arg_types;
-        for (int i = 0; i < md->param_names.totalParameters(); i++) {
+        for (int i = 0; i < code->param_names.totalParameters(); i++) {
             Box* arg = getArg(i, arg1, arg2, arg3, args);
 
-            assert(arg || i == md->param_names.kwargsIndex()); // only builtin functions can pass NULL args
+            assert(arg || i == code->param_names.kwargsIndex()); // only builtin functions can pass NULL args
 
             // TODO: reenable argument-type specialization
             arg_types.push_back(UNKNOWN);
@@ -1981,9 +1982,9 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
         FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
 
         // this also pushes the new CompiledVersion to the back of the version list:
-        CompiledFunction* optimized = compileFunction(md, spec, new_effort, NULL);
+        CompiledFunction* optimized = compileFunction(code, spec, new_effort, NULL);
 
-        md->dependent_interp_callsites.invalidateAll();
+        code->dependent_interp_callsites.invalidateAll();
 
         UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
         Box* r;
@@ -2024,16 +2025,16 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
         memset(vregs, 0, sizeof(Box*) * num_vregs);
     }
 
-    ++md->times_interpreted;
-    ASTInterpreter interpreter(md, vregs);
+    ++code->times_interpreted;
+    ASTInterpreter interpreter(code, vregs);
 
-    const ScopingResults& scope_info = md->source->scoping;
+    const ScopingResults& scope_info = code->source->scoping;
 
     if (unlikely(scope_info.usesNameLookup())) {
         interpreter.setBoxedLocals(new BoxedDict());
     }
 
-    assert((!globals) == md->source->scoping.areGlobalsFromModule());
+    assert((!globals) == code->source->scoping.areGlobalsFromModule());
     if (globals) {
         interpreter.setGlobals(globals);
     } else {
@@ -2045,10 +2046,10 @@ Box* astInterpretFunction(FunctionMetadata* md, Box* closure, Box* generator, Bo
     return v ? v : incref(Py_None);
 }
 
-Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
-    ++md->times_interpreted;
+Box* astInterpretFunctionEval(BoxedCode* code, Box* globals, Box* boxedLocals) {
+    ++code->times_interpreted;
 
-    SourceInfo* source_info = md->source.get();
+    SourceInfo* source_info = code->source.get();
     assert(source_info->cfg);
 
     Box** vregs = NULL;
@@ -2058,11 +2059,11 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
         memset(vregs, 0, sizeof(Box*) * num_vregs);
     }
 
-    ASTInterpreter interpreter(md, vregs);
+    ASTInterpreter interpreter(code, vregs);
     interpreter.initArguments(NULL, NULL, NULL, NULL, NULL, NULL);
     interpreter.setBoxedLocals(incref(boxedLocals));
 
-    assert(!md->source->scoping.areGlobalsFromModule());
+    assert(!code->source->scoping.areGlobalsFromModule());
     assert(globals);
     interpreter.setGlobals(globals);
 
@@ -2071,17 +2072,17 @@ Box* astInterpretFunctionEval(FunctionMetadata* md, Box* globals, Box* boxedLoca
 }
 
 // caution when changing the function arguments: this function gets called from an assembler wrapper!
-extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_expr, AST_stmt* enclosing_stmt,
-                                         Box* expr_val, STOLEN(FrameStackState) frame_state) {
+extern "C" Box* astInterpretDeoptFromASM(BoxedCode* code, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+                                         STOLEN(FrameStackState) frame_state) {
     static_assert(sizeof(FrameStackState) <= 2 * 8, "astInterpretDeopt assumes that all args get passed in regs!");
 
-    assert(md);
+    assert(code);
     assert(enclosing_stmt);
     assert(frame_state.locals);
     assert(after_expr);
     assert(expr_val);
 
-    SourceInfo* source_info = md->source.get();
+    SourceInfo* source_info = code->source.get();
 
     // We can't reuse the existing vregs from the LLVM tier because they only contain the user visible ones this means
     // there wouldn't be enough space for the compiler generated ones which the interpreter (+bjit) stores inside the
@@ -2098,7 +2099,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
     RELEASE_ASSERT(cur_thread_state.frame_info == frame_state.frame_info, "");
     cur_thread_state.frame_info = frame_state.frame_info->back;
 
-    ASTInterpreter interpreter(md, vregs, frame_state.frame_info);
+    ASTInterpreter interpreter(code, vregs, frame_state.frame_info);
 
     for (const auto& p : *frame_state.locals) {
         if (p.first->cls == int_cls) {
@@ -2150,7 +2151,7 @@ extern "C" Box* astInterpretDeoptFromASM(FunctionMetadata* md, AST_expr* after_e
 
     if (start_block == NULL) {
         // TODO innefficient
-        for (auto block : md->source->cfg->blocks) {
+        for (auto block : code->source->cfg->blocks) {
             int n = block->body.size();
             for (int i = 0; i < n; i++) {
                 if (block->body[i] == enclosing_stmt) {

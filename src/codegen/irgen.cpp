@@ -551,8 +551,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         if (block == cfg->getStartingBlock()) {
             assert(entry_descriptor == NULL);
 
-            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast != NULL
-                && source->ast->type != AST_TYPE::Module) {
+            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast_type != AST_TYPE::Module) {
                 llvm::BasicBlock* preentry_bb = llvm::BasicBlock::Create(
                     g.context, "pre_entry", irstate->getLLVMFunction(), llvm_entry_blocks[cfg->getStartingBlock()]);
                 llvm::BasicBlock* reopt_bb = llvm::BasicBlock::Create(g.context, "reopt", irstate->getLLVMFunction());
@@ -988,14 +987,12 @@ static void computeBlockSetClosure(BlockSet& blocks) {
     }
 }
 // returns a pointer to the function-info mdnode
-static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::string origname) {
-    int lineno = 0;
-    if (source->ast)
-        lineno = source->ast->lineno;
+static llvm::MDNode* setupDebugInfo(BoxedCode* code, llvm::Function* f, std::string origname) {
+    int lineno = code->firstlineno;
 
     llvm::DIBuilder builder(*g.cur_module);
 
-    BoxedString* fn = source->getFn();
+    BoxedString* fn = code->filename;
     std::string dir = "";
     std::string producer = "pyston; git rev " STRINGIFY(GITREV);
 
@@ -1026,7 +1023,7 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel eff
     return os.str();
 }
 
-std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, SourceInfo* source,
+std::pair<CompiledFunction*, llvm::Function*> doCompile(BoxedCode* code, SourceInfo* source,
                                                         const ParamNames* param_names,
                                                         const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
                                                         ExceptionStyle exception_style, FunctionSpecialization* spec,
@@ -1090,7 +1087,7 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
         llvm_arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
     }
 
-    CompiledFunction* cf = new CompiledFunction(md, spec, NULL, effort, exception_style, entry_descriptor);
+    CompiledFunction* cf = new CompiledFunction(code, spec, NULL, effort, exception_style, entry_descriptor);
 
     // Make sure that the instruction memory keeps the module object alive.
     // TODO: implement this for real
@@ -1102,7 +1099,7 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
 
     // g.func_registry.registerFunction(f, g.cur_module);
 
-    llvm::MDNode* dbg_funcinfo = setupDebugInfo(source, f, nameprefix);
+    llvm::MDNode* dbg_funcinfo = setupDebugInfo(code, f, nameprefix);
 
     irgen_us += _t2.split();
 
@@ -1139,7 +1136,7 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
 
     RefcountTracker refcounter;
 
-    IRGenState irstate(md, cf, f, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo, &refcounter);
+    IRGenState irstate(code, cf, f, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo, &refcounter);
 
     emitBBs(&irstate, types, entry_descriptor, blocks);
     assert(!llvm::verifyFunction(*f, &llvm::errs()));

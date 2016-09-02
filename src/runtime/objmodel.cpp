@@ -156,7 +156,7 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
         deopt_state.frame_state.frame_info->exc.value = NULL;
     }
 
-    return astInterpretDeopt(deopt_state.cf->md, expr, deopt_state.current_stmt, value, deopt_state.frame_state);
+    return astInterpretDeopt(deopt_state.cf->code_obj, expr, deopt_state.current_stmt, value, deopt_state.frame_state);
 }
 
 extern "C" void printHelper(Box* w, Box* v, bool nl) {
@@ -3952,22 +3952,22 @@ static inline RewriterVar* getArg(int idx, _CallRewriteArgsBase* rewrite_args) {
 
 static StatCounter slowpath_pickversion("slowpath_pickversion");
 template <ExceptionStyle S>
-static CompiledFunction* pickVersion(FunctionMetadata* f, int num_output_args, Box* oarg1, Box* oarg2, Box* oarg3,
+static CompiledFunction* pickVersion(BoxedCode* code, int num_output_args, Box* oarg1, Box* oarg2, Box* oarg3,
                                      Box** oargs) {
     // if always_use_version is set use it even if the exception style does not match.
     // But prefer using the correct style if both are available
-    if (f->always_use_version.get(S))
-        return f->always_use_version.get(S);
+    if (code->always_use_version.get(S))
+        return code->always_use_version.get(S);
     ExceptionStyle other = S == CAPI ? CXX : CAPI;
-    if (f->always_use_version.get(other))
-        return f->always_use_version.get(other);
+    if (code->always_use_version.get(other))
+        return code->always_use_version.get(other);
 
 
     slowpath_pickversion.log();
 
     CompiledFunction* best_nonexcmatch = NULL;
 
-    for (CompiledFunction* cf : f->versions) {
+    for (CompiledFunction* cf : code->versions) {
         assert(cf->spec->arg_types.size() == num_output_args);
 
         if (!cf->spec->boxed_return_value)
@@ -4000,26 +4000,18 @@ static CompiledFunction* pickVersion(FunctionMetadata* f, int num_output_args, B
     if (best_nonexcmatch)
         return best_nonexcmatch;
 
-    if (f->source == NULL) {
+    if (code->source == NULL) {
         // TODO I don't think this should be happening any more?
         printf("Error: couldn't find suitable function version and no source to recompile!\n");
-        printf("(First version: %p)\n", f->versions[0]->code);
+        printf("(First version: %p)\n", code->versions[0]->code);
         abort();
     }
 
     return NULL;
 }
 
-static llvm::StringRef getFunctionName(FunctionMetadata* f) {
-    if (f->source)
-        return f->source->getName()->s();
-    else if (f->versions.size()) {
-        return "<builtin function>";
-        // std::ostringstream oss;
-        // oss << "<function at " << f->versions[0]->code << ">";
-        // return oss.str();
-    }
-    return "<unknown function>";
+static llvm::StringRef getFunctionName(BoxedCode* code) {
+    return code->name->s();
 }
 
 // A hacky little class that lets us save on some parameter size.
@@ -4036,12 +4028,12 @@ private:
 
 public:
     FuncNameGetter(const char* name) : data((uint64_t)name) { assert(!(data & BIT)); }
-    FuncNameGetter(FunctionMetadata* md) : data(((uint64_t)md) ^ BIT) { assert(data & BIT); }
+    FuncNameGetter(BoxedCode* code) : data(((uint64_t)code) ^ BIT) { assert(data & BIT); }
 
     const char* operator()() {
         if (data & BIT) {
-            FunctionMetadata* md = (FunctionMetadata*)(data ^ BIT);
-            return getFunctionName(md).data();
+            BoxedCode* code = (BoxedCode*)(data ^ BIT);
+            return getFunctionName(code).data();
         } else {
             return (const char*)data;
         }
@@ -4628,7 +4620,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 #endif
     slowpath_callfunc.log();
 
-    FunctionMetadata* md = func->md;
+    BoxedCode* code = func->code;
     ParamReceiveSpec paramspec = func->getParamspec();
 
     if (rewrite_args) {
@@ -4655,7 +4647,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         // special handling for generators:
         // the call to function containing a yield should just create a new generator object.
         Box* res;
-        if (md->isGenerator()) {
+        if (code->isGenerator()) {
             res = createGenerator(func, arg1, arg2, arg3, args);
 
             if (rewrite_args) {
@@ -4670,15 +4662,15 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
                 rewrite_args->out_success = true;
             }
         } else {
-            res = callCLFunc<S, rewritable>(md, rewrite_args, num_output_args, closure, NULL, func->globals, arg1, arg2,
-                                            arg3, args);
+            res = callCLFunc<S, rewritable>(code, rewrite_args, num_output_args, closure, NULL, func->globals, arg1,
+                                            arg2, arg3, args);
         }
 
         return res;
     };
 
     Box* r = callCXXFromStyle<S>([&] {
-        return rearrangeArgumentsAndCallInternal(paramspec, &md->param_names, md,
+        return rearrangeArgumentsAndCallInternal(paramspec, &code->param_names, code,
                                                  paramspec.num_defaults ? func->defaults->elts : NULL, rewrite_args,
                                                  argspec, arg1, arg2, arg3, args, keyword_names, continuation);
     });
@@ -4703,7 +4695,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 // from a rewrite.
 #if 0
         char buf[80];
-        snprintf(buf, sizeof(buf), "zzz_aborted_%d_args_%d_%d_%d_%d_params_%d_%d_%d_%d", md->isGenerator(),
+        snprintf(buf, sizeof(buf), "zzz_aborted_%d_args_%d_%d_%d_%d_params_%d_%d_%d_%d", code->isGenerator(),
                  argspec.num_args, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs, paramspec.num_args,
                  paramspec.num_defaults, paramspec.takes_varargs, paramspec.takes_kwargs);
         uint64_t* counter = Stats::getStatCounter(buf);
@@ -4771,7 +4763,8 @@ static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, Box
         }
     }
 
-    assert((globals == NULL) == (!chosen_cf->md->source || chosen_cf->md->source->scoping.areGlobalsFromModule()));
+    assert((globals == NULL)
+           == (!chosen_cf->code_obj->source || chosen_cf->code_obj->source->scoping.areGlobalsFromModule()));
 
     Box* maybe_args[3];
     int nmaybe_args = 0;
@@ -4797,30 +4790,30 @@ static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, Box
 // This function exists for the rewriter: astInterpretFunction takes 9 args, but the rewriter
 // only supports calling functions with at most 6 since it can currently only pass arguments
 // in registers.
-static Box* astInterpretHelper(FunctionMetadata* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
+static Box* astInterpretHelper(BoxedCode* code, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                                Box** _args) {
     Box* arg1 = _args[0];
     Box* arg2 = _args[1];
     Box* arg3 = _args[2];
     Box* args = _args[3];
 
-    return astInterpretFunction(f, closure, generator, globals, arg1, arg2, arg3, (Box**)args);
+    return astInterpretFunction(code, closure, generator, globals, arg1, arg2, arg3, (Box**)args);
 }
 
-static Box* astInterpretHelperCapi(FunctionMetadata* f, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
+static Box* astInterpretHelperCapi(BoxedCode* code, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                                    Box** _args) noexcept {
     try {
-        return astInterpretHelper(f, closure, generator, globals, _args);
+        return astInterpretHelper(code, closure, generator, globals, _args);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
     }
 }
 
-static Box* astInterpretHelper2ArgsCapi(FunctionMetadata* f, BoxedClosure* closure, BoxedGenerator* generator,
-                                        Box* globals, Box* arg1, Box* arg2) noexcept {
+static Box* astInterpretHelper2ArgsCapi(BoxedCode* code, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
+                                        Box* arg1, Box* arg2) noexcept {
     try {
-        return astInterpretFunction(f, closure, generator, globals, arg1, arg2, NULL, NULL);
+        return astInterpretFunction(code, closure, generator, globals, arg1, arg2, NULL, NULL);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -4840,7 +4833,7 @@ static Box* capiCallCxxHelper(Box* (*func_ptr)(void*, void*, void*, void*, void*
 }
 
 template <ExceptionStyle S, Rewritable rewritable>
-Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
+Box* callCLFunc(BoxedCode* code, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3,
                 Box** oargs) noexcept(S == CAPI) {
     if (rewritable == NOT_REWRITABLE) {
@@ -4848,17 +4841,17 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
         rewrite_args = NULL;
     }
 
-    CompiledFunction* chosen_cf = pickVersion<S>(md, num_output_args, oarg1, oarg2, oarg3, oargs);
+    CompiledFunction* chosen_cf = pickVersion<S>(code, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     if (!chosen_cf) {
         if (rewrite_args) {
             RewriterVar::SmallVector arg_vec;
 
-            rewrite_args->rewriter->addDependenceOn(md->dependent_interp_callsites);
+            rewrite_args->rewriter->addDependenceOn(code->dependent_interp_callsites);
 
             // TODO this kind of embedded reference needs to be tracked by the GC somehow?
             // Or maybe it's ok, since we've guarded on the function object?
-            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)md, Location::forArg(0)));
+            arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)code, Location::forArg(0)));
             arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)closure, Location::forArg(1)));
             arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)generator, Location::forArg(2)));
             arg_vec.push_back(rewrite_args->rewriter->loadConst((intptr_t)globals, Location::forArg(3)));
@@ -4911,13 +4904,13 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
 
         if (S == CAPI) {
             try {
-                return astInterpretFunction(md, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
+                return astInterpretFunction(code, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
             } catch (ExcInfo e) {
                 setCAPIException(e);
                 return NULL;
             }
         } else {
-            return astInterpretFunction(md, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
+            return astInterpretFunction(code, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
         }
     }
 
@@ -4977,7 +4970,7 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
     // we duplicate the call to callChosenCf here so we can
     // distinguish lexically between calls that target jitted python
     // code and calls that target to builtins.
-    if (md->source) {
+    if (code->source) {
         UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
         r = callChosenCF<S>(chosen_cf, closure, generator, globals, oarg1, oarg2, oarg3, oargs);
     } else {
@@ -5003,16 +4996,16 @@ Box* callCLFunc(FunctionMetadata* md, CallRewriteArgs* rewrite_args, int num_out
 }
 
 // force instantiation:
-template Box* callCLFunc<CAPI, REWRITABLE>(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args,
+template Box* callCLFunc<CAPI, REWRITABLE>(BoxedCode* code, CallRewriteArgs* rewrite_args, int num_output_args,
                                            BoxedClosure* closure, BoxedGenerator* generator, Box* globals, Box* oarg1,
                                            Box* oarg2, Box* oarg3, Box** oargs);
-template Box* callCLFunc<CXX, REWRITABLE>(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args,
+template Box* callCLFunc<CXX, REWRITABLE>(BoxedCode* code, CallRewriteArgs* rewrite_args, int num_output_args,
                                           BoxedClosure* closure, BoxedGenerator* generator, Box* globals, Box* oarg1,
                                           Box* oarg2, Box* oarg3, Box** oargs);
-template Box* callCLFunc<CAPI, NOT_REWRITABLE>(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args,
+template Box* callCLFunc<CAPI, NOT_REWRITABLE>(BoxedCode* code, CallRewriteArgs* rewrite_args, int num_output_args,
                                                BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                                                Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
-template Box* callCLFunc<CXX, NOT_REWRITABLE>(FunctionMetadata* f, CallRewriteArgs* rewrite_args, int num_output_args,
+template Box* callCLFunc<CXX, NOT_REWRITABLE>(BoxedCode* code, CallRewriteArgs* rewrite_args, int num_output_args,
                                               BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                                               Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
 
@@ -5223,13 +5216,13 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
         // Some functions are sufficiently important that we want them to be able to patchpoint themselves;
         // they can do this by setting the "internal_callable" field:
-        auto callable = f->md->internal_callable.get<S>();
+        auto callable = f->code->internal_callable.get<S>();
 
         if (S == CAPI)
-            assert((bool(f->md->internal_callable.get(CXX)) == bool(callable))
+            assert((bool(f->code->internal_callable.get(CXX)) == bool(callable))
                    && "too many opportunities for mistakes unless both CXX and CAPI versions are implemented");
         else
-            assert((bool(f->md->internal_callable.get(CAPI)) == bool(callable))
+            assert((bool(f->code->internal_callable.get(CAPI)) == bool(callable))
                    && "too many opportunities for mistake unless both CXX and CAPI versions are implementeds");
 
         if (callable == NULL) {

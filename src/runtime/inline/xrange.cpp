@@ -267,31 +267,35 @@ void setupXrange() {
     static PySequenceMethods xrange_as_sequence;
     xrange_cls->tp_as_sequence = &xrange_as_sequence;
 
-    xrange_cls->giveAttr("__new__", new BoxedFunction(FunctionMetadata::create((void*)xrange, typeFromClass(xrange_cls),
-                                                                               4, false, false),
+    xrange_cls->giveAttr("__new__", new BoxedFunction(BoxedCode::create((void*)xrange, typeFromClass(xrange_cls), 4,
+                                                                        false, false, "xrange.__new__"),
                                                       { NULL, NULL }));
-    xrange_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create(
-                                         (void*)xrangeIter, typeFromClass(xrange_iterator_cls), 1)));
-    xrange_cls->giveAttr("__reversed__", new BoxedFunction(FunctionMetadata::create(
-                                             (void*)xrangeReversed, typeFromClass(xrange_iterator_cls), 1)));
+    xrange_cls->giveAttr("__iter__", new BoxedFunction(BoxedCode::create(
+                                         (void*)xrangeIter, typeFromClass(xrange_iterator_cls), 1, "xrange.__iter__")));
+    xrange_cls->giveAttr("__reversed__",
+                         new BoxedFunction(BoxedCode::create((void*)xrangeReversed, typeFromClass(xrange_iterator_cls),
+                                                             1, "xrange.__reversed__")));
 
-    xrange_cls->giveAttr("__getitem__",
-                         new BoxedFunction(FunctionMetadata::create((void*)xrangeGetitem, BOXED_INT, 2)));
+    xrange_cls->giveAttr(
+        "__getitem__", new BoxedFunction(BoxedCode::create((void*)xrangeGetitem, BOXED_INT, 2, "xrange.__getitem__")));
 
-    xrange_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)xrangeLen, BOXED_INT, 1)));
-    xrange_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)xrangeRepr, STR, 1)));
-    xrange_cls->giveAttr("__reduce__",
-                         new BoxedFunction(FunctionMetadata::create((void*)xrangeReduce, BOXED_TUPLE, 1)));
+    xrange_cls->giveAttr("__len__",
+                         new BoxedFunction(BoxedCode::create((void*)xrangeLen, BOXED_INT, 1, "xrange.__len__")));
+    xrange_cls->giveAttr("__repr__",
+                         new BoxedFunction(BoxedCode::create((void*)xrangeRepr, STR, 1, "xrange.__repr__")));
+    xrange_cls->giveAttr(
+        "__reduce__", new BoxedFunction(BoxedCode::create((void*)xrangeReduce, BOXED_TUPLE, 1, "xrange.__reduce__")));
 
-    FunctionMetadata* hasnext
-        = FunctionMetadata::create((void*)BoxedXrangeIterator::xrangeIteratorHasnextUnboxed, BOOL, 1);
+    BoxedCode* hasnext
+        = BoxedCode::create((void*)BoxedXrangeIterator::xrangeIteratorHasnextUnboxed, BOOL, 1, "xrange.__hasnext__");
     hasnext->addVersion((void*)BoxedXrangeIterator::xrangeIteratorHasnext, BOXED_BOOL);
-    xrange_iterator_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create(
-                                                  (void*)xrangeIterIter, typeFromClass(xrange_iterator_cls), 1)));
+    xrange_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(BoxedCode::create((void*)xrangeIterIter, typeFromClass(xrange_iterator_cls), 1,
+                                                        "xrange.__iter__")));
     xrange_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
 
-    FunctionMetadata* next
-        = FunctionMetadata::create((void*)BoxedXrangeIterator::xrangeIteratorNextUnboxed, UNBOXED_INT, 1);
+    BoxedCode* next
+        = BoxedCode::create((void*)BoxedXrangeIterator::xrangeIteratorNextUnboxed, UNBOXED_INT, 1, "xrange.next");
     next->addVersion((void*)BoxedXrangeIterator::xrangeIteratorNext, BOXED_INT);
     xrange_iterator_cls->giveAttr("next", new BoxedFunction(next));
 

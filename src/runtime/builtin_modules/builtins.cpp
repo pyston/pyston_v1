@@ -2380,7 +2380,8 @@ void setupBuiltins() {
 
     ellipsis_cls
         = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "ellipsis", false, NULL, NULL, false);
-    ellipsis_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)ellipsisRepr, STR, 1)));
+    ellipsis_cls->giveAttr("__repr__",
+                           new BoxedFunction(BoxedCode::create((void*)ellipsisRepr, STR, 1, "ellipsis.__repr__")));
     Ellipsis = new (ellipsis_cls) Box();
     assert(Ellipsis->cls);
 
@@ -2392,8 +2393,8 @@ void setupBuiltins() {
 
     notimplemented_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "NotImplementedType", false,
                                             NULL, NULL, false);
-    notimplemented_cls->giveAttr("__repr__",
-                                 new BoxedFunction(FunctionMetadata::create((void*)notimplementedRepr, STR, 1)));
+    notimplemented_cls->giveAttr(
+        "__repr__", new BoxedFunction(BoxedCode::create((void*)notimplementedRepr, STR, 1, "notimplemented.__repr__")));
     notimplemented_cls->freeze();
     notimplemented_cls->instances_are_nonzero = true;
     NotImplemented = new (notimplemented_cls) Box();
@@ -2402,115 +2403,114 @@ void setupBuiltins() {
     builtins_module->giveAttrBorrowed("NotImplemented", NotImplemented);
 
     builtins_module->giveAttr(
-        "all", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)all, BOXED_BOOL, 1), "all", all_doc));
+        "all", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)all, BOXED_BOOL, 1, "all", all_doc)));
     builtins_module->giveAttr(
-        "any", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)any, BOXED_BOOL, 1), "any", any_doc));
+        "any", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)any, BOXED_BOOL, 1, "any", any_doc)));
 
-    builtins_module->giveAttr("apply", new BoxedBuiltinFunctionOrMethod(
-                                           FunctionMetadata::create((void*)builtinApply, UNKNOWN, 3, false, false),
-                                           "apply", { NULL }, NULL, apply_doc));
+    builtins_module->giveAttr(
+        "apply",
+        new BoxedBuiltinFunctionOrMethod(
+            BoxedCode::create((void*)builtinApply, UNKNOWN, 3, false, false, "apply", apply_doc), { NULL }, NULL));
 
-    repr_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)repr, UNKNOWN, 1), "repr", repr_doc);
+    repr_obj = new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)repr, UNKNOWN, 1, "repr", repr_doc));
     builtins_module->giveAttr("repr", repr_obj);
 
-    auto len_func = FunctionMetadata::create((void*)len, UNKNOWN, 1);
+    auto len_func = BoxedCode::create((void*)len, UNKNOWN, 1, "len", len_doc);
     len_func->internal_callable.capi_val = lenCallInternalCapi;
     len_func->internal_callable.cxx_val = lenCallInternal;
-    len_obj = new BoxedBuiltinFunctionOrMethod(len_func, "len", len_doc);
+    len_obj = new BoxedBuiltinFunctionOrMethod(len_func);
     builtins_module->giveAttr("len", len_obj);
 
-    hash_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)hash, UNKNOWN, 1), "hash", hash_doc);
+    hash_obj = new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)hash, UNKNOWN, 1, "hash", hash_doc));
     builtins_module->giveAttr("hash", hash_obj);
-    abs_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)abs_, UNKNOWN, 1), "abs", abs_doc);
+    abs_obj = new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)abs_, UNKNOWN, 1, "abs", abs_doc));
     builtins_module->giveAttr("abs", abs_obj);
 
-    min_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)min, UNKNOWN, 1, true, true), "min",
-                                               { Py_None }, NULL, min_doc);
+    min_obj = new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)min, UNKNOWN, 1, true, true, "min", min_doc),
+                                               { Py_None }, NULL);
     builtins_module->giveAttr("min", min_obj);
 
-    max_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)max, UNKNOWN, 1, true, true), "max",
-                                               { Py_None }, NULL, max_doc);
+    max_obj = new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)max, UNKNOWN, 1, true, true, "max", max_doc),
+                                               { Py_None }, NULL);
     builtins_module->giveAttr("max", max_obj);
 
     builtins_module->giveAttr(
-        "next", new BoxedBuiltinFunctionOrMethod(
-                    FunctionMetadata::create((void*)next, UNKNOWN, 2, false, false, ParamNames::empty(), CAPI), "next",
-                    { NULL }, NULL, next_doc));
+        "next", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)next, UNKNOWN, 2, false, false, "next",
+                                                                   next_doc, ParamNames::empty(), CAPI),
+                                                 { NULL }, NULL));
 
     builtins_module->giveAttr(
-        "sum", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)sum, UNKNOWN, 2, false, false), "sum",
-                                                { autoDecref(boxInt(0)) }, NULL, sum_doc));
+        "sum", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)sum, UNKNOWN, 2, false, false, "sum", sum_doc),
+                                                { autoDecref(boxInt(0)) }, NULL));
 
-    id_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)id, BOXED_INT, 1), "id", id_doc);
+    id_obj = new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)id, BOXED_INT, 1, "id", id_doc));
     builtins_module->giveAttr("id", id_obj);
-    chr_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)chr, STR, 1), "chr", chr_doc);
+    chr_obj = new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)chr, STR, 1, "chr", chr_doc));
     builtins_module->giveAttr("chr", chr_obj);
-    builtins_module->giveAttr("unichr", new BoxedBuiltinFunctionOrMethod(
-                                            FunctionMetadata::create((void*)unichr, UNKNOWN, 1), "unichr", unichr_doc));
-    ord_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)ord, BOXED_INT, 1), "ord", ord_doc);
+    builtins_module->giveAttr(
+        "unichr", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)unichr, UNKNOWN, 1, "unichr", unichr_doc)));
+    ord_obj = new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)ord, BOXED_INT, 1, "ord", ord_doc));
     builtins_module->giveAttr("ord", ord_obj);
-    trap_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)trap, UNKNOWN, 0), "trap");
+    trap_obj = new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)trap, UNKNOWN, 0, "trap"));
     builtins_module->giveAttr("trap", trap_obj);
     builtins_module->giveAttr("dump",
-                              new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)pydump, UNKNOWN, 2),
-                                                               "dump", { autoDecref(boxInt(0)) }));
-    builtins_module->giveAttr("dumpAddr", new BoxedBuiltinFunctionOrMethod(
-                                              FunctionMetadata::create((void*)pydumpAddr, UNKNOWN, 1), "dumpAddr"));
+                              new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)pydump, UNKNOWN, 2, "dump"),
+                                                               { autoDecref(boxInt(0)) }));
+    builtins_module->giveAttr(
+        "dumpAddr", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)pydumpAddr, UNKNOWN, 1, "dumpAddr")));
 
-    builtins_module->giveAttr("delattr",
-                              new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)delattrFunc, NONE, 2),
-                                                               "delattr", delattr_doc));
+    builtins_module->giveAttr("delattr", new BoxedBuiltinFunctionOrMethod(
+                                             BoxedCode::create((void*)delattrFunc, NONE, 2, "delattr", delattr_doc)));
 
-    auto getattr_func = new FunctionMetadata(3, true, true, ParamNames::empty());
+    auto getattr_func = new BoxedCode(3, true, true, "getattr", getattr_doc, ParamNames::empty());
     getattr_func->internal_callable.capi_val = &getattrFuncInternal<CAPI>;
     getattr_func->internal_callable.cxx_val = &getattrFuncInternal<CXX>;
-    builtins_module->giveAttr("getattr",
-                              new BoxedBuiltinFunctionOrMethod(getattr_func, "getattr", { NULL }, NULL, getattr_doc));
+    builtins_module->giveAttr("getattr", new BoxedBuiltinFunctionOrMethod(getattr_func, { NULL }, NULL));
 
-    builtins_module->giveAttr(
-        "setattr", new BoxedBuiltinFunctionOrMethod(
-                       FunctionMetadata::create((void*)setattrFunc, UNKNOWN, 3, false, false), "setattr", setattr_doc));
+    builtins_module->giveAttr("setattr", new BoxedBuiltinFunctionOrMethod(BoxedCode::create(
+                                             (void*)setattrFunc, UNKNOWN, 3, false, false, "setattr", setattr_doc)));
 
-    auto hasattr_func = new FunctionMetadata(2, false, false);
+    auto hasattr_func = new BoxedCode(2, false, false, "hasattr", hasattr_doc);
     hasattr_func->internal_callable.capi_val = &hasattrFuncInternal<CAPI>;
     hasattr_func->internal_callable.cxx_val = &hasattrFuncInternal<CXX>;
-    builtins_module->giveAttr("hasattr", new BoxedBuiltinFunctionOrMethod(hasattr_func, "hasattr", hasattr_doc));
+    builtins_module->giveAttr("hasattr", new BoxedBuiltinFunctionOrMethod(hasattr_func));
 
     builtins_module->giveAttr(
-        "pow", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)powFunc, UNKNOWN, 3, false, false),
-                                                "pow", { Py_None }, NULL, pow_doc));
+        "pow", new BoxedBuiltinFunctionOrMethod(
+                   BoxedCode::create((void*)powFunc, UNKNOWN, 3, false, false, "pow", pow_doc), { Py_None }, NULL));
 
     Box* isinstance_obj = new BoxedBuiltinFunctionOrMethod(
-        FunctionMetadata::create((void*)isinstance_func, BOXED_BOOL, 2), "isinstance", isinstance_doc);
+        BoxedCode::create((void*)isinstance_func, BOXED_BOOL, 2, "isinstance", isinstance_doc));
     builtins_module->giveAttr("isinstance", isinstance_obj);
 
     Box* issubclass_obj = new BoxedBuiltinFunctionOrMethod(
-        FunctionMetadata::create((void*)issubclass_func, BOXED_BOOL, 2), "issubclass", issubclass_doc);
+        BoxedCode::create((void*)issubclass_func, BOXED_BOOL, 2, "issubclass", issubclass_doc));
     builtins_module->giveAttr("issubclass", issubclass_obj);
 
-    Box* intern_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)intern_func, UNKNOWN, 1),
-                                                       "intern", intern_doc);
+    Box* intern_obj
+        = new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)intern_func, UNKNOWN, 1, "intern", intern_doc));
     builtins_module->giveAttr("intern", intern_obj);
 
-    FunctionMetadata* import_func
-        = FunctionMetadata::create((void*)bltinImport, UNKNOWN, 5, false, false,
-                                   ParamNames({ "name", "globals", "locals", "fromlist", "level" }, "", ""));
-    builtins_module->giveAttr(
-        "__import__", new BoxedBuiltinFunctionOrMethod(import_func, "__import__",
-                                                       { NULL, NULL, NULL, autoDecref(boxInt(-1)) }, NULL, import_doc));
+    BoxedCode* import_func
+        = BoxedCode::create((void*)bltinImport, UNKNOWN, 5, false, false, "__import__", import_doc,
+                            ParamNames({ "name", "globals", "locals", "fromlist", "level" }, "", ""));
+    builtins_module->giveAttr("__import__", new BoxedBuiltinFunctionOrMethod(
+                                                import_func, { NULL, NULL, NULL, autoDecref(boxInt(-1)) }, NULL));
 
     enumerate_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(BoxedEnumerate), false, "enumerate", true,
                                        BoxedEnumerate::dealloc, NULL, true, BoxedEnumerate::traverse, NOCLEAR);
-    enumerate_cls->giveAttr("__new__",
-                            new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::new_, UNKNOWN, 3,
-                                                                       ParamNames({ "", "sequence", "start" }, "", "")),
-                                              { autoDecref(boxInt(0)) }));
-    enumerate_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::iter,
-                                                                                   typeFromClass(enumerate_cls), 1)));
-    enumerate_cls->giveAttr("next",
-                            new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::next, BOXED_TUPLE, 1)));
-    enumerate_cls->giveAttr("__hasnext__",
-                            new BoxedFunction(FunctionMetadata::create((void*)BoxedEnumerate::hasnext, BOXED_BOOL, 1)));
+    enumerate_cls->giveAttr(
+        "__new__", new BoxedFunction(BoxedCode::create((void*)BoxedEnumerate::new_, UNKNOWN, 3, "enumerate.__new__", "",
+                                                       ParamNames({ "", "sequence", "start" }, "", "")),
+                                     { autoDecref(boxInt(0)) }));
+    enumerate_cls->giveAttr(
+        "__iter__", new BoxedFunction(BoxedCode::create((void*)BoxedEnumerate::iter, typeFromClass(enumerate_cls), 1,
+                                                        "enumerate.__iter__")));
+    enumerate_cls->giveAttr(
+        "next", new BoxedFunction(BoxedCode::create((void*)BoxedEnumerate::next, BOXED_TUPLE, 1, "enumerate.next")));
+    enumerate_cls->giveAttr(
+        "__hasnext__",
+        new BoxedFunction(BoxedCode::create((void*)BoxedEnumerate::hasnext, BOXED_BOOL, 1, "enumerate.__hasnext__")));
     enumerate_cls->freeze();
     enumerate_cls->tp_iter = PyObject_SelfIter;
     builtins_module->giveAttrBorrowed("enumerate", enumerate_cls);
@@ -2518,59 +2518,56 @@ void setupBuiltins() {
     builtins_module->giveAttrBorrowed("True", Py_True);
     builtins_module->giveAttrBorrowed("False", Py_False);
 
-    range_obj = new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)range, LIST, 3, false, false), "range",
-                                                 { NULL, NULL }, NULL, range_doc);
+    range_obj = new BoxedBuiltinFunctionOrMethod(
+        BoxedCode::create((void*)range, LIST, 3, false, false, "range", range_doc), { NULL, NULL }, NULL);
     builtins_module->giveAttr("range", range_obj);
 
-    auto* round_obj = new BoxedBuiltinFunctionOrMethod(
-        FunctionMetadata::create((void*)builtinRound, BOXED_FLOAT, 2, ParamNames({ "number", "ndigits" }, "", "")),
-        "round", { autoDecref(boxInt(0)) }, NULL, round_doc);
+    auto* round_obj
+        = new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)builtinRound, BOXED_FLOAT, 2, "round", round_doc,
+                                                             ParamNames({ "number", "ndigits" }, "", "")),
+                                           { autoDecref(boxInt(0)) }, NULL);
     builtins_module->giveAttr("round", round_obj);
 
     setupXrange();
     builtins_module->giveAttrBorrowed("xrange", xrange_cls);
 
-    open_obj = new BoxedBuiltinFunctionOrMethod(
-        FunctionMetadata::create((void*)open, typeFromClass(&PyFile_Type), 3, false, false,
-                                 ParamNames({ "name", "mode", "buffering" }, "", "")),
-        "open", { autoDecref(boxString("r")), autoDecref(boxInt(-1)) }, NULL, open_doc);
+    open_obj = new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)open, typeFromClass(&PyFile_Type), 3, false,
+                                                                  false, "open", open_doc,
+                                                                  ParamNames({ "name", "mode", "buffering" }, "", "")),
+                                                { autoDecref(boxString("r")), autoDecref(boxInt(-1)) }, NULL);
     builtins_module->giveAttr("open", open_obj);
 
-    builtins_module->giveAttr(
-        "globals", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)globals, UNKNOWN, 0, false, false),
-                                                    "globals", globals_doc));
-    builtins_module->giveAttr(
-        "locals", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)locals, UNKNOWN, 0, false, false),
-                                                   "locals", locals_doc));
+    builtins_module->giveAttr("globals", new BoxedBuiltinFunctionOrMethod(BoxedCode::create(
+                                             (void*)globals, UNKNOWN, 0, false, false, "globals", globals_doc)));
+    builtins_module->giveAttr("locals", new BoxedBuiltinFunctionOrMethod(BoxedCode::create(
+                                            (void*)locals, UNKNOWN, 0, false, false, "locals", locals_doc)));
 
     builtins_module->giveAttr(
-        "iter", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)builtinIter, UNKNOWN, 2, false, false),
-                                                 "iter", { NULL }, NULL, iter_doc));
-    builtins_module->giveAttr("reversed",
-                              new BoxedBuiltinFunctionOrMethod(
-                                  FunctionMetadata::create((void*)getreversed, UNKNOWN, 1, false, false), "reversed"));
+        "iter", new BoxedBuiltinFunctionOrMethod(
+                    BoxedCode::create((void*)builtinIter, UNKNOWN, 2, false, false, "iter", iter_doc), { NULL }, NULL));
+    builtins_module->giveAttr("reversed", new BoxedBuiltinFunctionOrMethod(BoxedCode::create(
+                                              (void*)getreversed, UNKNOWN, 1, false, false, "reversed")));
+    builtins_module->giveAttr("coerce", new BoxedBuiltinFunctionOrMethod(BoxedCode::create(
+                                            (void*)coerceFunc, UNKNOWN, 2, false, false, "coerce", coerce_doc)));
     builtins_module->giveAttr(
-        "coerce", new BoxedBuiltinFunctionOrMethod(
-                      FunctionMetadata::create((void*)coerceFunc, UNKNOWN, 2, false, false), "coerce", coerce_doc));
-    builtins_module->giveAttr("divmod", new BoxedBuiltinFunctionOrMethod(
-                                            FunctionMetadata::create((void*)divmod, UNKNOWN, 2), "divmod", divmod_doc));
+        "divmod", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)divmod, UNKNOWN, 2, "divmod", divmod_doc)));
 
-    builtins_module->giveAttr("map", new BoxedBuiltinFunctionOrMethod(
-                                         FunctionMetadata::create((void*)map, LIST, 1, true, false), "map", map_doc));
     builtins_module->giveAttr(
-        "reduce", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)reduce, UNKNOWN, 3, false, false),
-                                                   "reduce", { NULL }, NULL, reduce_doc));
+        "map", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)map, LIST, 1, true, false, "map", map_doc)));
     builtins_module->giveAttr(
-        "filter",
-        new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)filter2, UNKNOWN, 2), "filter", filter_doc));
-    builtins_module->giveAttr("zip", new BoxedBuiltinFunctionOrMethod(
-                                         FunctionMetadata::create((void*)zip, LIST, 0, true, false), "zip", zip_doc));
+        "reduce",
+        new BoxedBuiltinFunctionOrMethod(
+            BoxedCode::create((void*)reduce, UNKNOWN, 3, false, false, "reduce", reduce_doc), { NULL }, NULL));
+    builtins_module->giveAttr("filter", new BoxedBuiltinFunctionOrMethod(
+                                            BoxedCode::create((void*)filter2, UNKNOWN, 2, "filter", filter_doc)));
     builtins_module->giveAttr(
-        "dir", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)dir, LIST, 1, false, false), "dir",
-                                                { NULL }, NULL, dir_doc));
+        "zip", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)zip, LIST, 0, true, false, "zip", zip_doc)));
     builtins_module->giveAttr(
-        "vars", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)vars, UNKNOWN, 1, false, false),
-                                                 "vars", { NULL }, NULL, vars_doc));
+        "dir", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)dir, LIST, 1, false, false, "dir", dir_doc),
+                                                { NULL }, NULL));
+    builtins_module->giveAttr(
+        "vars", new BoxedBuiltinFunctionOrMethod(
+                    BoxedCode::create((void*)vars, UNKNOWN, 1, false, false, "vars", vars_doc), { NULL }, NULL));
     builtins_module->giveAttrBorrowed("object", object_cls);
     builtins_module->giveAttrBorrowed("str", str_cls);
     builtins_module->giveAttrBorrowed("bytes", str_cls);
@@ -2606,21 +2603,21 @@ void setupBuiltins() {
     PyType_Ready(&PyBuffer_Type);
     builtins_module->giveAttrBorrowed("buffer", &PyBuffer_Type);
 
-    builtins_module->giveAttr("callable",
-                              new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)callable, UNKNOWN, 1),
-                                                               "callable", callable_doc));
+    builtins_module->giveAttr("callable", new BoxedBuiltinFunctionOrMethod(BoxedCode::create(
+                                              (void*)callable, UNKNOWN, 1, "callable", callable_doc)));
 
-    builtins_module->giveAttr("raw_input", new BoxedBuiltinFunctionOrMethod(
-                                               FunctionMetadata::create((void*)rawInput, UNKNOWN, 1, false, false),
-                                               "raw_input", { NULL }, NULL, raw_input_doc));
     builtins_module->giveAttr(
-        "input", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)input, UNKNOWN, 1, false, false),
-                                                  "input", { NULL }, NULL, input_doc));
-    builtins_module->giveAttr("cmp", new BoxedBuiltinFunctionOrMethod(
-                                         FunctionMetadata::create((void*)builtinCmp, UNKNOWN, 2), "cmp", cmp_doc));
+        "raw_input",
+        new BoxedBuiltinFunctionOrMethod(
+            BoxedCode::create((void*)rawInput, UNKNOWN, 1, false, false, "raw_input", raw_input_doc), { NULL }, NULL));
     builtins_module->giveAttr(
-        "format", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)builtinFormat, UNKNOWN, 2), "format",
-                                                   { NULL }, NULL, format_doc));
+        "input", new BoxedBuiltinFunctionOrMethod(
+                     BoxedCode::create((void*)input, UNKNOWN, 1, false, false, "input", input_doc), { NULL }, NULL));
+    builtins_module->giveAttr(
+        "cmp", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)builtinCmp, UNKNOWN, 2, "cmp", cmp_doc)));
+    builtins_module->giveAttr(
+        "format", new BoxedBuiltinFunctionOrMethod(
+                      BoxedCode::create((void*)builtinFormat, UNKNOWN, 2, "format", format_doc), { NULL }, NULL));
 
 
     static PyMethodDef builtin_methods[] = {

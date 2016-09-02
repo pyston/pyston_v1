@@ -47,8 +47,8 @@ TEST_F(AnalysisTest, augassign) {
     ParamNames param_names(func, *module->interned_strings.get());
 
     // Hack to get at the cfg:
-    auto node = module->md->source->cfg->blocks[0]->body[0];
-    CFG* cfg = ast_cast<AST_MakeFunction>(ast_cast<AST_Assign>(node)->value)->function_def->md->source->cfg;
+    auto node = module->code->source->cfg->blocks[0]->body[0];
+    CFG* cfg = ast_cast<AST_MakeFunction>(ast_cast<AST_Assign>(node)->value)->function_def->code->source->cfg;
 
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
     auto&& vregs = cfg->getVRegInfo();
@@ -82,9 +82,9 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     computeAllCFGs(module, true, future_flags, boxString(fn), NULL);
 
     // Hack to get at the cfg:
-    auto node = module->md->source->cfg->blocks[0]->body[0];
-    auto md = ast_cast<AST_MakeFunction>(ast_cast<AST_Assign>(node)->value)->function_def->md;
-    CFG* cfg = md->source->cfg;
+    auto node = module->code->source->cfg->blocks[0]->body[0];
+    auto code = ast_cast<AST_MakeFunction>(ast_cast<AST_Assign>(node)->value)->function_def->code;
+    CFG* cfg = code->source->cfg;
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
 
     // cfg->print();
@@ -107,7 +107,7 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
 
     if (is_osr) {
         int vreg = vregs.getVReg(i_str);
-        OSREntryDescriptor* entry_descriptor = OSREntryDescriptor::create(md, backedge, CXX);
+        OSREntryDescriptor* entry_descriptor = OSREntryDescriptor::create(code, backedge, CXX);
         // need to set it to non-null
         ConcreteCompilerType* fake_type = (ConcreteCompilerType*)1;
         entry_descriptor->args[vreg] = fake_type;

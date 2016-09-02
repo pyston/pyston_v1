@@ -877,11 +877,11 @@ static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* flo
     v_uu.push_back(UNKNOWN);
     v_uu.push_back(UNKNOWN);
 
-    FunctionMetadata* md = new FunctionMetadata(2, false, false);
-    md->addVersion(float_func, rtn_type, v_ff);
-    md->addVersion(int_func, rtn_type, v_fi);
-    md->addVersion(boxed_func, UNKNOWN, v_uu);
-    float_cls->giveAttr(name, new BoxedFunction(md));
+    BoxedCode* code = new BoxedCode(2, false, false, name);
+    code->addVersion(float_func, rtn_type, v_ff);
+    code->addVersion(int_func, rtn_type, v_fi);
+    code->addVersion(boxed_func, UNKNOWN, v_uu);
+    float_cls->giveAttr(name, new BoxedFunction(code));
 }
 
 static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* float_func, void* int_func,
@@ -890,11 +890,11 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     std::vector<ConcreteCompilerType*> v_fiu{ BOXED_FLOAT, BOXED_INT, UNKNOWN };
     std::vector<ConcreteCompilerType*> v_fuu{ BOXED_FLOAT, UNKNOWN, UNKNOWN };
 
-    FunctionMetadata* md = new FunctionMetadata(3, false, false);
-    md->addVersion(float_func, rtn_type, v_ffu);
-    md->addVersion(int_func, rtn_type, v_fiu);
-    md->addVersion(boxed_func, UNKNOWN, v_fuu);
-    float_cls->giveAttr(name, new BoxedFunction(md, { Py_None }));
+    BoxedCode* code = new BoxedCode(3, false, false, name);
+    code->addVersion(float_func, rtn_type, v_ffu);
+    code->addVersion(int_func, rtn_type, v_fiu);
+    code->addVersion(boxed_func, UNKNOWN, v_fuu);
+    float_cls->giveAttr(name, new BoxedFunction(code, { Py_None }));
 }
 
 static Box* float_conjugate(Box* b, void*) noexcept {
@@ -949,8 +949,9 @@ void setupFloat() {
     static PyNumberMethods float_as_number;
     float_cls->tp_as_number = &float_as_number;
 
-    float_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)float_getnewargs, UNKNOWN,
-                                                                                     1, ParamNames::empty(), CAPI)));
+    float_cls->giveAttr("__getnewargs__",
+                        new BoxedFunction(BoxedCode::create((void*)float_getnewargs, UNKNOWN, 1, "float.__getnewargs__",
+                                                            "", ParamNames::empty(), CAPI)));
 
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);
     float_cls->giveAttrBorrowed("__radd__", float_cls->getattr(autoDecref(internStringMortal("__add__"))));
@@ -959,9 +960,10 @@ void setupFloat() {
     _addFunc("__rdiv__", BOXED_FLOAT, (void*)floatRDivFloat, (void*)floatRDivInt, (void*)floatRDiv);
     _addFunc("__floordiv__", BOXED_FLOAT, (void*)floatFloorDivFloat, (void*)floatFloorDivInt, (void*)floatFloorDiv);
     float_cls->giveAttr("__rfloordiv__",
-                        new BoxedFunction(FunctionMetadata::create((void*)floatRFloorDiv, UNKNOWN, 2)));
+                        new BoxedFunction(BoxedCode::create((void*)floatRFloorDiv, UNKNOWN, 2, "float.__rfloordiv__")));
     _addFunc("__truediv__", BOXED_FLOAT, (void*)floatDivFloat, (void*)floatDivInt, (void*)floatTruediv);
-    float_cls->giveAttr("__rtruediv__", new BoxedFunction(FunctionMetadata::create((void*)floatRTruediv, UNKNOWN, 2)));
+    float_cls->giveAttr("__rtruediv__",
+                        new BoxedFunction(BoxedCode::create((void*)floatRTruediv, UNKNOWN, 2, "float.__rtruediv__")));
 
     _addFunc("__mod__", BOXED_FLOAT, (void*)floatModFloat, (void*)floatModInt, (void*)floatMod);
     _addFunc("__rmod__", BOXED_FLOAT, (void*)floatRModFloat, (void*)floatRModInt, (void*)floatRMod);
@@ -969,46 +971,60 @@ void setupFloat() {
     float_cls->giveAttrBorrowed("__rmul__", float_cls->getattr(autoDecref(internStringMortal("__mul__"))));
 
     _addFuncPow("__pow__", BOXED_FLOAT, (void*)floatPowFloat, (void*)floatPowInt, (void*)floatPow);
-    float_cls->giveAttr("__rpow__", new BoxedFunction(FunctionMetadata::create((void*)floatRPow, UNKNOWN, 2)));
+    float_cls->giveAttr("__rpow__",
+                        new BoxedFunction(BoxedCode::create((void*)floatRPow, UNKNOWN, 2, "float.__rpow__")));
     _addFunc("__sub__", BOXED_FLOAT, (void*)floatSubFloat, (void*)floatSubInt, (void*)floatSub);
     _addFunc("__rsub__", BOXED_FLOAT, (void*)floatRSubFloat, (void*)floatRSubInt, (void*)floatRSub);
-    float_cls->giveAttr("__divmod__", new BoxedFunction(FunctionMetadata::create((void*)floatDivmod, UNKNOWN, 2)));
-    float_cls->giveAttr("__rdivmod__", new BoxedFunction(FunctionMetadata::create((void*)floatRDivmod, UNKNOWN, 2)));
+    float_cls->giveAttr("__divmod__",
+                        new BoxedFunction(BoxedCode::create((void*)floatDivmod, UNKNOWN, 2, "float.__divmod__")));
+    float_cls->giveAttr("__rdivmod__",
+                        new BoxedFunction(BoxedCode::create((void*)floatRDivmod, UNKNOWN, 2, "float.__rdivmod__")));
 
-    auto float_new = FunctionMetadata::create((void*)floatNew<CXX>, UNKNOWN, 2, false, false,
-                                              ParamNames({ "", "x" }, "", ""), CXX);
+    auto float_new = BoxedCode::create((void*)floatNew<CXX>, UNKNOWN, 2, false, false, "float.__new__", "",
+                                       ParamNames({ "", "x" }, "", ""), CXX);
     float_new->addVersion((void*)floatNew<CAPI>, UNKNOWN, CAPI);
     float_cls->giveAttr("__new__", new BoxedFunction(float_new, { autoDecref(boxFloat(0.0)) }));
 
-    float_cls->giveAttr("__eq__", new BoxedFunction(FunctionMetadata::create((void*)floatEq, UNKNOWN, 2)));
-    float_cls->giveAttr("__ne__", new BoxedFunction(FunctionMetadata::create((void*)floatNe, UNKNOWN, 2)));
-    float_cls->giveAttr("__le__", new BoxedFunction(FunctionMetadata::create((void*)floatLe, UNKNOWN, 2)));
-    float_cls->giveAttr("__lt__", new BoxedFunction(FunctionMetadata::create((void*)floatLt, UNKNOWN, 2)));
-    float_cls->giveAttr("__ge__", new BoxedFunction(FunctionMetadata::create((void*)floatGe, UNKNOWN, 2)));
-    float_cls->giveAttr("__gt__", new BoxedFunction(FunctionMetadata::create((void*)floatGt, UNKNOWN, 2)));
-    float_cls->giveAttr("__neg__", new BoxedFunction(FunctionMetadata::create((void*)floatNeg, BOXED_FLOAT, 1)));
-    float_cls->giveAttr("__pos__", new BoxedFunction(FunctionMetadata::create((void*)floatPos, BOXED_FLOAT, 1)));
-    float_cls->giveAttr("__abs__", new BoxedFunction(FunctionMetadata::create((void*)floatAbs, BOXED_FLOAT, 1)));
+    float_cls->giveAttr("__eq__", new BoxedFunction(BoxedCode::create((void*)floatEq, UNKNOWN, 2, "float.__eq__")));
+    float_cls->giveAttr("__ne__", new BoxedFunction(BoxedCode::create((void*)floatNe, UNKNOWN, 2, "float.__ne__")));
+    float_cls->giveAttr("__le__", new BoxedFunction(BoxedCode::create((void*)floatLe, UNKNOWN, 2, "float.__le__")));
+    float_cls->giveAttr("__lt__", new BoxedFunction(BoxedCode::create((void*)floatLt, UNKNOWN, 2, "float.__lt__")));
+    float_cls->giveAttr("__ge__", new BoxedFunction(BoxedCode::create((void*)floatGe, UNKNOWN, 2, "float.__ge__")));
+    float_cls->giveAttr("__gt__", new BoxedFunction(BoxedCode::create((void*)floatGt, UNKNOWN, 2, "float.__gt__")));
+    float_cls->giveAttr("__neg__",
+                        new BoxedFunction(BoxedCode::create((void*)floatNeg, BOXED_FLOAT, 1, "float.__neg__")));
+    float_cls->giveAttr("__pos__",
+                        new BoxedFunction(BoxedCode::create((void*)floatPos, BOXED_FLOAT, 1, "float.__pos__")));
+    float_cls->giveAttr("__abs__",
+                        new BoxedFunction(BoxedCode::create((void*)floatAbs, BOXED_FLOAT, 1, "float.__abs__")));
 
-    FunctionMetadata* nonzero = FunctionMetadata::create((void*)floatNonzeroUnboxed, BOOL, 1);
+    BoxedCode* nonzero = BoxedCode::create((void*)floatNonzeroUnboxed, BOOL, 1, "float.__nonzero__");
     nonzero->addVersion((void*)floatNonzero, UNKNOWN);
     float_cls->giveAttr("__nonzero__", new BoxedFunction(nonzero));
 
-    // float_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)floatNonzero, NULL, 1)));
-    float_cls->giveAttr("__float__", new BoxedFunction(FunctionMetadata::create((void*)floatFloat, BOXED_FLOAT, 1)));
-    float_cls->giveAttr("__str__", new BoxedFunction(FunctionMetadata::create((void*)floatStr<CXX>, STR, 1)));
-    float_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)floatRepr<CXX>, STR, 1)));
-    float_cls->giveAttr("__coerce__", new BoxedFunction(FunctionMetadata::create((void*)floatCoerce, UNKNOWN, 2)));
+    // float_cls->giveAttr("__nonzero__", new BoxedFunction(BoxedCode::create((void*)floatNonzero, NULL, 1,
+    // "float.__nonzero__")));
+    float_cls->giveAttr("__float__",
+                        new BoxedFunction(BoxedCode::create((void*)floatFloat, BOXED_FLOAT, 1, "float.__float__")));
+    float_cls->giveAttr("__str__", new BoxedFunction(BoxedCode::create((void*)floatStr<CXX>, STR, 1, "float.__str__")));
+    float_cls->giveAttr("__repr__",
+                        new BoxedFunction(BoxedCode::create((void*)floatRepr<CXX>, STR, 1, "float.__repr__")));
+    float_cls->giveAttr("__coerce__",
+                        new BoxedFunction(BoxedCode::create((void*)floatCoerce, UNKNOWN, 2, "float.__coerce__")));
 
-    float_cls->giveAttr("__trunc__", new BoxedFunction(FunctionMetadata::create((void*)floatTrunc, UNKNOWN, 1)));
-    float_cls->giveAttr("__int__", new BoxedFunction(FunctionMetadata::create((void*)floatInt, UNKNOWN, 1)));
-    float_cls->giveAttr("__long__", new BoxedFunction(FunctionMetadata::create((void*)floatLong, UNKNOWN, 1)));
-    float_cls->giveAttr("__hash__", new BoxedFunction(FunctionMetadata::create((void*)floatHash, BOXED_INT, 1)));
+    float_cls->giveAttr("__trunc__",
+                        new BoxedFunction(BoxedCode::create((void*)floatTrunc, UNKNOWN, 1, "float.__trunc__")));
+    float_cls->giveAttr("__int__", new BoxedFunction(BoxedCode::create((void*)floatInt, UNKNOWN, 1, "float.__int__")));
+    float_cls->giveAttr("__long__",
+                        new BoxedFunction(BoxedCode::create((void*)floatLong, UNKNOWN, 1, "float.__long__")));
+    float_cls->giveAttr("__hash__",
+                        new BoxedFunction(BoxedCode::create((void*)floatHash, BOXED_INT, 1, "float.__hash__")));
 
     float_cls->giveAttrDescriptor("real", float_conjugate, NULL);
     float_cls->giveAttrDescriptor("imag", float0, NULL);
-    float_cls->giveAttr("conjugate", new BoxedFunction(FunctionMetadata::create((void*)float_conjugate, BOXED_FLOAT, 1,
-                                                                                ParamNames::empty(), CAPI)));
+    float_cls->giveAttr("conjugate",
+                        new BoxedFunction(BoxedCode::create((void*)float_conjugate, BOXED_FLOAT, 1, "float.conjugate",
+                                                            "", ParamNames::empty(), CAPI)));
 
     float_cls->giveAttr("__doc__", boxString("float(x) -> floating point number\n"
                                              "\n"

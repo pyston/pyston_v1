@@ -251,7 +251,7 @@ public:
 
     ModuleCFGProcessor(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn, BoxedModule* bm)
         : scoping(ast, globals_from_module),
-          stringpool(stringpoolForAST(ast)),
+          stringpool(ast->getStringpool()),
           future_flags(future_flags),
           fn(fn),
           bm(bm) {}
@@ -263,7 +263,7 @@ public:
     void runRecursively(AST* ast, AST_arguments* args, AST* orig_node);
 };
 
-static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
+static CFG* computeCFG(AST* ast, BoxedString* fn, SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
                        ModuleCFGProcessor* cfgizer);
 
 // A class that crawls the AST of a single function and computes the CFG
@@ -343,6 +343,7 @@ private:
 
     // ---------- Member fields ----------
 private:
+    BoxedString* filename;
     SourceInfo* source;
     InternedStringPool& stringpool;
     ScopeInfo* scoping;
@@ -360,12 +361,14 @@ private:
 
     unsigned int next_var_index = 0;
 
-    friend CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeInfo*, ModuleCFGProcessor*);
+    friend CFG* computeCFG(AST* ast, BoxedString* fn, SourceInfo* source, const ParamNames& param_names, ScopeInfo*,
+                           ModuleCFGProcessor*);
 
 public:
-    CFGVisitor(SourceInfo* source, InternedStringPool& stringpool, ScopeInfo* scoping, AST_TYPE::AST_TYPE root_type,
-               FutureFlags future_flags, CFG* cfg, ModuleCFGProcessor* cfgizer)
-        : source(source),
+    CFGVisitor(BoxedString* filename, SourceInfo* source, InternedStringPool& stringpool, ScopeInfo* scoping,
+               AST_TYPE::AST_TYPE root_type, FutureFlags future_flags, CFG* cfg, ModuleCFGProcessor* cfgizer)
+        : filename(filename),
+          source(source),
           stringpool(stringpool),
           scoping(scoping),
           root_type(root_type),
@@ -459,8 +462,7 @@ private:
             }
         }
 
-        raiseSyntaxError("'continue' not properly in loop", value->lineno, value->col_offset, source->getFn()->s(), "",
-                         true);
+        raiseSyntaxError("'continue' not properly in loop", value->lineno, value->col_offset, filename->s(), "", true);
     }
 
     void doBreak(AST* value) {
@@ -477,7 +479,7 @@ private:
             }
         }
 
-        raiseSyntaxError("'break' outside loop", value->lineno, value->col_offset, source->getFn()->s(), "", true);
+        raiseSyntaxError("'break' outside loop", value->lineno, value->col_offset, filename->s(), "", true);
     }
 
     AST_expr* callNonzero(AST_expr* e) {
@@ -2959,32 +2961,32 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names) {
 }
 
 
-static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
-                       ModuleCFGProcessor* cfgizer) {
+static CFG* computeCFG(AST* ast, BoxedString* filename, SourceInfo* source, const ParamNames& param_names,
+                       ScopeInfo* scoping, ModuleCFGProcessor* cfgizer) {
     STAT_TIMER(t0, "us_timer_computecfg", 0);
 
-    auto body = source->getBody();
+    auto body = ast->getBody();
 
     CFG* rtn = new CFG();
 
     auto&& stringpool = cfgizer->stringpool;
-    CFGVisitor visitor(source, stringpool, scoping, source->ast->type, source->future_flags, rtn, cfgizer);
+    CFGVisitor visitor(filename, source, stringpool, scoping, ast->type, source->future_flags, rtn, cfgizer);
 
     bool skip_first = false;
 
-    if (source->ast->type == AST_TYPE::ClassDef) {
+    if (ast->type == AST_TYPE::ClassDef) {
         // A classdef always starts with "__module__ = __name__"
         AST_Assign* module_assign = new AST_Assign();
-        auto module_name_target = new AST_Name(stringpool.get("__module__"), AST_TYPE::Store, source->ast->lineno);
+        auto module_name_target = new AST_Name(stringpool.get("__module__"), AST_TYPE::Store, ast->lineno);
         fillScopingInfo(module_name_target, scoping);
 
-        auto module_name_value = new AST_Name(stringpool.get("__name__"), AST_TYPE::Load, source->ast->lineno);
+        auto module_name_value = new AST_Name(stringpool.get("__name__"), AST_TYPE::Load, ast->lineno);
         fillScopingInfo(module_name_value, scoping);
 
         module_assign->targets.push_back(module_name_target);
         module_assign->value = module_name_value;
 
-        module_assign->lineno = source->ast->lineno;
+        module_assign->lineno = ast->lineno;
         visitor.push_back(module_assign);
 
         // If the first statement is just a single string, transform it to an assignment to __doc__
@@ -2992,18 +2994,18 @@ static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeI
             AST_Expr* first_expr = ast_cast<AST_Expr>(body[0]);
             if (first_expr->value->type == AST_TYPE::Str) {
                 AST_Assign* doc_assign = new AST_Assign();
-                auto doc_target_name = new AST_Name(stringpool.get("__doc__"), AST_TYPE::Store, source->ast->lineno);
+                auto doc_target_name = new AST_Name(stringpool.get("__doc__"), AST_TYPE::Store, ast->lineno);
                 fillScopingInfo(doc_target_name, scoping);
                 doc_assign->targets.push_back(doc_target_name);
                 doc_assign->value = first_expr->value;
-                doc_assign->lineno = source->ast->lineno;
+                doc_assign->lineno = ast->lineno;
                 visitor.push_back(doc_assign);
                 skip_first = true;
             }
         }
     }
 
-    if (source->ast->type == AST_TYPE::FunctionDef || source->ast->type == AST_TYPE::Lambda) {
+    if (ast->type == AST_TYPE::FunctionDef || ast->type == AST_TYPE::Lambda) {
         // Unpack tuple arguments
         // Tuple arguments get assigned names ".0", ".1" etc. So this
         // def f(a, (b,c), (d,e)):
@@ -3012,10 +3014,10 @@ static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeI
         //     (b, c) = .1
         //     (d, e) = .2
         AST_arguments* args;
-        if (source->ast->type == AST_TYPE::FunctionDef) {
-            args = ast_cast<AST_FunctionDef>(source->ast)->args;
+        if (ast->type == AST_TYPE::FunctionDef) {
+            args = ast_cast<AST_FunctionDef>(ast)->args;
         } else {
-            args = ast_cast<AST_Lambda>(source->ast)->args;
+            args = ast_cast<AST_Lambda>(ast)->args;
         }
         int counter = 0;
         for (AST_expr* arg_expr : args->args) {
@@ -3042,11 +3044,11 @@ static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeI
 
     // The functions we create for classdefs are supposed to return a dictionary of their locals.
     // This is the place that we add all of that:
-    if (source->ast->type == AST_TYPE::ClassDef) {
+    if (ast->type == AST_TYPE::ClassDef) {
         AST_LangPrimitive* locals = new AST_LangPrimitive(AST_LangPrimitive::LOCALS);
 
         AST_Return* rtn = new AST_Return();
-        rtn->lineno = getLastLineno(source->ast);
+        rtn->lineno = getLastLineno(ast);
         rtn->value = locals;
         visitor.push_back(rtn);
     } else {
@@ -3054,7 +3056,7 @@ static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeI
         // we already have to support multiple return statements in a function, but this way we can avoid
         // having to support not having a return statement:
         AST_Return* return_stmt = new AST_Return();
-        return_stmt->lineno = getLastLineno(source->ast);
+        return_stmt->lineno = getLastLineno(ast);
         return_stmt->col_offset = 0;
         return_stmt->value = NULL;
         visitor.push_back(return_stmt);
@@ -3091,7 +3093,6 @@ static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeI
         if (b->predecessors.size() == 0) {
             if (b != rtn->getStartingBlock()) {
                 rtn->print();
-                printf("%s\n", source->getName()->c_str());
             }
             ASSERT(b == rtn->getStartingBlock(), "%d", b->idx);
         }
@@ -3260,50 +3261,30 @@ static CFG* computeCFG(SourceInfo* source, const ParamNames& param_names, ScopeI
     return rtn;
 }
 
-FunctionMetadata*& metadataForAST(AST* ast) {
-    switch (ast->type) {
-        case AST_TYPE::Expression:
-            return ast_cast<AST_Expression>(ast)->md;
-        case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->md;
-        case AST_TYPE::ClassDef:
-            return ast_cast<AST_ClassDef>(ast)->md;
-        case AST_TYPE::Module:
-            return ast_cast<AST_Module>(ast)->md;
-        default:
-            break;
-    }
-    RELEASE_ASSERT(0, "%d", ast->type);
-}
-InternedStringPool& stringpoolForAST(AST* ast) {
-    switch (ast->type) {
-        case AST_TYPE::Expression:
-            return *ast_cast<AST_Expression>(ast)->interned_strings;
-        case AST_TYPE::Module:
-            return *ast_cast<AST_Module>(ast)->interned_strings;
-        default:
-            break;
-    }
-    RELEASE_ASSERT(0, "%d", ast->type);
-}
 
 void ModuleCFGProcessor::runRecursively(AST* ast, AST_arguments* args, AST* orig_node) {
     ScopeInfo* scope_info = scoping.getScopeInfoForNode(orig_node);
     std::unique_ptr<SourceInfo> si(
-        new SourceInfo(bm, ScopingResults(scope_info, scoping.areGlobalsFromModule()), future_flags, ast, fn));
+        new SourceInfo(bm, ScopingResults(scope_info, scoping.areGlobalsFromModule()), future_flags, ast));
     ParamNames param_names(ast, stringpool);
 
     for (auto e : param_names.allArgsAsName())
         fillScopingInfo(e, scope_info);
 
-    si->cfg = computeCFG(si.get(), param_names, scope_info, this);
+    si->cfg = computeCFG(ast, fn, si.get(), param_names, scope_info, this);
 
-    FunctionMetadata* md;
+    BoxedCode* code;
     if (args)
-        md = new FunctionMetadata(args->args.size(), args->vararg, args->kwarg, std::move(si), std::move(param_names));
+        code = new BoxedCode(args->args.size(), args->vararg, args->kwarg, ast->lineno, std::move(si),
+                             std::move(param_names), fn, ast->getName(), autoDecref(ast->getDocString()));
     else
-        md = new FunctionMetadata(0, false, false, std::move(si), std::move(param_names));
-    metadataForAST(ast) = md;
+        code = new BoxedCode(0, false, false, ast->lineno, std::move(si), std::move(param_names), fn, ast->getName(),
+                             autoDecref(ast->getDocString()));
+
+    // XXX very bad!  Should properly track this:
+    constants.push_back(code);
+
+    ast->getCode() = code;
 }
 
 void computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn, BoxedModule* bm) {

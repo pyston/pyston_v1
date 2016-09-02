@@ -922,8 +922,9 @@ wdbg_%:
 
 .PHONY: head_%
 HEAD := 40
+HEAD_SKIP := 6
 head_%:
-	@ bash -c "set -o pipefail; script -e -q -c '$(MAKE) $(dir $@)$(patsubst head_%,%,$(notdir $@))' /dev/null | head -n$(HEAD)"
+	@ bash -c "set -o pipefail; script -e -q -c '$(MAKE) $(dir $@)$(patsubst head_%,%,$(notdir $@))' /dev/null | tail -n+$(HEAD_SKIP) | head -n$(HEAD)"
 head: head_pyston_dbg
 .PHONY: hwatch_%
 hwatch_%:

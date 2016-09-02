@@ -902,10 +902,10 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     std::vector<ConcreteCompilerType*> v_ifu{ BOXED_INT, BOXED_FLOAT, UNKNOWN };
     std::vector<ConcreteCompilerType*> v_uuu{ UNKNOWN, UNKNOWN, UNKNOWN };
 
-    FunctionMetadata* md = new FunctionMetadata(3, false, false);
-    md->addVersion(float_func, UNKNOWN, v_ifu);
-    md->addVersion(int_func, UNKNOWN, v_uuu);
-    int_cls->giveAttr(name, new BoxedFunction(md, { Py_None }));
+    BoxedCode* code = new BoxedCode(3, false, false, name);
+    code->addVersion(float_func, UNKNOWN, v_ifu);
+    code->addVersion(int_func, UNKNOWN, v_uuu);
+    int_cls->giveAttr(name, new BoxedFunction(code, { Py_None }));
 }
 
 extern "C" Box* intPowLong(BoxedInt* lhs, BoxedLong* rhs, Box* mod) {
@@ -1406,11 +1406,11 @@ static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* floa
     v_iu.push_back(UNKNOWN);
     v_iu.push_back(UNKNOWN);
 
-    FunctionMetadata* md = new FunctionMetadata(2, false, false);
-    md->addVersion(int_func, UNKNOWN, v_ii);
-    md->addVersion(float_func, BOXED_FLOAT, v_if);
-    md->addVersion(boxed_func, UNKNOWN, v_iu);
-    int_cls->giveAttr(name, new BoxedFunction(md));
+    BoxedCode* code = new BoxedCode(2, false, false, name);
+    code->addVersion(int_func, UNKNOWN, v_ii);
+    code->addVersion(float_func, BOXED_FLOAT, v_if);
+    code->addVersion(boxed_func, UNKNOWN, v_iu);
+    int_cls->giveAttr(name, new BoxedFunction(code));
 }
 
 static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type, void* int_func, void* boxed_func) {
@@ -1421,10 +1421,10 @@ static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type,
     v_iu.push_back(UNKNOWN);
     v_iu.push_back(UNKNOWN);
 
-    FunctionMetadata* md = new FunctionMetadata(2, false, false);
-    md->addVersion(int_func, rtn_type, v_ii);
-    md->addVersion(boxed_func, UNKNOWN, v_iu);
-    int_cls->giveAttr(name, new BoxedFunction(md));
+    BoxedCode* code = new BoxedCode(2, false, false, name);
+    code->addVersion(int_func, rtn_type, v_ii);
+    code->addVersion(boxed_func, UNKNOWN, v_iu);
+    int_cls->giveAttr(name, new BoxedFunction(code));
 }
 
 static Box* int_int_getset(Box* b, void*) noexcept {
@@ -1557,8 +1557,9 @@ void setupInt() {
         interned_ints[-MIN_INTERNED_INT + i] = new BoxedInt(i);
     }
 
-    int_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)int_getnewargs, UNKNOWN, 1,
-                                                                                   ParamNames::empty(), CAPI)));
+    int_cls->giveAttr("__getnewargs__",
+                      new BoxedFunction(BoxedCode::create((void*)int_getnewargs, UNKNOWN, 1, "int.__getnewargs__", "",
+                                                          ParamNames::empty(), CAPI)));
     _addFuncIntFloatUnknown("__add__", (void*)intAddInt, (void*)intAddFloat, (void*)intAdd);
     _addFuncIntUnknown("__and__", BOXED_INT, (void*)intAndInt, (void*)intAnd);
     _addFuncIntUnknown("__or__", BOXED_INT, (void*)intOrInt, (void*)intOr);
@@ -1571,50 +1572,63 @@ void setupInt() {
     _addFuncIntUnknown("__mod__", UNKNOWN, (void*)intModInt, (void*)intMod);
     _addFuncPow("__pow__", BOXED_INT, (void*)intPowFloat, (void*)intPow);
 
-    int_cls->giveAttr("__radd__", new BoxedFunction(FunctionMetadata::create((void*)intRAdd, UNKNOWN, 2)));
-    int_cls->giveAttr("__rand__", new BoxedFunction(FunctionMetadata::create((void*)intRAnd, UNKNOWN, 2)));
-    int_cls->giveAttr("__ror__", new BoxedFunction(FunctionMetadata::create((void*)intROr, UNKNOWN, 2)));
-    int_cls->giveAttr("__rxor__", new BoxedFunction(FunctionMetadata::create((void*)intRXor, UNKNOWN, 2)));
+    int_cls->giveAttr("__radd__", new BoxedFunction(BoxedCode::create((void*)intRAdd, UNKNOWN, 2, "int.__radd__")));
+    int_cls->giveAttr("__rand__", new BoxedFunction(BoxedCode::create((void*)intRAnd, UNKNOWN, 2, "int.__rand__")));
+    int_cls->giveAttr("__ror__", new BoxedFunction(BoxedCode::create((void*)intROr, UNKNOWN, 2, "int.__ror__")));
+    int_cls->giveAttr("__rxor__", new BoxedFunction(BoxedCode::create((void*)intRXor, UNKNOWN, 2, "int.__rxor__")));
 
-    int_cls->giveAttr("__rsub__", new BoxedFunction(FunctionMetadata::create((void*)intRSub, UNKNOWN, 2)));
-    int_cls->giveAttr("__rmul__", new BoxedFunction(FunctionMetadata::create((void*)intRMul, UNKNOWN, 2)));
-    int_cls->giveAttr("__rdiv__", new BoxedFunction(FunctionMetadata::create((void*)intRDiv, UNKNOWN, 2)));
-    int_cls->giveAttr("__rfloordiv__", new BoxedFunction(FunctionMetadata::create((void*)intRFloordiv, UNKNOWN, 2)));
-    int_cls->giveAttr("__rtruediv__", new BoxedFunction(FunctionMetadata::create((void*)intRTruediv, UNKNOWN, 2)));
-    int_cls->giveAttr("__rmod__", new BoxedFunction(FunctionMetadata::create((void*)intRMod, UNKNOWN, 2)));
-    int_cls->giveAttr("__rdivmod__", new BoxedFunction(FunctionMetadata::create((void*)intRDivmod, UNKNOWN, 2)));
+    int_cls->giveAttr("__rsub__", new BoxedFunction(BoxedCode::create((void*)intRSub, UNKNOWN, 2, "int.__rsub__")));
+    int_cls->giveAttr("__rmul__", new BoxedFunction(BoxedCode::create((void*)intRMul, UNKNOWN, 2, "int.__rmul__")));
+    int_cls->giveAttr("__rdiv__", new BoxedFunction(BoxedCode::create((void*)intRDiv, UNKNOWN, 2, "int.__rdiv__")));
+    int_cls->giveAttr("__rfloordiv__",
+                      new BoxedFunction(BoxedCode::create((void*)intRFloordiv, UNKNOWN, 2, "int.__rfloordiv__")));
+    int_cls->giveAttr("__rtruediv__",
+                      new BoxedFunction(BoxedCode::create((void*)intRTruediv, UNKNOWN, 2, "int.__rtruediv__")));
+    int_cls->giveAttr("__rmod__", new BoxedFunction(BoxedCode::create((void*)intRMod, UNKNOWN, 2, "int.__rmod__")));
+    int_cls->giveAttr("__rdivmod__",
+                      new BoxedFunction(BoxedCode::create((void*)intRDivmod, UNKNOWN, 2, "int.__rdivmod__")));
     int_cls->giveAttr(
-        "__rpow__", new BoxedFunction(FunctionMetadata::create((void*)intRPow, UNKNOWN, 3, false, false), { Py_None }));
-    int_cls->giveAttr("__rrshift__", new BoxedFunction(FunctionMetadata::create((void*)intRRShift, UNKNOWN, 2)));
-    int_cls->giveAttr("__rlshift__", new BoxedFunction(FunctionMetadata::create((void*)intRLShift, UNKNOWN, 2)));
+        "__rpow__",
+        new BoxedFunction(BoxedCode::create((void*)intRPow, UNKNOWN, 3, false, false, "int.__rpow__"), { Py_None }));
+    int_cls->giveAttr("__rrshift__",
+                      new BoxedFunction(BoxedCode::create((void*)intRRShift, UNKNOWN, 2, "int.__rrshift__")));
+    int_cls->giveAttr("__rlshift__",
+                      new BoxedFunction(BoxedCode::create((void*)intRLShift, UNKNOWN, 2, "int.__rlshift__")));
     // Note: CPython implements int comparisons using tp_compare
     int_cls->tp_richcompare = int_richcompare;
 
     _addFuncIntUnknown("__lshift__", UNKNOWN, (void*)intLShiftInt, (void*)intLShift);
     _addFuncIntUnknown("__rshift__", UNKNOWN, (void*)intRShiftInt, (void*)intRShift);
 
-    int_cls->giveAttr("__invert__", new BoxedFunction(FunctionMetadata::create((void*)intInvert, BOXED_INT, 1)));
-    int_cls->giveAttr("__pos__", new BoxedFunction(FunctionMetadata::create((void*)intPos, BOXED_INT, 1)));
-    int_cls->giveAttr("__neg__", new BoxedFunction(FunctionMetadata::create((void*)intNeg, UNKNOWN, 1)));
-    int_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)intNonzero, BOXED_BOOL, 1)));
-    int_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)intRepr, STR, 1)));
+    int_cls->giveAttr("__invert__",
+                      new BoxedFunction(BoxedCode::create((void*)intInvert, BOXED_INT, 1, "int.__invert__")));
+    int_cls->giveAttr("__pos__", new BoxedFunction(BoxedCode::create((void*)intPos, BOXED_INT, 1, "int.__pos__")));
+    int_cls->giveAttr("__neg__", new BoxedFunction(BoxedCode::create((void*)intNeg, UNKNOWN, 1, "int.__neg__")));
+    int_cls->giveAttr("__nonzero__",
+                      new BoxedFunction(BoxedCode::create((void*)intNonzero, BOXED_BOOL, 1, "int.__nonzero__")));
+    int_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)intRepr, STR, 1, "int.__repr__")));
     int_cls->tp_hash = (hashfunc)int_hash;
-    int_cls->giveAttr("__divmod__", new BoxedFunction(FunctionMetadata::create((void*)intDivmod, UNKNOWN, 2)));
+    int_cls->giveAttr("__divmod__",
+                      new BoxedFunction(BoxedCode::create((void*)intDivmod, UNKNOWN, 2, "int.__divmod__")));
 
 
-    int_cls->giveAttr("__coerce__", new BoxedFunction(FunctionMetadata::create((void*)intCoerce, UNKNOWN, 2)));
-    int_cls->giveAttr("__abs__", new BoxedFunction(FunctionMetadata::create((void*)intAbs, UNKNOWN, 1)));
-    int_cls->giveAttr("__bin__", new BoxedFunction(FunctionMetadata::create((void*)intBin, STR, 1)));
-    int_cls->giveAttr("__hex__", new BoxedFunction(FunctionMetadata::create((void*)intHex, STR, 1)));
-    int_cls->giveAttr("__oct__", new BoxedFunction(FunctionMetadata::create((void*)intOct, STR, 1)));
+    int_cls->giveAttr("__coerce__",
+                      new BoxedFunction(BoxedCode::create((void*)intCoerce, UNKNOWN, 2, "int.__coerce__")));
+    int_cls->giveAttr("__abs__", new BoxedFunction(BoxedCode::create((void*)intAbs, UNKNOWN, 1, "int.__abs__")));
+    int_cls->giveAttr("__bin__", new BoxedFunction(BoxedCode::create((void*)intBin, STR, 1, "int.__bin__")));
+    int_cls->giveAttr("__hex__", new BoxedFunction(BoxedCode::create((void*)intHex, STR, 1, "int.__hex__")));
+    int_cls->giveAttr("__oct__", new BoxedFunction(BoxedCode::create((void*)intOct, STR, 1, "int.__oct__")));
 
-    int_cls->giveAttr("__trunc__", new BoxedFunction(FunctionMetadata::create((void*)intTrunc, BOXED_INT, 1)));
-    int_cls->giveAttr("__index__", new BoxedFunction(FunctionMetadata::create((void*)intIndex, BOXED_INT, 1)));
-    int_cls->giveAttr("__int__", new BoxedFunction(FunctionMetadata::create((void*)intInt, BOXED_INT, 1)));
-    int_cls->giveAttr("__float__", new BoxedFunction(FunctionMetadata::create((void*)intFloat, BOXED_FLOAT, 1)));
-    int_cls->giveAttr("__long__", new BoxedFunction(FunctionMetadata::create((void*)intLong, LONG, 1)));
+    int_cls->giveAttr("__trunc__",
+                      new BoxedFunction(BoxedCode::create((void*)intTrunc, BOXED_INT, 1, "int.__trunc__")));
+    int_cls->giveAttr("__index__",
+                      new BoxedFunction(BoxedCode::create((void*)intIndex, BOXED_INT, 1, "int.__index__")));
+    int_cls->giveAttr("__int__", new BoxedFunction(BoxedCode::create((void*)intInt, BOXED_INT, 1, "int.__int__")));
+    int_cls->giveAttr("__float__",
+                      new BoxedFunction(BoxedCode::create((void*)intFloat, BOXED_FLOAT, 1, "int.__float__")));
+    int_cls->giveAttr("__long__", new BoxedFunction(BoxedCode::create((void*)intLong, LONG, 1, "int.__long__")));
 
-    int_cls->giveAttr("__format__", new BoxedFunction(FunctionMetadata::create((void*)intFormat, STR, 2)));
+    int_cls->giveAttr("__format__", new BoxedFunction(BoxedCode::create((void*)intFormat, STR, 2, "int.__format__")));
 
     int_cls->giveAttr("__doc__",
                       boxString("int(x=0) -> int or long\n"
@@ -1632,18 +1646,20 @@ void setupInt() {
                                 ">>> int('0b100', base=0)\n"
                                 "4"));
 
-    auto int_new = FunctionMetadata::create((void*)intNew<CXX>, UNKNOWN, 3, false, false,
-                                            ParamNames({ "", "x", "base" }, "", ""), CXX);
+    auto int_new = BoxedCode::create((void*)intNew<CXX>, UNKNOWN, 3, false, false, "int.__new__", "",
+                                     ParamNames({ "", "x", "base" }, "", ""), CXX);
     int_new->addVersion((void*)intNew<CAPI>, UNKNOWN, CAPI);
     int_cls->giveAttr("__new__", new BoxedFunction(int_new, { NULL, NULL }));
 
 
-    int_cls->giveAttr("bit_length", new BoxedFunction(FunctionMetadata::create((void*)intBitLength, BOXED_INT, 1)));
+    int_cls->giveAttr("bit_length",
+                      new BoxedFunction(BoxedCode::create((void*)intBitLength, BOXED_INT, 1, "int.bit_length")));
 
     // int_int_getset doesn't throw at all, so we can cheat and use it as both a CAPI and CXX style function.
     int_cls->giveAttrDescriptor("real", int_int_getset, NULL);
     int_cls->giveAttrDescriptor("imag", int0, NULL);
-    int_cls->giveAttr("conjugate", new BoxedFunction(FunctionMetadata::create((void*)int_int_getset, BOXED_INT, 1)));
+    int_cls->giveAttr("conjugate",
+                      new BoxedFunction(BoxedCode::create((void*)int_int_getset, BOXED_INT, 1, "int.conjugate")));
     int_cls->giveAttrDescriptor("numerator", int_int_getset, NULL);
     int_cls->giveAttrDescriptor("denominator", int1, NULL);
 
