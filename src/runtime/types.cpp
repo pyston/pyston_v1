@@ -346,6 +346,11 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(BoxedCode* code, llvm::ArrayRef<
         }
     }
 
+    assert(!this->name);
+    this->name = incref(code->name);
+    assert(!this->doc);
+    this->doc = incref(code->_doc);
+
     if (code->source) {
         auto parent_module = code->source->parent_module;
         Py_INCREF(parent_module);
@@ -363,11 +368,8 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(BoxedCode* code, llvm::ArrayRef<
             this->modname = xincref(PyDict_GetItem(globals_for_name, name_str));
         }
         // It's ok for modname to be NULL
-
-        this->doc = xincref(code->_doc);
     } else {
         this->modname = PyString_InternFromString("__builtin__");
-        this->doc = incref(Py_None);
     }
 }
 
@@ -377,28 +379,14 @@ BoxedFunction::BoxedFunction(BoxedCode* code) : BoxedFunction(code, {}) {
 BoxedFunction::BoxedFunction(BoxedCode* code, llvm::ArrayRef<Box*> defaults, BoxedClosure* closure, Box* globals,
                              bool can_change_defaults)
     : BoxedFunctionBase(code, defaults, closure, globals, can_change_defaults) {
-
-    assert(!this->name);
-    this->name = xincref(code->name);
 }
 
-BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(BoxedCode* code, const char* name, const char* doc)
-    : BoxedBuiltinFunctionOrMethod(code, name, {}) {
-
-    Py_DECREF(this->doc);
-    this->doc = doc ? boxString(doc) : incref(Py_None);
+BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(BoxedCode* code) : BoxedBuiltinFunctionOrMethod(code, {}) {
 }
 
-BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(BoxedCode* code, const char* name,
-                                                           std::initializer_list<Box*> defaults, BoxedClosure* closure,
-                                                           const char* doc)
+BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(BoxedCode* code, std::initializer_list<Box*> defaults,
+                                                           BoxedClosure* closure)
     : BoxedFunctionBase(code, defaults, closure) {
-
-    assert(name);
-    assert(!this->name);
-    this->name = static_cast<BoxedString*>(boxString(name));
-    Py_DECREF(this->doc);
-    this->doc = doc ? boxString(doc) : incref(Py_None);
 }
 
 static void functionDtor(Box* b) {
@@ -4373,19 +4361,21 @@ void setupRuntime() {
     SET = typeFromClass(set_cls);
     FROZENSET = typeFromClass(frozenset_cls);
 
-    object_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)object_repr, UNKNOWN, 1, false, false,
-                                                                         ParamNames::empty(), CAPI)));
-    object_cls->giveAttr("__subclasshook__",
-                         boxInstanceMethod(object_cls, autoDecref(new BoxedFunction(
-                                                           BoxedCode::create((void*)objectSubclasshook, UNKNOWN, 2))),
-                                           object_cls));
+    object_cls->giveAttr("__repr__",
+                         new BoxedFunction(BoxedCode::create((void*)object_repr, UNKNOWN, 1, false, false,
+                                                             "object.__repr__", "", ParamNames::empty(), CAPI)));
+    object_cls->giveAttr(
+        "__subclasshook__",
+        boxInstanceMethod(object_cls, autoDecref(new BoxedFunction(BoxedCode::create((void*)objectSubclasshook, UNKNOWN,
+                                                                                     2, "object.__subclasshook__"))),
+                          object_cls));
     // __setattr__ was already set to a WrapperDescriptor; it'd be nice to set this to a faster BoxedFunction
     // object_cls->setattr("__setattr__", new BoxedFunction(BoxedCode::create((void*)objectSetattr, UNKNOWN, 3)),
     // NULL);
     // but unfortunately that will set tp_setattro to slot_tp_setattro on object_cls and all already-made subclasses!
     // Punting on that until needed; hopefully by then we will have better Pyston slots support.
 
-    auto typeCallObj = BoxedCode::create((void*)typeCall, UNKNOWN, 1, true, true);
+    auto typeCallObj = BoxedCode::create((void*)typeCall, UNKNOWN, 1, true, true, "type.__call__");
     typeCallObj->internal_callable.capi_val = &typeCallInternal<CAPI>;
     typeCallObj->internal_callable.cxx_val = &typeCallInternal<CXX>;
 
@@ -4395,17 +4385,19 @@ void setupRuntime() {
 
     type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
 
-    type_cls->giveAttr("__new__", new BoxedFunction(BoxedCode::create((void*)typeNewGeneric, UNKNOWN, 4, false, false),
-                                                    { NULL, NULL }));
-    type_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)typeRepr, STR, 1)));
+    type_cls->giveAttr(
+        "__new__", new BoxedFunction(BoxedCode::create((void*)typeNewGeneric, UNKNOWN, 4, false, false, "type.__new__"),
+                                     { NULL, NULL }));
+    type_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)typeRepr, STR, 1, "type.__repr__")));
     type_cls->tp_hash = (hashfunc)_Py_HashPointer;
     type_cls->giveAttrDescriptor("__module__", type_module, type_set_module);
     type_cls->giveAttrMember("__mro__", T_OBJECT, offsetof(BoxedClass, tp_mro));
     type_cls->giveAttrMember("__basicsize__", T_PYSSIZET, offsetof(BoxedClass, tp_basicsize));
     type_cls->giveAttrMember("__itemsize__", T_PYSSIZET, offsetof(BoxedClass, tp_itemsize));
     type_cls->giveAttrMember("__flags__", T_LONG, offsetof(BoxedClass, tp_flags));
-    type_cls->giveAttr("__subclasses__", new BoxedFunction(BoxedCode::create((void*)typeSubclasses, UNKNOWN, 1)));
-    type_cls->giveAttr("mro", new BoxedFunction(BoxedCode::create((void*)typeMro, UNKNOWN, 1)));
+    type_cls->giveAttr("__subclasses__",
+                       new BoxedFunction(BoxedCode::create((void*)typeSubclasses, UNKNOWN, 1, "type.__subclasses__")));
+    type_cls->giveAttr("mro", new BoxedFunction(BoxedCode::create((void*)typeMro, UNKNOWN, 1, "type.mro")));
     type_cls->tp_richcompare = type_richcompare;
     add_operators(type_cls);
     type_cls->freeze();
@@ -4415,17 +4407,20 @@ void setupRuntime() {
     type_cls->tpp_call.capi_val = &typeTppCall<CAPI>;
     type_cls->tpp_call.cxx_val = &typeTppCall<CXX>;
 
-    none_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)none_repr, STR, 1)));
-    none_cls->giveAttr("__nonzero__", new BoxedFunction(BoxedCode::create((void*)noneNonzero, BOXED_BOOL, 1)));
+    none_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)none_repr, STR, 1, "none.__repr__")));
+    none_cls->giveAttr("__nonzero__",
+                       new BoxedFunction(BoxedCode::create((void*)noneNonzero, BOXED_BOOL, 1, "none.__nonzero__")));
     none_cls->giveAttrBorrowed("__doc__", Py_None);
     none_cls->tp_hash = (hashfunc)_Py_HashPointer;
     none_cls->tp_new = NULL; // don't allow creating instances
     none_cls->freeze();
     none_cls->tp_repr = none_repr;
 
-    module_cls->giveAttr("__init__",
-                         new BoxedFunction(BoxedCode::create((void*)moduleInit, UNKNOWN, 3, false, false), { NULL }));
-    module_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)moduleRepr, STR, 1)));
+    module_cls->giveAttr(
+        "__init__",
+        new BoxedFunction(BoxedCode::create((void*)moduleInit, UNKNOWN, 3, false, false, "module.__init__"), { NULL }));
+    module_cls->giveAttr("__repr__",
+                         new BoxedFunction(BoxedCode::create((void*)moduleRepr, STR, 1, "module.__repr__")));
     module_cls->giveAttrBorrowed("__dict__", dict_descr);
     module_cls->freeze();
 
@@ -4470,21 +4465,24 @@ void setupRuntime() {
 
     function_cls->giveAttr(
         "__new__",
-        new BoxedFunction(BoxedCode::create((void*)function_new, UNKNOWN, 6, false, false,
+        new BoxedFunction(BoxedCode::create((void*)function_new, UNKNOWN, 6, false, false, "function.__new__", "",
                                             ParamNames({ "", "code", "globals", "name", "argdefs", "closure" }, "", ""),
                                             CAPI),
                           { Py_None, Py_None, Py_None }));
     function_cls->giveAttrBorrowed("__dict__", dict_descr);
     function_cls->giveAttrDescriptor("__name__", func_name, func_set_name);
-    function_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)functionRepr<CXX>, STR, 1)));
+    function_cls->giveAttr("__repr__",
+                           new BoxedFunction(BoxedCode::create((void*)functionRepr<CXX>, STR, 1, "function.__repr__")));
     function_cls->giveAttrMember("__module__", T_OBJECT, offsetof(BoxedFunction, modname), false);
     function_cls->giveAttrMember("__doc__", T_OBJECT, offsetof(BoxedFunction, doc), false);
     function_cls->giveAttrBorrowed("func_doc", function_cls->getattr(getStaticString("__doc__")));
     function_cls->giveAttrDescriptor("__globals__", function_globals, NULL);
-    function_cls->giveAttr("__get__", new BoxedFunction(BoxedCode::create((void*)functionGet, UNKNOWN, 3)));
-    function_cls->giveAttr("__call__",
-                           new BoxedFunction(BoxedCode::create((void*)functionCall, UNKNOWN, 1, true, true)));
-    function_cls->giveAttr("__nonzero__", new BoxedFunction(BoxedCode::create((void*)functionNonzero, BOXED_BOOL, 1)));
+    function_cls->giveAttr("__get__",
+                           new BoxedFunction(BoxedCode::create((void*)functionGet, UNKNOWN, 3, "function.__get__")));
+    function_cls->giveAttr("__call__", new BoxedFunction(BoxedCode::create((void*)functionCall, UNKNOWN, 1, true, true,
+                                                                           "function.__call__")));
+    function_cls->giveAttr("__nonzero__", new BoxedFunction(BoxedCode::create((void*)functionNonzero, BOXED_BOOL, 1,
+                                                                              "function.__nonzero__")));
     function_cls->giveAttrDescriptor("func_code", function_code, function_set_code);
     function_cls->giveAttrBorrowed("__code__", function_cls->getattr(getStaticString("func_code")));
     function_cls->giveAttrBorrowed("func_name", function_cls->getattr(getStaticString("__name__")));
@@ -4500,23 +4498,30 @@ void setupRuntime() {
     builtin_function_or_method_cls->giveAttrMember("__module__", T_OBJECT,
                                                    offsetof(BoxedBuiltinFunctionOrMethod, modname));
     builtin_function_or_method_cls->giveAttr(
-        "__call__", new BoxedFunction(BoxedCode::create((void*)builtinFunctionOrMethodCall, UNKNOWN, 1, true, true)));
+        "__call__", new BoxedFunction(BoxedCode::create((void*)builtinFunctionOrMethodCall, UNKNOWN, 1, true, true,
+                                                        "builtin_function_or_method.__call__")));
 
     builtin_function_or_method_cls->giveAttr(
-        "__repr__", new BoxedFunction(BoxedCode::create((void*)builtinFunctionOrMethodRepr, STR, 1)));
+        "__repr__", new BoxedFunction(BoxedCode::create((void*)builtinFunctionOrMethodRepr, STR, 1,
+                                                        "builtin_function_or_method.__repr__")));
     builtin_function_or_method_cls->giveAttrDescriptor("__name__", builtin_function_or_method_name, NULL);
     builtin_function_or_method_cls->giveAttrMember("__doc__", T_OBJECT, offsetof(BoxedBuiltinFunctionOrMethod, doc),
                                                    false);
     builtin_function_or_method_cls->freeze();
 
+    instancemethod_cls->giveAttr("__new__", new BoxedFunction(BoxedCode::create((void*)instancemethodNew, UNKNOWN, 4,
+                                                                                false, false, "instancemethod.__new__"),
+                                                              { NULL }));
     instancemethod_cls->giveAttr(
-        "__new__", new BoxedFunction(BoxedCode::create((void*)instancemethodNew, UNKNOWN, 4, false, false), { NULL }));
-    instancemethod_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)instancemethodRepr, STR, 1)));
-    instancemethod_cls->giveAttr("__eq__", new BoxedFunction(BoxedCode::create((void*)instancemethodEq, UNKNOWN, 2)));
+        "__repr__", new BoxedFunction(BoxedCode::create((void*)instancemethodRepr, STR, 1, "instancemethod.__repr__")));
     instancemethod_cls->giveAttr(
-        "__get__", new BoxedFunction(BoxedCode::create((void*)instancemethodGet, UNKNOWN, 3, false, false)));
-    instancemethod_cls->giveAttr(
-        "__call__", new BoxedFunction(BoxedCode::create((void*)instancemethodCall, UNKNOWN, 1, true, true)));
+        "__eq__", new BoxedFunction(BoxedCode::create((void*)instancemethodEq, UNKNOWN, 2, "instancemethod.__eq__")));
+    instancemethod_cls->giveAttr("__get__",
+                                 new BoxedFunction(BoxedCode::create((void*)instancemethodGet, UNKNOWN, 3, false, false,
+                                                                     "instancemethod.__get__")));
+    instancemethod_cls->giveAttr("__call__",
+                                 new BoxedFunction(BoxedCode::create((void*)instancemethodCall, UNKNOWN, 1, true, true,
+                                                                     "instancemethod.__call__")));
     instancemethod_cls->giveAttrMember("im_func", T_OBJECT, offsetof(BoxedInstanceMethod, func));
     instancemethod_cls->giveAttrBorrowed("__func__", instancemethod_cls->getattr(getStaticString("im_func")));
     instancemethod_cls->giveAttrMember("im_self", T_OBJECT, offsetof(BoxedInstanceMethod, obj));
@@ -4525,12 +4530,16 @@ void setupRuntime() {
 
     instancemethod_cls->giveAttrMember("im_class", T_OBJECT, offsetof(BoxedInstanceMethod, im_class), true);
 
-    slice_cls->giveAttr(
-        "__new__", new BoxedFunction(BoxedCode::create((void*)sliceNew, UNKNOWN, 4, false, false), { NULL, Py_None }));
-    slice_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)sliceRepr, STR, 1)));
-    slice_cls->giveAttr("__hash__", new BoxedFunction(BoxedCode::create((void*)sliceHash, UNKNOWN, 1)));
-    slice_cls->giveAttr("indices", new BoxedFunction(BoxedCode::create((void*)sliceIndices, BOXED_TUPLE, 2)));
-    slice_cls->giveAttr("__reduce__", new BoxedFunction(BoxedCode::create((void*)sliceReduce, BOXED_TUPLE, 1)));
+    slice_cls->giveAttr("__new__",
+                        new BoxedFunction(BoxedCode::create((void*)sliceNew, UNKNOWN, 4, false, false, "slice.__new__"),
+                                          { NULL, Py_None }));
+    slice_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)sliceRepr, STR, 1, "slice.__repr__")));
+    slice_cls->giveAttr("__hash__",
+                        new BoxedFunction(BoxedCode::create((void*)sliceHash, UNKNOWN, 1, "slice.__hash__")));
+    slice_cls->giveAttr("indices",
+                        new BoxedFunction(BoxedCode::create((void*)sliceIndices, BOXED_TUPLE, 2, "slice.indices")));
+    slice_cls->giveAttr("__reduce__",
+                        new BoxedFunction(BoxedCode::create((void*)sliceReduce, BOXED_TUPLE, 1, "slice.__reduce__")));
     slice_cls->giveAttrMember("start", T_OBJECT, offsetof(BoxedSlice, start));
     slice_cls->giveAttrMember("stop", T_OBJECT, offsetof(BoxedSlice, stop));
     slice_cls->giveAttrMember("step", T_OBJECT, offsetof(BoxedSlice, step));
@@ -4541,40 +4550,54 @@ void setupRuntime() {
     attrwrapper_cls->tp_as_mapping = &attrwrapper_as_mapping;
     static PySequenceMethods attrwrapper_as_sequence;
     attrwrapper_cls->tp_as_sequence = &attrwrapper_as_sequence;
-    attrwrapper_cls->giveAttr("__setitem__",
-                              new BoxedFunction(BoxedCode::create((void*)AttrWrapper::setitem, UNKNOWN, 3)));
+    attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::setitem, UNKNOWN,
+                                                                                 3, "attrwrapper.__setitem__")));
     attrwrapper_cls->giveAttr(
-        "pop", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::pop, UNKNOWN, 3, false, false), { NULL }));
-    attrwrapper_cls->giveAttr("__getitem__",
-                              new BoxedFunction(BoxedCode::create((void*)AttrWrapper::getitem<CXX>, UNKNOWN, 2)));
-    attrwrapper_cls->giveAttr("__delitem__",
-                              new BoxedFunction(BoxedCode::create((void*)AttrWrapper::delitem, UNKNOWN, 2)));
-    attrwrapper_cls->giveAttr("setdefault",
-                              new BoxedFunction(BoxedCode::create((void*)AttrWrapper::setdefault, UNKNOWN, 3)));
+        "pop", new BoxedFunction(
+                   BoxedCode::create((void*)AttrWrapper::pop, UNKNOWN, 3, false, false, "attrwrapper.pop"), { NULL }));
     attrwrapper_cls->giveAttr(
-        "get", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::get, UNKNOWN, 3, false, false), { Py_None }));
-    attrwrapper_cls->giveAttr("__str__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::str, UNKNOWN, 1)));
+        "__getitem__",
+        new BoxedFunction(BoxedCode::create((void*)AttrWrapper::getitem<CXX>, UNKNOWN, 2, "attrwrapper.__getitem__")));
+    attrwrapper_cls->giveAttr("__delitem__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::delitem, UNKNOWN,
+                                                                                 2, "attrwrapper.__delitem__")));
+    attrwrapper_cls->giveAttr("setdefault", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::setdefault, UNKNOWN,
+                                                                                3, "attrwrapper.setdefault")));
+    attrwrapper_cls->giveAttr("get", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::get, UNKNOWN, 3, false,
+                                                                         false, "attrwrapper.get"),
+                                                       { Py_None }));
+    attrwrapper_cls->giveAttr(
+        "__str__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::str, UNKNOWN, 1, "attrwrapper.__str__")));
     attrwrapper_cls->giveAttr("__contains__",
-                              new BoxedFunction(BoxedCode::create((void*)AttrWrapper::contains<CXX>, BOXED_BOOL, 2)));
-    attrwrapper_cls->giveAttr("has_key",
-                              new BoxedFunction(BoxedCode::create((void*)AttrWrapper::hasKey, BOXED_BOOL, 2)));
-    attrwrapper_cls->giveAttr("__eq__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::eq, UNKNOWN, 2)));
-    attrwrapper_cls->giveAttr("__ne__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::ne, UNKNOWN, 2)));
-    attrwrapper_cls->giveAttr("keys", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::keys, LIST, 1)));
-    attrwrapper_cls->giveAttr("values", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::values, LIST, 1)));
-    attrwrapper_cls->giveAttr("items", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::items, LIST, 1)));
-    attrwrapper_cls->giveAttr("iterkeys",
-                              new BoxedFunction(BoxedCode::create((void*)AttrWrapper::iterkeys, UNKNOWN, 1)));
-    attrwrapper_cls->giveAttr("itervalues",
-                              new BoxedFunction(BoxedCode::create((void*)AttrWrapper::itervalues, UNKNOWN, 1)));
-    attrwrapper_cls->giveAttr("iteritems",
-                              new BoxedFunction(BoxedCode::create((void*)AttrWrapper::iteritems, UNKNOWN, 1)));
-    attrwrapper_cls->giveAttr("copy", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::copy, UNKNOWN, 1)));
-    attrwrapper_cls->giveAttr("clear", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::clear, NONE, 1)));
-    attrwrapper_cls->giveAttr("__len__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::len, BOXED_INT, 1)));
-    attrwrapper_cls->giveAttr("__iter__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::iter, UNKNOWN, 1)));
-    attrwrapper_cls->giveAttr("update",
-                              new BoxedFunction(BoxedCode::create((void*)AttrWrapper::update, NONE, 1, true, true)));
+                              new BoxedFunction(BoxedCode::create((void*)AttrWrapper::contains<CXX>, BOXED_BOOL, 2,
+                                                                  "attrwrapper.__contains__")));
+    attrwrapper_cls->giveAttr("has_key", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::hasKey, BOXED_BOOL, 2,
+                                                                             "attrwrapper.has_key")));
+    attrwrapper_cls->giveAttr(
+        "__eq__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::eq, UNKNOWN, 2, "attrwrapper.__eq__")));
+    attrwrapper_cls->giveAttr(
+        "__ne__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::ne, UNKNOWN, 2, "attrwrapper.__ne__")));
+    attrwrapper_cls->giveAttr(
+        "keys", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::keys, LIST, 1, "attrwrapper.keys")));
+    attrwrapper_cls->giveAttr(
+        "values", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::values, LIST, 1, "attrwrapper.values")));
+    attrwrapper_cls->giveAttr(
+        "items", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::items, LIST, 1, "attrwrapper.items")));
+    attrwrapper_cls->giveAttr("iterkeys", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::iterkeys, UNKNOWN, 1,
+                                                                              "attrwrapper.iterkeys")));
+    attrwrapper_cls->giveAttr("itervalues", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::itervalues, UNKNOWN,
+                                                                                1, "attrwrapper.itervalues")));
+    attrwrapper_cls->giveAttr("iteritems", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::iteritems, UNKNOWN,
+                                                                               1, "attrwrapper.iteritems")));
+    attrwrapper_cls->giveAttr(
+        "copy", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::copy, UNKNOWN, 1, "attrwrapper.copy")));
+    attrwrapper_cls->giveAttr(
+        "clear", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::clear, NONE, 1, "attrwrapper.clear")));
+    attrwrapper_cls->giveAttr(
+        "__len__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::len, BOXED_INT, 1, "attrwrapper.__len__")));
+    attrwrapper_cls->giveAttr(
+        "__iter__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::iter, UNKNOWN, 1, "attrwrapper.__iter__")));
+    attrwrapper_cls->giveAttr("update", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::update, NONE, 1, true,
+                                                                            true, "attrwrapper.update")));
     attrwrapper_cls->freeze();
     attrwrapper_cls->tp_iter = AttrWrapper::iter;
     attrwrapper_cls->tp_as_mapping->mp_subscript = (binaryfunc)AttrWrapper::getitem<CAPI>;
@@ -4582,9 +4605,10 @@ void setupRuntime() {
     attrwrapper_cls->tp_as_sequence->sq_contains = (objobjproc)AttrWrapper::sq_contains;
 
     attrwrapperiter_cls->giveAttr("__hasnext__",
-                                  new BoxedFunction(BoxedCode::create((void*)AttrWrapperIter::hasnext, UNKNOWN, 1)));
-    attrwrapperiter_cls->giveAttr("next",
-                                  new BoxedFunction(BoxedCode::create((void*)AttrWrapperIter::next, UNKNOWN, 1)));
+                                  new BoxedFunction(BoxedCode::create((void*)AttrWrapperIter::hasnext, UNKNOWN, 1,
+                                                                      "attrwrapperiter.__hasnext__")));
+    attrwrapperiter_cls->giveAttr(
+        "next", new BoxedFunction(BoxedCode::create((void*)AttrWrapperIter::next, UNKNOWN, 1, "attrwrapperiter.next")));
     attrwrapperiter_cls->freeze();
     attrwrapperiter_cls->tp_iter = PyObject_SelfIter;
     attrwrapperiter_cls->tp_iternext = AttrWrapperIter::next_capi;

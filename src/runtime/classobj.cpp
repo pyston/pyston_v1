@@ -2086,18 +2086,22 @@ void setupClassobj() {
                              sizeof(BoxedInstance), false, "instance", false, (destructor)BoxedInstance::dealloc, NULL,
                              true, (traverseproc)BoxedInstance::traverse, (inquiry)BoxedInstance::clear);
 
-    classobj_cls->giveAttr("__new__",
-                           new BoxedFunction(BoxedCode::create((void*)classobjNew, UNKNOWN, 4, false, false)));
+    classobj_cls->giveAttr("__new__", new BoxedFunction(BoxedCode::create((void*)classobjNew, UNKNOWN, 4, false, false,
+                                                                          "classobj.__new__")));
 
-    classobj_cls->giveAttr("__call__",
-                           new BoxedFunction(BoxedCode::create((void*)classobjCall, UNKNOWN, 1, true, true)));
+    classobj_cls->giveAttr("__call__", new BoxedFunction(BoxedCode::create((void*)classobjCall, UNKNOWN, 1, true, true,
+                                                                           "classobj.__call__")));
 
-    classobj_cls->giveAttr("__getattribute__",
-                           new BoxedFunction(BoxedCode::create((void*)classobjGetattribute, UNKNOWN, 2)));
-    classobj_cls->giveAttr("__setattr__", new BoxedFunction(BoxedCode::create((void*)classobjSetattr, UNKNOWN, 3)));
-    classobj_cls->giveAttr("__delattr__", new BoxedFunction(BoxedCode::create((void*)classobjDelattr, UNKNOWN, 2)));
-    classobj_cls->giveAttr("__str__", new BoxedFunction(BoxedCode::create((void*)classobjStr, STR, 1)));
-    classobj_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)classobjRepr, STR, 1)));
+    classobj_cls->giveAttr("__getattribute__", new BoxedFunction(BoxedCode::create((void*)classobjGetattribute, UNKNOWN,
+                                                                                   2, "classobj.__getattribute__")));
+    classobj_cls->giveAttr("__setattr__", new BoxedFunction(BoxedCode::create((void*)classobjSetattr, UNKNOWN, 3,
+                                                                              "classobj.__setattr__")));
+    classobj_cls->giveAttr("__delattr__", new BoxedFunction(BoxedCode::create((void*)classobjDelattr, UNKNOWN, 2,
+                                                                              "classobj.__delattr__")));
+    classobj_cls->giveAttr("__str__",
+                           new BoxedFunction(BoxedCode::create((void*)classobjStr, STR, 1, "classobj.__str__")));
+    classobj_cls->giveAttr("__repr__",
+                           new BoxedFunction(BoxedCode::create((void*)classobjRepr, STR, 1, "classobj.__repr__")));
     classobj_cls->giveAttrBorrowed("__dict__", dict_descr);
 
     classobj_cls->freeze();
@@ -2113,87 +2117,161 @@ void setupClassobj() {
     instance_cls->tp_as_mapping = &instance_as_mapping;
 
     instance_cls->giveAttr("__getattribute__",
-                           new BoxedFunction(BoxedCode::create((void*)instanceGetattroInternal<CXX>, UNKNOWN, 2)));
-    instance_cls->giveAttr("__delattr__", new BoxedFunction(BoxedCode::create((void*)instanceDelattr, UNKNOWN, 2)));
-    instance_cls->giveAttr("__str__", new BoxedFunction(BoxedCode::create((void*)instanceStr, UNKNOWN, 1)));
-    instance_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)instanceRepr, UNKNOWN, 1)));
-    instance_cls->giveAttr("__nonzero__", new BoxedFunction(BoxedCode::create((void*)instanceNonzero, UNKNOWN, 1)));
-    instance_cls->giveAttr("__len__", new BoxedFunction(BoxedCode::create((void*)instanceLen, UNKNOWN, 1)));
-    instance_cls->giveAttr("__getitem__",
-                           new BoxedFunction(BoxedCode::create((void*)instanceGetitem<CXX>, UNKNOWN, 2)));
-    instance_cls->giveAttr("__setitem__", new BoxedFunction(BoxedCode::create((void*)instanceSetitem, UNKNOWN, 3)));
-    instance_cls->giveAttr("__delitem__", new BoxedFunction(BoxedCode::create((void*)instanceDelitem, UNKNOWN, 2)));
-    instance_cls->giveAttr("__getslice__", new BoxedFunction(BoxedCode::create((void*)instanceGetslice, UNKNOWN, 3)));
-    instance_cls->giveAttr("__setslice__", new BoxedFunction(BoxedCode::create((void*)instanceSetslice, UNKNOWN, 4)));
-    instance_cls->giveAttr("__delslice__", new BoxedFunction(BoxedCode::create((void*)instanceDelslice, UNKNOWN, 3)));
-    instance_cls->giveAttr("__cmp__", new BoxedFunction(BoxedCode::create((void*)instanceCompare, UNKNOWN, 2)));
-    instance_cls->giveAttr("__contains__", new BoxedFunction(BoxedCode::create((void*)instanceContains, UNKNOWN, 2)));
-    instance_cls->giveAttr("__hash__", new BoxedFunction(BoxedCode::create((void*)instanceHash, UNKNOWN, 1)));
-    instance_cls->giveAttr("__iter__", new BoxedFunction(BoxedCode::create((void*)instanceIter, UNKNOWN, 1)));
-    instance_cls->giveAttr("next", new BoxedFunction(BoxedCode::create((void*)instanceNext, UNKNOWN, 1)));
-    instance_cls->giveAttr("__call__",
-                           new BoxedFunction(BoxedCode::create((void*)instanceCall, UNKNOWN, 1, true, true)));
-    instance_cls->giveAttr("__eq__", new BoxedFunction(BoxedCode::create((void*)instanceEq, UNKNOWN, 2)));
-    instance_cls->giveAttr("__ne__", new BoxedFunction(BoxedCode::create((void*)instanceNe, UNKNOWN, 2)));
-    instance_cls->giveAttr("__lt__", new BoxedFunction(BoxedCode::create((void*)instanceLt, UNKNOWN, 2)));
-    instance_cls->giveAttr("__le__", new BoxedFunction(BoxedCode::create((void*)instanceLe, UNKNOWN, 2)));
-    instance_cls->giveAttr("__gt__", new BoxedFunction(BoxedCode::create((void*)instanceGt, UNKNOWN, 2)));
-    instance_cls->giveAttr("__ge__", new BoxedFunction(BoxedCode::create((void*)instanceGe, UNKNOWN, 2)));
-    instance_cls->giveAttr("__add__", new BoxedFunction(BoxedCode::create((void*)instanceAdd, UNKNOWN, 2)));
-    instance_cls->giveAttr("__sub__", new BoxedFunction(BoxedCode::create((void*)instanceSub, UNKNOWN, 2)));
-    instance_cls->giveAttr("__mul__", new BoxedFunction(BoxedCode::create((void*)instanceMul, UNKNOWN, 2)));
-    instance_cls->giveAttr("__floordiv__", new BoxedFunction(BoxedCode::create((void*)instanceFloordiv, UNKNOWN, 2)));
-    instance_cls->giveAttr("__mod__", new BoxedFunction(BoxedCode::create((void*)instanceMod, UNKNOWN, 2)));
-    instance_cls->giveAttr("__divmod__", new BoxedFunction(BoxedCode::create((void*)instanceDivMod, UNKNOWN, 2)));
-    instance_cls->giveAttr("__pow__", new BoxedFunction(BoxedCode::create((void*)instancePow, UNKNOWN, 2)));
-    instance_cls->giveAttr("__lshift__", new BoxedFunction(BoxedCode::create((void*)instanceLshift, UNKNOWN, 2)));
-    instance_cls->giveAttr("__rshift__", new BoxedFunction(BoxedCode::create((void*)instanceRshift, UNKNOWN, 2)));
-    instance_cls->giveAttr("__and__", new BoxedFunction(BoxedCode::create((void*)instanceAnd, UNKNOWN, 2)));
-    instance_cls->giveAttr("__xor__", new BoxedFunction(BoxedCode::create((void*)instanceXor, UNKNOWN, 2)));
-    instance_cls->giveAttr("__or__", new BoxedFunction(BoxedCode::create((void*)instanceOr, UNKNOWN, 2)));
-    instance_cls->giveAttr("__div__", new BoxedFunction(BoxedCode::create((void*)instanceDiv, UNKNOWN, 2)));
-    instance_cls->giveAttr("__truediv__", new BoxedFunction(BoxedCode::create((void*)instanceTruediv, UNKNOWN, 2)));
+                           new BoxedFunction(BoxedCode::create((void*)instanceGetattroInternal<CXX>, UNKNOWN, 2,
+                                                               "instance.__getattribute__")));
+    instance_cls->giveAttr("__delattr__", new BoxedFunction(BoxedCode::create((void*)instanceDelattr, UNKNOWN, 2,
+                                                                              "instance.__delattr__")));
+    instance_cls->giveAttr("__str__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceStr, UNKNOWN, 1, "instance.__str__")));
+    instance_cls->giveAttr("__repr__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceRepr, UNKNOWN, 1, "instance.__repr__")));
+    instance_cls->giveAttr("__nonzero__", new BoxedFunction(BoxedCode::create((void*)instanceNonzero, UNKNOWN, 1,
+                                                                              "instance.__nonzero__")));
+    instance_cls->giveAttr("__len__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceLen, UNKNOWN, 1, "instance.__len__")));
+    instance_cls->giveAttr("__getitem__", new BoxedFunction(BoxedCode::create((void*)instanceGetitem<CXX>, UNKNOWN, 2,
+                                                                              "instance.__getitem__")));
+    instance_cls->giveAttr("__setitem__", new BoxedFunction(BoxedCode::create((void*)instanceSetitem, UNKNOWN, 3,
+                                                                              "instance.__setitem__")));
+    instance_cls->giveAttr("__delitem__", new BoxedFunction(BoxedCode::create((void*)instanceDelitem, UNKNOWN, 2,
+                                                                              "instance.__delitem__")));
+    instance_cls->giveAttr("__getslice__", new BoxedFunction(BoxedCode::create((void*)instanceGetslice, UNKNOWN, 3,
+                                                                               "instance.__getslice__")));
+    instance_cls->giveAttr("__setslice__", new BoxedFunction(BoxedCode::create((void*)instanceSetslice, UNKNOWN, 4,
+                                                                               "instance.__setslice__")));
+    instance_cls->giveAttr("__delslice__", new BoxedFunction(BoxedCode::create((void*)instanceDelslice, UNKNOWN, 3,
+                                                                               "instance.__delslice__")));
+    instance_cls->giveAttr(
+        "__cmp__", new BoxedFunction(BoxedCode::create((void*)instanceCompare, UNKNOWN, 2, "instance.__cmp__")));
+    instance_cls->giveAttr("__contains__", new BoxedFunction(BoxedCode::create((void*)instanceContains, UNKNOWN, 2,
+                                                                               "instance.__contains__")));
+    instance_cls->giveAttr("__hash__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceHash, UNKNOWN, 1, "instance.__hash__")));
+    instance_cls->giveAttr("__iter__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceIter, UNKNOWN, 1, "instance.__iter__")));
+    instance_cls->giveAttr("next",
+                           new BoxedFunction(BoxedCode::create((void*)instanceNext, UNKNOWN, 1, "instance.next")));
+    instance_cls->giveAttr("__call__", new BoxedFunction(BoxedCode::create((void*)instanceCall, UNKNOWN, 1, true, true,
+                                                                           "instance.__call__")));
+    instance_cls->giveAttr("__eq__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceEq, UNKNOWN, 2, "instance.__eq__")));
+    instance_cls->giveAttr("__ne__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceNe, UNKNOWN, 2, "instance.__ne__")));
+    instance_cls->giveAttr("__lt__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceLt, UNKNOWN, 2, "instance.__lt__")));
+    instance_cls->giveAttr("__le__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceLe, UNKNOWN, 2, "instance.__le__")));
+    instance_cls->giveAttr("__gt__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceGt, UNKNOWN, 2, "instance.__gt__")));
+    instance_cls->giveAttr("__ge__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceGe, UNKNOWN, 2, "instance.__ge__")));
+    instance_cls->giveAttr("__add__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceAdd, UNKNOWN, 2, "instance.__add__")));
+    instance_cls->giveAttr("__sub__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceSub, UNKNOWN, 2, "instance.__sub__")));
+    instance_cls->giveAttr("__mul__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceMul, UNKNOWN, 2, "instance.__mul__")));
+    instance_cls->giveAttr("__floordiv__", new BoxedFunction(BoxedCode::create((void*)instanceFloordiv, UNKNOWN, 2,
+                                                                               "instance.__floordiv__")));
+    instance_cls->giveAttr("__mod__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceMod, UNKNOWN, 2, "instance.__mod__")));
+    instance_cls->giveAttr(
+        "__divmod__", new BoxedFunction(BoxedCode::create((void*)instanceDivMod, UNKNOWN, 2, "instance.__divmod__")));
+    instance_cls->giveAttr("__pow__",
+                           new BoxedFunction(BoxedCode::create((void*)instancePow, UNKNOWN, 2, "instance.__pow__")));
+    instance_cls->giveAttr(
+        "__lshift__", new BoxedFunction(BoxedCode::create((void*)instanceLshift, UNKNOWN, 2, "instance.__lshift__")));
+    instance_cls->giveAttr(
+        "__rshift__", new BoxedFunction(BoxedCode::create((void*)instanceRshift, UNKNOWN, 2, "instance.__rshift__")));
+    instance_cls->giveAttr("__and__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceAnd, UNKNOWN, 2, "instance.__and__")));
+    instance_cls->giveAttr("__xor__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceXor, UNKNOWN, 2, "instance.__xor__")));
+    instance_cls->giveAttr("__or__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceOr, UNKNOWN, 2, "instance.__or__")));
+    instance_cls->giveAttr("__div__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceDiv, UNKNOWN, 2, "instance.__div__")));
+    instance_cls->giveAttr("__truediv__", new BoxedFunction(BoxedCode::create((void*)instanceTruediv, UNKNOWN, 2,
+                                                                              "instance.__truediv__")));
 
-    instance_cls->giveAttr("__radd__", new BoxedFunction(BoxedCode::create((void*)instanceRadd, UNKNOWN, 2)));
-    instance_cls->giveAttr("__rsub__", new BoxedFunction(BoxedCode::create((void*)instanceRsub, UNKNOWN, 2)));
-    instance_cls->giveAttr("__rmul__", new BoxedFunction(BoxedCode::create((void*)instanceRmul, UNKNOWN, 2)));
-    instance_cls->giveAttr("__rdiv__", new BoxedFunction(BoxedCode::create((void*)instanceRdiv, UNKNOWN, 2)));
-    instance_cls->giveAttr("__rtruediv__", new BoxedFunction(BoxedCode::create((void*)instanceRtruediv, UNKNOWN, 2)));
-    instance_cls->giveAttr("__rfloordiv__", new BoxedFunction(BoxedCode::create((void*)instanceRfloordiv, UNKNOWN, 2)));
-    instance_cls->giveAttr("__rmod__", new BoxedFunction(BoxedCode::create((void*)instanceRmod, UNKNOWN, 2)));
-    instance_cls->giveAttr("__rdivmod__", new BoxedFunction(BoxedCode::create((void*)instanceRdivmod, UNKNOWN, 2)));
-    instance_cls->giveAttr("__rpow__", new BoxedFunction(BoxedCode::create((void*)instanceRpow, UNKNOWN, 2)));
-    instance_cls->giveAttr("__rlshift__", new BoxedFunction(BoxedCode::create((void*)instanceRlshift, UNKNOWN, 2)));
-    instance_cls->giveAttr("__rrshift__", new BoxedFunction(BoxedCode::create((void*)instanceRrshift, UNKNOWN, 2)));
-    instance_cls->giveAttr("__rand__", new BoxedFunction(BoxedCode::create((void*)instanceRand, UNKNOWN, 2)));
-    instance_cls->giveAttr("__rxor__", new BoxedFunction(BoxedCode::create((void*)instanceRxor, UNKNOWN, 2)));
-    instance_cls->giveAttr("__ror__", new BoxedFunction(BoxedCode::create((void*)instanceRor, UNKNOWN, 2)));
+    instance_cls->giveAttr("__radd__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceRadd, UNKNOWN, 2, "instance.__radd__")));
+    instance_cls->giveAttr("__rsub__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceRsub, UNKNOWN, 2, "instance.__rsub__")));
+    instance_cls->giveAttr("__rmul__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceRmul, UNKNOWN, 2, "instance.__rmul__")));
+    instance_cls->giveAttr("__rdiv__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceRdiv, UNKNOWN, 2, "instance.__rdiv__")));
+    instance_cls->giveAttr("__rtruediv__", new BoxedFunction(BoxedCode::create((void*)instanceRtruediv, UNKNOWN, 2,
+                                                                               "instance.__rtruediv__")));
+    instance_cls->giveAttr("__rfloordiv__", new BoxedFunction(BoxedCode::create((void*)instanceRfloordiv, UNKNOWN, 2,
+                                                                                "instance.__rfloordiv__")));
+    instance_cls->giveAttr("__rmod__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceRmod, UNKNOWN, 2, "instance.__rmod__")));
+    instance_cls->giveAttr("__rdivmod__", new BoxedFunction(BoxedCode::create((void*)instanceRdivmod, UNKNOWN, 2,
+                                                                              "instance.__rdivmod__")));
+    instance_cls->giveAttr("__rpow__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceRpow, UNKNOWN, 2, "instance.__rpow__")));
+    instance_cls->giveAttr("__rlshift__", new BoxedFunction(BoxedCode::create((void*)instanceRlshift, UNKNOWN, 2,
+                                                                              "instance.__rlshift__")));
+    instance_cls->giveAttr("__rrshift__", new BoxedFunction(BoxedCode::create((void*)instanceRrshift, UNKNOWN, 2,
+                                                                              "instance.__rrshift__")));
+    instance_cls->giveAttr("__rand__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceRand, UNKNOWN, 2, "instance.__rand__")));
+    instance_cls->giveAttr("__rxor__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceRxor, UNKNOWN, 2, "instance.__rxor__")));
+    instance_cls->giveAttr("__ror__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceRor, UNKNOWN, 2, "instance.__ror__")));
 
-    instance_cls->giveAttr("__iadd__", new BoxedFunction(BoxedCode::create((void*)instanceIadd, UNKNOWN, 2)));
-    instance_cls->giveAttr("__isub__", new BoxedFunction(BoxedCode::create((void*)instanceIsub, UNKNOWN, 2)));
-    instance_cls->giveAttr("__imul__", new BoxedFunction(BoxedCode::create((void*)instanceImul, UNKNOWN, 2)));
-    instance_cls->giveAttr("__idiv__", new BoxedFunction(BoxedCode::create((void*)instanceIdiv, UNKNOWN, 2)));
-    instance_cls->giveAttr("__itruediv__", new BoxedFunction(BoxedCode::create((void*)instanceItruediv, UNKNOWN, 2)));
-    instance_cls->giveAttr("__ifloordiv__", new BoxedFunction(BoxedCode::create((void*)instanceIfloordiv, UNKNOWN, 2)));
-    instance_cls->giveAttr("__imod__", new BoxedFunction(BoxedCode::create((void*)instanceImod, UNKNOWN, 2)));
-    instance_cls->giveAttr("__ipow__", new BoxedFunction(BoxedCode::create((void*)instanceIpow, UNKNOWN, 2)));
-    instance_cls->giveAttr("__ilshift__", new BoxedFunction(BoxedCode::create((void*)instanceIlshift, UNKNOWN, 2)));
-    instance_cls->giveAttr("__irshift__", new BoxedFunction(BoxedCode::create((void*)instanceIrshift, UNKNOWN, 2)));
-    instance_cls->giveAttr("__iand__", new BoxedFunction(BoxedCode::create((void*)instanceIand, UNKNOWN, 2)));
-    instance_cls->giveAttr("__ixor__", new BoxedFunction(BoxedCode::create((void*)instanceIxor, UNKNOWN, 2)));
-    instance_cls->giveAttr("__ior__", new BoxedFunction(BoxedCode::create((void*)instanceIor, UNKNOWN, 2)));
+    instance_cls->giveAttr("__iadd__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceIadd, UNKNOWN, 2, "instance.__iadd__")));
+    instance_cls->giveAttr("__isub__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceIsub, UNKNOWN, 2, "instance.__isub__")));
+    instance_cls->giveAttr("__imul__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceImul, UNKNOWN, 2, "instance.__imul__")));
+    instance_cls->giveAttr("__idiv__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceIdiv, UNKNOWN, 2, "instance.__idiv__")));
+    instance_cls->giveAttr("__itruediv__", new BoxedFunction(BoxedCode::create((void*)instanceItruediv, UNKNOWN, 2,
+                                                                               "instance.__itruediv__")));
+    instance_cls->giveAttr("__ifloordiv__", new BoxedFunction(BoxedCode::create((void*)instanceIfloordiv, UNKNOWN, 2,
+                                                                                "instance.__ifloordiv__")));
+    instance_cls->giveAttr("__imod__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceImod, UNKNOWN, 2, "instance.__imod__")));
+    instance_cls->giveAttr("__ipow__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceIpow, UNKNOWN, 2, "instance.__ipow__")));
+    instance_cls->giveAttr("__ilshift__", new BoxedFunction(BoxedCode::create((void*)instanceIlshift, UNKNOWN, 2,
+                                                                              "instance.__ilshift__")));
+    instance_cls->giveAttr("__irshift__", new BoxedFunction(BoxedCode::create((void*)instanceIrshift, UNKNOWN, 2,
+                                                                              "instance.__irshift__")));
+    instance_cls->giveAttr("__iand__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceIand, UNKNOWN, 2, "instance.__iand__")));
+    instance_cls->giveAttr("__ixor__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceIxor, UNKNOWN, 2, "instance.__ixor__")));
+    instance_cls->giveAttr("__ior__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceIor, UNKNOWN, 2, "instance.__ior__")));
 
-    instance_cls->giveAttr("__neg__", new BoxedFunction(BoxedCode::create((void*)instanceNeg, UNKNOWN, 1)));
-    instance_cls->giveAttr("__pos__", new BoxedFunction(BoxedCode::create((void*)instancePos, UNKNOWN, 1)));
-    instance_cls->giveAttr("__abs__", new BoxedFunction(BoxedCode::create((void*)instanceAbs, UNKNOWN, 1)));
-    instance_cls->giveAttr("__invert__", new BoxedFunction(BoxedCode::create((void*)instanceInvert, UNKNOWN, 1)));
-    instance_cls->giveAttr("__int__", new BoxedFunction(BoxedCode::create((void*)instanceInt, UNKNOWN, 1)));
-    instance_cls->giveAttr("__long__", new BoxedFunction(BoxedCode::create((void*)instanceLong, UNKNOWN, 1)));
-    instance_cls->giveAttr("__float__", new BoxedFunction(BoxedCode::create((void*)instanceFloat, UNKNOWN, 1)));
-    instance_cls->giveAttr("__oct__", new BoxedFunction(BoxedCode::create((void*)instanceOct, UNKNOWN, 1)));
-    instance_cls->giveAttr("__hex__", new BoxedFunction(BoxedCode::create((void*)instanceHex, UNKNOWN, 1)));
-    instance_cls->giveAttr("__coerce__", new BoxedFunction(BoxedCode::create((void*)instanceCoerce, UNKNOWN, 2)));
-    instance_cls->giveAttr("__index__", new BoxedFunction(BoxedCode::create((void*)instanceIndex, UNKNOWN, 1)));
+    instance_cls->giveAttr("__neg__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceNeg, UNKNOWN, 1, "instance.__neg__")));
+    instance_cls->giveAttr("__pos__",
+                           new BoxedFunction(BoxedCode::create((void*)instancePos, UNKNOWN, 1, "instance.__pos__")));
+    instance_cls->giveAttr("__abs__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceAbs, UNKNOWN, 1, "instance.__abs__")));
+    instance_cls->giveAttr(
+        "__invert__", new BoxedFunction(BoxedCode::create((void*)instanceInvert, UNKNOWN, 1, "instance.__invert__")));
+    instance_cls->giveAttr("__int__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceInt, UNKNOWN, 1, "instance.__int__")));
+    instance_cls->giveAttr("__long__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceLong, UNKNOWN, 1, "instance.__long__")));
+    instance_cls->giveAttr(
+        "__float__", new BoxedFunction(BoxedCode::create((void*)instanceFloat, UNKNOWN, 1, "instance.__float__")));
+    instance_cls->giveAttr("__oct__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceOct, UNKNOWN, 1, "instance.__oct__")));
+    instance_cls->giveAttr("__hex__",
+                           new BoxedFunction(BoxedCode::create((void*)instanceHex, UNKNOWN, 1, "instance.__hex__")));
+    instance_cls->giveAttr(
+        "__coerce__", new BoxedFunction(BoxedCode::create((void*)instanceCoerce, UNKNOWN, 2, "instance.__coerce__")));
+    instance_cls->giveAttr(
+        "__index__", new BoxedFunction(BoxedCode::create((void*)instanceIndex, UNKNOWN, 1, "instance.__index__")));
 
     instance_cls->freeze();
     instance_cls->tp_getattro = instance_getattro;

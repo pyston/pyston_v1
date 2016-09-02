@@ -715,26 +715,28 @@ void setupGenerator() {
     generator_cls = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedGenerator, weakreflist),
                                        sizeof(BoxedGenerator), false, "generator", false, (destructor)generator_dealloc,
                                        NULL, true, (traverseproc)generator_traverse, NOCLEAR);
-    generator_cls->giveAttr(
-        "__iter__", new BoxedFunction(BoxedCode::create((void*)generatorIter, typeFromClass(generator_cls), 1)));
+    generator_cls->giveAttr("__iter__",
+                            new BoxedFunction(BoxedCode::create((void*)generatorIter, typeFromClass(generator_cls), 1,
+                                                                "generator.__iter__")));
 
-    auto generator_close = BoxedCode::create((void*)generatorClose<CXX>, UNKNOWN, 1);
+    auto generator_close = BoxedCode::create((void*)generatorClose<CXX>, UNKNOWN, 1, "generator.close");
     generator_close->addVersion((void*)generatorClose<CAPI>, UNKNOWN, CAPI);
     generator_cls->giveAttr("close", new BoxedFunction(generator_close));
 
-    auto generator_next = BoxedCode::create((void*)generatorNext<CXX>, UNKNOWN, 1, ParamNames::empty(), CXX);
+    auto generator_next
+        = BoxedCode::create((void*)generatorNext<CXX>, UNKNOWN, 1, "generatro.next", "", ParamNames::empty(), CXX);
     generator_next->addVersion((void*)generatorNext<CAPI>, UNKNOWN, CAPI);
     generator_cls->giveAttr("next", new BoxedFunction(generator_next));
 
-    BoxedCode* hasnext = BoxedCode::create((void*)generatorHasnextUnboxed, BOOL, 1);
+    BoxedCode* hasnext = BoxedCode::create((void*)generatorHasnextUnboxed, BOOL, 1, "generator.__hasnext__");
     hasnext->addVersion((void*)generatorHasnext, BOXED_BOOL);
     generator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
 
-    auto generator_send = BoxedCode::create((void*)generatorSend<CXX>, UNKNOWN, 2);
+    auto generator_send = BoxedCode::create((void*)generatorSend<CXX>, UNKNOWN, 2, "generator.send");
     generator_send->addVersion((void*)generatorSend<CAPI>, UNKNOWN, CAPI);
     generator_cls->giveAttr("send", new BoxedFunction(generator_send));
 
-    auto generator_throw = BoxedCode::create((void*)generatorThrow<CXX>, UNKNOWN, 4, false, false);
+    auto generator_throw = BoxedCode::create((void*)generatorThrow<CXX>, UNKNOWN, 4, false, false, "generator.throw");
     generator_throw->addVersion((void*)generatorThrow<CAPI>, UNKNOWN, CAPI);
     generator_cls->giveAttr("throw", new BoxedFunction(generator_throw, { NULL, NULL }));
 

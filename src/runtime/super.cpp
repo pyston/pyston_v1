@@ -254,11 +254,13 @@ void setupSuper() {
 
     // super_cls->giveAttr("__getattribute__", new BoxedFunction(BoxedCode::create((void*)superGetattribute,
     // UNKNOWN, 2)));
-    super_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)superRepr, STR, 1)));
+    super_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)superRepr, STR, 1, "super.__repr__")));
 
-    super_cls->giveAttr("__init__",
-                        new BoxedFunction(BoxedCode::create((void*)superInit, UNKNOWN, 3, false, false), { NULL }));
-    super_cls->giveAttr("__get__", new BoxedFunction(BoxedCode::create((void*)superGet<CXX>, UNKNOWN, 3)));
+    super_cls->giveAttr(
+        "__init__",
+        new BoxedFunction(BoxedCode::create((void*)superInit, UNKNOWN, 3, false, false, "super.__init__"), { NULL }));
+    super_cls->giveAttr("__get__",
+                        new BoxedFunction(BoxedCode::create((void*)superGet<CXX>, UNKNOWN, 3, "super.__get__")));
 
     super_cls->giveAttrMember("__thisclass__", T_OBJECT, offsetof(BoxedSuper, type));
     super_cls->giveAttrMember("__self__", T_OBJECT, offsetof(BoxedSuper, obj));

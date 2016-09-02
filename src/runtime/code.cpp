@@ -129,13 +129,15 @@ BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, int fi
       internal_callable(NULL, NULL) {
 }
 
-BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
+BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const char* name, const char* doc,
+                     const ParamNames& param_names)
     : source(nullptr),
-      // TODO what to do with these?
+      // TODO what to do with this?
       filename(nullptr),
-      name(nullptr),
+      name(boxString(name)),
+      // TODO what to do with this?
       firstlineno(-1),
-      _doc(nullptr),
+      _doc(doc[0] == '\0' ? incref(Py_None) : boxString(doc)),
 
       param_names(param_names),
       takes_varargs(takes_varargs),

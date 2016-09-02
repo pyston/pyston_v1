@@ -814,14 +814,13 @@ void setupSys() {
 
     sys_module->giveAttr("argv", new BoxedList());
 
-    sys_module->giveAttr("exc_info",
-                         new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)sysExcInfo, BOXED_TUPLE, 0),
-                                                          "exc_info", exc_info_doc));
-    sys_module->giveAttr("exc_clear", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)sysExcClear, NONE, 0),
-                                                                       "exc_clear", exc_clear_doc));
-    sys_module->giveAttr("exit",
-                         new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)sysExit, NONE, 1, false, false),
-                                                          "exit", { Py_None }, NULL, exit_doc));
+    sys_module->giveAttr("exc_info", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)sysExcInfo, BOXED_TUPLE,
+                                                                                        0, "exc_info", exc_info_doc)));
+    sys_module->giveAttr("exc_clear", new BoxedBuiltinFunctionOrMethod(
+                                          BoxedCode::create((void*)sysExcClear, NONE, 0, "exc_clear", exc_clear_doc)));
+    sys_module->giveAttr(
+        "exit", new BoxedBuiltinFunctionOrMethod(
+                    BoxedCode::create((void*)sysExit, NONE, 1, false, false, "exit", exit_doc), { Py_None }, NULL));
 
     sys_module->giveAttr("warnoptions", new BoxedList());
     sys_module->giveAttrBorrowed("py3kwarning", Py_False);
@@ -831,20 +830,22 @@ void setupSys() {
 
     sys_module->giveAttr("executable", boxString(Py_GetProgramFullPath()));
 
-    sys_module->giveAttr("_getframe",
-                         new BoxedFunction(BoxedCode::create((void*)sysGetFrame, UNKNOWN, 1, false, false), { NULL }));
-    sys_module->giveAttr("_current_frames", new BoxedFunction(BoxedCode::create((void*)sysCurrentFrames, UNKNOWN, 0)));
+    sys_module->giveAttr(
+        "_getframe",
+        new BoxedFunction(BoxedCode::create((void*)sysGetFrame, UNKNOWN, 1, false, false, "_getframe"), { NULL }));
+    sys_module->giveAttr("_current_frames",
+                         new BoxedFunction(BoxedCode::create((void*)sysCurrentFrames, UNKNOWN, 0, "_current_frames")));
     sys_module->giveAttr("getdefaultencoding",
-                         new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)sysGetDefaultEncoding, STR, 0),
-                                                          "getdefaultencoding", getdefaultencoding_doc));
+                         new BoxedBuiltinFunctionOrMethod(BoxedCode::create(
+                             (void*)sysGetDefaultEncoding, STR, 0, "getdefaultencoding", getdefaultencoding_doc)));
 
-    sys_module->giveAttr("getfilesystemencoding",
-                         new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)sysGetFilesystemEncoding, STR, 0),
-                                                          "getfilesystemencoding", getfilesystemencoding_doc));
+    sys_module->giveAttr("getfilesystemencoding", new BoxedBuiltinFunctionOrMethod(BoxedCode::create(
+                                                      (void*)sysGetFilesystemEncoding, STR, 0, "getfilesystemencoding",
+                                                      getfilesystemencoding_doc)));
 
     sys_module->giveAttr("getrecursionlimit",
-                         new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)sysGetRecursionLimit, UNKNOWN, 0),
-                                                          "getrecursionlimit", getrecursionlimit_doc));
+                         new BoxedBuiltinFunctionOrMethod(BoxedCode::create(
+                             (void*)sysGetRecursionLimit, UNKNOWN, 0, "getrecursionlimit", getrecursionlimit_doc)));
 
     // As we don't support compile() etc yet force 'dont_write_bytecode' to true.
     sys_module->giveAttrBorrowed("dont_write_bytecode", Py_True);

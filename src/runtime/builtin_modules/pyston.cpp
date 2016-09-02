@@ -67,12 +67,12 @@ void setupPyston() {
     pyston_module = createModule(autoDecref(boxString("__pyston__")));
 
     pyston_module->giveAttr(
-        "setOption", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)setOption, UNKNOWN, 2), "setOption"));
+        "setOption", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)setOption, UNKNOWN, 2, "setOption")));
 
     pyston_module->giveAttr(
-        "clearStats", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)clearStats, NONE, 0), "clearStats"));
+        "clearStats", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)clearStats, NONE, 0, "clearStats")));
     pyston_module->giveAttr("dumpStats",
-                            new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)dumpStats, NONE, 1, false, false),
-                                                             "dumpStats", { Py_False }));
+                            new BoxedBuiltinFunctionOrMethod(
+                                BoxedCode::create((void*)dumpStats, NONE, 1, false, false, "dumpStats"), { Py_False }));
 }
 }
