@@ -278,17 +278,17 @@ public:
     RewriterVar* emitCreateSet(const llvm::ArrayRef<RewriterVar*> values);
     RewriterVar* emitCreateSlice(RewriterVar* start, RewriterVar* stop, RewriterVar* step);
     RewriterVar* emitCreateTuple(const llvm::ArrayRef<RewriterVar*> values);
-    RewriterVar* emitDeref(AST_Name* name);
+    RewriterVar* emitDeref(InternedString s);
     RewriterVar* emitExceptionMatches(RewriterVar* v, RewriterVar* cls);
     RewriterVar* emitGetAttr(RewriterVar* obj, BoxedString* s, AST_expr* node);
-    RewriterVar* emitGetBlockLocal(AST_Name* name);
-    void emitKillTemporary(AST_Name* name);
+    RewriterVar* emitGetBlockLocal(InternedString s, int vreg);
+    void emitKillTemporary(InternedString s, int vreg);
     RewriterVar* emitGetBoxedLocal(BoxedString* s);
     RewriterVar* emitGetBoxedLocals();
     RewriterVar* emitGetClsAttr(RewriterVar* obj, BoxedString* s);
     RewriterVar* emitGetGlobal(BoxedString* s);
     RewriterVar* emitGetItem(AST_expr* node, RewriterVar* value, RewriterVar* slice);
-    RewriterVar* emitGetLocal(AST_Name* name);
+    RewriterVar* emitGetLocal(InternedString s, int vreg);
     RewriterVar* emitGetPystonIter(RewriterVar* v);
     RewriterVar* emitHasnext(RewriterVar* v);
     RewriterVar* emitImportFrom(RewriterVar* module, BoxedString* name);
@@ -318,13 +318,13 @@ public:
     void emitRaise3(RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2);
     void emitReturn(RewriterVar* v);
     void emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr);
-    void emitSetBlockLocal(AST_Name* name, STOLEN(RewriterVar*) v);
+    void emitSetBlockLocal(InternedString s, int vreg, STOLEN(RewriterVar*) v);
     void emitSetCurrentInst(AST_stmt* node);
     void emitSetExcInfo(RewriterVar* type, RewriterVar* value, RewriterVar* traceback);
     void emitSetGlobal(BoxedString* s, STOLEN(RewriterVar*) v, bool are_globals_from_module);
     void emitSetItemName(BoxedString* s, RewriterVar* v);
     void emitSetItem(RewriterVar* target, RewriterVar* slice, RewriterVar* value);
-    void emitSetLocal(AST_Name* name, bool set_closure, STOLEN(RewriterVar*) v);
+    void emitSetLocal(InternedString s, int vreg, bool set_closure, STOLEN(RewriterVar*) v);
     // emitSideExit steals a full ref from v, not just a vref
     void emitSideExit(STOLEN(RewriterVar*) v, Box* cmp_value, CFGBlock* next_block);
     void emitUncacheExcInfo();

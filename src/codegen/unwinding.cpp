@@ -985,12 +985,12 @@ BORROWED(Box*) FrameInfo::updateBoxedLocals() {
 
     FrameInfo* frame_info = this;
     FunctionMetadata* md = frame_info->md;
-    const ScopingResults& scope_info = md->source->scoping;
+    ScopeInfo* scope_info = md->source->getScopeInfo();
 
-    if (scope_info.areLocalsFromModule()) {
+    if (scope_info->areLocalsFromModule()) {
         // TODO we should cache this in frame_info->locals or something so that locals()
         // (and globals() too) will always return the same dict
-        RELEASE_ASSERT(md->source->scoping.areGlobalsFromModule(), "");
+        RELEASE_ASSERT(md->source->scoping->areGlobalsFromModule(), "");
         return md->source->parent_module->getAttrWrapper();
     }
 
@@ -1000,7 +1000,7 @@ BORROWED(Box*) FrameInfo::updateBoxedLocals() {
     // Add the locals from the closure
     // TODO in a ClassDef scope, we aren't supposed to add these
     size_t depth = 0;
-    for (auto& p : scope_info.getAllDerefVarsAndInfo()) {
+    for (auto& p : scope_info->getAllDerefVarsAndInfo()) {
         InternedString name = p.first;
         DerefInfo derefInfo = p.second;
         while (depth < derefInfo.num_parents_from_passed_closure) {

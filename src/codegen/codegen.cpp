@@ -38,10 +38,10 @@
 namespace pyston {
 
 FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs,
-                                   std::unique_ptr<SourceInfo> source, ParamNames param_names)
+                                   std::unique_ptr<SourceInfo> source)
     : code_obj(NULL),
       source(std::move(source)),
-      param_names(std::move(param_names)),
+      param_names(this->source->ast, this->source->getInternedStrings()),
       takes_varargs(takes_varargs),
       takes_kwargs(takes_kwargs),
       num_args(num_args),
@@ -91,8 +91,8 @@ void FunctionMetadata::addVersion(CompiledFunction* compiled) {
     }
 }
 
-SourceInfo::SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, AST* ast, BoxedString* fn)
-    : parent_module(m), scoping(std::move(scoping)), ast(ast), cfg(NULL), future_flags(future_flags) {
+SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast, BoxedString* fn)
+    : parent_module(m), scoping(scoping), scope_info(NULL), ast(ast), cfg(NULL), future_flags(future_flags) {
     assert(fn);
 
     // TODO: this is a very bad way of handling this:

@@ -1,4 +1,11 @@
 # I would have expected this to be valid, but cPython and pypy err out saying "name 'x' is local and global"
+
+try:
+    import __pyston__
+    __pyston__.setOption("LAZY_SCOPING_ANALYSIS", 0)
+except ImportError:
+    pass
+
 try:
     exec """
 x = 1

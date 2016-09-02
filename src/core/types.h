@@ -161,6 +161,7 @@ class AST_stmt;
 
 class PhiAnalysis;
 class LivenessAnalysis;
+class ScopingAnalysis;
 
 class FunctionMetadata;
 class OSREntryDescriptor;
@@ -429,59 +430,9 @@ public:
 typedef int FutureFlags;
 
 class BoxedModule;
+class ScopeInfo;
 class InternedStringPool;
 class LivenessAnalysis;
-
-// Each closure has an array (fixed-size for that particular scope) of variables
-// and a parent pointer to a parent closure. To look up a variable from the passed-in
-// closure (i.e., DEREF), you just need to know (i) how many parents up to go and
-// (ii) what offset into the array to find the variable. This struct stores that
-// information. You can query the ScopeInfo with a name to get this info.
-struct DerefInfo {
-    size_t num_parents_from_passed_closure;
-    size_t offset;
-};
-
-class ScopeInfo;
-// The results of our scoping analysis.
-// A ScopeInfo is a component of the analysis itself and contains a lot of other
-// metadata that is necessary during the analysis, after which we can throw it
-// away and only keep a ScopingResults object.
-struct ScopingResults {
-private:
-    bool are_locals_from_module : 1;
-    bool are_globals_from_module : 1;
-    bool creates_closure : 1;
-    bool takes_closure : 1;
-    bool passes_through_closure : 1;
-    bool uses_name_lookup : 1;
-
-    int closure_size;
-    std::vector<std::pair<InternedString, DerefInfo>> deref_info;
-
-public:
-    ScopingResults(ScopingResults&&) = default;
-    // Delete these just to make sure we avoid extra copies
-    ScopingResults(const ScopingResults&) = delete;
-    void operator=(const ScopingResults&) = delete;
-
-    bool areLocalsFromModule() const { return are_locals_from_module; }
-    bool areGlobalsFromModule() const { return are_globals_from_module; }
-    bool createsClosure() const { return creates_closure; }
-    bool takesClosure() const { return takes_closure; }
-    bool passesThroughClosure() const { return passes_through_closure; }
-    bool usesNameLookup() const { return uses_name_lookup; }
-
-    int getClosureSize() const {
-        assert(createsClosure());
-        return closure_size;
-    }
-    const std::vector<std::pair<InternedString, DerefInfo>>& getAllDerefVarsAndInfo() const { return deref_info; }
-    DerefInfo getDerefInfo(AST_Name*) const;
-    size_t getClosureOffset(AST_Name*) const;
-
-    ScopingResults(ScopeInfo* scope_info, bool globals_from_module);
-};
 
 // Data about a single textual function definition.
 class SourceInfo {
@@ -491,23 +442,29 @@ private:
 
 public:
     BoxedModule* parent_module;
-    ScopingResults scoping;
+    ScopingAnalysis* scoping;
+    ScopeInfo* scope_info;
     AST* ast;
     CFG* cfg;
     FutureFlags future_flags;
     bool is_generator;
 
+    InternedStringPool& getInternedStrings();
+
+    ScopeInfo* getScopeInfo();
     LivenessAnalysis* getLiveness();
 
     // does not throw CXX or CAPI exceptions:
     BORROWED(BoxedString*) getName() noexcept;
     BORROWED(BoxedString*) getFn();
 
+    InternedString mangleName(InternedString id);
+
     llvm::ArrayRef<AST_stmt*> getBody() const;
 
     Box* getDocString();
 
-    SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, AST* ast, BoxedString* fn);
+    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast, BoxedString* fn);
     ~SourceInfo();
 };
 
@@ -562,8 +519,7 @@ public:
                                         Box**, const std::vector<BoxedString*>*> InternalCallable;
     InternalCallable internal_callable;
 
-    FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source,
-                     ParamNames param_names);
+    FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source);
     FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs,
                      const ParamNames& param_names = ParamNames::empty());
     ~FunctionMetadata();

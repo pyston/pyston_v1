@@ -1,3 +1,9 @@
+try:
+    import __pyston__
+    __pyston__.setOption("LAZY_SCOPING_ANALYSIS", 0)
+except ImportError:
+    pass
+
 cases = [
 
 """

@@ -1639,24 +1639,8 @@ bool PrintVisitor::visit_suite(AST_Suite* node) {
 
 bool PrintVisitor::visit_name(AST_Name* node) {
     stream << node->id.s();
-#if 0
-    if (node->lookup_type == ScopeInfo::VarScopeType::UNKNOWN)
-        stream << "<U>";
-    else if (node->lookup_type == ScopeInfo::VarScopeType::FAST)
-        stream << "<F>";
-    else if (node->lookup_type == ScopeInfo::VarScopeType::DEREF)
-        stream << "<D>";
-    else if (node->lookup_type == ScopeInfo::VarScopeType::CLOSURE)
-        stream << "<C>";
-    else if (node->lookup_type == ScopeInfo::VarScopeType::GLOBAL)
-        stream << "<G>";
-    else
-        stream << "<?>";
-#endif
-
-#if 0
-    if (node->is_kill) stream << "<k>";
-#endif
+    // Uncomment this line to see which names are kills:
+    // if (node->is_kill) stream << "<k>";
     return false;
 }
 

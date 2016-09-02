@@ -169,7 +169,7 @@ public:
     int getNumOfCrossBlockVRegs() const { return num_vregs_cross_block; }
 
     bool hasVRegsAssigned() const { return num_vregs != -1; }
-    void assignVRegs(CFG* cfg, const ParamNames& param_names);
+    void assignVRegs(CFG* cfg, const ParamNames& param_names, ScopeInfo* scope_info);
 };
 
 // Control Flow Graph
@@ -330,10 +330,8 @@ public:
     iterator end() const { return iterator(*this, this->v.size()); }
 };
 
-FunctionMetadata*& metadataForAST(AST* ast);
-InternedStringPool& stringpoolForAST(AST* ast);
-
-void computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn, BoxedModule* bm);
+class SourceInfo;
+CFG* computeCFG(SourceInfo* source, const ParamNames& param_names);
 void printCFG(CFG* cfg);
 }
 

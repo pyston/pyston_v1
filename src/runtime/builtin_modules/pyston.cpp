@@ -45,6 +45,7 @@ static Box* setOption(Box* option, Box* value) {
     else CHECK(SPECULATION_THRESHOLD);
     else CHECK(ENABLE_ICS);
     else CHECK(ENABLE_ICGETATTRS);
+    else CHECK(LAZY_SCOPING_ANALYSIS);
     else raiseExcHelper(ValueError, "unknown option name '%s", option_string->data());
 
     Py_RETURN_NONE;

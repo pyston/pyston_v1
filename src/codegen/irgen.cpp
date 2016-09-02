@@ -408,7 +408,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         irstate->getRefcounts()->setType(osr_created_closure, RefType::BORROWED);
         if (source->is_generator)
             irstate->setPassedGenerator(osr_generator);
-        if (source->scoping.createsClosure())
+        if (source->getScopeInfo()->createsClosure())
             irstate->setCreatedClosure(osr_created_closure);
 
         int arg_num = -1;
@@ -730,16 +730,13 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                         auto asgn = ast_cast<AST_Assign>(stmt);
                         assert(asgn->targets.size() == 1);
                         if (asgn->targets[0]->type == AST_TYPE::Name) {
-                            auto asname = ast_cast<AST_Name>(asgn->targets[0]);
-                            assert(asname->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
-
-                            InternedString name = asname->id;
+                            InternedString name = ast_cast<AST_Name>(asgn->targets[0])->id;
                             int vreg = ast_cast<AST_Name>(asgn->targets[0])->vreg;
                             assert(name.c_str()[0] == '#'); // it must be a temporary
                             // You might think I need to check whether `name' is being assigned globally or locally,
                             // since a global assign doesn't affect the symbol table. However, the CFG pass only
                             // generates invoke-assigns to temporary variables. Just to be sure, we assert:
-                            assert(asname->lookup_type != ScopeInfo::VarScopeType::GLOBAL);
+                            assert(source->getScopeInfo()->getScopeTypeOfName(name) != ScopeInfo::VarScopeType::GLOBAL);
 
                             // TODO: inefficient
                             sym_table = new SymbolTable(*sym_table);
@@ -1066,13 +1063,13 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
         int nargs = param_names->totalParameters();
         ASSERT(nargs == spec->arg_types.size(), "%d %ld", nargs, spec->arg_types.size());
 
-        if (source->scoping.takesClosure())
+        if (source->getScopeInfo()->takesClosure())
             llvm_arg_types.push_back(g.llvm_closure_type_ptr);
 
         if (source->is_generator)
             llvm_arg_types.push_back(g.llvm_generator_type_ptr);
 
-        if (!source->scoping.areGlobalsFromModule())
+        if (!source->scoping->areGlobalsFromModule())
             llvm_arg_types.push_back(g.llvm_value_type_ptr);
 
         for (int i = 0; i < nargs; i++) {
@@ -1112,9 +1109,10 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
         speculation_level = TypeAnalysis::SOME;
     TypeAnalysis* types;
     if (entry_descriptor)
-        types = doTypeAnalysis(entry_descriptor, effort, speculation_level);
+        types = doTypeAnalysis(entry_descriptor, effort, speculation_level, source->getScopeInfo());
     else
-        types = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort, speculation_level);
+        types = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort, speculation_level,
+                               source->getScopeInfo());
 
 
     _t2.split();
@@ -1133,9 +1131,9 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
     std::unique_ptr<PhiAnalysis> phis;
 
     if (entry_descriptor)
-        phis = computeRequiredPhis(entry_descriptor, liveness);
+        phis = computeRequiredPhis(entry_descriptor, liveness, source->getScopeInfo());
     else
-        phis = computeRequiredPhis(*param_names, source->cfg, liveness);
+        phis = computeRequiredPhis(*param_names, source->cfg, liveness, source->getScopeInfo());
 
     RefcountTracker refcounter;
 
