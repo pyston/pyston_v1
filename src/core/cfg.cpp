@@ -34,39 +34,50 @@
 
 namespace pyston {
 
-ParamNames::ParamNames(AST* ast, InternedStringPool& pool)
+void fillScopingInfo(BST_Name* node, ScopeInfo* scope_info) {
+    node->lookup_type = scope_info->getScopeTypeOfName(node->id);
+
+    if (node->lookup_type == ScopeInfo::VarScopeType::CLOSURE)
+        node->closure_offset = scope_info->getClosureOffset(node->id);
+    else if (node->lookup_type == ScopeInfo::VarScopeType::DEREF)
+        node->deref_info = scope_info->getDerefInfo(node->id);
+
+    assert(node->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
+}
+
+ParamNames::ParamNames(AST_arguments* arguments, InternedStringPool& pool)
     : all_args_contains_names(1), takes_param_names(1), has_vararg_name(0), has_kwarg_name(0) {
-    if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef || ast->type == AST_TYPE::Expression
-        || ast->type == AST_TYPE::Suite) {
-    } else if (ast->type == AST_TYPE::FunctionDef || ast->type == AST_TYPE::Lambda) {
-        AST_arguments* arguments = ast->type == AST_TYPE::FunctionDef ? ast_cast<AST_FunctionDef>(ast)->args
-                                                                      : ast_cast<AST_Lambda>(ast)->args;
-        for (int i = 0; i < arguments->args.size(); i++) {
-            AST_expr* arg = arguments->args[i];
-            if (arg->type == AST_TYPE::Name) {
-                AST_Name* name = ast_cast<AST_Name>(arg);
-                all_args.emplace_back(name);
-            } else {
-                InternedString dot_arg_name = pool.get("." + std::to_string(i));
-                auto new_name = new AST_Name(dot_arg_name, AST_TYPE::Param, arg->lineno, arg->col_offset);
-                new_name->lookup_type = ScopeInfo::VarScopeType::FAST;
-                all_args.emplace_back(new_name);
-            }
-        }
+    if (!arguments)
+        return;
 
-        auto vararg_name = arguments->vararg;
-        if (vararg_name) {
-            has_vararg_name = 1;
-            all_args.emplace_back(vararg_name);
+    for (int i = 0; i < arguments->args.size(); i++) {
+        AST_expr* arg = arguments->args[i];
+        if (arg->type == AST_TYPE::Name) {
+            AST_Name* name = ast_cast<AST_Name>(arg);
+            BST_Name* new_name = new BST_Name(name->id, name->ctx_type, name->lineno, name->col_offset);
+            all_args.emplace_back(new_name);
+        } else {
+            InternedString dot_arg_name = pool.get("." + std::to_string(i));
+            auto new_name = new BST_Name(dot_arg_name, AST_TYPE::Param, arg->lineno, arg->col_offset);
+            new_name->lookup_type = ScopeInfo::VarScopeType::FAST;
+            all_args.emplace_back(new_name);
         }
+    }
 
-        auto kwarg_name = arguments->kwarg;
-        if (kwarg_name) {
-            has_kwarg_name = 1;
-            all_args.emplace_back(kwarg_name);
-        }
-    } else {
-        RELEASE_ASSERT(0, "%d", ast->type);
+    auto vararg_name = arguments->vararg;
+    if (vararg_name) {
+        has_vararg_name = 1;
+        BST_Name* new_name
+            = new BST_Name(vararg_name->id, vararg_name->ctx_type, vararg_name->lineno, vararg_name->col_offset);
+        all_args.emplace_back(new_name);
+    }
+
+    auto kwarg_name = arguments->kwarg;
+    if (kwarg_name) {
+        has_kwarg_name = 1;
+        BST_Name* new_name
+            = new BST_Name(kwarg_name->id, kwarg_name->ctx_type, kwarg_name->lineno, kwarg_name->col_offset);
+        all_args.emplace_back(new_name);
     }
 }
 
@@ -104,7 +115,7 @@ std::vector<const char*> ParamNames::allArgsAsStr() const {
 // getLastLineno takes the block itself, and getLastLinenoSub takes an entry
 // inside the block.  This is important because if there is a functiondef as the last
 // statement in a block, we should not look inside it.
-int getLastLinenoSub(AST* ast) {
+static int getLastLinenoSub(AST* ast) {
     if (ast->type == AST_TYPE::TryExcept) {
         auto te = ast_cast<AST_TryExcept>(ast);
         if (!te->orelse.empty())
@@ -134,6 +145,12 @@ int getLastLinenoSub(AST* ast) {
     return ast->lineno;
 }
 
+static int getLastLineno(llvm::ArrayRef<AST_stmt*> body, int default_lineno) {
+    if (body.size() == 0)
+        return default_lineno;
+    return getLastLinenoSub(body.back());
+}
+#if 0
 int getLastLineno(AST* ast) {
     switch (ast->type) {
         case AST_TYPE::Lambda: {
@@ -168,6 +185,7 @@ int getLastLineno(AST* ast) {
             RELEASE_ASSERT(0, "%d", ast->type);
     }
 }
+#endif
 
 void CFGBlock::connectTo(CFGBlock* successor, bool allow_backedge) {
     assert(successors.size() <= 1);
@@ -215,17 +233,6 @@ void CFGBlock::print(llvm::raw_ostream& stream) {
     }
 }
 
-void fillScopingInfo(AST_Name* node, ScopeInfo* scope_info) {
-    node->lookup_type = scope_info->getScopeTypeOfName(node->id);
-
-    if (node->lookup_type == ScopeInfo::VarScopeType::CLOSURE)
-        node->closure_offset = scope_info->getClosureOffset(node->id);
-    else if (node->lookup_type == ScopeInfo::VarScopeType::DEREF)
-        node->deref_info = scope_info->getDerefInfo(node->id);
-
-    assert(node->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
-}
-
 static const std::string RETURN_NAME("#rtnval");
 
 // The various reasons why a `finally' block (or similar, eg. a `with' exit block) might get entered.
@@ -260,10 +267,12 @@ public:
     // For example if we convert a generator expression into a function, the new function
     // should get passed as 'ast', but the original generator expression should get
     // passed as 'orig_node' so that the scoping analysis can know what we're talking about.
-    void runRecursively(AST* ast, AST_arguments* args, AST* orig_node);
+    BoxedCode* runRecursively(llvm::ArrayRef<AST_stmt*> body, BoxedString* name, int lineno, AST_arguments* args,
+                              AST* orig_node);
 };
 
-static CFG* computeCFG(AST* ast, BoxedString* fn, SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
+static CFG* computeCFG(llvm::ArrayRef<AST_stmt*> body, AST_TYPE::AST_TYPE ast_type, int lineno, AST_arguments* args,
+                       BoxedString* filename, SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
                        ModuleCFGProcessor* cfgizer);
 
 // A class that crawls the AST of a single function and computes the CFG
@@ -361,8 +370,9 @@ private:
 
     unsigned int next_var_index = 0;
 
-    friend CFG* computeCFG(AST* ast, BoxedString* fn, SourceInfo* source, const ParamNames& param_names, ScopeInfo*,
-                           ModuleCFGProcessor*);
+    friend CFG* computeCFG(llvm::ArrayRef<AST_stmt*> body, AST_TYPE::AST_TYPE ast_type, int lineno, AST_arguments* args,
+                           BoxedString* filename, SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
+                           ModuleCFGProcessor* cfgizer);
 
 public:
     CFGVisitor(BoxedString* filename, SourceInfo* source, InternedStringPool& stringpool, ScopeInfo* scoping,
@@ -395,19 +405,28 @@ private:
         return stringpool.get(std::move(name));
     }
 
-    AST_Name* makeName(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0,
-                       bool is_kill = false) {
+    AST_Name* makeASTName(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0) {
         AST_Name* name = new AST_Name(id, ctx_type, lineno, col_offset);
+        return name;
+    }
+
+    BST_Name* makeName(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0,
+                       bool is_kill = false) {
+        BST_Name* name = new BST_Name(id, ctx_type, lineno, col_offset);
         fillScopingInfo(name, scoping);
         name->is_kill = is_kill;
         return name;
     }
 
-    AST_Name* makeLoad(InternedString id, AST* node, bool is_kill = false) {
+    BST_Name* makeLoad(InternedString id, AST* node, bool is_kill = false) {
         return makeName(id, AST_TYPE::Load, node->lineno, 0, is_kill);
     }
 
-    AST_Name* makeLoad(InternedString id, int lineno, bool is_kill = false) {
+    BST_Name* makeLoad(InternedString id, BST* node, bool is_kill = false) {
+        return makeName(id, AST_TYPE::Load, node->lineno, 0, is_kill);
+    }
+
+    BST_Name* makeLoad(InternedString id, int lineno, bool is_kill = false) {
         return makeName(id, AST_TYPE::Load, lineno, 0, is_kill);
     }
 
@@ -423,7 +442,7 @@ private:
 
     void popContinuation() { continuations.pop_back(); }
 
-    void doReturn(AST_expr* value) {
+    void doReturn(BST_expr* value) {
         assert(value);
         assert(curblock);
 
@@ -440,7 +459,7 @@ private:
             }
         }
 
-        AST_Return* node = new AST_Return();
+        BST_Return* node = new BST_Return();
         node->value = value;
         node->col_offset = value->col_offset;
         node->lineno = value->lineno;
@@ -482,8 +501,8 @@ private:
         raiseSyntaxError("'break' outside loop", value->lineno, value->col_offset, filename->s(), "", true);
     }
 
-    AST_expr* callNonzero(AST_expr* e) {
-        AST_LangPrimitive* call = new AST_LangPrimitive(AST_LangPrimitive::NONZERO);
+    BST_expr* callNonzero(BST_expr* e) {
+        BST_LangPrimitive* call = new BST_LangPrimitive(BST_LangPrimitive::NONZERO);
         call->args.push_back(e);
         call->lineno = e->lineno;
         call->col_offset = e->col_offset;
@@ -498,17 +517,49 @@ private:
         return makeLoad(name, e, true);
     }
 
-    AST_Name* remapName(AST_Name* name) {
-        fillScopingInfo(name, scoping);
-        return name;
+    BST_Name* remapName(AST_Name* name) {
+        if (!name)
+            return NULL;
+        BST_Name* rtn = new BST_Name(name->id, name->ctx_type, name->lineno, name->col_offset);
+        fillScopingInfo(rtn, scoping);
+        return rtn;
     }
 
-    AST_expr* applyComprehensionCall(AST_ListComp* node, AST_Name* name) {
-        AST_expr* elt = remapExpr(node->elt);
+    BST_Num* remapNum(AST_Num* num) {
+        auto r = new BST_Num();
+        r->lineno = num->lineno;
+        r->col_offset = num->col_offset;
+        r->num_type = num->num_type;
+        switch (r->num_type) {
+            case AST_Num::INT:
+                r->n_int = num->n_int;
+                break;
+            case AST_Num::FLOAT:
+            case AST_Num::COMPLEX:
+                r->n_float = num->n_float;
+                break;
+            case AST_Num::LONG:
+                r->n_long = num->n_long;
+                break;
+        }
+        return r;
+    }
+
+    BST_Str* remapStr(AST_Str* str) {
+        auto r = new BST_Str();
+        r->str_data = str->str_data;
+        r->str_type = str->str_type;
+        r->lineno = str->lineno;
+        r->col_offset = str->col_offset;
+        return r;
+    }
+
+    BST_expr* applyComprehensionCall(AST_ListComp* node, BST_Name* name) {
+        BST_expr* elt = remapExpr(node->elt);
         return makeCall(makeLoadAttribute(name, internString("append"), true), elt);
     }
 
-    template <typename ResultASTType, typename CompType> AST_expr* remapComprehension(CompType* node) {
+    template <typename ResultASTType, typename CompType> BST_expr* remapComprehension(CompType* node) {
         assert(curblock);
 
         InternedString rtn_name = nodeName();
@@ -525,14 +576,14 @@ private:
             AST_comprehension* c = node->generators[i];
             bool is_innermost = (i == n - 1);
 
-            AST_expr* remapped_iter = remapExpr(c->iter);
-            AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER);
+            BST_expr* remapped_iter = remapExpr(c->iter);
+            BST_LangPrimitive* iter_call = new BST_LangPrimitive(BST_LangPrimitive::GET_ITER);
             iter_call->args.push_back(remapped_iter);
             iter_call->lineno = c->target->lineno; // Not sure if this should be c->target or c->iter
             InternedString iter_name = nodeName("lc_iter", i);
             pushAssign(iter_name, iter_call);
 
-            AST_expr* next_attr = makeLoadAttribute(makeLoad(iter_name, node), internString("next"), true);
+            BST_expr* next_attr = makeLoadAttribute(makeLoad(iter_name, node), internString("next"), true);
 
             CFGBlock* test_block = cfg->addBlock();
             test_block->info = "comprehension_test";
@@ -540,10 +591,10 @@ private:
             pushJump(test_block);
 
             curblock = test_block;
-            AST_LangPrimitive* test_call = new AST_LangPrimitive(AST_LangPrimitive::HASNEXT);
+            BST_LangPrimitive* test_call = new BST_LangPrimitive(BST_LangPrimitive::HASNEXT);
             test_call->args.push_back(makeName(iter_name, AST_TYPE::Load, node->lineno));
             test_call->lineno = c->target->lineno;
-            AST_expr* test = remapExpr(test_call);
+            BST_expr* test = wrap(test_call);
 
             CFGBlock* body_block = cfg->addBlock();
             body_block->info = "comprehension_body";
@@ -552,7 +603,7 @@ private:
             exit_blocks.push_back(exit_block);
             // printf("Body block for comp %d is %d\n", i, body_block->idx);
 
-            AST_Branch* br = new AST_Branch();
+            BST_Branch* br = new BST_Branch();
             br->col_offset = node->col_offset;
             br->lineno = node->lineno;
             br->test = test;
@@ -568,8 +619,8 @@ private:
             pushAssign(c->target, makeLoad(next_name, node, true));
 
             for (AST_expr* if_condition : c->ifs) {
-                AST_expr* remapped = callNonzero(remapExpr(if_condition));
-                AST_Branch* br = new AST_Branch();
+                BST_expr* remapped = callNonzero(remapExpr(if_condition));
+                BST_Branch* br = new BST_Branch();
                 br->test = remapped;
                 push_back(br);
 
@@ -626,15 +677,15 @@ private:
         return makeLoad(rtn_name, node, /* is_kill */ true);
     }
 
-    AST_expr* makeNum(int n) {
-        AST_Num* node = new AST_Num();
+    BST_expr* makeNum(int n) {
+        BST_Num* node = new BST_Num();
         node->num_type = AST_Num::INT;
         node->n_int = n;
         return node;
     }
 
     void pushJump(CFGBlock* target, bool allow_backedge = false, int lineno = 0) {
-        AST_Jump* rtn = new AST_Jump();
+        BST_Jump* rtn = new BST_Jump();
         rtn->target = target;
         rtn->lineno = lineno;
 
@@ -644,8 +695,8 @@ private:
     }
 
     // NB. can generate blocks, because callNonzero can
-    AST_Branch* makeBranch(AST_expr* test) {
-        AST_Branch* rtn = new AST_Branch();
+    BST_Branch* makeBranch(BST_expr* test) {
+        BST_Branch* rtn = new BST_Branch();
         rtn->test = callNonzero(test);
         rtn->col_offset = test->col_offset;
         rtn->lineno = test->lineno;
@@ -655,9 +706,9 @@ private:
     // NB. this can (but usually doesn't) generate new blocks, which is why we require `iftrue' and `iffalse' to be
     // deferred, to avoid heisenbugs. of course, this doesn't allow these branches to be backedges, but that hasn't yet
     // been necessary.
-    void pushBranch(AST_expr* test, CFGBlock* iftrue, CFGBlock* iffalse) {
+    void pushBranch(BST_expr* test, CFGBlock* iftrue, CFGBlock* iffalse) {
         assert(iftrue->idx == -1 && iffalse->idx == -1);
-        AST_Branch* branch = makeBranch(test);
+        BST_Branch* branch = makeBranch(test);
         branch->iftrue = iftrue;
         branch->iffalse = iffalse;
         curblock->connectTo(iftrue);
@@ -668,7 +719,7 @@ private:
 
     void pushReraise(int lineno, InternedString exc_type_name, InternedString exc_value_name,
                      InternedString exc_traceback_name) {
-        auto raise = new AST_Raise();
+        auto raise = new BST_Raise();
         raise->lineno = lineno;
         raise->arg0 = makeLoad(exc_type_name, lineno, true);
         raise->arg1 = makeLoad(exc_value_name, lineno, true);
@@ -677,7 +728,7 @@ private:
         curblock = nullptr;
     }
 
-    AST_expr* makeLoadAttribute(AST_expr* base, InternedString name, bool clsonly) {
+    AST_expr* makeASTLoadAttribute(AST_expr* base, InternedString name, bool clsonly) {
         AST_expr* rtn;
         if (clsonly) {
             AST_ClsAttribute* attr = new AST_ClsAttribute();
@@ -696,7 +747,26 @@ private:
         return rtn;
     }
 
-    AST_Call* makeCall(AST_expr* func) {
+    BST_expr* makeLoadAttribute(BST_expr* base, InternedString name, bool clsonly) {
+        BST_expr* rtn;
+        if (clsonly) {
+            BST_ClsAttribute* attr = new BST_ClsAttribute();
+            attr->value = base;
+            attr->attr = name;
+            rtn = attr;
+        } else {
+            BST_Attribute* attr = new BST_Attribute();
+            attr->ctx_type = AST_TYPE::Load;
+            attr->value = base;
+            attr->attr = name;
+            rtn = attr;
+        }
+        rtn->col_offset = base->col_offset;
+        rtn->lineno = base->lineno;
+        return rtn;
+    }
+
+    AST_Call* makeASTCall(AST_expr* func) {
         AST_Call* call = new AST_Call();
         call->starargs = NULL;
         call->kwargs = NULL;
@@ -706,20 +776,43 @@ private:
         return call;
     }
 
-    AST_Call* makeCall(AST_expr* func, AST_expr* arg0) {
+    AST_Call* makeASTCall(AST_expr* func, AST_expr* arg0) {
+        auto call = makeASTCall(func);
+        call->args.push_back(arg0);
+        return call;
+    }
+
+    AST_Call* makeASTCall(AST_expr* func, AST_expr* arg0, AST_expr* arg1) {
+        auto call = makeASTCall(func);
+        call->args.push_back(arg0);
+        call->args.push_back(arg1);
+        return call;
+    }
+
+    BST_Call* makeCall(BST_expr* func) {
+        BST_Call* call = new BST_Call();
+        call->starargs = NULL;
+        call->kwargs = NULL;
+        call->func = func;
+        call->col_offset = func->col_offset;
+        call->lineno = func->lineno;
+        return call;
+    }
+
+    BST_Call* makeCall(BST_expr* func, BST_expr* arg0) {
         auto call = makeCall(func);
         call->args.push_back(arg0);
         return call;
     }
 
-    AST_Call* makeCall(AST_expr* func, AST_expr* arg0, AST_expr* arg1) {
+    BST_Call* makeCall(BST_expr* func, BST_expr* arg0, BST_expr* arg1) {
         auto call = makeCall(func);
         call->args.push_back(arg0);
         call->args.push_back(arg1);
         return call;
     }
 
-    AST_Call* makeCall(AST_expr* func, AST_expr* arg0, AST_expr* arg1, AST_expr* arg2) {
+    BST_Call* makeCall(BST_expr* func, BST_expr* arg0, BST_expr* arg1, BST_expr* arg2) {
         auto call = makeCall(func);
         call->args.push_back(arg0);
         call->args.push_back(arg1);
@@ -727,24 +820,24 @@ private:
         return call;
     }
 
-    AST_Compare* makeCompare(AST_TYPE::AST_TYPE oper, AST_expr* left, AST_expr* right) {
-        auto compare = new AST_Compare();
-        compare->ops.push_back(AST_TYPE::Eq);
+    BST_Compare* makeCompare(AST_TYPE::AST_TYPE oper, BST_expr* left, BST_expr* right) {
+        auto compare = new BST_Compare();
+        compare->ops.push_back(oper);
         compare->left = left;
         compare->comparators.push_back(right);
         return compare;
     }
 
-    AST_Index* makeIndex(AST_expr* value) {
-        auto index = new AST_Index();
+    BST_Index* makeIndex(BST_expr* value) {
+        auto index = new BST_Index();
         index->value = value;
         index->lineno = value->lineno;
         index->col_offset = value->col_offset;
         return index;
     }
 
-    AST_Subscript* makeSubscript(AST_TYPE::AST_TYPE ctx_type, AST_expr* value, AST_slice* slice) {
-        auto subscript = new AST_Subscript();
+    BST_Subscript* makeSubscript(AST_TYPE::AST_TYPE ctx_type, BST_expr* value, BST_slice* slice) {
+        auto subscript = new BST_Subscript();
         subscript->ctx_type = ctx_type;
         subscript->value = value;
         subscript->slice = slice;
@@ -753,20 +846,33 @@ private:
         return subscript;
     }
 
-    void pushAssign(AST_expr* target, AST_expr* val) {
-        AST_Assign* assign = new AST_Assign();
+    // void pushAssign(BST_expr* target, BST_expr* val);
+    // We need this both on asts (ex assigning to the element name in a for loop), and
+    // for bsts (desugaring an augassign)
+    // TODO: we should get rid of this bst one, or at least not call it the same thing?
+    void pushAssign(BST_expr* target, BST_expr* val) {
+        BST_Assign* assign = new BST_Assign();
+        assign->value = val;
+        assign->col_offset = val->col_offset;
+        assign->lineno = val->lineno;
+        assign->targets.push_back(target);
+        push_back(assign);
+    }
+
+    void pushAssign(AST_expr* target, BST_expr* val) {
+        BST_Assign* assign = new BST_Assign();
         assign->value = val;
         assign->col_offset = val->col_offset;
         assign->lineno = val->lineno;
 
         if (target->type == AST_TYPE::Name) {
-            assign->targets.push_back(remapName(ast_cast<AST_Name>(target)));
+            assign->targets.push_back(makeName(ast_cast<AST_Name>(target)->id, AST_TYPE::Store, val->lineno, 0));
             push_back(assign);
         } else if (target->type == AST_TYPE::Subscript) {
             AST_Subscript* s = ast_cast<AST_Subscript>(target);
             assert(s->ctx_type == AST_TYPE::Store);
 
-            AST_Subscript* s_target = new AST_Subscript();
+            BST_Subscript* s_target = new BST_Subscript();
             s_target->value = remapExpr(s->value);
             s_target->slice = remapSlice(s->slice);
             s_target->ctx_type = AST_TYPE::Store;
@@ -779,7 +885,7 @@ private:
             AST_Attribute* a = ast_cast<AST_Attribute>(target);
             assert(a->ctx_type == AST_TYPE::Store);
 
-            AST_Attribute* a_target = new AST_Attribute();
+            BST_Attribute* a_target = new BST_Attribute();
             a_target->value = remapExpr(a->value);
             a_target->attr = scoping->mangleName(a->attr);
             a_target->ctx_type = AST_TYPE::Store;
@@ -800,7 +906,7 @@ private:
                 elts = &_t->elts;
             }
 
-            AST_Tuple* new_target = new AST_Tuple();
+            BST_Tuple* new_target = new BST_Tuple();
             new_target->ctx_type = AST_TYPE::Store;
             new_target->lineno = target->lineno;
             new_target->col_offset = target->col_offset;
@@ -821,14 +927,25 @@ private:
         }
     }
 
-    void pushAssign(InternedString id, AST_expr* val) {
-        assert(val);
-        AST_expr* name = makeName(id, AST_TYPE::Store, val->lineno, 0);
-        pushAssign(name, val);
+    void pushAssign(InternedString id, BST_expr* val) {
+        BST_Assign* assign = new BST_Assign();
+        assign->value = val;
+        assign->col_offset = val->col_offset;
+        assign->lineno = val->lineno;
+        assign->targets.push_back(makeName(id, AST_TYPE::Store, val->lineno, 0));
+        push_back(assign);
     }
 
-    AST_stmt* makeExpr(AST_expr* expr) {
+    AST_stmt* makeASTExpr(AST_expr* expr) {
         AST_Expr* stmt = new AST_Expr();
+        stmt->value = expr;
+        stmt->lineno = expr->lineno;
+        stmt->col_offset = expr->col_offset;
+        return stmt;
+    }
+
+    BST_stmt* makeExpr(BST_expr* expr) {
+        BST_Expr* stmt = new BST_Expr();
         stmt->value = expr;
         stmt->lineno = expr->lineno;
         stmt->col_offset = expr->col_offset;
@@ -843,8 +960,8 @@ private:
         return createUniqueName(llvm::Twine("#") + suffix + "_" + llvm::Twine(idx) + "_");
     }
 
-    AST_expr* remapAttribute(AST_Attribute* node) {
-        AST_Attribute* rtn = new AST_Attribute();
+    BST_expr* remapAttribute(AST_Attribute* node) {
+        BST_Attribute* rtn = new BST_Attribute();
 
         rtn->col_offset = node->col_offset;
         rtn->lineno = node->lineno;
@@ -854,8 +971,8 @@ private:
         return rtn;
     }
 
-    AST_expr* remapBinOp(AST_BinOp* node) {
-        AST_BinOp* rtn = new AST_BinOp();
+    BST_expr* remapBinOp(AST_BinOp* node) {
+        BST_BinOp* rtn = new BST_BinOp();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
         rtn->op_type = remapBinOpType(node->op_type);
@@ -864,35 +981,35 @@ private:
         return rtn;
     }
 
-    AST_slice* _dup(AST_slice* val) {
+    BST_slice* _dup(BST_slice* val) {
         if (val == nullptr) {
             return nullptr;
-        } else if (val->type == AST_TYPE::Ellipsis) {
-            AST_Ellipsis* orig = ast_cast<AST_Ellipsis>(val);
-            AST_Ellipsis* made = new AST_Ellipsis();
+        } else if (val->type == BST_TYPE::Ellipsis) {
+            BST_Ellipsis* orig = bst_cast<BST_Ellipsis>(val);
+            BST_Ellipsis* made = new BST_Ellipsis();
             made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             return made;
-        } else if (val->type == AST_TYPE::ExtSlice) {
-            AST_ExtSlice* orig = ast_cast<AST_ExtSlice>(val);
-            AST_ExtSlice* made = new AST_ExtSlice();
+        } else if (val->type == BST_TYPE::ExtSlice) {
+            BST_ExtSlice* orig = bst_cast<BST_ExtSlice>(val);
+            BST_ExtSlice* made = new BST_ExtSlice();
             made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             made->dims.reserve(orig->dims.size());
-            for (AST_slice* item : orig->dims) {
+            for (BST_slice* item : orig->dims) {
                 made->dims.push_back(_dup(item));
             }
             return made;
-        } else if (val->type == AST_TYPE::Index) {
-            AST_Index* orig = ast_cast<AST_Index>(val);
-            AST_Index* made = new AST_Index();
+        } else if (val->type == BST_TYPE::Index) {
+            BST_Index* orig = bst_cast<BST_Index>(val);
+            BST_Index* made = new BST_Index();
             made->value = _dup(orig->value);
             made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             return made;
-        } else if (val->type == AST_TYPE::Slice) {
-            AST_Slice* orig = ast_cast<AST_Slice>(val);
-            AST_Slice* made = new AST_Slice();
+        } else if (val->type == BST_TYPE::Slice) {
+            BST_Slice* orig = bst_cast<BST_Slice>(val);
+            BST_Slice* made = new BST_Slice();
             made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             made->lower = _dup(orig->lower);
@@ -910,26 +1027,26 @@ private:
     // So instead, just create a copy of it.
     // This is only intended to be used with the primitev types,
     // ie those that can be used as operands (temp names and constants).
-    AST_expr* _dup(AST_expr* val) {
+    BST_expr* _dup(BST_expr* val) {
         if (val == nullptr)
             return val;
 
-        if (val->type == AST_TYPE::Name) {
-            AST_Name* orig = ast_cast<AST_Name>(val);
-            AST_Name* made = makeName(orig->id, orig->ctx_type, orig->lineno, orig->col_offset);
+        if (val->type == BST_TYPE::Name) {
+            BST_Name* orig = bst_cast<BST_Name>(val);
+            BST_Name* made = makeName(orig->id, orig->ctx_type, orig->lineno, orig->col_offset);
             return made;
-        } else if (val->type == AST_TYPE::Num) {
-            AST_Num* orig = ast_cast<AST_Num>(val);
-            AST_Num* made = new AST_Num();
+        } else if (val->type == BST_TYPE::Num) {
+            BST_Num* orig = bst_cast<BST_Num>(val);
+            BST_Num* made = new BST_Num();
             made->num_type = orig->num_type;
             made->n_int = orig->n_int;
             made->n_long = orig->n_long;
             made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             return made;
-        } else if (val->type == AST_TYPE::Str) {
-            AST_Str* orig = ast_cast<AST_Str>(val);
-            AST_Str* made = new AST_Str();
+        } else if (val->type == BST_TYPE::Str) {
+            BST_Str* orig = bst_cast<BST_Str>(val);
+            BST_Str* made = new BST_Str();
             made->str_type = orig->str_type;
             made->str_data = orig->str_data;
             made->col_offset = orig->col_offset;
@@ -940,7 +1057,7 @@ private:
         }
     }
 
-    AST_expr* remapBoolOp(AST_BoolOp* node) {
+    BST_expr* remapBoolOp(AST_BoolOp* node) {
         assert(curblock);
 
         InternedString name = nodeName();
@@ -949,10 +1066,10 @@ private:
         CFGBlock* exit_block = cfg->addDeferredBlock();
 
         for (int i = 0; i < node->values.size() - 1; i++) {
-            AST_expr* val = remapExpr(node->values[i]);
+            BST_expr* val = remapExpr(node->values[i]);
             pushAssign(name, _dup(val));
 
-            AST_Branch* br = new AST_Branch();
+            BST_Branch* br = new BST_Branch();
             br->test = callNonzero(val);
             br->lineno = val->lineno;
             push_back(br);
@@ -979,7 +1096,7 @@ private:
             curblock = next_block;
         }
 
-        AST_expr* final_val = remapExpr(node->values[node->values.size() - 1]);
+        BST_expr* final_val = remapExpr(node->values[node->values.size() - 1]);
         pushAssign(name, final_val);
         pushJump(exit_block);
 
@@ -989,8 +1106,8 @@ private:
         return makeLoad(name, node, true);
     }
 
-    AST_expr* remapCall(AST_Call* node) {
-        AST_Call* rtn = new AST_Call();
+    BST_expr* remapCall(AST_Call* node) {
+        BST_Call* rtn = new BST_Call();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
 
@@ -1012,7 +1129,7 @@ private:
             rtn->args.push_back(remapExpr(e));
         }
         for (auto e : node->keywords) {
-            AST_keyword* kw = new AST_keyword();
+            BST_keyword* kw = new BST_keyword();
             kw->value = remapExpr(e->value);
             kw->arg = e->arg;
             rtn->keywords.push_back(kw);
@@ -1023,8 +1140,8 @@ private:
         return rtn;
     }
 
-    AST_expr* remapClsAttribute(AST_ClsAttribute* node) {
-        AST_ClsAttribute* rtn = new AST_ClsAttribute();
+    BST_expr* remapClsAttribute(AST_ClsAttribute* node) {
+        BST_ClsAttribute* rtn = new BST_ClsAttribute();
 
         rtn->col_offset = node->col_offset;
         rtn->lineno = node->lineno;
@@ -1033,12 +1150,12 @@ private:
         return rtn;
     }
 
-    AST_expr* remapCompare(AST_Compare* node) {
+    BST_expr* remapCompare(AST_Compare* node) {
         assert(curblock);
 
         // special case unchained comparisons to avoid generating a unnecessary complex cfg.
         if (node->ops.size() == 1) {
-            AST_Compare* rtn = new AST_Compare();
+            BST_Compare* rtn = new BST_Compare();
             rtn->lineno = node->lineno;
             rtn->col_offset = node->col_offset;
 
@@ -1053,15 +1170,15 @@ private:
             InternedString name = nodeName();
 
             CFGBlock* exit_block = cfg->addDeferredBlock();
-            AST_expr* left = remapExpr(node->left);
+            BST_expr* left = remapExpr(node->left);
 
             for (int i = 0; i < node->ops.size(); i++) {
                 if (i > 0)
                     push_back(makeKill(name));
 
-                AST_expr* right = remapExpr(node->comparators[i]);
+                BST_expr* right = remapExpr(node->comparators[i]);
 
-                AST_Compare* val = new AST_Compare;
+                BST_Compare* val = new BST_Compare;
                 val->col_offset = node->col_offset;
                 val->lineno = node->lineno;
                 val->left = left;
@@ -1077,7 +1194,7 @@ private:
                     continue;
                 }
 
-                AST_Branch* br = new AST_Branch();
+                BST_Branch* br = new BST_Branch();
                 br->test = callNonzero(makeLoad(name, node));
                 push_back(br);
 
@@ -1106,8 +1223,8 @@ private:
         }
     }
 
-    AST_expr* remapDict(AST_Dict* node) {
-        AST_Dict* rtn = new AST_Dict();
+    BST_expr* remapDict(AST_Dict* node) {
+        BST_Dict* rtn = new BST_Dict();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
 
@@ -1116,19 +1233,24 @@ private:
         pushAssign(dict_name, rtn);
 
         for (int i = 0; i < node->keys.size(); i++) {
-            AST_expr* value = remapExpr(node->values[i]);
-            AST_Index* index = makeIndex(node->keys[i]);
-            AST_Subscript* subscript = makeSubscript(AST_TYPE::Store, makeLoad(dict_name, node, false), index);
-            pushAssign(remapSubscript(subscript), value);
+            BST_expr* value = remapExpr(node->values[i]);
+            BST_Index* index = makeIndex(remapExpr(node->keys[i]));
+            BST_Subscript* subscript = makeSubscript(AST_TYPE::Store, makeLoad(dict_name, node, false), index);
+            pushAssign(subscript, value);
         }
 
         return makeLoad(dict_name, node, true);
     }
 
-    AST_slice* remapEllipsis(AST_Ellipsis* node) { return node; }
+    BST_slice* remapEllipsis(AST_Ellipsis* node) {
+        auto r = new BST_Ellipsis();
+        r->lineno = node->lineno;
+        r->col_offset = node->col_offset;
+        return r;
+    }
 
-    AST_slice* remapExtSlice(AST_ExtSlice* node) {
-        AST_ExtSlice* rtn = new AST_ExtSlice();
+    BST_slice* remapExtSlice(AST_ExtSlice* node) {
+        BST_ExtSlice* rtn = new BST_ExtSlice();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
 
@@ -1152,6 +1274,7 @@ private:
         func->args = new AST_arguments();
         func->args->vararg = NULL;
         func->args->kwarg = NULL;
+        RELEASE_ASSERT(0, "should this just be the bare functiondef?");
         return new AST_MakeFunction(func);
     }
 
@@ -1185,84 +1308,108 @@ private:
         }
 
         do_yield(insert_point);
+        // RELEASE_ASSERT(0, "have to delete these new ast nodes");
     }
 
-    AST_expr* remapGeneratorExp(AST_GeneratorExp* node) {
+    BST_expr* remapGeneratorExp(AST_GeneratorExp* node) {
         assert(node->generators.size());
 
         // We need to evaluate the first for-expression immediately, as the PEP dictates; so we pass it in as an
         // argument to the function we create. See
         // https://www.python.org/dev/peps/pep-0289/#early-binding-versus-late-binding
-        AST_expr* first = remapExpr(node->generators[0]->iter);
+        BST_expr* first = remapExpr(node->generators[0]->iter);
         InternedString arg_name = internString("#arg");
 
-        AST_MakeFunction* func = makeFunctionForScope(node);
-        func->function_def->args->args.push_back(makeName(arg_name, AST_TYPE::Param, node->lineno));
-        emitComprehensionLoops(node->lineno, &func->function_def->body, node->generators,
-                               makeName(arg_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true),
+        AST_arguments* genexp_args = new AST_arguments();
+        genexp_args->args.push_back(makeASTName(arg_name, AST_TYPE::Param, node->lineno));
+        std::vector<AST_stmt*> new_body;
+        emitComprehensionLoops(node->lineno, &new_body, node->generators,
+                               makeASTName(arg_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0),
                                [this, node](std::vector<AST_stmt*>* insert_point) {
                                    auto y = new AST_Yield();
                                    y->value = node->elt;
                                    y->lineno = node->lineno;
-                                   insert_point->push_back(makeExpr(y));
+                                   insert_point->push_back(makeASTExpr(y));
                                });
-        cfgizer->runRecursively(func->function_def, func->function_def->args, node);
 
+        // I'm not sure this actually gets used
+        static BoxedString* gen_name = getStaticString("<generator>");
+
+        BoxedCode* code = cfgizer->runRecursively(new_body, gen_name, node->lineno, genexp_args, node);
+        // XXX bad!  this should be tracked ex through co_consts
+        // cur_code->co_consts.push_back(def->code)
+        constants.push_back(code);
+
+        BST_FunctionDef* func = new BST_FunctionDef();
+        func->args = new BST_arguments(); // hacky, but we don't have to fill this in except for the defaults
+        func->code = code;
+        BST_MakeFunction* mkfunc = new BST_MakeFunction(func);
         InternedString func_var_name = nodeName();
-        pushAssign(func_var_name, func);
+        pushAssign(func_var_name, mkfunc);
 
         return makeCall(makeLoad(func_var_name, node, true), first);
     }
 
     void emitComprehensionYield(AST_DictComp* node, InternedString dict_name, std::vector<AST_stmt*>* insert_point) {
         // add entry to the dictionary
-        AST_expr* setitem
-            = makeLoadAttribute(makeName(dict_name, AST_TYPE::Load, node->lineno), internString("__setitem__"), true);
-        insert_point->push_back(makeExpr(makeCall(setitem, node->key, node->value)));
+        AST_expr* setitem = makeASTLoadAttribute(makeASTName(dict_name, AST_TYPE::Load, node->lineno),
+                                                 internString("__setitem__"), true);
+        insert_point->push_back(makeASTExpr(makeASTCall(setitem, node->key, node->value)));
     }
 
     void emitComprehensionYield(AST_SetComp* node, InternedString set_name, std::vector<AST_stmt*>* insert_point) {
         // add entry to the dictionary
-        AST_expr* add = makeLoadAttribute(makeName(set_name, AST_TYPE::Load, node->lineno), internString("add"), true);
-        insert_point->push_back(makeExpr(makeCall(add, node->elt)));
+        AST_expr* add
+            = makeASTLoadAttribute(makeASTName(set_name, AST_TYPE::Load, node->lineno), internString("add"), true);
+        insert_point->push_back(makeASTExpr(makeASTCall(add, node->elt)));
     }
 
-    template <typename ResultType, typename CompType> AST_expr* remapScopedComprehension(CompType* node) {
+    template <typename ResultType, typename CompType> BST_expr* remapScopedComprehension(CompType* node) {
         // See comment in remapGeneratorExp re early vs. late binding.
-        AST_expr* first = remapExpr(node->generators[0]->iter);
+        BST_expr* first = remapExpr(node->generators[0]->iter);
         InternedString arg_name = internString("#arg");
 
-        AST_MakeFunction* func = makeFunctionForScope(node);
-        func->function_def->args->args.push_back(makeName(arg_name, AST_TYPE::Param, node->lineno));
+        AST_arguments* args = new AST_arguments();
+        args->args.push_back(makeASTName(arg_name, AST_TYPE::Param, node->lineno));
+
+        std::vector<AST_stmt*> new_body;
 
         InternedString rtn_name = internString("#comp_rtn");
         auto asgn = new AST_Assign();
-        asgn->targets.push_back(makeName(rtn_name, AST_TYPE::Store, node->lineno));
+        asgn->targets.push_back(makeASTName(rtn_name, AST_TYPE::Store, node->lineno));
         asgn->value = new ResultType();
         asgn->lineno = node->lineno;
-        func->function_def->body.push_back(asgn);
+        new_body.push_back(asgn);
 
         auto lambda =
             [&](std::vector<AST_stmt*>* insert_point) { emitComprehensionYield(node, rtn_name, insert_point); };
-        AST_Name* first_name
-            = makeName(internString("#arg"), AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true);
-        emitComprehensionLoops(node->lineno, &func->function_def->body, node->generators, first_name, lambda);
+        AST_Name* first_name = makeASTName(internString("#arg"), AST_TYPE::Load, node->lineno, /* col_offset */ 0);
+        emitComprehensionLoops(node->lineno, &new_body, node->generators, first_name, lambda);
 
         auto rtn = new AST_Return();
-        rtn->value = makeName(rtn_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true);
+        rtn->value = makeASTName(rtn_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0);
         rtn->lineno = node->lineno;
-        func->function_def->body.push_back(rtn);
+        new_body.push_back(rtn);
 
-        cfgizer->runRecursively(func->function_def, func->function_def->args, node);
+        // I'm not sure this actually gets used
+        static BoxedString* comp_name = getStaticString("<comperehension>");
 
+        BoxedCode* code = cfgizer->runRecursively(new_body, comp_name, node->lineno, args, node);
+        // XXX bad!  this should be tracked ex through co_consts
+        // cur_code->co_consts.push_back(def->code)
+        constants.push_back(code);
+
+        BST_FunctionDef* func = new BST_FunctionDef();
+        func->args = new BST_arguments(); // hacky, but we don't have to fill this in except for the defaults
+        func->code = code;
+        BST_MakeFunction* mkfunc = new BST_MakeFunction(func);
         InternedString func_var_name = nodeName();
-        pushAssign(func_var_name, func);
+        pushAssign(func_var_name, mkfunc);
 
-        return makeCall(makeName(func_var_name, AST_TYPE::Load, node->lineno, /* col_offset */ 0, /* is_kill */ true),
-                        first);
+        return makeCall(makeLoad(func_var_name, node, true), first);
     }
 
-    AST_expr* remapIfExp(AST_IfExp* node) {
+    BST_expr* remapIfExp(AST_IfExp* node) {
         assert(curblock);
 
         InternedString rtn_name = nodeName();
@@ -1293,50 +1440,53 @@ private:
         return makeLoad(rtn_name, node, true);
     }
 
-    AST_slice* remapIndex(AST_Index* node) {
-        AST_Index* rtn = new AST_Index();
+    BST_slice* remapIndex(AST_Index* node) {
+        BST_Index* rtn = new BST_Index();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
         rtn->value = remapExpr(node->value);
         return rtn;
     }
 
-    AST_arguments* remapArguments(AST_arguments* args) {
-        auto rtn = new AST_arguments();
-        rtn = new AST_arguments();
-        // don't remap args, they're not evaluated. NB. expensive vector copy.
-        rtn->args = args->args;
-        rtn->kwarg = args->kwarg;
-        rtn->vararg = args->vararg;
+    BST_arguments* remapArguments(AST_arguments* args) {
+        // TODO: once in BST we don't need the arguments struct except for evaluating defaults.
+        auto rtn = new BST_arguments();
+        // for (auto a : args->args)
+        // rtn->args.push_back(remapExpr(a));
+        // rtn->kwarg = remapName(args->kwarg);
+        // rtn->vararg = remapName(args->vararg);
         for (auto expr : args->defaults)
             rtn->defaults.push_back(remapExpr(expr));
         return rtn;
     }
 
-    AST_expr* remapLambda(AST_Lambda* node) {
-        // we convert lambdas into normal functions (but don't give it a name)
-        auto def = new AST_FunctionDef();
-        def->lineno = node->lineno;
-        def->col_offset = node->col_offset;
-
+    BST_expr* remapLambda(AST_Lambda* node) {
         auto stmt = new AST_Return;
         stmt->lineno = node->lineno;
         stmt->col_offset = node->col_offset;
+
         stmt->value = node->body; // don't remap now; will be CFG'ed later
 
-        def->body = { stmt };
-        def->args = remapArguments(node->args);
+        auto bdef = new BST_FunctionDef();
+        bdef->lineno = node->lineno;
+        bdef->col_offset = node->col_offset;
+        // bdef->name = name;
 
-        cfgizer->runRecursively(def, def->args, node);
+        bdef->args = remapArguments(node->args);
 
-        auto tmp = nodeName();
-        pushAssign(tmp, new AST_MakeFunction(def));
+        auto name = getStaticString("<lambda>");
+        bdef->code = cfgizer->runRecursively({ stmt }, name, node->lineno, node->args, node);
+        // XXX bad!  this should be tracked ex through co_consts
+        // cur_code->co_consts.push_back(def->code)
+        constants.push_back(bdef->code);
 
-        return makeLoad(tmp, def, /* is_kill */ false);
+        return new BST_MakeFunction(bdef);
     }
 
-    AST_expr* remapLangPrimitive(AST_LangPrimitive* node) {
-        AST_LangPrimitive* rtn = new AST_LangPrimitive(node->opcode);
+    BST_expr* remapLangPrimitive(AST_LangPrimitive* node) {
+        // AST_LangPrimitive can be PRINT_EXPR
+        assert(node->opcode == AST_LangPrimitive::PRINT_EXPR);
+        BST_LangPrimitive* rtn = new BST_LangPrimitive(BST_LangPrimitive::PRINT_EXPR);
         rtn->col_offset = node->col_offset;
         rtn->lineno = node->lineno;
 
@@ -1346,10 +1496,10 @@ private:
         return rtn;
     }
 
-    AST_expr* remapList(AST_List* node) {
+    BST_expr* remapList(AST_List* node) {
         assert(node->ctx_type == AST_TYPE::Load);
 
-        AST_List* rtn = new AST_List();
+        BST_List* rtn = new BST_List();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
         rtn->ctx_type = node->ctx_type;
@@ -1360,16 +1510,16 @@ private:
         return rtn;
     }
 
-    AST_expr* remapRepr(AST_Repr* node) {
-        AST_Repr* rtn = new AST_Repr();
+    BST_expr* remapRepr(AST_Repr* node) {
+        BST_Repr* rtn = new BST_Repr();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
         rtn->value = remapExpr(node->value);
         return rtn;
     }
 
-    AST_expr* remapSet(AST_Set* node) {
-        AST_Set* rtn = new AST_Set();
+    BST_expr* remapSet(AST_Set* node) {
+        BST_Set* rtn = new BST_Set();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
 
@@ -1380,8 +1530,8 @@ private:
         return rtn;
     }
 
-    AST_slice* remapSlice(AST_Slice* node) {
-        AST_Slice* rtn = new AST_Slice();
+    BST_slice* remapSlice(AST_Slice* node) {
+        BST_Slice* rtn = new BST_Slice();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
 
@@ -1392,10 +1542,10 @@ private:
         return rtn;
     }
 
-    AST_expr* remapTuple(AST_Tuple* node) {
+    BST_expr* remapTuple(AST_Tuple* node) {
         assert(node->ctx_type == AST_TYPE::Load);
 
-        AST_Tuple* rtn = new AST_Tuple();
+        BST_Tuple* rtn = new BST_Tuple();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
         rtn->ctx_type = node->ctx_type;
@@ -1406,8 +1556,8 @@ private:
         return rtn;
     }
 
-    AST_expr* remapSubscript(AST_Subscript* node) {
-        AST_Subscript* rtn = new AST_Subscript();
+    BST_expr* remapSubscript(AST_Subscript* node) {
+        BST_Subscript* rtn = new BST_Subscript();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
         rtn->ctx_type = node->ctx_type;
@@ -1416,8 +1566,8 @@ private:
         return rtn;
     }
 
-    AST_expr* remapUnaryOp(AST_UnaryOp* node) {
-        AST_UnaryOp* rtn = new AST_UnaryOp();
+    BST_expr* remapUnaryOp(AST_UnaryOp* node) {
+        BST_UnaryOp* rtn = new BST_UnaryOp();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
         rtn->op_type = node->op_type;
@@ -1425,8 +1575,8 @@ private:
         return rtn;
     }
 
-    AST_expr* remapYield(AST_Yield* node) {
-        AST_Yield* rtn = new AST_Yield();
+    BST_expr* remapYield(AST_Yield* node) {
+        BST_Yield* rtn = new BST_Yield();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
         rtn->value = remapExpr(node->value);
@@ -1434,7 +1584,7 @@ private:
         InternedString node_name(nodeName());
         pushAssign(node_name, rtn);
 
-        push_back(makeExpr(new AST_LangPrimitive(AST_LangPrimitive::UNCACHE_EXC_INFO)));
+        push_back(makeExpr(new BST_LangPrimitive(BST_LangPrimitive::UNCACHE_EXC_INFO)));
 
         if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda)
             raiseExcHelper(SyntaxError, "'yield' outside function");
@@ -1442,11 +1592,11 @@ private:
         return makeLoad(node_name, node, /* is_kill */ true);
     }
 
-    AST_slice* remapSlice(AST_slice* node) {
+    BST_slice* remapSlice(AST_slice* node) {
         if (node == nullptr)
             return nullptr;
 
-        AST_slice* rtn = nullptr;
+        BST_slice* rtn = nullptr;
         switch (node->type) {
             case AST_TYPE::Ellipsis:
                 rtn = remapEllipsis(ast_cast<AST_Ellipsis>(node));
@@ -1455,8 +1605,8 @@ private:
                 rtn = remapExtSlice(ast_cast<AST_ExtSlice>(node));
                 break;
             case AST_TYPE::Index:
-                if (ast_cast<AST_Index>(node)->value->type == AST_TYPE::Num)
-                    return node;
+                // if (ast_cast<AST_Index>(node)->value->type == AST_TYPE::Num)
+                // return node;
                 rtn = remapIndex(ast_cast<AST_Index>(node));
                 break;
             case AST_TYPE::Slice:
@@ -1468,16 +1618,27 @@ private:
         return rtn;
     }
 
+    BST_expr* wrap(BST_expr* node) {
+        // this is the part that actually generates temporaries & assigns to them.
+        // TODO: could skip num, str, etc.
+        if (node->type != BST_TYPE::Name || bst_cast<BST_Name>(node)->id.s()[0] != '#') {
+            InternedString name = nodeName();
+            pushAssign(name, node);
+            return makeLoad(name, node, true);
+        }
+        return node;
+    }
+
     // Flattens a nested expression into a flat one, emitting instructions &
     // generating temporary variables as needed.
     //
     // If `wrap_with_assign` is true, it will always return a temporary
     // variable.
-    AST_expr* remapExpr(AST_expr* node, bool wrap_with_assign = true) {
+    BST_expr* remapExpr(AST_expr* node, bool wrap_with_assign = true) {
         if (node == NULL)
             return NULL;
 
-        AST_expr* rtn;
+        BST_expr* rtn;
         switch (node->type) {
             case AST_TYPE::Attribute:
                 rtn = remapAttribute(ast_cast<AST_Attribute>(node));
@@ -1519,13 +1680,15 @@ private:
                 rtn = remapList(ast_cast<AST_List>(node));
                 break;
             case AST_TYPE::ListComp:
-                rtn = remapComprehension<AST_List>(ast_cast<AST_ListComp>(node));
+                rtn = remapComprehension<BST_List>(ast_cast<AST_ListComp>(node));
                 break;
             case AST_TYPE::Name:
                 rtn = remapName(ast_cast<AST_Name>(node));
                 break;
             case AST_TYPE::Num:
-                return node;
+                rtn = remapNum(ast_cast<AST_Num>(node));
+                // TODO: might want to start wrapping literals with assigns too
+                return rtn;
             case AST_TYPE::Repr:
                 rtn = remapRepr(ast_cast<AST_Repr>(node));
                 break;
@@ -1536,7 +1699,9 @@ private:
                 rtn = remapScopedComprehension<AST_Set>(ast_cast<AST_SetComp>(node));
                 break;
             case AST_TYPE::Str:
-                return node;
+                rtn = remapStr(ast_cast<AST_Str>(node));
+                // TODO: might want to start wrapping literals with assigns too
+                return rtn;
             case AST_TYPE::Subscript:
                 rtn = remapSubscript(ast_cast<AST_Subscript>(node));
                 break;
@@ -1553,18 +1718,14 @@ private:
                 RELEASE_ASSERT(0, "%d", node->type);
         }
 
-        // this is the part that actually generates temporaries & assigns to them.
-        if (wrap_with_assign && (rtn->type != AST_TYPE::Name || ast_cast<AST_Name>(rtn)->id.s()[0] != '#')) {
-            InternedString name = nodeName();
-            pushAssign(name, rtn);
-            return makeLoad(name, node, true);
-        } else {
+        if (wrap_with_assign)
+            return wrap(rtn);
+        else
             return rtn;
-        }
     }
 
     // helper for visit_{tryfinally,with}
-    CFGBlock* makeFinallyCont(Why reason, AST_expr* whyexpr, CFGBlock* then_block) {
+    CFGBlock* makeFinallyCont(Why reason, BST_expr* whyexpr, CFGBlock* then_block) {
         CFGBlock* otherwise = cfg->addDeferredBlock();
         otherwise->info = "finally_otherwise";
         pushBranch(makeCompare(AST_TYPE::Eq, whyexpr, makeNum(reason)), then_block, otherwise);
@@ -1631,7 +1792,7 @@ public:
         }
 
         if (type == BST_TYPE::Branch) {
-            BST_TYPE::BST_TYPE test_type = ast_cast<BST_Branch>(node)->test->type;
+            BST_TYPE::BST_TYPE test_type = bst_cast<BST_Branch>(node)->test->type;
             ASSERT(test_type == BST_TYPE::Name || test_type == BST_TYPE::Num, "%d", test_type);
             curblock->push_back(node);
             return;
@@ -1643,9 +1804,9 @@ public:
         }
 
         if (type == BST_TYPE::Expr) {
-            auto expr = ast_cast<BST_Expr>(node)->value;
+            auto expr = bst_cast<BST_Expr>(node)->value;
             if (expr->type == BST_TYPE::LangPrimitive) {
-                auto lp = ast_cast<BST_LangPrimitive>(expr);
+                auto lp = bst_cast<BST_LangPrimitive>(expr);
                 if (lp->opcode == BST_LangPrimitive::UNCACHE_EXC_INFO
                     || lp->opcode == BST_LangPrimitive::SET_EXC_INFO) {
                     curblock->push_back(node);
@@ -1656,30 +1817,30 @@ public:
         }
 
         if (node->type == BST_TYPE::Assign) {
-            BST_Assign* asgn = ast_cast<BST_Assign>(node);
+            BST_Assign* asgn = bst_cast<BST_Assign>(node);
             assert(asgn->targets.size() == 1);
             if (asgn->targets[0]->type == BST_TYPE::Name) {
-                BST_Name* target = ast_cast<BST_Name>(asgn->targets[0]);
+                BST_Name* target = bst_cast<BST_Name>(asgn->targets[0]);
                 if (target->id.s()[0] != '#') {
 // assigning to a non-temporary
 #ifndef NDEBUG
-                    if (!(asgn->value->type == BST_TYPE::Name && ast_cast<BST_Name>(asgn->value)->id.s()[0] == '#')
+                    if (!(asgn->value->type == BST_TYPE::Name && bst_cast<BST_Name>(asgn->value)->id.s()[0] == '#')
                         && asgn->value->type != BST_TYPE::Str && asgn->value->type != BST_TYPE::Num) {
                         fprintf(stdout, "\nError: doing a non-trivial assignment in an invoke is not allowed:\n");
-                        print_ast(node);
+                        print_bst(node);
                         printf("\n");
                         abort();
                     }
 #endif
                     curblock->push_back(node);
                     return;
-                } else if (asgn->value->type == BST_TYPE::Name && ast_cast<BST_Name>(asgn->value)->id.s()[0] == '#') {
+                } else if (asgn->value->type == BST_TYPE::Name && bst_cast<BST_Name>(asgn->value)->id.s()[0] == '#') {
                     // Assigning from one temporary name to another:
                     curblock->push_back(node);
                     return;
                 } else if (asgn->value->type == BST_TYPE::Num || asgn->value->type == BST_TYPE::Str
                            || (asgn->value->type == BST_TYPE::Name
-                               && ast_cast<BST_Name>(asgn->value)->id.s() == "None")) {
+                               && bst_cast<BST_Name>(asgn->value)->id.s() == "None")) {
                     // Assigning to a temporary name from an expression that can't throw:
                     // NB. `None' can't throw in Python, because it's hardcoded
                     // (seriously, try reassigning "None" in CPython).
@@ -1691,10 +1852,10 @@ public:
 
         // Deleting temporary names is safe, since we only use it to represent kills.
         if (node->type == BST_TYPE::Delete) {
-            BST_Delete* del = ast_cast<BST_Delete>(node);
+            BST_Delete* del = bst_cast<BST_Delete>(node);
             assert(del->targets.size() == 1);
             if (del->targets[0]->type == BST_TYPE::Name) {
-                BST_Name* target = ast_cast<BST_Name>(del->targets[0]);
+                BST_Name* target = bst_cast<BST_Name>(del->targets[0]);
                 if (target->id.s()[0] == '#') {
                     curblock->push_back(node);
                     return;
@@ -1736,9 +1897,9 @@ public:
         // TODO: need to clear some temporaries here
         BST_Assign* exc_asgn = new BST_Assign();
         BST_Tuple* target = new BST_Tuple();
-        target->elts.push_back(makeName(exc_info.exc_type_name, BST_TYPE::Store, node->lineno));
-        target->elts.push_back(makeName(exc_info.exc_value_name, BST_TYPE::Store, node->lineno));
-        target->elts.push_back(makeName(exc_info.exc_traceback_name, BST_TYPE::Store, node->lineno));
+        target->elts.push_back(makeName(exc_info.exc_type_name, AST_TYPE::Store, node->lineno));
+        target->elts.push_back(makeName(exc_info.exc_value_name, AST_TYPE::Store, node->lineno));
+        target->elts.push_back(makeName(exc_info.exc_traceback_name, AST_TYPE::Store, node->lineno));
         exc_asgn->targets.push_back(target);
 
         exc_asgn->value = new BST_LangPrimitive(BST_LangPrimitive::LANDINGPAD);
@@ -1753,12 +1914,10 @@ public:
     }
 
     bool visit_classdef(AST_ClassDef* node) override {
-        // waitaminute, who deallocates `node'?
-        auto def = new AST_ClassDef();
+        auto def = new BST_ClassDef();
         def->lineno = node->lineno;
         def->col_offset = node->col_offset;
         def->name = node->name;
-        def->body = node->body; // expensive vector copy
 
         // Decorators are evaluated before bases:
         for (auto expr : node->decorator_list)
@@ -1766,38 +1925,46 @@ public:
         for (auto expr : node->bases)
             def->bases.push_back(remapExpr(expr));
 
-        cfgizer->runRecursively(def, nullptr, node);
+        def->code = cfgizer->runRecursively(node->body, node->name.getBox(), node->lineno, NULL, node);
+        // XXX bad!  this should be tracked ex through co_consts
+        // cur_code->co_consts.push_back(def->code)
+        constants.push_back(def->code);
 
         auto tmp = nodeName();
-        pushAssign(tmp, new AST_MakeClass(def));
+        pushAssign(tmp, new BST_MakeClass(def));
         pushAssign(scoping->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, 0, true));
 
         return true;
     }
 
     bool visit_functiondef(AST_FunctionDef* node) override {
-        auto def = new AST_FunctionDef();
+        auto def = new BST_FunctionDef();
         def->lineno = node->lineno;
         def->col_offset = node->col_offset;
         def->name = node->name;
-        def->body = node->body; // expensive vector copy
+
         // Decorators are evaluated before the defaults, so this *must* go before remapArguments().
         // TODO(rntz): do we have a test for this
         for (auto expr : node->decorator_list)
             def->decorator_list.push_back(remapExpr(expr));
         def->args = remapArguments(node->args);
 
-        cfgizer->runRecursively(def, node->args, node);
+        def->code = cfgizer->runRecursively(node->body, node->name.getBox(), node->lineno, node->args, node);
+        // XXX bad!  this should be tracked ex through co_consts
+        // cur_code->co_consts.push_back(def->code)
+        constants.push_back(def->code);
 
         auto tmp = nodeName();
-        pushAssign(tmp, new AST_MakeFunction(def));
+        pushAssign(tmp, new BST_MakeFunction(def));
         pushAssign(scoping->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno, node->col_offset, true));
 
         return true;
     }
 
     bool visit_global(AST_Global* node) override {
-        push_back(node);
+        BST_Global* newnode = new BST_Global();
+        newnode->names = std::move(node->names);
+        push_back(newnode);
         return true;
     }
 
@@ -1812,12 +1979,12 @@ public:
 
     bool visit_import(AST_Import* node) override {
         for (AST_alias* a : node->names) {
-            AST_LangPrimitive* import = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_NAME);
+            BST_LangPrimitive* import = new BST_LangPrimitive(BST_LangPrimitive::IMPORT_NAME);
             import->lineno = node->lineno;
             import->col_offset = node->col_offset;
 
-            import->args.push_back(new AST_Num());
-            static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
+            import->args.push_back(new BST_Num());
+            static_cast<BST_Num*>(import->args[0])->num_type = AST_Num::INT;
 
             // level == 0 means only check sys path for imports, nothing package-relative,
             // level == -1 means check both sys path and relative for imports.
@@ -1827,9 +1994,9 @@ public:
                 level = -1;
             else
                 level = 0;
-            static_cast<AST_Num*>(import->args[0])->n_int = level;
-            import->args.push_back(new AST_LangPrimitive(AST_LangPrimitive::NONE));
-            import->args.push_back(new AST_Str(a->name.s()));
+            static_cast<BST_Num*>(import->args[0])->n_int = level;
+            import->args.push_back(new BST_LangPrimitive(BST_LangPrimitive::NONE));
+            import->args.push_back(new BST_Str(a->name.s()));
 
             InternedString tmpname = nodeName();
             pushAssign(tmpname, import);
@@ -1851,7 +2018,7 @@ public:
                         l = r + 1;
                         continue;
                     }
-                    auto attr = new AST_Attribute(makeLoad(tmpname, node, true), AST_TYPE::Load,
+                    auto attr = new BST_Attribute(makeLoad(tmpname, node, true), AST_TYPE::Load,
                                                   internString(a->name.s().substr(l, r - l)));
                     attr->lineno = import->lineno;
                     pushAssign(tmpname, attr);
@@ -1865,12 +2032,12 @@ public:
     }
 
     bool visit_importfrom(AST_ImportFrom* node) override {
-        AST_LangPrimitive* import = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_NAME);
+        BST_LangPrimitive* import = new BST_LangPrimitive(BST_LangPrimitive::IMPORT_NAME);
         import->lineno = node->lineno;
         import->col_offset = node->col_offset;
 
-        import->args.push_back(new AST_Num());
-        static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
+        import->args.push_back(new BST_Num());
+        static_cast<BST_Num*>(import->args[0])->num_type = AST_Num::INT;
 
         // level == 0 means only check sys path for imports, nothing package-relative,
         // level == -1 means check both sys path and relative for imports.
@@ -1880,14 +2047,14 @@ public:
             level = -1;
         else
             level = node->level;
-        static_cast<AST_Num*>(import->args[0])->n_int = level;
+        static_cast<BST_Num*>(import->args[0])->n_int = level;
 
-        import->args.push_back(new AST_Tuple());
-        static_cast<AST_Tuple*>(import->args[1])->ctx_type = AST_TYPE::Load;
+        import->args.push_back(new BST_Tuple());
+        static_cast<BST_Tuple*>(import->args[1])->ctx_type = AST_TYPE::Load;
         for (int i = 0; i < node->names.size(); i++) {
-            static_cast<AST_Tuple*>(import->args[1])->elts.push_back(new AST_Str(node->names[i]->name.s()));
+            static_cast<BST_Tuple*>(import->args[1])->elts.push_back(new BST_Str(node->names[i]->name.s()));
         }
-        import->args.push_back(new AST_Str(node->module.s()));
+        import->args.push_back(new BST_Str(node->module.s()));
 
         InternedString tmp_module_name = nodeName();
         pushAssign(tmp_module_name, import);
@@ -1898,23 +2065,23 @@ public:
             bool is_kill = (i == node->names.size());
             if (a->name.s() == "*") {
 
-                AST_LangPrimitive* import_star = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_STAR);
+                BST_LangPrimitive* import_star = new BST_LangPrimitive(BST_LangPrimitive::IMPORT_STAR);
                 import_star->lineno = node->lineno;
                 import_star->col_offset = node->col_offset;
                 import_star->args.push_back(makeLoad(tmp_module_name, node, is_kill));
 
-                AST_Expr* import_star_expr = new AST_Expr();
+                BST_Expr* import_star_expr = new BST_Expr();
                 import_star_expr->value = import_star;
                 import_star_expr->lineno = node->lineno;
                 import_star_expr->col_offset = node->col_offset;
 
                 push_back(import_star_expr);
             } else {
-                AST_LangPrimitive* import_from = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_FROM);
+                BST_LangPrimitive* import_from = new BST_LangPrimitive(BST_LangPrimitive::IMPORT_FROM);
                 import_from->lineno = node->lineno;
                 import_from->col_offset = node->col_offset;
                 import_from->args.push_back(makeLoad(tmp_module_name, node, is_kill));
-                import_from->args.push_back(new AST_Str(a->name.s()));
+                import_from->args.push_back(new BST_Str(a->name.s()));
 
                 InternedString tmp_import_name = nodeName();
                 pushAssign(tmp_import_name, import_from);
@@ -1930,7 +2097,7 @@ public:
     bool visit_assert(AST_Assert* node) override {
         assert(curblock);
 
-        AST_Branch* br = new AST_Branch();
+        BST_Branch* br = new BST_Branch();
         br->test = callNonzero(remapExpr(node->test));
         push_back(br);
 
@@ -1945,12 +2112,12 @@ public:
 
         curblock = iffalse;
 
-        AST_Assert* remapped = new AST_Assert();
+        BST_Assert* remapped = new BST_Assert();
         if (node->msg)
             remapped->msg = remapExpr(node->msg);
         else
             remapped->msg = NULL;
-        AST_Num* fake_test = new AST_Num();
+        BST_Num* fake_test = new BST_Num();
         fake_test->num_type = AST_Num::INT;
         fake_test->n_int = 0;
         remapped->test = fake_test;
@@ -1964,10 +2131,10 @@ public:
     }
 
     bool visit_assign(AST_Assign* node) override {
-        AST_expr* remapped_value = remapExpr(node->value);
+        BST_expr* remapped_value = remapExpr(node->value);
 
         for (int i = 0; i < node->targets.size(); i++) {
-            AST_expr* val;
+            BST_expr* val;
             if (i == node->targets.size() - 1)
                 val = remapped_value;
             else
@@ -1995,8 +2162,8 @@ public:
         // Finally, due to possibility of exceptions, we don't want to assign directly
         // to the final target at the same time as evaluating the augbinop
 
-        AST_expr* remapped_target;
-        AST_expr* remapped_lhs;
+        BST_expr* remapped_target;
+        BST_expr* remapped_lhs;
 
         // TODO bad that it's reusing the AST nodes?
         switch (node->target->type) {
@@ -2005,7 +2172,7 @@ public:
                 assert(n->ctx_type == AST_TYPE::Store);
                 InternedString n_name(nodeName());
                 pushAssign(n_name, makeLoad(n->id, node));
-                remapped_target = n;
+                remapped_target = remapName(n);
                 remapped_lhs = makeLoad(n_name, node, /* is_kill */ true);
                 break;
             }
@@ -2013,7 +2180,7 @@ public:
                 AST_Subscript* s = ast_cast<AST_Subscript>(node->target);
                 assert(s->ctx_type == AST_TYPE::Store);
 
-                AST_Subscript* s_target = new AST_Subscript();
+                BST_Subscript* s_target = new BST_Subscript();
                 s_target->value = remapExpr(s->value);
                 s_target->slice = remapSlice(s->slice);
                 s_target->ctx_type = AST_TYPE::Store;
@@ -2021,13 +2188,13 @@ public:
                 s_target->lineno = s->lineno;
                 remapped_target = s_target;
 
-                AST_Subscript* s_lhs = new AST_Subscript();
+                BST_Subscript* s_lhs = new BST_Subscript();
                 s_lhs->value = _dup(s_target->value);
                 s_lhs->slice = _dup(s_target->slice);
                 s_lhs->col_offset = s->col_offset;
                 s_lhs->lineno = s->lineno;
                 s_lhs->ctx_type = AST_TYPE::Load;
-                remapped_lhs = remapExpr(s_lhs);
+                remapped_lhs = wrap(s_lhs);
 
                 break;
             }
@@ -2035,21 +2202,21 @@ public:
                 AST_Attribute* a = ast_cast<AST_Attribute>(node->target);
                 assert(a->ctx_type == AST_TYPE::Store);
 
-                AST_Attribute* a_target = new AST_Attribute();
+                BST_Attribute* a_target = new BST_Attribute();
                 a_target->value = remapExpr(a->value);
-                a_target->attr = a->attr;
+                a_target->attr = scoping->mangleName(a->attr);
                 a_target->ctx_type = AST_TYPE::Store;
                 a_target->col_offset = a->col_offset;
                 a_target->lineno = a->lineno;
                 remapped_target = a_target;
 
-                AST_Attribute* a_lhs = new AST_Attribute();
+                BST_Attribute* a_lhs = new BST_Attribute();
                 a_lhs->value = _dup(a_target->value);
-                a_lhs->attr = a->attr;
+                a_lhs->attr = a_target->attr;
                 a_lhs->ctx_type = AST_TYPE::Load;
                 a_lhs->col_offset = a->col_offset;
                 a_lhs->lineno = a->lineno;
-                remapped_lhs = remapExpr(a_lhs);
+                remapped_lhs = wrap(a_lhs);
 
                 break;
             }
@@ -2057,7 +2224,7 @@ public:
                 RELEASE_ASSERT(0, "%d", node->target->type);
         }
 
-        AST_AugBinOp* binop = new AST_AugBinOp();
+        BST_AugBinOp* binop = new BST_AugBinOp();
         binop->op_type = remapBinOpType(node->op_type);
         binop->left = remapped_lhs;
         binop->right = remapExpr(node->value);
@@ -2080,14 +2247,14 @@ public:
 
     bool visit_delete(AST_Delete* node) override {
         for (auto t : node->targets) {
-            AST_Delete* astdel = new AST_Delete();
+            BST_Delete* astdel = new BST_Delete();
             astdel->lineno = node->lineno;
             astdel->col_offset = node->col_offset;
-            AST_expr* target = NULL;
+            BST_expr* target = NULL;
             switch (t->type) {
                 case AST_TYPE::Subscript: {
                     AST_Subscript* s = static_cast<AST_Subscript*>(t);
-                    AST_Subscript* astsubs = new AST_Subscript();
+                    BST_Subscript* astsubs = new BST_Subscript();
                     astsubs->value = remapExpr(s->value);
                     astsubs->slice = remapSlice(s->slice);
                     astsubs->ctx_type = AST_TYPE::Del;
@@ -2095,7 +2262,7 @@ public:
                     break;
                 }
                 case AST_TYPE::Attribute: {
-                    AST_Attribute* astattr = static_cast<AST_Attribute*>(remapExpr(t, false));
+                    BST_Attribute* astattr = static_cast<BST_Attribute*>(remapExpr(t, false));
                     astattr->ctx_type = AST_TYPE::Del;
                     target = astattr;
                     break;
@@ -2143,7 +2310,7 @@ public:
     }
 
     bool visit_expr(AST_Expr* node) override {
-        AST_Expr* remapped = new AST_Expr();
+        BST_Expr* remapped = new BST_Expr();
         remapped->lineno = node->lineno;
         remapped->col_offset = node->col_offset;
         remapped->value = remapExpr(node->value, false);
@@ -2152,11 +2319,11 @@ public:
     }
 
     bool visit_print(AST_Print* node) override {
-        AST_expr* dest = remapExpr(node->dest);
+        BST_expr* dest = remapExpr(node->dest);
 
         int i = 0;
         for (auto v : node->values) {
-            AST_Print* remapped = new AST_Print();
+            BST_Print* remapped = new BST_Print();
             remapped->col_offset = node->col_offset;
             remapped->lineno = node->lineno;
 
@@ -2177,7 +2344,7 @@ public:
         if (node->values.size() == 0) {
             assert(node->nl);
 
-            AST_Print* final = new AST_Print();
+            BST_Print* final = new BST_Print();
             final->col_offset = node->col_offset;
             final->lineno = node->lineno;
             // TODO not good to reuse 'dest' like this
@@ -2208,7 +2375,7 @@ public:
     bool visit_if(AST_If* node) override {
         assert(curblock);
 
-        AST_Branch* br = new AST_Branch();
+        BST_Branch* br = new BST_Branch();
         br->col_offset = node->col_offset;
         br->lineno = node->lineno;
         br->test = callNonzero(remapExpr(node->test));
@@ -2274,7 +2441,7 @@ public:
     }
 
     bool visit_exec(AST_Exec* node) override {
-        AST_Exec* astexec = new AST_Exec();
+        BST_Exec* astexec = new BST_Exec();
         astexec->lineno = node->lineno;
         astexec->col_offset = node->col_offset;
         astexec->body = remapExpr(node->body);
@@ -2292,7 +2459,7 @@ public:
         pushJump(test_block);
 
         curblock = test_block;
-        AST_Branch* br = makeBranch(remapExpr(node->test));
+        BST_Branch* br = makeBranch(remapExpr(node->test));
         CFGBlock* test_block_end = curblock;
         push_back(br);
 
@@ -2341,9 +2508,9 @@ public:
         return true;
     }
 
-    AST_stmt* makeKill(InternedString name) {
+    BST_stmt* makeKill(InternedString name) {
         // There might be a better way to represent this, maybe with a dedicated AST_Kill bytecode?
-        auto del = new AST_Delete();
+        auto del = new BST_Delete();
         del->targets.push_back(makeName(name, AST_TYPE::Del, 0, 0, false));
         return del;
     }
@@ -2355,24 +2522,24 @@ public:
         // is it really worth it?  It got so bad because all the edges became
         // critical edges and needed to be broken, otherwise it's not too different.
 
-        AST_expr* remapped_iter = remapExpr(node->iter);
-        AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER);
+        BST_expr* remapped_iter = remapExpr(node->iter);
+        BST_LangPrimitive* iter_call = new BST_LangPrimitive(BST_LangPrimitive::GET_ITER);
         iter_call->args.push_back(remapped_iter);
         iter_call->lineno = node->lineno;
 
         InternedString itername = createUniqueName("#iter_");
         pushAssign(itername, iter_call);
 
-        AST_expr* next_attr = makeLoadAttribute(makeLoad(itername, node), internString("next"), true);
+        BST_expr* next_attr = makeLoadAttribute(makeLoad(itername, node), internString("next"), true);
 
         CFGBlock* test_block = cfg->addBlock();
         pushJump(test_block);
         curblock = test_block;
 
-        AST_LangPrimitive* test_call = new AST_LangPrimitive(AST_LangPrimitive::HASNEXT);
+        BST_LangPrimitive* test_call = new BST_LangPrimitive(BST_LangPrimitive::HASNEXT);
         test_call->lineno = node->lineno;
         test_call->args.push_back(makeName(itername, AST_TYPE::Load, node->lineno));
-        AST_Branch* test_br = makeBranch(remapExpr(test_call));
+        BST_Branch* test_br = makeBranch(test_call);
 
         push_back(test_br);
         CFGBlock* test_true = cfg->addBlock();
@@ -2409,10 +2576,10 @@ public:
         popContinuation();
 
         if (curblock) {
-            AST_LangPrimitive* end_call = new AST_LangPrimitive(AST_LangPrimitive::HASNEXT);
+            BST_LangPrimitive* end_call = new BST_LangPrimitive(BST_LangPrimitive::HASNEXT);
             end_call->args.push_back(makeName(itername, AST_TYPE::Load, node->lineno));
             end_call->lineno = node->lineno;
-            AST_Branch* end_br = makeBranch(remapExpr(end_call));
+            BST_Branch* end_br = makeBranch(end_call);
             push_back(end_br);
 
             CFGBlock* end_true = cfg->addBlock();
@@ -2455,7 +2622,7 @@ public:
     bool visit_raise(AST_Raise* node) override {
         assert(curblock);
 
-        AST_Raise* remapped = new AST_Raise();
+        BST_Raise* remapped = new BST_Raise();
         remapped->col_offset = node->col_offset;
         remapped->lineno = node->lineno;
 
@@ -2517,16 +2684,16 @@ public:
 
                 CFGBlock* exc_next = nullptr;
                 if (exc_handler->type) {
-                    AST_expr* handled_type = remapExpr(exc_handler->type);
+                    BST_expr* handled_type = remapExpr(exc_handler->type);
 
-                    AST_LangPrimitive* is_caught_here = new AST_LangPrimitive(AST_LangPrimitive::CHECK_EXC_MATCH);
+                    BST_LangPrimitive* is_caught_here = new BST_LangPrimitive(BST_LangPrimitive::CHECK_EXC_MATCH);
                     // TODO This is supposed to be exc_type_name (value doesn't matter for checking matches)
                     is_caught_here->args.push_back(makeLoad(exc_value_name, exc_handler));
                     is_caught_here->args.push_back(handled_type);
                     is_caught_here->lineno = exc_handler->lineno;
 
-                    AST_Branch* br = new AST_Branch();
-                    br->test = callNonzero(remapExpr(is_caught_here));
+                    BST_Branch* br = new BST_Branch();
+                    br->test = callNonzero(is_caught_here);
                     br->lineno = exc_handler->lineno;
 
                     CFGBlock* exc_handle = cfg->addBlock();
@@ -2546,7 +2713,7 @@ public:
                     pushAssign(exc_handler->name, makeLoad(exc_value_name, exc_handler));
                 }
 
-                AST_LangPrimitive* set_exc_info = new AST_LangPrimitive(AST_LangPrimitive::SET_EXC_INFO);
+                BST_LangPrimitive* set_exc_info = new BST_LangPrimitive(BST_LangPrimitive::SET_EXC_INFO);
                 set_exc_info->args.push_back(makeLoad(exc_type_name, node, true));
                 set_exc_info->args.push_back(makeLoad(exc_value_name, node, true));
                 set_exc_info->args.push_back(makeLoad(exc_traceback_name, node, true));
@@ -2571,7 +2738,7 @@ public:
             }
 
             if (!caught_all) {
-                AST_Raise* raise = new AST_Raise();
+                BST_Raise* raise = new BST_Raise();
                 raise->arg0 = makeLoad(exc_type_name, node, true);
                 raise->arg1 = makeLoad(exc_value_name, node, true);
                 raise->arg2 = makeLoad(exc_traceback_name, node, true);
@@ -2711,13 +2878,13 @@ public:
 
         // TODO(rntz): for some reason, in the interpreter (but not the JIT), this is looking up __exit__ on the
         // instance rather than the class. See test/tests/with_ctxclass_instance_attrs.py.
-        AST_expr* exit = makeLoadAttribute(makeLoad(ctxmgrname, node), internString("__exit__"), true);
+        BST_expr* exit = makeLoadAttribute(makeLoad(ctxmgrname, node), internString("__exit__"), true);
         pushAssign(exitname, exit);
 
         // Oddly, this acces to __enter__ doesn't suffer from the same bug. Perhaps it has something to do with
         // __enter__ being called immediately?
-        AST_expr* enter = makeLoadAttribute(makeLoad(ctxmgrname, node, true), internString("__enter__"), true);
-        enter = remapExpr(makeCall(enter));
+        BST_expr* enter = makeLoadAttribute(makeLoad(ctxmgrname, node, true), internString("__enter__"), true);
+        enter = wrap(makeCall(enter));
         if (node->optional_vars)
             pushAssign(node->optional_vars, enter);
         else
@@ -2819,7 +2986,7 @@ void CFG::print(llvm::raw_ostream& stream) {
         blocks[i]->print(stream);
 }
 
-class AssignVRegsVisitor : public NoopASTVisitor {
+class AssignVRegsVisitor : public NoopBSTVisitor {
 public:
     CFGBlock* current_block;
     int next_vreg;
@@ -2831,15 +2998,15 @@ public:
 
     AssignVRegsVisitor() : current_block(0), next_vreg(0) {}
 
-    bool visit_alias(AST_alias* node) override { RELEASE_ASSERT(0, "these should be removed by the cfg"); }
+    bool visit_alias(BST_alias* node) override { RELEASE_ASSERT(0, "these should be removed by the cfg"); }
 
-    bool visit_arguments(AST_arguments* node) override {
-        for (AST_expr* d : node->defaults)
+    bool visit_arguments(BST_arguments* node) override {
+        for (BST_expr* d : node->defaults)
             d->accept(this);
         return true;
     }
 
-    bool visit_classdef(AST_ClassDef* node) override {
+    bool visit_classdef(BST_ClassDef* node) override {
         for (auto e : node->bases)
             e->accept(this);
         for (auto e : node->decorator_list)
@@ -2847,14 +3014,14 @@ public:
         return true;
     }
 
-    bool visit_functiondef(AST_FunctionDef* node) override {
+    bool visit_functiondef(BST_FunctionDef* node) override {
         for (auto* d : node->decorator_list)
             d->accept(this);
         node->args->accept(this);
         return true;
     }
 
-    bool visit_lambda(AST_Lambda* node) override {
+    bool visit_lambda(BST_Lambda* node) override {
         node->args->accept(this);
         return true;
     }
@@ -2866,7 +3033,7 @@ public:
         return sym_blocks_map[id].size() == 1;
     }
 
-    bool visit_name(AST_Name* node) override {
+    bool visit_name(BST_Name* node) override {
         if (node->vreg != -1)
             return true;
 
@@ -2932,7 +3099,7 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names) {
                 }
             }
 
-            for (AST_stmt* stmt : b->body) {
+            for (BST_stmt* stmt : b->body) {
                 stmt->accept(&visitor);
             }
 
@@ -2961,51 +3128,55 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names) {
 }
 
 
-static CFG* computeCFG(AST* ast, BoxedString* filename, SourceInfo* source, const ParamNames& param_names,
-                       ScopeInfo* scoping, ModuleCFGProcessor* cfgizer) {
+static CFG* computeCFG(llvm::ArrayRef<AST_stmt*> body, AST_TYPE::AST_TYPE ast_type, int lineno, AST_arguments* args,
+                       BoxedString* filename, SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
+                       ModuleCFGProcessor* cfgizer) {
     STAT_TIMER(t0, "us_timer_computecfg", 0);
-
-    auto body = ast->getBody();
 
     CFG* rtn = new CFG();
 
+    assert((bool)args == (ast_type == AST_TYPE::FunctionDef || ast_type == AST_TYPE::Lambda));
+
     auto&& stringpool = cfgizer->stringpool;
-    CFGVisitor visitor(filename, source, stringpool, scoping, ast->type, source->future_flags, rtn, cfgizer);
+    CFGVisitor visitor(filename, source, stringpool, scoping, ast_type, source->future_flags, rtn, cfgizer);
 
     bool skip_first = false;
 
-    if (ast->type == AST_TYPE::ClassDef) {
+    if (ast_type == AST_TYPE::ClassDef) {
         // A classdef always starts with "__module__ = __name__"
-        AST_Assign* module_assign = new AST_Assign();
-        auto module_name_target = new AST_Name(stringpool.get("__module__"), AST_TYPE::Store, ast->lineno);
+        BST_Assign* module_assign = new BST_Assign();
+        auto module_name_target = new BST_Name(stringpool.get("__module__"), AST_TYPE::Store, lineno);
         fillScopingInfo(module_name_target, scoping);
 
-        auto module_name_value = new AST_Name(stringpool.get("__name__"), AST_TYPE::Load, ast->lineno);
+        auto module_name_value = new BST_Name(stringpool.get("__name__"), AST_TYPE::Load, lineno);
         fillScopingInfo(module_name_value, scoping);
 
         module_assign->targets.push_back(module_name_target);
         module_assign->value = module_name_value;
 
-        module_assign->lineno = ast->lineno;
+        module_assign->lineno = lineno;
         visitor.push_back(module_assign);
 
         // If the first statement is just a single string, transform it to an assignment to __doc__
         if (body.size() && body[0]->type == AST_TYPE::Expr) {
             AST_Expr* first_expr = ast_cast<AST_Expr>(body[0]);
             if (first_expr->value->type == AST_TYPE::Str) {
-                AST_Assign* doc_assign = new AST_Assign();
-                auto doc_target_name = new AST_Name(stringpool.get("__doc__"), AST_TYPE::Store, ast->lineno);
+                BST_Assign* doc_assign = new BST_Assign();
+                auto doc_target_name = new BST_Name(stringpool.get("__doc__"), AST_TYPE::Store, lineno);
                 fillScopingInfo(doc_target_name, scoping);
                 doc_assign->targets.push_back(doc_target_name);
-                doc_assign->value = first_expr->value;
-                doc_assign->lineno = ast->lineno;
+                auto doc_val = new BST_Str();
+                doc_val->str_data = ast_cast<AST_Str>(first_expr->value)->str_data;
+                doc_val->str_type = ast_cast<AST_Str>(first_expr->value)->str_type;
+                doc_assign->value = doc_val;
+                doc_assign->lineno = lineno;
                 visitor.push_back(doc_assign);
                 skip_first = true;
             }
         }
     }
 
-    if (ast->type == AST_TYPE::FunctionDef || ast->type == AST_TYPE::Lambda) {
+    if (ast_type == AST_TYPE::FunctionDef || ast_type == AST_TYPE::Lambda) {
         // Unpack tuple arguments
         // Tuple arguments get assigned names ".0", ".1" etc. So this
         // def f(a, (b,c), (d,e)):
@@ -3013,18 +3184,12 @@ static CFG* computeCFG(AST* ast, BoxedString* filename, SourceInfo* source, cons
         // def f(a, .1, .2):
         //     (b, c) = .1
         //     (d, e) = .2
-        AST_arguments* args;
-        if (ast->type == AST_TYPE::FunctionDef) {
-            args = ast_cast<AST_FunctionDef>(ast)->args;
-        } else {
-            args = ast_cast<AST_Lambda>(ast)->args;
-        }
         int counter = 0;
         for (AST_expr* arg_expr : args->args) {
             if (arg_expr->type == AST_TYPE::Tuple) {
                 InternedString arg_name = stringpool.get("." + std::to_string(counter));
-                AST_Name* arg_name_expr
-                    = new AST_Name(arg_name, AST_TYPE::Load, arg_expr->lineno, arg_expr->col_offset);
+                BST_Name* arg_name_expr
+                    = new BST_Name(arg_name, AST_TYPE::Load, arg_expr->lineno, arg_expr->col_offset);
                 assert(scoping->getScopeTypeOfName(arg_name) == ScopeInfo::VarScopeType::FAST);
                 arg_name_expr->lookup_type = ScopeInfo::VarScopeType::FAST;
                 visitor.pushAssign(arg_expr, arg_name_expr);
@@ -3044,19 +3209,19 @@ static CFG* computeCFG(AST* ast, BoxedString* filename, SourceInfo* source, cons
 
     // The functions we create for classdefs are supposed to return a dictionary of their locals.
     // This is the place that we add all of that:
-    if (ast->type == AST_TYPE::ClassDef) {
-        AST_LangPrimitive* locals = new AST_LangPrimitive(AST_LangPrimitive::LOCALS);
+    if (ast_type == AST_TYPE::ClassDef) {
+        BST_LangPrimitive* locals = new BST_LangPrimitive(BST_LangPrimitive::LOCALS);
 
-        AST_Return* rtn = new AST_Return();
-        rtn->lineno = getLastLineno(ast);
+        BST_Return* rtn = new BST_Return();
+        rtn->lineno = getLastLineno(body, lineno);
         rtn->value = locals;
         visitor.push_back(rtn);
     } else {
         // Put a fake "return" statement at the end of every function just to make sure they all have one;
         // we already have to support multiple return statements in a function, but this way we can avoid
         // having to support not having a return statement:
-        AST_Return* return_stmt = new AST_Return();
-        return_stmt->lineno = getLastLineno(ast);
+        BST_Return* return_stmt = new BST_Return();
+        return_stmt->lineno = getLastLineno(body, lineno);
         return_stmt->col_offset = 0;
         return_stmt->value = NULL;
         visitor.push_back(return_stmt);
@@ -3085,9 +3250,9 @@ static CFG* computeCFG(AST* ast, BoxedString* filename, SourceInfo* source, cons
         ASSERT(b->body.size(), "%d", b->idx);
         ASSERT(b->successors.size() <= 2, "%d has too many successors!", b->idx);
         if (b->successors.size() == 0) {
-            AST_stmt* terminator = b->body.back();
-            assert(terminator->type == AST_TYPE::Return || terminator->type == AST_TYPE::Raise
-                   || terminator->type == AST_TYPE::Raise || terminator->type == AST_TYPE::Assert);
+            BST_stmt* terminator = b->body.back();
+            assert(terminator->type == BST_TYPE::Return || terminator->type == BST_TYPE::Raise
+                   || terminator->type == BST_TYPE::Raise || terminator->type == BST_TYPE::Assert);
         }
 
         if (b->predecessors.size() == 0) {
@@ -3137,17 +3302,17 @@ static CFG* computeCFG(AST* ast, BoxedString* filename, SourceInfo* source, cons
 
     assert(rtn->getStartingBlock()->idx == 0);
 
-    std::vector<AST*> flattened;
+    std::vector<BST*> flattened;
     for (auto b : rtn->blocks)
         flatten(b->body, flattened, true);
 
-    std::unordered_map<AST*, int> deduped;
+    std::unordered_map<BST*, int> deduped;
     bool no_dups = true;
     for (auto e : flattened) {
         deduped[e]++;
         if (deduped[e] == 2) {
             printf("Duplicated: ");
-            print_ast(e);
+            print_bst(e);
             printf("\n");
             no_dups = false;
         }
@@ -3223,11 +3388,11 @@ static CFG* computeCFG(AST* ast, BoxedString* filename, SourceInfo* source, cons
             if (b2->predecessors.size() != 1)
                 break;
 
-            AST_TYPE::AST_TYPE end_ast_type = b->body[b->body.size() - 1]->type;
-            assert(end_ast_type == AST_TYPE::Jump || end_ast_type == AST_TYPE::Invoke);
-            if (end_ast_type == AST_TYPE::Invoke) {
+            BST_TYPE::BST_TYPE end_ast_type = b->body[b->body.size() - 1]->type;
+            assert(end_ast_type == BST_TYPE::Jump || end_ast_type == BST_TYPE::Invoke);
+            if (end_ast_type == BST_TYPE::Invoke) {
                 // TODO probably shouldn't be generating these anyway:
-                auto invoke = ast_cast<AST_Invoke>(b->body.back());
+                auto invoke = bst_cast<BST_Invoke>(b->body.back());
                 assert(invoke->normal_dest == invoke->exc_dest);
                 break;
             }
@@ -3262,33 +3427,66 @@ static CFG* computeCFG(AST* ast, BoxedString* filename, SourceInfo* source, cons
 }
 
 
-void ModuleCFGProcessor::runRecursively(AST* ast, AST_arguments* args, AST* orig_node) {
+BoxedCode* ModuleCFGProcessor::runRecursively(llvm::ArrayRef<AST_stmt*> body, BoxedString* name, int lineno,
+                                              AST_arguments* args, AST* orig_node) {
     ScopeInfo* scope_info = scoping.getScopeInfoForNode(orig_node);
-    std::unique_ptr<SourceInfo> si(
-        new SourceInfo(bm, ScopingResults(scope_info, scoping.areGlobalsFromModule()), future_flags, ast));
-    ParamNames param_names(ast, stringpool);
+
+    AST_TYPE::AST_TYPE ast_type = orig_node->type;
+    bool is_generator;
+    switch (ast_type) {
+        case AST_TYPE::ClassDef:
+        case AST_TYPE::Module:
+        case AST_TYPE::Expression:
+        case AST_TYPE::Suite:
+            is_generator = false;
+            break;
+        case AST_TYPE::GeneratorExp:
+        case AST_TYPE::DictComp:
+        case AST_TYPE::SetComp:
+            is_generator = ast_type == AST_TYPE::GeneratorExp;
+            assert(containsYield(body) == is_generator);
+
+            // Hack: our old system represented this as ast_type == FuntionDef, so
+            // keep doing that for now
+            ast_type = AST_TYPE::FunctionDef;
+
+            break;
+        case AST_TYPE::FunctionDef:
+        case AST_TYPE::Lambda:
+            is_generator = containsYield(orig_node);
+            break;
+        default:
+            RELEASE_ASSERT(0, "Unknown type: %d", ast_type);
+            break;
+    }
+
+    std::unique_ptr<SourceInfo> si(new SourceInfo(bm, ScopingResults(scope_info, scoping.areGlobalsFromModule()),
+                                                  future_flags, ast_type, is_generator));
+
+    assert((bool)args == (ast_type == AST_TYPE::FunctionDef || ast_type == AST_TYPE::Lambda));
+
+    ParamNames param_names(args, stringpool);
 
     for (auto e : param_names.allArgsAsName())
         fillScopingInfo(e, scope_info);
 
-    si->cfg = computeCFG(ast, fn, si.get(), param_names, scope_info, this);
+    si->cfg = computeCFG(body, ast_type, lineno, args, fn, si.get(), param_names, scope_info, this);
 
     BoxedCode* code;
     if (args)
-        code = new BoxedCode(args->args.size(), args->vararg, args->kwarg, ast->lineno, std::move(si),
-                             std::move(param_names), fn, ast->getName(), autoDecref(ast->getDocString()));
+        code = new BoxedCode(args->args.size(), args->vararg, args->kwarg, lineno, std::move(si),
+                             std::move(param_names), fn, name, autoDecref(getDocString(body)));
     else
-        code = new BoxedCode(0, false, false, ast->lineno, std::move(si), std::move(param_names), fn, ast->getName(),
-                             autoDecref(ast->getDocString()));
+        code = new BoxedCode(0, false, false, lineno, std::move(si), std::move(param_names), fn, name,
+                             autoDecref(getDocString(body)));
 
-    // XXX very bad!  Should properly track this:
-    constants.push_back(code);
-
-    ast->getCode() = code;
+    return code;
 }
 
-void computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn, BoxedModule* bm) {
-    ModuleCFGProcessor(ast, globals_from_module, future_flags, fn, bm).runRecursively(ast, nullptr, ast);
+BoxedCode* computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn,
+                          BoxedModule* bm) {
+    return ModuleCFGProcessor(ast, globals_from_module, future_flags, fn, bm)
+        .runRecursively(ast->getBody(), ast->getName(), ast->lineno, nullptr, ast);
 }
 
 void printCFG(CFG* cfg) {

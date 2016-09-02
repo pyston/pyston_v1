@@ -156,7 +156,7 @@ class CFG;
 class AST;
 class BST;
 class BST_FunctionDef;
-class BST_arguments;
+class AST_arguments;
 class BST_expr;
 class BST_Name;
 class BST_stmt;
@@ -234,7 +234,7 @@ struct ParamNames {
     unsigned char has_vararg_name : 1;
     unsigned char has_kwarg_name : 1;
 
-    explicit ParamNames(AST* ast, InternedStringPool& pool);
+    explicit ParamNames(AST_arguments* ast, InternedStringPool& pool);
     ParamNames(const std::vector<const char*>& args, const char* vararg, const char* kwarg);
     static ParamNames empty() { return ParamNames(); }
 
@@ -502,7 +502,7 @@ public:
 
     LivenessAnalysis* getLiveness();
 
-    SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, AST* ast);
+    SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, int ast_type, bool is_generator);
     ~SourceInfo();
 };
 

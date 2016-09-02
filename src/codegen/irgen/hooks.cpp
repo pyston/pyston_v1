@@ -231,10 +231,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     RELEASE_ASSERT(fn, "");
 
     FutureFlags future_flags = getFutureFlags(m->body, fn);
-    computeAllCFGs(m, /* globals_from_module */ true, future_flags, autoDecref(boxString(fn)), bm);
-
-    BoxedCode* code = m->getCode();
-    assert(code);
+    BoxedCode* code = computeAllCFGs(m, /* globals_from_module */ true, future_flags, autoDecref(boxString(fn)), bm);
+    AUTO_DECREF(code);
 
     static BoxedString* doc_str = getStaticString("__doc__");
     bm->setattr(doc_str, code->_doc, NULL);
@@ -279,8 +277,7 @@ static BoxedCode* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_stmt*> bo
         flags->cf_flags = future_flags;
     }
 
-    computeAllCFGs(source, /* globals_from_module */ false, future_flags, fn, getCurrentModule());
-    return source->getCode();
+    return computeAllCFGs(source, /* globals_from_module */ false, future_flags, fn, getCurrentModule());
 }
 
 static BoxedCode* compileExec(AST_Module* parsedModule, BoxedString* fn, PyCompilerFlags* flags) {
@@ -319,7 +316,7 @@ extern "C" PyCodeObject* PyAST_Compile(struct _mod* _mod, const char* filename, 
                 return NULL;
         }
 
-        return (PyCodeObject*)incref(code);
+        return (PyCodeObject*)code;
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;

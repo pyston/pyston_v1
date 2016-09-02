@@ -159,7 +159,9 @@ public:
     bool areGlobalsFromModule() { return globals_from_module; }
 };
 
+class AST_stmt;
 bool containsYield(AST* ast);
+bool containsYield(llvm::ArrayRef<AST_stmt*> ast);
 
 class BoxedString;
 BoxedString* mangleNameBoxedString(BoxedString* id, BoxedString* private_name);

@@ -43,6 +43,12 @@ template <class T> static void visitVector(const std::vector<T*>& vec, BSTVisito
     }
 }
 
+static void visitCFG(CFG* cfg, BSTVisitor* v) {
+    for (auto bb : cfg->blocks)
+        for (auto e : bb->body)
+            e->accept(v);
+}
+
 void BST_alias::accept(BSTVisitor* v) {
     bool skip = v->visit_alias(this);
     if (skip)
@@ -218,7 +224,7 @@ void BST_ClassDef::accept(BSTVisitor* v) {
 
     visitVector(this->bases, v);
     visitVector(this->decorator_list, v);
-    visitVector(this->body, v);
+    visitCFG(this->code->source->cfg, v);
 }
 
 void BST_ClassDef::accept_stmt(StmtVisitor* v) {
@@ -364,7 +370,7 @@ void BST_FunctionDef::accept(BSTVisitor* v) {
 
     visitVector(decorator_list, v);
     args->accept(v);
-    visitVector(body, v);
+    visitCFG(code->source->cfg, v);
 }
 
 void BST_FunctionDef::accept_stmt(StmtVisitor* v) {
@@ -1084,11 +1090,16 @@ bool PrintVisitor::visit_classdef(BST_ClassDef* node) {
     stream << ")";
 
     indent += 4;
+    stream << '\n';
+    printIndent();
+    stream << "...";
+#if 0
     for (int i = 0, n = node->body.size(); i < n; i++) {
         stream << "\n";
         printIndent();
         node->body[i]->accept(this);
     }
+#endif
     indent -= 4;
 
     return true;
@@ -1215,11 +1226,16 @@ bool PrintVisitor::visit_functiondef(BST_FunctionDef* node) {
     stream << ")";
 
     indent += 4;
+    stream << '\n';
+    printIndent();
+    stream << "...";
+#if 0
     for (int i = 0; i < node->body.size(); i++) {
         stream << "\n";
         printIndent();
         node->body[i]->accept(this);
     }
+#endif
     indent -= 4;
     return true;
 }

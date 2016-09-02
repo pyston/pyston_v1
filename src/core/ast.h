@@ -190,12 +190,11 @@ public:
 
     // These could be virtual methods, but since we already keep track of the type use a switch statement
     // like everywhere else.
-    BoxedCode*& getCode();
     InternedStringPool& getStringpool();
     llvm::ArrayRef<AST_stmt*> getBody();
-    Box* getDocString();
     BORROWED(BoxedString*) getName() noexcept;
 };
+Box* getDocString(llvm::ArrayRef<AST_stmt*> body);
 
 class AST_expr : public AST {
 public:
@@ -398,8 +397,6 @@ public:
     std::vector<AST_stmt*> body;
     InternedString name;
 
-    BoxedCode* code;
-
     AST_ClassDef() : AST_stmt(AST_TYPE::ClassDef) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ClassDef;
@@ -506,8 +503,6 @@ public:
     // this should be an expr but we convert it into a AST_Return(AST_expr) to make the code simpler
     AST_stmt* body;
 
-    BoxedCode* code;
-
     virtual void accept(ASTVisitor* v);
 
     AST_Expression(std::unique_ptr<InternedStringPool> interned_strings)
@@ -546,8 +541,6 @@ public:
     std::vector<AST_expr*> decorator_list;
     InternedString name; // if the name is not set this is a lambda
     AST_arguments* args;
-
-    BoxedCode* code;
 
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(ASTStmtVisitor* v);
@@ -697,8 +690,6 @@ public:
 
     // no lineno, col_offset attributes
     std::vector<AST_stmt*> body;
-
-    BoxedCode* code;
 
     virtual void accept(ASTVisitor* v);
 

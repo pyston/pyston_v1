@@ -2138,22 +2138,6 @@ void flatten(AST_expr* root, std::vector<AST*>& output, bool expand_scopes) {
     root->accept(&visitor);
 }
 
-BoxedCode*& AST::getCode() {
-    switch (this->type) {
-        case AST_TYPE::Expression:
-            return ast_cast<AST_Expression>(this)->code;
-        case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(this)->code;
-        case AST_TYPE::ClassDef:
-            return ast_cast<AST_ClassDef>(this)->code;
-        case AST_TYPE::Module:
-            return ast_cast<AST_Module>(this)->code;
-        default:
-            break;
-    }
-    RELEASE_ASSERT(0, "%d", this->type);
-}
-
 InternedStringPool& AST::getStringpool() {
     switch (this->type) {
         case AST_TYPE::Expression:
@@ -2181,11 +2165,12 @@ llvm::ArrayRef<AST_stmt*> AST::getBody() {
     };
 }
 
-Box* AST::getDocString() {
-    auto body = this->getBody();
+Box* getDocString(llvm::ArrayRef<AST_stmt*> body) {
     if (body.size() > 0 && body[0]->type == AST_TYPE::Expr
         && static_cast<AST_Expr*>(body[0])->value->type == AST_TYPE::Str) {
-        return boxString(static_cast<AST_Str*>(static_cast<AST_Expr*>(body[0])->value)->str_data);
+        auto expr = static_cast<AST_Expr*>(body[0]);
+        auto str = static_cast<AST_Str*>(expr->value);
+        return boxString(str->str_data);
     }
 
     return incref(Py_None);

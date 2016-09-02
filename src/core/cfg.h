@@ -330,7 +330,8 @@ public:
     iterator end() const { return iterator(*this, this->v.size()); }
 };
 
-void computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn, BoxedModule* bm);
+BoxedCode* computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn,
+                          BoxedModule* bm);
 void printCFG(CFG* cfg);
 }
 

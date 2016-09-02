@@ -73,6 +73,13 @@ bool containsYield(AST* ast) {
     return visitor.contains_yield;
 }
 
+bool containsYield(llvm::ArrayRef<AST_stmt*> body) {
+    for (auto e : body)
+        if (containsYield(e))
+            return true;
+    return false;
+}
+
 // TODO
 // Combine this with the below? Basically the same logic with different string types...
 // Also should this go in this file?

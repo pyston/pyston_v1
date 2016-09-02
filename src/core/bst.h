@@ -398,7 +398,6 @@ public:
     virtual void accept_stmt(StmtVisitor* v);
 
     std::vector<BST_expr*> bases, decorator_list;
-    std::vector<BST_stmt*> body;
     InternedString name;
 
     BoxedCode* code;
@@ -512,8 +511,6 @@ public:
     // this should be an expr but we convert it into a BST_Return(BST_expr) to make the code simpler
     BST_stmt* body;
 
-    BoxedCode* code;
-
     virtual void accept(BSTVisitor* v);
 
     BST_Expression(std::unique_ptr<InternedStringPool> interned_strings)
@@ -549,7 +546,6 @@ public:
 
 class BST_FunctionDef : public BST_stmt {
 public:
-    std::vector<BST_stmt*> body;
     std::vector<BST_expr*> decorator_list;
     InternedString name; // if the name is not set this is a lambda
     BST_arguments* args;
@@ -710,8 +706,6 @@ public:
 
     // no lineno, col_offset attributes
     std::vector<BST_stmt*> body;
-
-    BoxedCode* code;
 
     virtual void accept(BSTVisitor* v);
 
