@@ -107,7 +107,7 @@ public:
     BoxedCode* getCode();
     FrameInfo* getFrameInfo();
     bool exists() { return impl.get() != NULL; }
-    AST_stmt* getCurrentStatement();
+    BST_stmt* getCurrentStatement();
     BORROWED(Box*) getGlobalsDict();
 
     PythonFrameIterator(PythonFrameIterator&& rhs);
@@ -150,7 +150,7 @@ FrameStackState getFrameStackState();
 struct DeoptState {
     FrameStackState frame_state;
     CompiledFunction* cf;
-    AST_stmt* current_stmt;
+    BST_stmt* current_stmt;
 };
 DeoptState getDeoptState();
 }

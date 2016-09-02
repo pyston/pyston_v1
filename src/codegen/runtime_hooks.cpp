@@ -147,13 +147,13 @@ void initGlobalFuncs(GlobalState& g) {
     assert(g.llvm_dict_type_ptr);
     g.llvm_dict_type_ptr = g.llvm_dict_type_ptr->getPointerTo();
 
-    g.llvm_aststmt_type_ptr = g.stdlib_module->getTypeByName("class.pyston::AST_stmt");
-    assert(g.llvm_aststmt_type_ptr);
-    g.llvm_aststmt_type_ptr = g.llvm_aststmt_type_ptr->getPointerTo();
+    g.llvm_bststmt_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BST_stmt");
+    assert(g.llvm_bststmt_type_ptr);
+    g.llvm_bststmt_type_ptr = g.llvm_bststmt_type_ptr->getPointerTo();
 
-    g.llvm_astexpr_type_ptr = g.stdlib_module->getTypeByName("class.pyston::AST_expr");
-    assert(g.llvm_astexpr_type_ptr);
-    g.llvm_astexpr_type_ptr = g.llvm_astexpr_type_ptr->getPointerTo();
+    g.llvm_bstexpr_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BST_expr");
+    assert(g.llvm_bstexpr_type_ptr);
+    g.llvm_bstexpr_type_ptr = g.llvm_bstexpr_type_ptr->getPointerTo();
 
     // The LLVM vector type for the arguments that we pass to runtimeCall and related functions.
     // It will be a pointer to a type named something like class.std::vector or

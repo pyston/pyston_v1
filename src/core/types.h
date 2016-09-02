@@ -154,11 +154,12 @@ struct ICSlotInfo;
 
 class CFG;
 class AST;
-class AST_FunctionDef;
-class AST_arguments;
-class AST_expr;
-class AST_Name;
-class AST_stmt;
+class BST;
+class BST_FunctionDef;
+class BST_arguments;
+class BST_expr;
+class BST_Name;
+class BST_stmt;
 
 class PhiAnalysis;
 class LivenessAnalysis;
@@ -218,13 +219,13 @@ static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in 
 static_assert(sizeof(ArgPassSpec) == sizeof(uint32_t), "ArgPassSpec::asInt needs to be updated");
 
 struct ParamNames {
-    // the arguments are either an array of char* or AST_Name* depending on if all_args_contains_names is set or not
+    // the arguments are either an array of char* or BST_Name* depending on if all_args_contains_names is set or not
     union NameOrStr {
         NameOrStr(const char* str) : str(str) {}
-        NameOrStr(AST_Name* name) : name(name) {}
+        NameOrStr(BST_Name* name) : name(name) {}
 
         const char* str;
-        AST_Name* name;
+        BST_Name* name;
     };
     std::vector<NameOrStr> all_args;
 
@@ -245,26 +246,26 @@ struct ParamNames {
         return all_args.size() - 1;
     }
 
-    llvm::ArrayRef<AST_Name*> argsAsName() const {
+    llvm::ArrayRef<BST_Name*> argsAsName() const {
         assert(all_args_contains_names);
-        return llvm::makeArrayRef((AST_Name * const*)all_args.data(), numNormalArgs());
+        return llvm::makeArrayRef((BST_Name * const*)all_args.data(), numNormalArgs());
     }
 
-    llvm::ArrayRef<AST_Name*> allArgsAsName() const {
+    llvm::ArrayRef<BST_Name*> allArgsAsName() const {
         assert(all_args_contains_names);
-        return llvm::makeArrayRef((AST_Name * const*)all_args.data(), all_args.size());
+        return llvm::makeArrayRef((BST_Name * const*)all_args.data(), all_args.size());
     }
 
     std::vector<const char*> allArgsAsStr() const;
 
-    AST_Name* varArgAsName() const {
+    BST_Name* varArgAsName() const {
         assert(all_args_contains_names);
         if (has_vararg_name)
             return all_args[all_args.size() - 1 - has_kwarg_name].name;
         return NULL;
     }
 
-    AST_Name* kwArgAsName() const {
+    BST_Name* kwArgAsName() const {
         assert(all_args_contains_names);
         if (has_kwarg_name)
             return all_args.back().name;
@@ -477,8 +478,8 @@ public:
         return closure_size;
     }
     const std::vector<std::pair<InternedString, DerefInfo>>& getAllDerefVarsAndInfo() const { return deref_info; }
-    DerefInfo getDerefInfo(AST_Name*) const;
-    size_t getClosureOffset(AST_Name*) const;
+    DerefInfo getDerefInfo(BST_Name*) const;
+    size_t getClosureOffset(BST_Name*) const;
 
     ScopingResults(ScopeInfo* scope_info, bool globals_from_module);
 };
@@ -500,9 +501,6 @@ public:
     int ast_type;
 
     LivenessAnalysis* getLiveness();
-
-    // llvm::ArrayRef<AST_stmt*> getBody() const;
-    // Box* getDocString();
 
     SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, AST* ast);
     ~SourceInfo();
@@ -1049,7 +1047,7 @@ struct FrameInfo {
     Box** vregs;
     int num_vregs;
 
-    AST_stmt* stmt; // current statement
+    BST_stmt* stmt; // current statement
     // This is either a module or a dict
     BORROWED(Box*) globals;
 

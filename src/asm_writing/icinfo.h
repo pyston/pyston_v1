@@ -104,8 +104,8 @@ private:
     // global ones.
     std::vector<Location> ic_global_decref_locations;
 
-    // associated AST node for this IC
-    AST* node;
+    // associated BST node for this IC
+    BST* node;
 
     // for ICSlotRewrite:
     ICSlotInfo* pickEntryForRewrite(const char* debug_name);
@@ -145,8 +145,8 @@ public:
 
     friend class ICSlotRewrite;
 
-    static ICInfo* getICInfoForNode(AST* node);
-    void associateNodeWithICInfo(AST* node, std::unique_ptr<TypeRecorder> type_recorder);
+    static ICInfo* getICInfoForNode(BST* node);
+    void associateNodeWithICInfo(BST* node, std::unique_ptr<TypeRecorder> type_recorder);
 
     void appendDecrefInfosTo(std::vector<DecrefInfo>& dest_decref_infos);
 };

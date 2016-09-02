@@ -42,7 +42,7 @@
 #include "codegen/patchpoints.h"
 #include "codegen/stackmaps.h"
 #include "codegen/unwinding.h"
-#include "core/ast.h"
+#include "core/bst.h"
 #include "core/cfg.h"
 #include "core/common.h"
 #include "core/options.h"

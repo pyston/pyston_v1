@@ -911,7 +911,7 @@ bool PrintVisitor::visit_assign(BST_Assign* node) {
     return true;
 }
 
-void PrintVisitor::printOp(BST_TYPE::BST_TYPE op_type) {
+void PrintVisitor::printOp(AST_TYPE::AST_TYPE op_type) {
     switch (op_type) {
         case BST_TYPE::Add:
             stream << '+';
@@ -1442,7 +1442,7 @@ bool PrintVisitor::visit_name(BST_Name* node) {
 #if 0
     if (node->lookup_type == ScopeInfo::VarScopeType::UNKNOWN)
         stream << "<U>";
-    else if (node->lookup_type == ScopeInfo::VarScopeType::FBST)
+    else if (node->lookup_type == ScopeInfo::VarScopeType::FAST)
         stream << "<F>";
     else if (node->lookup_type == ScopeInfo::VarScopeType::DEREF)
         stream << "<D>";
@@ -1461,13 +1461,13 @@ bool PrintVisitor::visit_name(BST_Name* node) {
 }
 
 bool PrintVisitor::visit_num(BST_Num* node) {
-    if (node->num_type == BST_Num::INT) {
+    if (node->num_type == AST_Num::INT) {
         stream << node->n_int;
-    } else if (node->num_type == BST_Num::LONG) {
+    } else if (node->num_type == AST_Num::LONG) {
         stream << node->n_long << "L";
-    } else if (node->num_type == BST_Num::FLOAT) {
+    } else if (node->num_type == AST_Num::FLOAT) {
         stream << node->n_float;
-    } else if (node->num_type == BST_Num::COMPLEX) {
+    } else if (node->num_type == AST_Num::COMPLEX) {
         stream << node->n_float << "j";
     } else {
         RELEASE_ASSERT(0, "");
@@ -1576,9 +1576,9 @@ bool PrintVisitor::visit_slice(BST_Slice* node) {
 }
 
 bool PrintVisitor::visit_str(BST_Str* node) {
-    if (node->str_type == BST_Str::STR) {
+    if (node->str_type == AST_Str::STR) {
         stream << "\"" << node->str_data << "\"";
-    } else if (node->str_type == BST_Str::UNICODE) {
+    } else if (node->str_type == AST_Str::UNICODE) {
         stream << "<unicode value>";
     } else {
         RELEASE_ASSERT(0, "%d", node->str_type);
@@ -2047,4 +2047,18 @@ public:
         return false;
     }
 };
+
+void flatten(const llvm::SmallVector<BST_stmt*, 4>& roots, std::vector<BST*>& output, bool expand_scopes) {
+    FlattenVisitor visitor(&output, expand_scopes);
+
+    for (int i = 0; i < roots.size(); i++) {
+        roots[i]->accept(&visitor);
+    }
+}
+
+void flatten(BST_expr* root, std::vector<BST*>& output, bool expand_scopes) {
+    FlattenVisitor visitor(&output, expand_scopes);
+
+    root->accept(&visitor);
+}
 }

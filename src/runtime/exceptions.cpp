@@ -16,8 +16,8 @@
 #include <cstdarg>
 #include <dlfcn.h>
 
-#include "codegen/unwinding.h"
 #include "core/ast.h"
+#include "codegen/unwinding.h"
 #include "core/options.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"

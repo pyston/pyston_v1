@@ -33,7 +33,7 @@ struct StackMap;
 
 class OSREntryDescriptor {
 private:
-    OSREntryDescriptor(BoxedCode* code, AST_Jump* backedge, ExceptionStyle exception_style)
+    OSREntryDescriptor(BoxedCode* code, BST_Jump* backedge, ExceptionStyle exception_style)
         : code(code),
           backedge(backedge),
           exception_style(exception_style),
@@ -44,13 +44,13 @@ private:
 
 public:
     BoxedCode* code;
-    AST_Jump* const backedge;
+    BST_Jump* const backedge;
     ExceptionStyle exception_style;
     typedef VRegMap<ConcreteCompilerType*> ArgMap;
     ArgMap args;
     VRegSet potentially_undefined;
 
-    static OSREntryDescriptor* create(BoxedCode* code, AST_Jump* backedge, ExceptionStyle exception_style) {
+    static OSREntryDescriptor* create(BoxedCode* code, BST_Jump* backedge, ExceptionStyle exception_style) {
         return new OSREntryDescriptor(code, backedge, exception_style);
     }
 };

@@ -51,7 +51,7 @@
 #include "codegen/osrentry.h"
 #include "codegen/patchpoints.h"
 #include "codegen/stackmaps.h"
-#include "core/ast.h"
+#include "core/bst.h"
 #include "core/cfg.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -551,7 +551,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         if (block == cfg->getStartingBlock()) {
             assert(entry_descriptor == NULL);
 
-            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast_type != AST_TYPE::Module) {
+            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast_type != BST_TYPE::Module) {
                 llvm::BasicBlock* preentry_bb = llvm::BasicBlock::Create(
                     g.context, "pre_entry", irstate->getLLVMFunction(), llvm_entry_blocks[cfg->getStartingBlock()]);
                 llvm::BasicBlock* reopt_bb = llvm::BasicBlock::Create(g.context, "reopt", irstate->getLLVMFunction());
@@ -695,7 +695,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // analysis frameworks can't (yet) support the idea of a block flowing differently to its different
                 // successors.
                 //
-                // There are four kinds of AST statements which can set a name:
+                // There are four kinds of BST statements which can set a name:
                 // - Assign
                 // - ClassDef
                 // - FunctionDef
@@ -715,25 +715,25 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
                 SymbolTable* sym_table = ending_symbol_tables[pred];
                 bool created_new_sym_table = false;
-                if (last_inst->type == AST_TYPE::Invoke && ast_cast<AST_Invoke>(last_inst)->exc_dest == block) {
-                    AST_stmt* stmt = ast_cast<AST_Invoke>(last_inst)->stmt;
+                if (last_inst->type == BST_TYPE::Invoke && bst_cast<BST_Invoke>(last_inst)->exc_dest == block) {
+                    BST_stmt* stmt = bst_cast<BST_Invoke>(last_inst)->stmt;
 
                     // The CFG pass translates away these statements, so we should never encounter them.
                     // If we did, we'd need to remove a name here.
-                    assert(stmt->type != AST_TYPE::ClassDef);
-                    assert(stmt->type != AST_TYPE::FunctionDef);
-                    assert(stmt->type != AST_TYPE::Import);
-                    assert(stmt->type != AST_TYPE::ImportFrom);
+                    assert(stmt->type != BST_TYPE::ClassDef);
+                    assert(stmt->type != BST_TYPE::FunctionDef);
+                    assert(stmt->type != BST_TYPE::Import);
+                    assert(stmt->type != BST_TYPE::ImportFrom);
 
-                    if (stmt->type == AST_TYPE::Assign) {
-                        auto asgn = ast_cast<AST_Assign>(stmt);
+                    if (stmt->type == BST_TYPE::Assign) {
+                        auto asgn = bst_cast<BST_Assign>(stmt);
                         assert(asgn->targets.size() == 1);
-                        if (asgn->targets[0]->type == AST_TYPE::Name) {
-                            auto asname = ast_cast<AST_Name>(asgn->targets[0]);
+                        if (asgn->targets[0]->type == BST_TYPE::Name) {
+                            auto asname = bst_cast<BST_Name>(asgn->targets[0]);
                             assert(asname->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
 
                             InternedString name = asname->id;
-                            int vreg = ast_cast<AST_Name>(asgn->targets[0])->vreg;
+                            int vreg = bst_cast<BST_Name>(asgn->targets[0])->vreg;
                             assert(name.c_str()[0] == '#'); // it must be a temporary
                             // You might think I need to check whether `name' is being assigned globally or locally,
                             // since a global assign doesn't affect the symbol table. However, the CFG pass only
@@ -823,9 +823,9 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         llvm_exit_blocks[block] = ending_st.ending_block;
 
         if (ending_st.exception_state.size()) {
-            AST_stmt* last_stmt = block->body.back();
-            assert(last_stmt->type == AST_TYPE::Invoke);
-            CFGBlock* exc_block = ast_cast<AST_Invoke>(last_stmt)->exc_dest;
+            BST_stmt* last_stmt = block->body.back();
+            assert(last_stmt->type == BST_TYPE::Invoke);
+            CFGBlock* exc_block = bst_cast<BST_Invoke>(last_stmt)->exc_dest;
             assert(!incoming_exception_state.count(exc_block));
 
             incoming_exception_state.insert(std::make_pair(exc_block, ending_st.exception_state));

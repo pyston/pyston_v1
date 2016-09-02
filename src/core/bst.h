@@ -26,6 +26,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "analysis/scoping_analysis.h"
+#include "core/ast.h"
 #include "core/common.h"
 #include "core/stringpool.h"
 
@@ -271,7 +272,7 @@ class BST_AugAssign : public BST_stmt {
 public:
     BST_expr* value;
     BST_expr* target;
-    BST_TYPE::BST_TYPE op_type;
+    AST_TYPE::AST_TYPE op_type;
 
     virtual void accept(BSTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
@@ -283,7 +284,7 @@ public:
 
 class BST_AugBinOp : public BST_expr {
 public:
-    BST_TYPE::BST_TYPE op_type;
+    AST_TYPE::AST_TYPE op_type;
     BST_expr* left, *right;
 
     virtual void accept(BSTVisitor* v);
@@ -297,7 +298,7 @@ public:
 class BST_Attribute : public BST_expr {
 public:
     BST_expr* value;
-    BST_TYPE::BST_TYPE ctx_type;
+    AST_TYPE::AST_TYPE ctx_type;
     InternedString attr;
 
     virtual void accept(BSTVisitor* v);
@@ -305,7 +306,7 @@ public:
 
     BST_Attribute() : BST_expr(BST_TYPE::Attribute) {}
 
-    BST_Attribute(BST_expr* value, BST_TYPE::BST_TYPE ctx_type, InternedString attr)
+    BST_Attribute(BST_expr* value, AST_TYPE::AST_TYPE ctx_type, InternedString attr)
         : BST_expr(BST_TYPE::Attribute), value(value), ctx_type(ctx_type), attr(attr) {}
 
     static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Attribute;
@@ -313,7 +314,7 @@ public:
 
 class BST_BinOp : public BST_expr {
 public:
-    BST_TYPE::BST_TYPE op_type;
+    AST_TYPE::AST_TYPE op_type;
     BST_expr* left, *right;
 
     virtual void accept(BSTVisitor* v);
@@ -326,7 +327,7 @@ public:
 
 class BST_BoolOp : public BST_expr {
 public:
-    BST_TYPE::BST_TYPE op_type;
+    AST_TYPE::AST_TYPE op_type;
     std::vector<BST_expr*> values;
 
     virtual void accept(BSTVisitor* v);
@@ -366,7 +367,7 @@ public:
 
 class BST_Compare : public BST_expr {
 public:
-    std::vector<BST_TYPE::BST_TYPE> ops;
+    std::vector<AST_TYPE::AST_TYPE> ops;
     std::vector<BST_expr*> comparators;
     BST_expr* left;
 
@@ -680,7 +681,7 @@ public:
 class BST_List : public BST_expr {
 public:
     std::vector<BST_expr*> elts;
-    BST_TYPE::BST_TYPE ctx_type;
+    AST_TYPE::AST_TYPE ctx_type;
 
     virtual void accept(BSTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
@@ -736,7 +737,7 @@ public:
 
 class BST_Name : public BST_expr {
 public:
-    BST_TYPE::BST_TYPE ctx_type;
+    AST_TYPE::AST_TYPE ctx_type;
     InternedString id;
 
     // The resolved scope of this name.  Kind of hacky to be storing it in the BST node;
@@ -744,8 +745,8 @@ public:
     // different bytecodes.
     ScopeInfo::VarScopeType lookup_type;
 
-    // These are only valid for lookup_type == FBST or CLOSURE
-    // The interpreter and baseline JIT store variables with FBST and CLOSURE scopes in an array (vregs) this specifies
+    // These are only valid for lookup_type == FAST or CLOSURE
+    // The interpreter and baseline JIT store variables with FAST and CLOSURE scopes in an array (vregs) this specifies
     // the zero based index of this variable inside the vregs array. If uninitialized it's value is -1.
     int vreg;
     bool is_kill = false;
@@ -758,7 +759,7 @@ public:
     virtual void accept(BSTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    BST_Name(InternedString id, BST_TYPE::BST_TYPE ctx_type, int lineno, int col_offset = 0)
+    BST_Name(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0)
         : BST_expr(BST_TYPE::Name, lineno, col_offset),
           ctx_type(ctx_type),
           id(id),
@@ -770,16 +771,9 @@ public:
 
 class BST_Num : public BST_expr {
 public:
-    enum NumType {
-        // These values must correspond to the values in parse_ast.py
-        INT = 0x10,
-        FLOAT = 0x20,
-        LONG = 0x30,
+    AST_Num::NumType num_type;
 
-        // for COMPLEX, n_float is the imaginary part, real part is 0
-        COMPLEX = 0x40,
-    } num_type;
-
+    // TODO: these should just be Boxed objects now
     union {
         int64_t n_int;
         double n_float;
@@ -897,11 +891,7 @@ public:
 
 class BST_Str : public BST_expr {
 public:
-    enum StrType {
-        UNSET = 0x00,
-        STR = 0x10,
-        UNICODE = 0x20,
-    } str_type;
+    AST_Str::StrType str_type;
 
     // The meaning of str_data depends on str_type.  For STR, it's just the bytes value.
     // For UNICODE, it's the utf-8 encoded value.
@@ -910,8 +900,8 @@ public:
     virtual void accept(BSTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    BST_Str() : BST_expr(BST_TYPE::Str), str_type(UNSET) {}
-    BST_Str(std::string s) : BST_expr(BST_TYPE::Str), str_type(STR), str_data(std::move(s)) {}
+    BST_Str() : BST_expr(BST_TYPE::Str), str_type(AST_Str::UNSET) {}
+    BST_Str(std::string s) : BST_expr(BST_TYPE::Str), str_type(AST_Str::STR), str_data(std::move(s)) {}
 
     static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Str;
 };
@@ -920,7 +910,7 @@ class BST_Subscript : public BST_expr {
 public:
     BST_expr* value;
     BST_slice* slice;
-    BST_TYPE::BST_TYPE ctx_type;
+    AST_TYPE::AST_TYPE ctx_type;
 
     virtual void accept(BSTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
@@ -958,7 +948,7 @@ public:
 class BST_Tuple : public BST_expr {
 public:
     std::vector<BST_expr*> elts;
-    BST_TYPE::BST_TYPE ctx_type;
+    AST_TYPE::AST_TYPE ctx_type;
 
     virtual void accept(BSTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
@@ -971,7 +961,7 @@ public:
 class BST_UnaryOp : public BST_expr {
 public:
     BST_expr* operand;
-    BST_TYPE::BST_TYPE op_type;
+    AST_TYPE::AST_TYPE op_type;
 
     virtual void accept(BSTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
@@ -1369,7 +1359,7 @@ private:
     llvm::raw_ostream& stream;
     int indent;
     void printIndent();
-    void printOp(BST_TYPE::BST_TYPE op_type);
+    void printOp(AST_TYPE::AST_TYPE op_type);
 
 public:
     PrintVisitor(int indent = 0, llvm::raw_ostream& stream = llvm::outs()) : stream(stream), indent(indent) {}
@@ -1443,6 +1433,12 @@ public:
     virtual bool visit_makefunction(BST_MakeFunction* node);
     virtual bool visit_makeclass(BST_MakeClass* node);
 };
+
+// Given an BST node, return a vector of the node plus all its descendents.
+// This is useful for analyses that care more about the constituent nodes than the
+// exact tree structure; ex, finding all "global" directives.
+void flatten(const llvm::SmallVector<BST_stmt*, 4>& roots, std::vector<BST*>& output, bool expand_scopes);
+void flatten(BST_expr* root, std::vector<BST*>& output, bool expand_scopes);
 };
 
 #endif

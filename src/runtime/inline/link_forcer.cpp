@@ -17,7 +17,6 @@
 
 #include "codegen/ast_interpreter.h"
 #include "codegen/irgen/hooks.h"
-#include "core/ast.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/complex.h"

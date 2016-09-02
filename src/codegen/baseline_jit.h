@@ -28,7 +28,7 @@ namespace pyston {
 #define ENABLE_BASELINEJIT_MAP_32BIT 1
 #define ENABLE_BASELINEJIT_ICS 1
 
-class AST_stmt;
+class BST_stmt;
 class Box;
 class BoxedDict;
 class BoxedList;
@@ -43,7 +43,7 @@ class JitFragmentWriter;
 // It operates on a basic block at a time (=CFGBLock*) and supports very fast switching between the
 // interpreter and the JITed code on every block start/end.
 //
-// To archive this it's tightly integrated with the AST Interpreter and always operates on an ASTInterpreter instance.
+// To archive this it's tightly integrated with the BST Interpreter and always operates on an ASTInterpreter instance.
 // The process works like this:
 //  - in the ASTInterpreter main loop we will check on every basic block start if we have already machine code for the
 //  basic block
@@ -53,7 +53,7 @@ class JitFragmentWriter;
 //  - create/reuse a JitCodeBlock for the function
 //  - create a new JitFragmentWriter for the basic block to JIT
 //  - interpret the basic block and in addition call into corresponding emit* functions of the JitFragmentWriter on
-//      every AST node encountered.
+//      every BST node encountered.
 //  - if a node is encountered which is not supported, abort JITing of the block and blacklist this block
 //  - if we reached the control flow changing node of the basic block (e.g. a branch, return or jump node) we finish
 //     JITing the block.
@@ -127,7 +127,7 @@ class JitFragmentWriter;
 
 // second_JitFragment:
 //      ...
-//    ; this shows how a AST_Return looks like
+//    ; this shows how a BST_Return looks like
 //      xor    %eax,%eax            ; rax contains the next block to interpret.
 //                                    in this case 0 which means we are finished
 //      movabs $0x1270014108,%rdx   ; rdx must contain the Box* value to return
@@ -249,7 +249,7 @@ private:
         uint8_t* end_addr;
         std::unique_ptr<ICSetupInfo> ic;
         StackInfo stack_info;
-        AST* node;
+        BST* node;
         std::vector<Location> decref_infos;
         std::unique_ptr<TypeRecorder> type_recorder;
     };
@@ -266,29 +266,29 @@ public:
     RewriterVar* imm(uint64_t val);
     RewriterVar* imm(void* val);
 
-    RewriterVar* emitAugbinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type);
+    RewriterVar* emitAugbinop(BST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type);
     RewriterVar* emitApplySlice(RewriterVar* target, RewriterVar* lower, RewriterVar* upper);
-    RewriterVar* emitBinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type);
-    RewriterVar* emitCallattr(AST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
+    RewriterVar* emitBinop(BST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type);
+    RewriterVar* emitCallattr(BST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
                               const llvm::ArrayRef<RewriterVar*> args, std::vector<BoxedString*>* keyword_names);
-    RewriterVar* emitCompare(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type);
+    RewriterVar* emitCompare(BST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type);
     RewriterVar* emitCreateDict();
     void emitDictSet(RewriterVar* dict, RewriterVar* k, RewriterVar* v);
     RewriterVar* emitCreateList(const llvm::ArrayRef<STOLEN(RewriterVar*)> values);
     RewriterVar* emitCreateSet(const llvm::ArrayRef<RewriterVar*> values);
     RewriterVar* emitCreateSlice(RewriterVar* start, RewriterVar* stop, RewriterVar* step);
     RewriterVar* emitCreateTuple(const llvm::ArrayRef<RewriterVar*> values);
-    RewriterVar* emitDeref(AST_Name* name);
+    RewriterVar* emitDeref(BST_Name* name);
     RewriterVar* emitExceptionMatches(RewriterVar* v, RewriterVar* cls);
-    RewriterVar* emitGetAttr(RewriterVar* obj, BoxedString* s, AST_expr* node);
-    RewriterVar* emitGetBlockLocal(AST_Name* name);
-    void emitKillTemporary(AST_Name* name);
+    RewriterVar* emitGetAttr(RewriterVar* obj, BoxedString* s, BST_expr* node);
+    RewriterVar* emitGetBlockLocal(BST_Name* name);
+    void emitKillTemporary(BST_Name* name);
     RewriterVar* emitGetBoxedLocal(BoxedString* s);
     RewriterVar* emitGetBoxedLocals();
     RewriterVar* emitGetClsAttr(RewriterVar* obj, BoxedString* s);
     RewriterVar* emitGetGlobal(BoxedString* s);
-    RewriterVar* emitGetItem(AST_expr* node, RewriterVar* value, RewriterVar* slice);
-    RewriterVar* emitGetLocal(AST_Name* name);
+    RewriterVar* emitGetItem(BST_expr* node, RewriterVar* value, RewriterVar* slice);
+    RewriterVar* emitGetLocal(BST_Name* name);
     RewriterVar* emitGetPystonIter(RewriterVar* v);
     RewriterVar* emitHasnext(RewriterVar* v);
     RewriterVar* emitImportFrom(RewriterVar* module, BoxedString* name);
@@ -298,7 +298,7 @@ public:
     RewriterVar* emitNonzero(RewriterVar* v);
     RewriterVar* emitNotNonzero(RewriterVar* v);
     RewriterVar* emitRepr(RewriterVar* v);
-    RewriterVar* emitRuntimeCall(AST_expr* node, RewriterVar* obj, ArgPassSpec argspec,
+    RewriterVar* emitRuntimeCall(BST_expr* node, RewriterVar* obj, ArgPassSpec argspec,
                                  const llvm::ArrayRef<RewriterVar*> args, std::vector<BoxedString*>* keyword_names);
     RewriterVar* emitUnaryop(RewriterVar* v, int op_type);
     std::vector<RewriterVar*> emitUnpackIntoArray(RewriterVar* v, uint64_t num);
@@ -311,20 +311,20 @@ public:
     void emitDelName(InternedString name);
     void emitExec(RewriterVar* code, RewriterVar* globals, RewriterVar* locals, FutureFlags flags);
     void emitJump(CFGBlock* b);
-    void emitOSRPoint(AST_Jump* node);
+    void emitOSRPoint(BST_Jump* node);
     void emitPendingCallsCheck();
     void emitPrint(RewriterVar* dest, RewriterVar* var, bool nl);
     void emitRaise0();
     void emitRaise3(RewriterVar* arg0, RewriterVar* arg1, RewriterVar* arg2);
     void emitReturn(RewriterVar* v);
-    void emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr);
-    void emitSetBlockLocal(AST_Name* name, STOLEN(RewriterVar*) v);
-    void emitSetCurrentInst(AST_stmt* node);
+    void emitSetAttr(BST_expr* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr);
+    void emitSetBlockLocal(BST_Name* name, STOLEN(RewriterVar*) v);
+    void emitSetCurrentInst(BST_stmt* node);
     void emitSetExcInfo(RewriterVar* type, RewriterVar* value, RewriterVar* traceback);
     void emitSetGlobal(BoxedString* s, STOLEN(RewriterVar*) v, bool are_globals_from_module);
     void emitSetItemName(BoxedString* s, RewriterVar* v);
     void emitSetItem(RewriterVar* target, RewriterVar* slice, RewriterVar* value);
-    void emitSetLocal(AST_Name* name, bool set_closure, STOLEN(RewriterVar*) v);
+    void emitSetLocal(BST_Name* name, bool set_closure, STOLEN(RewriterVar*) v);
     // emitSideExit steals a full ref from v, not just a vref
     void emitSideExit(STOLEN(RewriterVar*) v, Box* cmp_value, CFGBlock* next_block);
     void emitUncacheExcInfo();
@@ -351,7 +351,7 @@ private:
                                            const llvm::ArrayRef<RewriterVar*> additional_uses);
     std::pair<RewriterVar*, RewriterAction*> emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args,
                                                         unsigned short pp_size, bool should_record_type = false,
-                                                        AST* ast_node = NULL,
+                                                        BST* bst_node = NULL,
                                                         llvm::ArrayRef<RewriterVar*> additional_uses = {});
 
     static void assertNameDefinedHelper(const char* id);
@@ -371,7 +371,7 @@ private:
     void _emitJump(CFGBlock* b, RewriterVar* block_next, ExitInfo& exit_info);
     void _emitOSRPoint();
     void _emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args, unsigned short pp_size,
-                     AST* ast_node, llvm::ArrayRef<RewriterVar*> vars_to_bump);
+                     BST* bst_node, llvm::ArrayRef<RewriterVar*> vars_to_bump);
     void _emitRecordType(RewriterVar* obj_cls_var);
     void _emitReturn(RewriterVar* v);
     void _emitSideExit(STOLEN(RewriterVar*) var, RewriterVar* val_constant, CFGBlock* next_block,

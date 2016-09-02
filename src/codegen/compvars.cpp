@@ -21,6 +21,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "core/bst.h"
 #include "codegen/codegen.h"
 #include "codegen/gcbuilder.h"
 #include "codegen/irgen.h"

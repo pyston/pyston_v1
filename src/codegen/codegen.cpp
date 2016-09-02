@@ -29,7 +29,7 @@
 #include "analysis/scoping_analysis.h"
 #include "codegen/baseline_jit.h"
 #include "codegen/compvars.h"
-#include "core/ast.h"
+#include "core/bst.h"
 #include "core/cfg.h"
 #include "core/util.h"
 #include "runtime/types.h"

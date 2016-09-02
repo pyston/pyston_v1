@@ -23,7 +23,7 @@
 
 #include "analysis/scoping_analysis.h"
 #include "codegen/unwinding.h"
-#include "core/ast.h"
+#include "core/bst.h"
 #include "core/options.h"
 #include "core/types.h"
 #include "runtime/objmodel.h"
@@ -1613,8 +1613,8 @@ private:
 
     // ---------- public methods ----------
 public:
-    void push_back(AST_stmt* node) {
-        assert(node->type != AST_TYPE::Invoke);
+    void push_back(BST_stmt* node) {
+        assert(node->type != BST_TYPE::Invoke);
 
         if (!curblock)
             return;
@@ -1624,30 +1624,30 @@ public:
             return;
         }
 
-        AST_TYPE::AST_TYPE type = node->type;
-        if (type == AST_TYPE::Jump) {
+        BST_TYPE::BST_TYPE type = node->type;
+        if (type == BST_TYPE::Jump) {
             curblock->push_back(node);
             return;
         }
 
-        if (type == AST_TYPE::Branch) {
-            AST_TYPE::AST_TYPE test_type = ast_cast<AST_Branch>(node)->test->type;
-            ASSERT(test_type == AST_TYPE::Name || test_type == AST_TYPE::Num, "%d", test_type);
+        if (type == BST_TYPE::Branch) {
+            BST_TYPE::BST_TYPE test_type = ast_cast<BST_Branch>(node)->test->type;
+            ASSERT(test_type == BST_TYPE::Name || test_type == BST_TYPE::Num, "%d", test_type);
             curblock->push_back(node);
             return;
         }
 
-        if (type == AST_TYPE::Return) {
+        if (type == BST_TYPE::Return) {
             curblock->push_back(node);
             return;
         }
 
-        if (type == AST_TYPE::Expr) {
-            auto expr = ast_cast<AST_Expr>(node)->value;
-            if (expr->type == AST_TYPE::LangPrimitive) {
-                auto lp = ast_cast<AST_LangPrimitive>(expr);
-                if (lp->opcode == AST_LangPrimitive::UNCACHE_EXC_INFO
-                    || lp->opcode == AST_LangPrimitive::SET_EXC_INFO) {
+        if (type == BST_TYPE::Expr) {
+            auto expr = ast_cast<BST_Expr>(node)->value;
+            if (expr->type == BST_TYPE::LangPrimitive) {
+                auto lp = ast_cast<BST_LangPrimitive>(expr);
+                if (lp->opcode == BST_LangPrimitive::UNCACHE_EXC_INFO
+                    || lp->opcode == BST_LangPrimitive::SET_EXC_INFO) {
                     curblock->push_back(node);
                     return;
                 }
@@ -1655,16 +1655,16 @@ public:
             }
         }
 
-        if (node->type == AST_TYPE::Assign) {
-            AST_Assign* asgn = ast_cast<AST_Assign>(node);
+        if (node->type == BST_TYPE::Assign) {
+            BST_Assign* asgn = ast_cast<BST_Assign>(node);
             assert(asgn->targets.size() == 1);
-            if (asgn->targets[0]->type == AST_TYPE::Name) {
-                AST_Name* target = ast_cast<AST_Name>(asgn->targets[0]);
+            if (asgn->targets[0]->type == BST_TYPE::Name) {
+                BST_Name* target = ast_cast<BST_Name>(asgn->targets[0]);
                 if (target->id.s()[0] != '#') {
 // assigning to a non-temporary
 #ifndef NDEBUG
-                    if (!(asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id.s()[0] == '#')
-                        && asgn->value->type != AST_TYPE::Str && asgn->value->type != AST_TYPE::Num) {
+                    if (!(asgn->value->type == BST_TYPE::Name && ast_cast<BST_Name>(asgn->value)->id.s()[0] == '#')
+                        && asgn->value->type != BST_TYPE::Str && asgn->value->type != BST_TYPE::Num) {
                         fprintf(stdout, "\nError: doing a non-trivial assignment in an invoke is not allowed:\n");
                         print_ast(node);
                         printf("\n");
@@ -1673,13 +1673,13 @@ public:
 #endif
                     curblock->push_back(node);
                     return;
-                } else if (asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id.s()[0] == '#') {
+                } else if (asgn->value->type == BST_TYPE::Name && ast_cast<BST_Name>(asgn->value)->id.s()[0] == '#') {
                     // Assigning from one temporary name to another:
                     curblock->push_back(node);
                     return;
-                } else if (asgn->value->type == AST_TYPE::Num || asgn->value->type == AST_TYPE::Str
-                           || (asgn->value->type == AST_TYPE::Name
-                               && ast_cast<AST_Name>(asgn->value)->id.s() == "None")) {
+                } else if (asgn->value->type == BST_TYPE::Num || asgn->value->type == BST_TYPE::Str
+                           || (asgn->value->type == BST_TYPE::Name
+                               && ast_cast<BST_Name>(asgn->value)->id.s() == "None")) {
                     // Assigning to a temporary name from an expression that can't throw:
                     // NB. `None' can't throw in Python, because it's hardcoded
                     // (seriously, try reassigning "None" in CPython).
@@ -1690,11 +1690,11 @@ public:
         }
 
         // Deleting temporary names is safe, since we only use it to represent kills.
-        if (node->type == AST_TYPE::Delete) {
-            AST_Delete* del = ast_cast<AST_Delete>(node);
+        if (node->type == BST_TYPE::Delete) {
+            BST_Delete* del = ast_cast<BST_Delete>(node);
             assert(del->targets.size() == 1);
-            if (del->targets[0]->type == AST_TYPE::Name) {
-                AST_Name* target = ast_cast<AST_Name>(del->targets[0]);
+            if (del->targets[0]->type == BST_TYPE::Name) {
+                BST_Name* target = ast_cast<BST_Name>(del->targets[0]);
                 if (target->id.s()[0] == '#') {
                     curblock->push_back(node);
                     return;
@@ -1703,7 +1703,7 @@ public:
         }
 
         // We remapped asserts to just be assertion failures at this point.
-        bool is_raise = (node->type == AST_TYPE::Raise || node->type == AST_TYPE::Assert);
+        bool is_raise = (node->type == BST_TYPE::Raise || node->type == BST_TYPE::Assert);
 
         // If we invoke a raise statement, generate an invoke where both destinations
         // are the exception handler, since we know the non-exceptional path won't be taken.
@@ -1718,7 +1718,7 @@ public:
         else
             exc_dest = cfg->addBlock();
 
-        AST_Invoke* invoke = new AST_Invoke(node);
+        BST_Invoke* invoke = new BST_Invoke(node);
         invoke->normal_dest = normal_dest;
         invoke->exc_dest = exc_dest;
         invoke->col_offset = node->col_offset;
@@ -1734,14 +1734,14 @@ public:
 
         curblock = exc_dest;
         // TODO: need to clear some temporaries here
-        AST_Assign* exc_asgn = new AST_Assign();
-        AST_Tuple* target = new AST_Tuple();
-        target->elts.push_back(makeName(exc_info.exc_type_name, AST_TYPE::Store, node->lineno));
-        target->elts.push_back(makeName(exc_info.exc_value_name, AST_TYPE::Store, node->lineno));
-        target->elts.push_back(makeName(exc_info.exc_traceback_name, AST_TYPE::Store, node->lineno));
+        BST_Assign* exc_asgn = new BST_Assign();
+        BST_Tuple* target = new BST_Tuple();
+        target->elts.push_back(makeName(exc_info.exc_type_name, BST_TYPE::Store, node->lineno));
+        target->elts.push_back(makeName(exc_info.exc_value_name, BST_TYPE::Store, node->lineno));
+        target->elts.push_back(makeName(exc_info.exc_traceback_name, BST_TYPE::Store, node->lineno));
         exc_asgn->targets.push_back(target);
 
-        exc_asgn->value = new AST_LangPrimitive(AST_LangPrimitive::LANDINGPAD);
+        exc_asgn->value = new BST_LangPrimitive(BST_LangPrimitive::LANDINGPAD);
         curblock->push_back(exc_asgn);
 
         pushJump(exc_info.exc_dest);

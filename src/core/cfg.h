@@ -32,13 +32,13 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
 
-#include "core/ast.h"
+#include "core/bst.h"
 #include "core/common.h"
 #include "core/stringpool.h"
 
 namespace pyston {
 
-class AST_stmt;
+class BST_stmt;
 class Box;
 
 class CFG;
@@ -75,19 +75,19 @@ public:
     // contains the address of the entry function
     std::pair<CFGBlock*, Box*>(*entry_code)(void* interpeter, CFGBlock* block, Box** vregs);
 
-    llvm::SmallVector<AST_stmt*, 4> body;
+    llvm::SmallVector<BST_stmt*, 4> body;
     llvm::SmallVector<CFGBlock*, 2> predecessors, successors;
     int idx; // index in the CFG
     const char* info;
 
-    typedef llvm::SmallVector<AST_stmt*, 4>::iterator iterator;
+    typedef llvm::SmallVector<BST_stmt*, 4>::iterator iterator;
 
     CFGBlock(CFG* cfg, int idx) : cfg(cfg), code(NULL), entry_code(NULL), idx(idx), info(NULL) {}
 
     void connectTo(CFGBlock* successor, bool allow_backedge = false);
     void unconnectFrom(CFGBlock* successor);
 
-    void push_back(AST_stmt* node) { body.push_back(node); }
+    void push_back(BST_stmt* node) { body.push_back(node); }
     void print(llvm::raw_ostream& stream = llvm::outs());
     void _print() { print(); }
 };

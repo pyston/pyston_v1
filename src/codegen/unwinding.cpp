@@ -365,7 +365,7 @@ public:
         }
     }
 
-    AST_stmt* getCurrentStatement() {
+    BST_stmt* getCurrentStatement() {
         assert(getFrameInfo()->stmt);
         return getFrameInfo()->stmt;
     }
@@ -417,7 +417,7 @@ static unw_word_t getFunctionEnd(unw_word_t ip) {
     return pip.end_ip;
 }
 
-static bool inASTInterpreterExecuteInner(unw_word_t ip) {
+static bool inBSTInterpreterExecuteInner(unw_word_t ip) {
     static unw_word_t interpreter_instr_end = getFunctionEnd((unw_word_t)interpreter_instr_addr);
     return ((unw_word_t)interpreter_instr_addr < ip && ip <= interpreter_instr_end);
 }
@@ -451,12 +451,12 @@ static inline unw_word_t get_cursor_sp(unw_cursor_t* cursor) {
 }
 
 // if the given ip/bp correspond to a jitted frame or
-// ASTInterpreter::execute_inner frame, return true and return the
+// BSTInterpreter::execute_inner frame, return true and return the
 // frame information through the PythonFrameIteratorImpl* info arg.
 bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, PythonFrameIteratorImpl* info) {
     CompiledFunction* cf = getCFForAddress(ip);
     bool jitted = cf != NULL;
-    bool interpreted = !jitted && inASTInterpreterExecuteInner(ip);
+    bool interpreted = !jitted && inBSTInterpreterExecuteInner(ip);
 
     if (!jitted && !interpreted)
         return false;
@@ -486,7 +486,7 @@ bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Pyth
 }
 
 static const LineInfo lineInfoForFrameInfo(FrameInfo* frame_info) {
-    AST_stmt* current_stmt = frame_info->stmt;
+    BST_stmt* current_stmt = frame_info->stmt;
     auto* code = frame_info->code;
     assert(code);
 
@@ -736,7 +736,7 @@ template <typename Func> void unwindPythonStack(Func func) {
 // 2. Grab the next frame in the stack and check what function it is from. There are four options:
 //
 //    (a) A JIT-compiled Python function.
-//    (b) ASTInterpreter::execute() in codegen/ast_interpreter.cpp.
+//    (b) BSTInterpreter::execute() in codegen/ast_interpreter.cpp.
 //    (c) generatorEntry() in runtime/generator.cpp.
 //    (d) Something else.
 //
@@ -753,7 +753,7 @@ template <typename Func> void unwindPythonStack(Func func) {
 //
 // 3. We've found a frame for our traceback, along with a CompiledFunction* and some other information about it.
 //
-//    We grab the current statement it is in (as an AST_stmt*) and use it and the CompiledFunction*'s source info to
+//    We grab the current statement it is in (as an BST_stmt*) and use it and the CompiledFunction*'s source info to
 //    produce the line information for the traceback. For JIT-compiled functions, getting the statement involves the
 //    CF's location_map.
 //
@@ -1040,7 +1040,7 @@ BORROWED(Box*) FrameInfo::updateBoxedLocals() {
     return frame_info->boxedLocals;
 }
 
-AST_stmt* PythonFrameIterator::getCurrentStatement() {
+BST_stmt* PythonFrameIterator::getCurrentStatement() {
     return impl->getCurrentStatement();
 }
 

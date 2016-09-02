@@ -28,7 +28,7 @@
 #include "codegen/irgen/irgenerator.h"
 #include "codegen/irgen/util.h"
 #include "codegen/osrentry.h"
-#include "core/ast.h"
+#include "core/bst.h"
 #include "core/cfg.h"
 #include "core/common.h"
 #include "core/contiguous_map.h"
@@ -56,7 +56,7 @@ namespace pyston {
 namespace {
 
 class ASTInterpreter;
-extern "C" Box* executeInnerAndSetupFrame(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at);
+extern "C" Box* executeInnerAndSetupFrame(ASTInterpreter& interpreter, CFGBlock* start_block, BST_stmt* start_at);
 
 /*
  * ASTInterpreters exist per function frame - there's no global interpreter object that executes
@@ -70,61 +70,61 @@ public:
 
     void initArguments(BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
-    static Box* execute(ASTInterpreter& interpreter, CFGBlock* start_block = NULL, AST_stmt* start_at = NULL);
-    static Box* executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at);
+    static Box* execute(ASTInterpreter& interpreter, CFGBlock* start_block = NULL, BST_stmt* start_at = NULL);
+    static Box* executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, BST_stmt* start_at);
 
 private:
-    Value createFunction(AST_FunctionDef* node, AST_arguments* args);
-    Value doBinOp(AST_expr* node, Value left, Value right, int op, BinExpType exp_type);
-    void doStore(AST_expr* node, STOLEN(Value) value);
-    void doStore(AST_Name* name, STOLEN(Value) value);
-    Box* doOSR(AST_Jump* node);
+    Value createFunction(BST_FunctionDef* node, BST_arguments* args);
+    Value doBinOp(BST_expr* node, Value left, Value right, int op, BinExpType exp_type);
+    void doStore(BST_expr* node, STOLEN(Value) value);
+    void doStore(BST_Name* name, STOLEN(Value) value);
+    Box* doOSR(BST_Jump* node);
     Value getNone();
 
-    Value visit_assert(AST_Assert* node);
-    Value visit_assign(AST_Assign* node);
-    Value visit_binop(AST_BinOp* node);
-    Value visit_call(AST_Call* node);
-    Value visit_compare(AST_Compare* node);
-    Value visit_delete(AST_Delete* node);
-    Value visit_exec(AST_Exec* node);
-    Value visit_global(AST_Global* node);
-    Value visit_module(AST_Module* node);
-    Value visit_print(AST_Print* node);
-    Value visit_raise(AST_Raise* node);
-    Value visit_return(AST_Return* node);
-    Value visit_stmt(AST_stmt* node);
-    Value visit_unaryop(AST_UnaryOp* node);
+    Value visit_assert(BST_Assert* node);
+    Value visit_assign(BST_Assign* node);
+    Value visit_binop(BST_BinOp* node);
+    Value visit_call(BST_Call* node);
+    Value visit_compare(BST_Compare* node);
+    Value visit_delete(BST_Delete* node);
+    Value visit_exec(BST_Exec* node);
+    Value visit_global(BST_Global* node);
+    Value visit_module(BST_Module* node);
+    Value visit_print(BST_Print* node);
+    Value visit_raise(BST_Raise* node);
+    Value visit_return(BST_Return* node);
+    Value visit_stmt(BST_stmt* node);
+    Value visit_unaryop(BST_UnaryOp* node);
 
-    Value visit_attribute(AST_Attribute* node);
-    Value visit_dict(AST_Dict* node);
-    Value visit_ellipsis(AST_Ellipsis* node);
-    Value visit_expr(AST_expr* node);
-    Value visit_expr(AST_Expr* node);
-    Value visit_extslice(AST_ExtSlice* node);
-    Value visit_index(AST_Index* node);
-    Value visit_list(AST_List* node);
-    Value visit_name(AST_Name* node);
-    Value visit_num(AST_Num* node);
-    Value visit_repr(AST_Repr* node);
-    Value visit_set(AST_Set* node);
-    Value visit_str(AST_Str* node);
-    Value visit_subscript(AST_Subscript* node);
-    Value visit_slice(AST_Slice* node);
-    Value visit_slice(AST_slice* node);
-    Value visit_tuple(AST_Tuple* node);
-    Value visit_yield(AST_Yield* node);
+    Value visit_attribute(BST_Attribute* node);
+    Value visit_dict(BST_Dict* node);
+    Value visit_ellipsis(BST_Ellipsis* node);
+    Value visit_expr(BST_expr* node);
+    Value visit_expr(BST_Expr* node);
+    Value visit_extslice(BST_ExtSlice* node);
+    Value visit_index(BST_Index* node);
+    Value visit_list(BST_List* node);
+    Value visit_name(BST_Name* node);
+    Value visit_num(BST_Num* node);
+    Value visit_repr(BST_Repr* node);
+    Value visit_set(BST_Set* node);
+    Value visit_str(BST_Str* node);
+    Value visit_subscript(BST_Subscript* node);
+    Value visit_slice(BST_Slice* node);
+    Value visit_slice(BST_slice* node);
+    Value visit_tuple(BST_Tuple* node);
+    Value visit_yield(BST_Yield* node);
 
-    Value visit_makeClass(AST_MakeClass* node);
-    Value visit_makeFunction(AST_MakeFunction* node);
+    Value visit_makeClass(BST_MakeClass* node);
+    Value visit_makeFunction(BST_MakeFunction* node);
 
     // pseudo
-    Value visit_augBinOp(AST_AugBinOp* node);
-    Value visit_branch(AST_Branch* node);
-    Value visit_clsAttribute(AST_ClsAttribute* node);
-    Value visit_invoke(AST_Invoke* node);
-    Value visit_jump(AST_Jump* node);
-    Value visit_langPrimitive(AST_LangPrimitive* node);
+    Value visit_augBinOp(BST_AugBinOp* node);
+    Value visit_branch(BST_Branch* node);
+    Value visit_clsAttribute(BST_ClsAttribute* node);
+    Value visit_invoke(BST_Invoke* node);
+    Value visit_jump(BST_Jump* node);
+    Value visit_langPrimitive(BST_LangPrimitive* node);
 
     // for doc on 'exit_offset' have a look at JitFragmentWriter::num_bytes_exit and num_bytes_overlapping
     void startJITing(CFGBlock* block, int exit_offset = 0,
@@ -162,12 +162,12 @@ public:
     }
 #endif
 
-    AST_stmt* getCurrentStatement() {
+    BST_stmt* getCurrentStatement() {
         assert(frame_info.stmt);
         return frame_info.stmt;
     }
 
-    void setCurrentStatement(AST_stmt* stmt) { frame_info.stmt = stmt; }
+    void setCurrentStatement(BST_stmt* stmt) { frame_info.stmt = stmt; }
 
     BoxedCode* getCode() { return frame_info.code; }
     FrameInfo* getFrameInfo() { return &frame_info; }
@@ -351,8 +351,8 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
         return rtn.second;
     } catch (ExcInfo e) {
         --num_inside;
-        AST_stmt* stmt = getCurrentStatement();
-        if (stmt->type != AST_TYPE::Invoke)
+        BST_stmt* stmt = getCurrentStatement();
+        if (stmt->type != BST_TYPE::Invoke)
             throw e;
 
         assert(getPythonFrameInfo(0) == getFrameInfo());
@@ -360,13 +360,13 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
         stmt->cxx_exception_count++;
         caughtCxxException(&e);
 
-        next_block = ((AST_Invoke*)stmt)->exc_dest;
+        next_block = ((BST_Invoke*)stmt)->exc_dest;
         last_exception = e;
     }
     return nullptr;
 }
 
-Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
+Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, BST_stmt* start_at) {
     Value v(nullptr, nullptr);
 
     bool from_start = start_block == NULL && start_at == NULL;
@@ -416,8 +416,8 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
 
                 // check if we returned from the baseline JIT because we should do a OSR.
                 if (unlikely(rtn == (Box*)ASTInterpreterJitInterface::osr_dummy_value)) {
-                    AST_Jump* cur_stmt = (AST_Jump*)interpreter.getCurrentStatement();
-                    RELEASE_ASSERT(cur_stmt->type == AST_TYPE::Jump, "");
+                    BST_Jump* cur_stmt = (BST_Jump*)interpreter.getCurrentStatement();
+                    RELEASE_ASSERT(cur_stmt->type == BST_TYPE::Jump, "");
                     // WARNING: do not put a try catch + rethrow block around this code here.
                     //          it will confuse our unwinder!
                     rtn = interpreter.doOSR(cur_stmt);
@@ -439,7 +439,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             interpreter.startJITing(interpreter.current_block);
         }
 
-        for (AST_stmt* s : interpreter.current_block->body) {
+        for (BST_stmt* s : interpreter.current_block->body) {
             interpreter.setCurrentStatement(s);
             if (interpreter.jit)
                 interpreter.jit->emitSetCurrentInst(s);
@@ -452,12 +452,12 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
     return v.o;
 }
 
-Box* ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
+Box* ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, BST_stmt* start_at) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_interpreter");
     return executeInnerAndSetupFrame(interpreter, start_block, start_at);
 }
 
-Value ASTInterpreter::doBinOp(AST_expr* node, Value left, Value right, int op, BinExpType exp_type) {
+Value ASTInterpreter::doBinOp(BST_expr* node, Value left, Value right, int op, BinExpType exp_type) {
     switch (exp_type) {
         case BinExpType::AugBinOp:
             return Value(augbinop(left.o, right.o, op), jit ? jit->emitAugbinop(node, left, right, op) : NULL);
@@ -471,7 +471,7 @@ Value ASTInterpreter::doBinOp(AST_expr* node, Value left, Value right, int op, B
     return Value();
 }
 
-void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
+void ASTInterpreter::doStore(BST_Name* node, STOLEN(Value) value) {
     assert(node->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
 
     InternedString name = node->id;
@@ -511,22 +511,22 @@ void ASTInterpreter::doStore(AST_Name* node, STOLEN(Value) value) {
     }
 }
 
-void ASTInterpreter::doStore(AST_expr* node, STOLEN(Value) value) {
-    if (node->type == AST_TYPE::Name) {
-        AST_Name* name = (AST_Name*)node;
+void ASTInterpreter::doStore(BST_expr* node, STOLEN(Value) value) {
+    if (node->type == BST_TYPE::Name) {
+        BST_Name* name = (BST_Name*)node;
         doStore(name, value);
-    } else if (node->type == AST_TYPE::Attribute) {
-        AST_Attribute* attr = (AST_Attribute*)node;
+    } else if (node->type == BST_TYPE::Attribute) {
+        BST_Attribute* attr = (BST_Attribute*)node;
         Value o = visit_expr(attr->value);
         if (jit) {
             jit->emitSetAttr(node, o, attr->attr.getBox(), value);
         }
         AUTO_DECREF(o.o);
         pyston::setattr(o.o, attr->attr.getBox(), value.o);
-    } else if (node->type == AST_TYPE::Tuple) {
+    } else if (node->type == BST_TYPE::Tuple) {
         AUTO_DECREF(value.o);
 
-        AST_Tuple* tuple = (AST_Tuple*)node;
+        BST_Tuple* tuple = (BST_Tuple*)node;
         Box* keep_alive;
         Box** array = unpackIntoArray(value.o, tuple->elts.size(), &keep_alive);
         AUTO_DECREF(keep_alive);
@@ -538,14 +538,14 @@ void ASTInterpreter::doStore(AST_expr* node, STOLEN(Value) value) {
         }
 
         unsigned i = 0;
-        for (AST_expr* e : tuple->elts) {
+        for (BST_expr* e : tuple->elts) {
             doStore(e, Value(array[i], jit ? array_vars[i] : NULL));
             ++i;
         }
-    } else if (node->type == AST_TYPE::List) {
+    } else if (node->type == BST_TYPE::List) {
         AUTO_DECREF(value.o);
 
-        AST_List* list = (AST_List*)node;
+        BST_List* list = (BST_List*)node;
         Box* keep_alive;
         Box** array = unpackIntoArray(value.o, list->elts.size(), &keep_alive);
         AUTO_DECREF(keep_alive);
@@ -557,20 +557,20 @@ void ASTInterpreter::doStore(AST_expr* node, STOLEN(Value) value) {
         }
 
         unsigned i = 0;
-        for (AST_expr* e : list->elts) {
+        for (BST_expr* e : list->elts) {
             doStore(e, Value(array[i], jit ? array_vars[i] : NULL));
             ++i;
         }
-    } else if (node->type == AST_TYPE::Subscript) {
+    } else if (node->type == BST_TYPE::Subscript) {
         AUTO_DECREF(value.o);
-        AST_Subscript* subscript = (AST_Subscript*)node;
+        BST_Subscript* subscript = (BST_Subscript*)node;
 
         Value target = visit_expr(subscript->value);
         AUTO_DECREF(target.o);
 
-        bool is_slice = (subscript->slice->type == AST_TYPE::Slice) && (((AST_Slice*)subscript->slice)->step == NULL);
+        bool is_slice = (subscript->slice->type == BST_TYPE::Slice) && (((BST_Slice*)subscript->slice)->step == NULL);
         if (is_slice) {
-            AST_Slice* slice = (AST_Slice*)subscript->slice;
+            BST_Slice* slice = (BST_Slice*)subscript->slice;
             Value lower = slice->lower ? visit_expr(slice->lower) : Value();
             AUTO_XDECREF(lower.o);
             Value upper = slice->upper ? visit_expr(slice->upper) : Value();
@@ -602,7 +602,7 @@ Value ASTInterpreter::getNone() {
     return Value(incref(Py_None), v);
 }
 
-Value ASTInterpreter::visit_unaryop(AST_UnaryOp* node) {
+Value ASTInterpreter::visit_unaryop(BST_UnaryOp* node) {
     Value operand = visit_expr(node->operand);
     AUTO_DECREF(operand.o);
     if (node->op_type == AST_TYPE::Not)
@@ -611,7 +611,7 @@ Value ASTInterpreter::visit_unaryop(AST_UnaryOp* node) {
         return Value(unaryop(operand.o, node->op_type), jit ? jit->emitUnaryop(operand, node->op_type) : NULL);
 }
 
-Value ASTInterpreter::visit_binop(AST_BinOp* node) {
+Value ASTInterpreter::visit_binop(BST_BinOp* node) {
     Value left = visit_expr(node->left);
     AUTO_DECREF(left.o);
     Value right = visit_expr(node->right);
@@ -619,28 +619,28 @@ Value ASTInterpreter::visit_binop(AST_BinOp* node) {
     return doBinOp(node, left, right, node->op_type, BinExpType::BinOp);
 }
 
-Value ASTInterpreter::visit_slice(AST_slice* node) {
+Value ASTInterpreter::visit_slice(BST_slice* node) {
     switch (node->type) {
-        case AST_TYPE::ExtSlice:
-            return visit_extslice(static_cast<AST_ExtSlice*>(node));
-        case AST_TYPE::Ellipsis:
-            return visit_ellipsis(static_cast<AST_Ellipsis*>(node));
+        case BST_TYPE::ExtSlice:
+            return visit_extslice(static_cast<BST_ExtSlice*>(node));
+        case BST_TYPE::Ellipsis:
+            return visit_ellipsis(static_cast<BST_Ellipsis*>(node));
             break;
-        case AST_TYPE::Index:
-            return visit_index(static_cast<AST_Index*>(node));
-        case AST_TYPE::Slice:
-            return visit_slice(static_cast<AST_Slice*>(node));
+        case BST_TYPE::Index:
+            return visit_index(static_cast<BST_Index*>(node));
+        case BST_TYPE::Slice:
+            return visit_slice(static_cast<BST_Slice*>(node));
         default:
             RELEASE_ASSERT(0, "Attempt to handle invalid slice type");
     }
     return Value();
 }
 
-Value ASTInterpreter::visit_ellipsis(AST_Ellipsis* node) {
+Value ASTInterpreter::visit_ellipsis(BST_Ellipsis* node) {
     return Value(incref(Ellipsis), jit ? jit->imm(Ellipsis) : NULL);
 }
 
-Value ASTInterpreter::visit_slice(AST_Slice* node) {
+Value ASTInterpreter::visit_slice(BST_Slice* node) {
     Value lower = node->lower ? visit_expr(node->lower) : getNone();
     AUTO_DECREF(lower.o);
     Value upper = node->upper ? visit_expr(node->upper) : getNone();
@@ -655,7 +655,7 @@ Value ASTInterpreter::visit_slice(AST_Slice* node) {
     return v;
 }
 
-Value ASTInterpreter::visit_extslice(AST_ExtSlice* node) {
+Value ASTInterpreter::visit_extslice(BST_ExtSlice* node) {
     llvm::SmallVector<RewriterVar*, 8> items;
 
     int num_slices = node->dims.size();
@@ -669,7 +669,7 @@ Value ASTInterpreter::visit_extslice(AST_ExtSlice* node) {
     return Value(rtn, jit ? jit->emitCreateTuple(items) : NULL);
 }
 
-Value ASTInterpreter::visit_branch(AST_Branch* node) {
+Value ASTInterpreter::visit_branch(BST_Branch* node) {
     Value v = visit_expr(node->test);
     ASSERT(v.o == Py_True || v.o == Py_False, "Should have called NONZERO before this branch");
 
@@ -696,7 +696,7 @@ Value ASTInterpreter::visit_branch(AST_Branch* node) {
     return Value();
 }
 
-Value ASTInterpreter::visit_jump(AST_Jump* node) {
+Value ASTInterpreter::visit_jump(BST_Jump* node) {
     bool backedge = node->target->idx < current_block->idx;
     if (backedge) {
         threading::allowGLReadPreemption();
@@ -735,7 +735,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
     return Value();
 }
 
-Box* ASTInterpreter::doOSR(AST_Jump* node) {
+Box* ASTInterpreter::doOSR(BST_Jump* node) {
     bool can_osr = ENABLE_OSR && !FORCE_INTERPRETER;
     if (!can_osr)
         return NULL;
@@ -843,7 +843,7 @@ Box* ASTInterpreter::doOSR(AST_Jump* node) {
     }
 }
 
-Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
+Value ASTInterpreter::visit_invoke(BST_Invoke* node) {
     Value v;
     try {
         v = visit_stmt(node->stmt);
@@ -869,14 +869,14 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
     return v;
 }
 
-Value ASTInterpreter::visit_clsAttribute(AST_ClsAttribute* node) {
+Value ASTInterpreter::visit_clsAttribute(BST_ClsAttribute* node) {
     Value obj = visit_expr(node->value);
     BoxedString* attr = node->attr.getBox();
     AUTO_DECREF(obj.o);
     return Value(getclsattr(obj.o, attr), jit ? jit->emitGetClsAttr(obj, attr) : NULL);
 }
 
-Value ASTInterpreter::visit_augBinOp(AST_AugBinOp* node) {
+Value ASTInterpreter::visit_augBinOp(BST_AugBinOp* node) {
     assert(node->op_type != AST_TYPE::Is && node->op_type != AST_TYPE::IsNot && "not tested yet");
 
     Value left = visit_expr(node->left);
@@ -886,22 +886,22 @@ Value ASTInterpreter::visit_augBinOp(AST_AugBinOp* node) {
     return doBinOp(node, left, right, node->op_type, BinExpType::AugBinOp);
 }
 
-Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
+Value ASTInterpreter::visit_langPrimitive(BST_LangPrimitive* node) {
     Value v;
-    if (node->opcode == AST_LangPrimitive::GET_ITER) {
+    if (node->opcode == BST_LangPrimitive::GET_ITER) {
         assert(node->args.size() == 1);
         Value val = visit_expr(node->args[0]);
         AUTO_DECREF(val.o);
         v = Value(getPystonIter(val.o), jit ? jit->emitGetPystonIter(val) : NULL);
-    } else if (node->opcode == AST_LangPrimitive::IMPORT_FROM) {
+    } else if (node->opcode == BST_LangPrimitive::IMPORT_FROM) {
         assert(node->args.size() == 2);
-        assert(node->args[0]->type == AST_TYPE::Name);
-        assert(node->args[1]->type == AST_TYPE::Str);
+        assert(node->args[0]->type == BST_TYPE::Name);
+        assert(node->args[1]->type == BST_TYPE::Str);
 
         Value module = visit_expr(node->args[0]);
         AUTO_DECREF(module.o);
 
-        auto ast_str = ast_cast<AST_Str>(node->args[1]);
+        auto ast_str = bst_cast<BST_Str>(node->args[1]);
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& name = ast_str->str_data;
         assert(name.size());
@@ -910,52 +910,52 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         if (jit)
             v.var = jit->emitImportFrom(module, name_boxed);
         v.o = importFrom(module.o, name_boxed);
-    } else if (node->opcode == AST_LangPrimitive::IMPORT_NAME) {
+    } else if (node->opcode == BST_LangPrimitive::IMPORT_NAME) {
         assert(node->args.size() == 3);
-        assert(node->args[0]->type == AST_TYPE::Num);
-        assert(static_cast<AST_Num*>(node->args[0])->num_type == AST_Num::INT);
-        assert(node->args[2]->type == AST_TYPE::Str);
+        assert(node->args[0]->type == BST_TYPE::Num);
+        assert(static_cast<BST_Num*>(node->args[0])->num_type == AST_Num::INT);
+        assert(node->args[2]->type == BST_TYPE::Str);
 
-        int level = static_cast<AST_Num*>(node->args[0])->n_int;
+        int level = static_cast<BST_Num*>(node->args[0])->n_int;
         Value froms = visit_expr(node->args[1]);
         AUTO_DECREF(froms.o);
-        auto ast_str = ast_cast<AST_Str>(node->args[2]);
+        auto ast_str = bst_cast<BST_Str>(node->args[2]);
         assert(ast_str->str_type == AST_Str::STR);
         const std::string& module_name = ast_str->str_data;
         if (jit)
             v.var = jit->emitImportName(level, froms, module_name);
         v.o = import(level, froms.o, module_name);
-    } else if (node->opcode == AST_LangPrimitive::IMPORT_STAR) {
+    } else if (node->opcode == BST_LangPrimitive::IMPORT_STAR) {
         assert(node->args.size() == 1);
-        assert(node->args[0]->type == AST_TYPE::Name);
+        assert(node->args[0]->type == BST_TYPE::Name);
 
-        RELEASE_ASSERT(source_info->ast_type == AST_TYPE::Module || source_info->ast_type == AST_TYPE::Suite,
+        RELEASE_ASSERT(source_info->ast_type == BST_TYPE::Module || source_info->ast_type == BST_TYPE::Suite,
                        "import * not supported in functions");
 
         Value module = visit_expr(node->args[0]);
         AUTO_DECREF(module.o);
         v = Value(importStar(module.o, frame_info.globals), jit ? jit->emitImportStar(module) : NULL);
-    } else if (node->opcode == AST_LangPrimitive::NONE) {
+    } else if (node->opcode == BST_LangPrimitive::NONE) {
         v = getNone();
-    } else if (node->opcode == AST_LangPrimitive::LANDINGPAD) {
+    } else if (node->opcode == BST_LangPrimitive::LANDINGPAD) {
         assert(last_exception.type);
         v = Value(ASTInterpreterJitInterface::landingpadHelper(this), jit ? jit->emitLandingpad() : NULL);
-    } else if (node->opcode == AST_LangPrimitive::CHECK_EXC_MATCH) {
+    } else if (node->opcode == BST_LangPrimitive::CHECK_EXC_MATCH) {
         assert(node->args.size() == 2);
         Value obj = visit_expr(node->args[0]);
         AUTO_DECREF(obj.o);
         Value cls = visit_expr(node->args[1]);
         AUTO_DECREF(cls.o);
         v = Value(boxBool(exceptionMatches(obj.o, cls.o)), jit ? jit->emitExceptionMatches(obj, cls) : NULL);
-    } else if (node->opcode == AST_LangPrimitive::LOCALS) {
+    } else if (node->opcode == BST_LangPrimitive::LOCALS) {
         assert(frame_info.boxedLocals != NULL);
         v = Value(incref(frame_info.boxedLocals), jit ? jit->emitGetBoxedLocals() : NULL);
-    } else if (node->opcode == AST_LangPrimitive::NONZERO) {
+    } else if (node->opcode == BST_LangPrimitive::NONZERO) {
         assert(node->args.size() == 1);
         Value obj = visit_expr(node->args[0]);
         AUTO_DECREF(obj.o);
         v = Value(boxBool(nonzero(obj.o)), jit ? jit->emitNonzero(obj) : NULL);
-    } else if (node->opcode == AST_LangPrimitive::SET_EXC_INFO) {
+    } else if (node->opcode == BST_LangPrimitive::SET_EXC_INFO) {
         assert(node->args.size() == 3);
 
         Value type = visit_expr(node->args[0]);
@@ -969,18 +969,18 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
             jit->emitSetExcInfo(type, value, traceback);
         setFrameExcInfo(getFrameInfo(), type.o, value.o, traceback.o);
         v = getNone();
-    } else if (node->opcode == AST_LangPrimitive::UNCACHE_EXC_INFO) {
+    } else if (node->opcode == BST_LangPrimitive::UNCACHE_EXC_INFO) {
         assert(node->args.empty());
         if (jit)
             jit->emitUncacheExcInfo();
         setFrameExcInfo(getFrameInfo(), NULL, NULL, NULL);
         v = getNone();
-    } else if (node->opcode == AST_LangPrimitive::HASNEXT) {
+    } else if (node->opcode == BST_LangPrimitive::HASNEXT) {
         assert(node->args.size() == 1);
         Value obj = visit_expr(node->args[0]);
         AUTO_DECREF(obj.o);
         v = Value(boxBool(hasnext(obj.o)), jit ? jit->emitHasnext(obj) : NULL);
-    } else if (node->opcode == AST_LangPrimitive::PRINT_EXPR) {
+    } else if (node->opcode == BST_LangPrimitive::PRINT_EXPR) {
         abortJITing();
         Value obj = visit_expr(node->args[0]);
         AUTO_DECREF(obj.o);
@@ -991,63 +991,63 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
     return v;
 }
 
-Value ASTInterpreter::visit_yield(AST_Yield* node) {
+Value ASTInterpreter::visit_yield(BST_Yield* node) {
     Value value = node->value ? visit_expr(node->value) : getNone();
     return Value(ASTInterpreterJitInterface::yieldHelper(this, value.o), jit ? jit->emitYield(value) : NULL);
 }
 
-Value ASTInterpreter::visit_stmt(AST_stmt* node) {
+Value ASTInterpreter::visit_stmt(BST_stmt* node) {
 #if ENABLE_SAMPLING_PROFILER
     threading::allowGLReadPreemption();
 #endif
 
     if (0) {
         printf("%20s % 2d ", getCode()->name->c_str(), current_block->idx);
-        print_ast(node);
+        print_bst(node);
         printf("\n");
     }
 
     Value rtn;
     switch (node->type) {
-        case AST_TYPE::Assert:
-            rtn = visit_assert((AST_Assert*)node);
+        case BST_TYPE::Assert:
+            rtn = visit_assert((BST_Assert*)node);
             ASTInterpreterJitInterface::pendingCallsCheckHelper();
             break;
-        case AST_TYPE::Assign:
-            rtn = visit_assign((AST_Assign*)node);
+        case BST_TYPE::Assign:
+            rtn = visit_assign((BST_Assign*)node);
             ASTInterpreterJitInterface::pendingCallsCheckHelper();
             break;
-        case AST_TYPE::Delete:
-            rtn = visit_delete((AST_Delete*)node);
+        case BST_TYPE::Delete:
+            rtn = visit_delete((BST_Delete*)node);
             ASTInterpreterJitInterface::pendingCallsCheckHelper();
             break;
-        case AST_TYPE::Exec:
-            rtn = visit_exec((AST_Exec*)node);
+        case BST_TYPE::Exec:
+            rtn = visit_exec((BST_Exec*)node);
             ASTInterpreterJitInterface::pendingCallsCheckHelper();
             break;
-        case AST_TYPE::Expr:
+        case BST_TYPE::Expr:
             // docstrings are str constant expression statements.
             // ignore those while interpreting.
-            if ((((AST_Expr*)node)->value)->type != AST_TYPE::Str) {
-                rtn = visit_expr((AST_Expr*)node);
+            if ((((BST_Expr*)node)->value)->type != BST_TYPE::Str) {
+                rtn = visit_expr((BST_Expr*)node);
                 Py_DECREF(rtn.o);
                 rtn = Value();
                 ASTInterpreterJitInterface::pendingCallsCheckHelper();
             }
             break;
-        case AST_TYPE::Pass:
+        case BST_TYPE::Pass:
             ASTInterpreterJitInterface::pendingCallsCheckHelper();
             break; // nothing todo
-        case AST_TYPE::Print:
-            rtn = visit_print((AST_Print*)node);
+        case BST_TYPE::Print:
+            rtn = visit_print((BST_Print*)node);
             ASTInterpreterJitInterface::pendingCallsCheckHelper();
             break;
-        case AST_TYPE::Raise:
-            rtn = visit_raise((AST_Raise*)node);
+        case BST_TYPE::Raise:
+            rtn = visit_raise((BST_Raise*)node);
             ASTInterpreterJitInterface::pendingCallsCheckHelper();
             break;
-        case AST_TYPE::Return:
-            rtn = visit_return((AST_Return*)node);
+        case BST_TYPE::Return:
+            rtn = visit_return((BST_Return*)node);
             try {
                 ASTInterpreterJitInterface::pendingCallsCheckHelper();
             } catch (ExcInfo e) {
@@ -1055,20 +1055,20 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
                 throw e;
             }
             return rtn;
-        case AST_TYPE::Global:
-            rtn = visit_global((AST_Global*)node);
+        case BST_TYPE::Global:
+            rtn = visit_global((BST_Global*)node);
             ASTInterpreterJitInterface::pendingCallsCheckHelper();
             break;
 
         // pseudo
-        case AST_TYPE::Branch:
-            rtn = visit_branch((AST_Branch*)node);
+        case BST_TYPE::Branch:
+            rtn = visit_branch((BST_Branch*)node);
             break;
-        case AST_TYPE::Jump:
-            rtn = visit_jump((AST_Jump*)node);
+        case BST_TYPE::Jump:
+            rtn = visit_jump((BST_Jump*)node);
             return rtn;
-        case AST_TYPE::Invoke:
-            rtn = visit_invoke((AST_Invoke*)node);
+        case BST_TYPE::Invoke:
+            rtn = visit_invoke((BST_Invoke*)node);
             break;
         default:
             RELEASE_ASSERT(0, "not implemented");
@@ -1083,7 +1083,7 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
     return rtn;
 }
 
-Value ASTInterpreter::visit_return(AST_Return* node) {
+Value ASTInterpreter::visit_return(BST_Return* node) {
     Value s = node->value ? visit_expr(node->value) : getNone();
 
     if (jit) {
@@ -1113,7 +1113,7 @@ Value ASTInterpreter::visit_return(AST_Return* node) {
     return s;
 }
 
-Value ASTInterpreter::createFunction(AST_FunctionDef* node, AST_arguments* args) {
+Value ASTInterpreter::createFunction(BST_FunctionDef* node, BST_arguments* args) {
     BoxedCode* code = node->code;
     assert(code);
 
@@ -1128,7 +1128,7 @@ Value ASTInterpreter::createFunction(AST_FunctionDef* node, AST_arguments* args)
     }
 
     int i = 0;
-    for (AST_expr* d : args->defaults) {
+    for (BST_expr* d : args->defaults) {
         Value v = visit_expr(d);
         defaults.push_back(v.o);
         if (jit) {
@@ -1194,13 +1194,13 @@ Value ASTInterpreter::createFunction(AST_FunctionDef* node, AST_arguments* args)
     return rtn;
 }
 
-Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
-    AST_FunctionDef* node = mkfn->function_def;
-    AST_arguments* args = node->args;
+Value ASTInterpreter::visit_makeFunction(BST_MakeFunction* mkfn) {
+    BST_FunctionDef* node = mkfn->function_def;
+    BST_arguments* args = node->args;
 
     std::vector<Value> decorators;
     decorators.reserve(node->decorator_list.size());
-    for (AST_expr* d : node->decorator_list)
+    for (BST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d));
 
     Value func = createFunction(node, args);
@@ -1216,21 +1216,21 @@ Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
     return func;
 }
 
-Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
+Value ASTInterpreter::visit_makeClass(BST_MakeClass* mkclass) {
     abortJITing();
-    AST_ClassDef* node = mkclass->class_def;
+    BST_ClassDef* node = mkclass->class_def;
 
 
     BoxedTuple* basesTuple = BoxedTuple::create(node->bases.size());
     AUTO_DECREF(basesTuple);
     int base_idx = 0;
-    for (AST_expr* b : node->bases) {
+    for (BST_expr* b : node->bases) {
         basesTuple->elts[base_idx++] = visit_expr(b).o;
     }
 
     std::vector<Box*> decorators;
     decorators.reserve(node->decorator_list.size());
-    for (AST_expr* d : node->decorator_list)
+    for (BST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d).o);
 
     BoxedCode* code = node->code;
@@ -1263,7 +1263,7 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     return Value(classobj, NULL);
 }
 
-Value ASTInterpreter::visit_raise(AST_Raise* node) {
+Value ASTInterpreter::visit_raise(BST_Raise* node) {
     if (node->arg0 == NULL) {
         assert(!node->arg1);
         assert(!node->arg2);
@@ -1289,7 +1289,7 @@ Value ASTInterpreter::visit_raise(AST_Raise* node) {
     return Value();
 }
 
-Value ASTInterpreter::visit_assert(AST_Assert* node) {
+Value ASTInterpreter::visit_assert(BST_Assert* node) {
     abortJITing();
 #ifndef NDEBUG
     // Currently we only generate "assert 0" statements
@@ -1308,7 +1308,7 @@ Value ASTInterpreter::visit_assert(AST_Assert* node) {
     return Value();
 }
 
-Value ASTInterpreter::visit_global(AST_Global* node) {
+Value ASTInterpreter::visit_global(BST_Global* node) {
 #ifndef NDEBUG
     for (auto name : node->names) {
         assert(!getSymVRegMap().count(name));
@@ -1317,17 +1317,17 @@ Value ASTInterpreter::visit_global(AST_Global* node) {
     return Value();
 }
 
-Value ASTInterpreter::visit_delete(AST_Delete* node) {
-    for (AST_expr* target_ : node->targets) {
+Value ASTInterpreter::visit_delete(BST_Delete* node) {
+    for (BST_expr* target_ : node->targets) {
         switch (target_->type) {
-            case AST_TYPE::Subscript: {
-                AST_Subscript* sub = (AST_Subscript*)target_;
+            case BST_TYPE::Subscript: {
+                BST_Subscript* sub = (BST_Subscript*)target_;
                 Value value = visit_expr(sub->value);
                 AUTO_DECREF(value.o);
 
-                bool is_slice = (sub->slice->type == AST_TYPE::Slice) && (((AST_Slice*)sub->slice)->step == NULL);
+                bool is_slice = (sub->slice->type == BST_TYPE::Slice) && (((BST_Slice*)sub->slice)->step == NULL);
                 if (is_slice) {
-                    AST_Slice* slice = (AST_Slice*)sub->slice;
+                    BST_Slice* slice = (BST_Slice*)sub->slice;
                     Value lower = slice->lower ? visit_expr(slice->lower) : Value();
                     AUTO_XDECREF(lower.o);
                     Value upper = slice->upper ? visit_expr(slice->upper) : Value();
@@ -1346,8 +1346,8 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                 }
                 break;
             }
-            case AST_TYPE::Attribute: {
-                AST_Attribute* attr = (AST_Attribute*)target_;
+            case BST_TYPE::Attribute: {
+                BST_Attribute* attr = (BST_Attribute*)target_;
                 Value target = visit_expr(attr->value);
                 AUTO_DECREF(target.o);
                 BoxedString* str = attr->attr.getBox();
@@ -1356,8 +1356,8 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                 delattr(target.o, str);
                 break;
             }
-            case AST_TYPE::Name: {
-                AST_Name* target = (AST_Name*)target_;
+            case BST_TYPE::Name: {
+                BST_Name* target = (BST_Name*)target_;
                 assert(target->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
 
                 ScopeInfo::VarScopeType vst = target->lookup_type;
@@ -1401,7 +1401,7 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
     return Value();
 }
 
-Value ASTInterpreter::visit_assign(AST_Assign* node) {
+Value ASTInterpreter::visit_assign(BST_Assign* node) {
     assert(node->targets.size() == 1 && "cfg should have lowered it to a single target");
 
     Value v = visit_expr(node->value);
@@ -1409,7 +1409,7 @@ Value ASTInterpreter::visit_assign(AST_Assign* node) {
     return Value();
 }
 
-Value ASTInterpreter::visit_print(AST_Print* node) {
+Value ASTInterpreter::visit_print(BST_Print* node) {
     assert(node->values.size() <= 1 && "cfg should have lowered it to 0 or 1 values");
     Value dest = node->dest ? visit_expr(node->dest) : Value();
     Value var = node->values.size() ? visit_expr(node->values[0]) : Value();
@@ -1425,7 +1425,7 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
     return Value();
 }
 
-Value ASTInterpreter::visit_exec(AST_Exec* node) {
+Value ASTInterpreter::visit_exec(BST_Exec* node) {
     // TODO implement the locals and globals arguments
     Value code = visit_expr(node->body);
     AUTO_DECREF(code.o);
@@ -1441,7 +1441,7 @@ Value ASTInterpreter::visit_exec(AST_Exec* node) {
     return Value();
 }
 
-Value ASTInterpreter::visit_compare(AST_Compare* node) {
+Value ASTInterpreter::visit_compare(BST_Compare* node) {
     RELEASE_ASSERT(node->comparators.size() == 1, "not implemented");
     Value left = visit_expr(node->left);
     AUTO_DECREF(left.o);
@@ -1450,50 +1450,50 @@ Value ASTInterpreter::visit_compare(AST_Compare* node) {
     return doBinOp(node, left, right, node->ops[0], BinExpType::Compare);
 }
 
-Value ASTInterpreter::visit_expr(AST_expr* node) {
+Value ASTInterpreter::visit_expr(BST_expr* node) {
     switch (node->type) {
-        case AST_TYPE::Attribute:
-            return visit_attribute((AST_Attribute*)node);
-        case AST_TYPE::BinOp:
-            return visit_binop((AST_BinOp*)node);
-        case AST_TYPE::Call:
-            return visit_call((AST_Call*)node);
-        case AST_TYPE::Compare:
-            return visit_compare((AST_Compare*)node);
-        case AST_TYPE::Dict:
-            return visit_dict((AST_Dict*)node);
-        case AST_TYPE::List:
-            return visit_list((AST_List*)node);
-        case AST_TYPE::Name:
-            return visit_name((AST_Name*)node);
-        case AST_TYPE::Num:
-            return visit_num((AST_Num*)node);
-        case AST_TYPE::Repr:
-            return visit_repr((AST_Repr*)node);
-        case AST_TYPE::Set:
-            return visit_set((AST_Set*)node);
-        case AST_TYPE::Str:
-            return visit_str((AST_Str*)node);
-        case AST_TYPE::Subscript:
-            return visit_subscript((AST_Subscript*)node);
-        case AST_TYPE::Tuple:
-            return visit_tuple((AST_Tuple*)node);
-        case AST_TYPE::UnaryOp:
-            return visit_unaryop((AST_UnaryOp*)node);
-        case AST_TYPE::Yield:
-            return visit_yield((AST_Yield*)node);
+        case BST_TYPE::Attribute:
+            return visit_attribute((BST_Attribute*)node);
+        case BST_TYPE::BinOp:
+            return visit_binop((BST_BinOp*)node);
+        case BST_TYPE::Call:
+            return visit_call((BST_Call*)node);
+        case BST_TYPE::Compare:
+            return visit_compare((BST_Compare*)node);
+        case BST_TYPE::Dict:
+            return visit_dict((BST_Dict*)node);
+        case BST_TYPE::List:
+            return visit_list((BST_List*)node);
+        case BST_TYPE::Name:
+            return visit_name((BST_Name*)node);
+        case BST_TYPE::Num:
+            return visit_num((BST_Num*)node);
+        case BST_TYPE::Repr:
+            return visit_repr((BST_Repr*)node);
+        case BST_TYPE::Set:
+            return visit_set((BST_Set*)node);
+        case BST_TYPE::Str:
+            return visit_str((BST_Str*)node);
+        case BST_TYPE::Subscript:
+            return visit_subscript((BST_Subscript*)node);
+        case BST_TYPE::Tuple:
+            return visit_tuple((BST_Tuple*)node);
+        case BST_TYPE::UnaryOp:
+            return visit_unaryop((BST_UnaryOp*)node);
+        case BST_TYPE::Yield:
+            return visit_yield((BST_Yield*)node);
 
         // pseudo
-        case AST_TYPE::AugBinOp:
-            return visit_augBinOp((AST_AugBinOp*)node);
-        case AST_TYPE::ClsAttribute:
-            return visit_clsAttribute((AST_ClsAttribute*)node);
-        case AST_TYPE::LangPrimitive:
-            return visit_langPrimitive((AST_LangPrimitive*)node);
-        case AST_TYPE::MakeClass:
-            return visit_makeClass((AST_MakeClass*)node);
-        case AST_TYPE::MakeFunction:
-            return visit_makeFunction((AST_MakeFunction*)node);
+        case BST_TYPE::AugBinOp:
+            return visit_augBinOp((BST_AugBinOp*)node);
+        case BST_TYPE::ClsAttribute:
+            return visit_clsAttribute((BST_ClsAttribute*)node);
+        case BST_TYPE::LangPrimitive:
+            return visit_langPrimitive((BST_LangPrimitive*)node);
+        case BST_TYPE::MakeClass:
+            return visit_makeClass((BST_MakeClass*)node);
+        case BST_TYPE::MakeFunction:
+            return visit_makeFunction((BST_MakeFunction*)node);
         default:
             RELEASE_ASSERT(0, "");
     };
@@ -1501,7 +1501,7 @@ Value ASTInterpreter::visit_expr(AST_expr* node) {
 }
 
 
-Value ASTInterpreter::visit_call(AST_Call* node) {
+Value ASTInterpreter::visit_call(BST_Call* node) {
     Value v;
     Value func;
 
@@ -1509,16 +1509,16 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
 
     bool is_callattr = false;
     bool callattr_clsonly = false;
-    if (node->func->type == AST_TYPE::Attribute) {
+    if (node->func->type == BST_TYPE::Attribute) {
         is_callattr = true;
         callattr_clsonly = false;
-        AST_Attribute* attr_ast = ast_cast<AST_Attribute>(node->func);
+        BST_Attribute* attr_ast = bst_cast<BST_Attribute>(node->func);
         func = visit_expr(attr_ast->value);
         attr = attr_ast->attr;
-    } else if (node->func->type == AST_TYPE::ClsAttribute) {
+    } else if (node->func->type == BST_TYPE::ClsAttribute) {
         is_callattr = true;
         callattr_clsonly = true;
-        AST_ClsAttribute* attr_ast = ast_cast<AST_ClsAttribute>(node->func);
+        BST_ClsAttribute* attr_ast = bst_cast<BST_ClsAttribute>(node->func);
         func = visit_expr(attr_ast->value);
         attr = attr_ast->attr;
     } else {
@@ -1532,7 +1532,7 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
     args.reserve(node->args.size());
     args_vars.reserve(node->args.size());
 
-    for (AST_expr* e : node->args) {
+    for (BST_expr* e : node->args) {
         Value v = visit_expr(e);
         args.push_back(v.o);
         args_vars.push_back(v);
@@ -1542,7 +1542,7 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
     if (node->keywords.size())
         keyword_names = getKeywordNameStorage(node);
 
-    for (AST_keyword* k : node->keywords) {
+    for (BST_keyword* k : node->keywords) {
         Value v = visit_expr(k->value);
         args.push_back(v.o);
         args_vars.push_back(v);
@@ -1585,11 +1585,11 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
 }
 
 
-Value ASTInterpreter::visit_expr(AST_Expr* node) {
+Value ASTInterpreter::visit_expr(BST_Expr* node) {
     return visit_expr(node->value);
 }
 
-Value ASTInterpreter::visit_num(AST_Num* node) {
+Value ASTInterpreter::visit_num(BST_Num* node) {
     Box* o = NULL;
     if (node->num_type == AST_Num::INT) {
         o = parent_module->getIntConstant(node->n_int);
@@ -1609,17 +1609,17 @@ Value ASTInterpreter::visit_num(AST_Num* node) {
     return Value(o, v);
 }
 
-Value ASTInterpreter::visit_index(AST_Index* node) {
+Value ASTInterpreter::visit_index(BST_Index* node) {
     return visit_expr(node->value);
 }
 
-Value ASTInterpreter::visit_repr(AST_Repr* node) {
+Value ASTInterpreter::visit_repr(BST_Repr* node) {
     Value v = visit_expr(node->value);
     AUTO_DECREF(v.o);
     return Value(repr(v.o), jit ? jit->emitRepr(v) : NULL);
 }
 
-Value ASTInterpreter::visit_dict(AST_Dict* node) {
+Value ASTInterpreter::visit_dict(BST_Dict* node) {
     RELEASE_ASSERT(node->keys.size() == node->values.size(), "not implemented");
 
     BoxedDict* dict = new BoxedDict();
@@ -1637,7 +1637,7 @@ Value ASTInterpreter::visit_dict(AST_Dict* node) {
     return Value(dict, r_dict);
 }
 
-Value ASTInterpreter::visit_set(AST_Set* node) {
+Value ASTInterpreter::visit_set(BST_Set* node) {
     BoxedSet* set = (BoxedSet*)createSet();
     try {
         // insert the elements in reverse like cpython does
@@ -1655,7 +1655,7 @@ Value ASTInterpreter::visit_set(AST_Set* node) {
     }
 }
 
-Value ASTInterpreter::visit_str(AST_Str* node) {
+Value ASTInterpreter::visit_str(BST_Str* node) {
     Box* o = NULL;
     if (node->str_type == AST_Str::STR) {
         o = parent_module->getStringConstant(node->str_data, true);
@@ -1668,7 +1668,7 @@ Value ASTInterpreter::visit_str(AST_Str* node) {
     return Value(o, jit ? jit->imm(o)->setType(RefType::BORROWED) : NULL);
 }
 
-Value ASTInterpreter::visit_name(AST_Name* node) {
+Value ASTInterpreter::visit_name(BST_Name* node) {
     assert(node->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
 
     switch (node->lookup_type) {
@@ -1739,13 +1739,13 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
     }
 }
 
-Value ASTInterpreter::visit_subscript(AST_Subscript* node) {
+Value ASTInterpreter::visit_subscript(BST_Subscript* node) {
     Value value = visit_expr(node->value);
     AUTO_DECREF(value.o);
 
-    bool is_slice = (node->slice->type == AST_TYPE::Slice) && (((AST_Slice*)node->slice)->step == NULL);
+    bool is_slice = (node->slice->type == BST_TYPE::Slice) && (((BST_Slice*)node->slice)->step == NULL);
     if (is_slice) {
-        AST_Slice* slice = (AST_Slice*)node->slice;
+        BST_Slice* slice = (BST_Slice*)node->slice;
         Value lower = slice->lower ? visit_expr(slice->lower) : Value();
         AUTO_XDECREF(lower.o);
         Value upper = slice->upper ? visit_expr(slice->upper) : Value();
@@ -1769,12 +1769,12 @@ Value ASTInterpreter::visit_subscript(AST_Subscript* node) {
     }
 }
 
-Value ASTInterpreter::visit_list(AST_List* node) {
+Value ASTInterpreter::visit_list(BST_List* node) {
     llvm::SmallVector<RewriterVar*, 8> items;
 
     BoxedList* list = new BoxedList();
     list->ensure(node->elts.size());
-    for (AST_expr* e : node->elts) {
+    for (BST_expr* e : node->elts) {
         try {
             Value v = visit_expr(e);
             items.push_back(v);
@@ -1791,12 +1791,12 @@ Value ASTInterpreter::visit_list(AST_List* node) {
     return Value(list, jit ? jit->emitCreateList(items) : NULL);
 }
 
-Value ASTInterpreter::visit_tuple(AST_Tuple* node) {
+Value ASTInterpreter::visit_tuple(BST_Tuple* node) {
     llvm::SmallVector<RewriterVar*, 8> items;
 
     BoxedTuple* rtn = BoxedTuple::create(node->elts.size());
     int rtn_idx = 0;
-    for (AST_expr* e : node->elts) {
+    for (BST_expr* e : node->elts) {
         Value v = visit_expr(e);
         rtn->elts[rtn_idx++] = v.o;
         items.push_back(v);
@@ -1805,7 +1805,7 @@ Value ASTInterpreter::visit_tuple(AST_Tuple* node) {
     return Value(rtn, jit ? jit->emitCreateTuple(items) : NULL);
 }
 
-Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
+Value ASTInterpreter::visit_attribute(BST_Attribute* node) {
     Value v = visit_expr(node->value);
     AUTO_DECREF(v.o);
     Value r(pyston::getattr(v.o, node->attr.getBox()), jit ? jit->emitGetAttr(v, node->attr.getBox(), node) : NULL);
@@ -1863,7 +1863,7 @@ void ASTInterpreterJitInterface::delNameHelper(void* _interpreter, InternedStrin
     }
 }
 
-Box* ASTInterpreterJitInterface::derefHelper(void* _interpreter, AST_Name* node) {
+Box* ASTInterpreterJitInterface::derefHelper(void* _interpreter, BST_Name* node) {
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
     DerefInfo deref_info = interpreter->scope_info.getDerefInfo(node);
     assert(interpreter->getPassedClosure());
@@ -1906,7 +1906,7 @@ void ASTInterpreterJitInterface::setExcInfoHelper(void* _interpreter, STOLEN(Box
     setFrameExcInfo(interpreter->getFrameInfo(), type, value, traceback);
 }
 
-void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, AST_Name* name, Box* v) {
+void ASTInterpreterJitInterface::setLocalClosureHelper(void* _interpreter, BST_Name* name, Box* v) {
     assert(name->lookup_type == ScopeInfo::VarScopeType::CLOSURE);
 
     ASTInterpreter* interpreter = (ASTInterpreter*)_interpreter;
@@ -1944,7 +1944,7 @@ Box* ASTInterpreterJitInterface::yieldHelper(void* _interpreter, STOLEN(Box*) va
 const void* interpreter_instr_addr = (void*)&executeInnerAndSetupFrame;
 
 // small wrapper around executeInner because we can not directly call the member function from asm.
-extern "C" Box* executeInnerFromASM(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
+extern "C" Box* executeInnerFromASM(ASTInterpreter& interpreter, CFGBlock* start_block, BST_stmt* start_at) {
     initFrame(interpreter.getFrameInfo());
     Box* rtn = ASTInterpreter::executeInner(interpreter, start_block, start_at);
     deinitFrameMaybe(interpreter.getFrameInfo());
@@ -2072,7 +2072,7 @@ Box* astInterpretFunctionEval(BoxedCode* code, Box* globals, Box* boxedLocals) {
 }
 
 // caution when changing the function arguments: this function gets called from an assembler wrapper!
-extern "C" Box* astInterpretDeoptFromASM(BoxedCode* code, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+extern "C" Box* astInterpretDeoptFromASM(BoxedCode* code, BST_expr* after_expr, BST_stmt* enclosing_stmt, Box* expr_val,
                                          STOLEN(FrameStackState) frame_state) {
     static_assert(sizeof(FrameStackState) <= 2 * 8, "astInterpretDeopt assumes that all args get passed in regs!");
 
@@ -2122,24 +2122,24 @@ extern "C" Box* astInterpretDeoptFromASM(BoxedCode* code, AST_expr* after_expr, 
     }
 
     CFGBlock* start_block = NULL;
-    AST_stmt* starting_statement = NULL;
+    BST_stmt* starting_statement = NULL;
     while (true) {
-        if (enclosing_stmt->type == AST_TYPE::Assign) {
-            auto asgn = ast_cast<AST_Assign>(enclosing_stmt);
+        if (enclosing_stmt->type == BST_TYPE::Assign) {
+            auto asgn = bst_cast<BST_Assign>(enclosing_stmt);
             RELEASE_ASSERT(asgn->value == after_expr, "%p %p", asgn->value, after_expr);
             assert(asgn->targets.size() == 1);
-            assert(asgn->targets[0]->type == AST_TYPE::Name);
-            auto name = ast_cast<AST_Name>(asgn->targets[0]);
+            assert(asgn->targets[0]->type == BST_TYPE::Name);
+            auto name = bst_cast<BST_Name>(asgn->targets[0]);
             assert(name->id.s()[0] == '#');
             interpreter.addSymbol(name->vreg, expr_val, true);
             break;
-        } else if (enclosing_stmt->type == AST_TYPE::Expr) {
-            auto expr = ast_cast<AST_Expr>(enclosing_stmt);
+        } else if (enclosing_stmt->type == BST_TYPE::Expr) {
+            auto expr = bst_cast<BST_Expr>(enclosing_stmt);
             RELEASE_ASSERT(expr->value == after_expr, "%p %p", expr->value, after_expr);
             assert(expr->value == after_expr);
             break;
-        } else if (enclosing_stmt->type == AST_TYPE::Invoke) {
-            auto invoke = ast_cast<AST_Invoke>(enclosing_stmt);
+        } else if (enclosing_stmt->type == BST_TYPE::Invoke) {
+            auto invoke = bst_cast<BST_Invoke>(enclosing_stmt);
             start_block = invoke->normal_dest;
             starting_statement = start_block->body[0];
             enclosing_stmt = invoke->stmt;

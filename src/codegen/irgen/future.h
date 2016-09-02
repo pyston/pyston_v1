@@ -21,6 +21,8 @@
 
 namespace pyston {
 
+class AST_stmt;
+
 // Loop through import statements to find __future__ imports throwing errors for
 // bad __future__ imports. Returns the futures that are turned on. This is used
 // for irgeneration; the parser still has to handle some futures on its own,
