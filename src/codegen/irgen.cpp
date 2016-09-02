@@ -551,8 +551,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         if (block == cfg->getStartingBlock()) {
             assert(entry_descriptor == NULL);
 
-            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast != NULL
-                && source->ast->type != AST_TYPE::Module) {
+            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast_type != AST_TYPE::Module) {
                 llvm::BasicBlock* preentry_bb = llvm::BasicBlock::Create(
                     g.context, "pre_entry", irstate->getLLVMFunction(), llvm_entry_blocks[cfg->getStartingBlock()]);
                 llvm::BasicBlock* reopt_bb = llvm::BasicBlock::Create(g.context, "reopt", irstate->getLLVMFunction());
@@ -989,9 +988,7 @@ static void computeBlockSetClosure(BlockSet& blocks) {
 }
 // returns a pointer to the function-info mdnode
 static llvm::MDNode* setupDebugInfo(BoxedCode* code, llvm::Function* f, std::string origname) {
-    int lineno = 0;
-    if (code->source->ast)
-        lineno = code->source->ast->lineno;
+    int lineno = code->firstlineno;
 
     llvm::DIBuilder builder(*g.cur_module);
 

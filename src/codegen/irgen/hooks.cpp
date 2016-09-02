@@ -54,31 +54,6 @@
 
 namespace pyston {
 
-llvm::ArrayRef<AST_stmt*> SourceInfo::getBody() const {
-    switch (ast->type) {
-        case AST_TYPE::ClassDef:
-            return ((AST_ClassDef*)ast)->body;
-        case AST_TYPE::Expression:
-            return ((AST_Expression*)ast)->body;
-        case AST_TYPE::FunctionDef:
-            return ((AST_FunctionDef*)ast)->body;
-        case AST_TYPE::Module:
-            return ((AST_Module*)ast)->body;
-        default:
-            RELEASE_ASSERT(0, "unknown %d", ast->type);
-    };
-}
-
-Box* SourceInfo::getDocString() {
-    auto body = getBody();
-    if (body.size() > 0 && body[0]->type == AST_TYPE::Expr
-        && static_cast<AST_Expr*>(body[0])->value->type == AST_TYPE::Str) {
-        return boxString(static_cast<AST_Str*>(static_cast<AST_Expr*>(body[0])->value)->str_data);
-    }
-
-    return incref(Py_None);
-}
-
 LivenessAnalysis* SourceInfo::getLiveness() {
     if (!liveness_info)
         liveness_info = computeLivenessInfo(cfg);
@@ -258,11 +233,11 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     FutureFlags future_flags = getFutureFlags(m->body, fn);
     computeAllCFGs(m, /* globals_from_module */ true, future_flags, autoDecref(boxString(fn)), bm);
 
-    BoxedCode* code = codeForAST(m);
+    BoxedCode* code = m->getCode();
     assert(code);
 
     static BoxedString* doc_str = getStaticString("__doc__");
-    bm->setattr(doc_str, autoDecref(code->source->getDocString()), NULL);
+    bm->setattr(doc_str, code->_doc, NULL);
 
     static BoxedString* builtins_str = getStaticString("__builtins__");
     if (!bm->hasattr(builtins_str))
@@ -279,12 +254,11 @@ Box* evalOrExec(BoxedCode* code, Box* globals, Box* boxedLocals) {
 
     assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 
-    Box* doc_string = code->source->getDocString();
+    // TODO: we're supposed to embed this directly into the bytecode
+    Box* doc_string = code->_doc;
     if (doc_string != Py_None) {
         static BoxedString* doc_box = getStaticString("__doc__");
-        setGlobal(boxedLocals, doc_box, doc_string);
-    } else {
-        Py_DECREF(doc_string);
+        setGlobal(boxedLocals, doc_box, incref(doc_string));
     }
 
     return astInterpretFunctionEval(code, globals, boxedLocals);
@@ -306,7 +280,7 @@ static BoxedCode* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_stmt*> bo
     }
 
     computeAllCFGs(source, /* globals_from_module */ false, future_flags, fn, getCurrentModule());
-    return codeForAST(source);
+    return source->getCode();
 }
 
 static BoxedCode* compileExec(AST_Module* parsedModule, BoxedString* fn, PyCompilerFlags* flags) {

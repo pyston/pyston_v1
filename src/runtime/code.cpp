@@ -58,17 +58,11 @@ Box* BoxedCode::co_filename(Box* b, void* arg) noexcept {
     return incref(code->filename);
 }
 
-Box* BoxedCode::firstlineno(Box* b, void*) noexcept {
+Box* BoxedCode::co_firstlineno(Box* b, void*) noexcept {
     RELEASE_ASSERT(b->cls == code_cls, "");
     BoxedCode* code = static_cast<BoxedCode*>(b);
 
-    if (!code || !code->source)
-        return boxInt(code->_firstline);
-
-    if (code->source->ast->lineno == (uint32_t)-1)
-        return boxInt(-1);
-
-    return boxInt(code->source->ast->lineno);
+    return boxInt(code->firstlineno);
 }
 
 Box* BoxedCode::argcount(Box* b, void*) noexcept {
@@ -112,39 +106,21 @@ void BoxedCode::dealloc(Box* b) noexcept {
 
     Py_XDECREF(o->filename);
     Py_XDECREF(o->name);
+    Py_XDECREF(o->_doc);
 
     o->source.~decltype(o->source)();
 
     o->cls->tp_free(o);
 }
 
-BORROWED(BoxedString*) getASTName(AST* ast) noexcept {
-    assert(ast);
-
-    static BoxedString* lambda_name = getStaticString("<lambda>");
-    static BoxedString* module_name = getStaticString("<module>");
-
-    switch (ast->type) {
-        case AST_TYPE::ClassDef:
-            return ast_cast<AST_ClassDef>(ast)->name.getBox();
-        case AST_TYPE::FunctionDef:
-            if (ast_cast<AST_FunctionDef>(ast)->name != InternedString())
-                return ast_cast<AST_FunctionDef>(ast)->name.getBox();
-            return lambda_name;
-        case AST_TYPE::Module:
-        case AST_TYPE::Expression:
-        case AST_TYPE::Suite:
-            return module_name;
-        default:
-            RELEASE_ASSERT(0, "%d", ast->type);
-    }
-}
-
-BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source,
-                     ParamNames param_names, BoxedString* filename)
+BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, int firstlineno,
+                     std::unique_ptr<SourceInfo> source, ParamNames param_names, BoxedString* filename,
+                     BoxedString* name, Box* doc)
     : source(std::move(source)),
       filename(incref(filename)),
-      name(incref(getASTName(this->source->ast))),
+      name(incref(name)),
+      firstlineno(firstlineno),
+      _doc(incref(doc)),
       param_names(std::move(param_names)),
       takes_varargs(takes_varargs),
       takes_kwargs(takes_kwargs),
@@ -153,12 +129,14 @@ BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, std::u
       internal_callable(NULL, NULL) {
 }
 
-BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names,
-                     BoxedString* filename)
+BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
     : source(nullptr),
-      // This should probably be just an "incref"?
-      filename(xincref(filename)),
-      name(boxString("???")),
+      // TODO what to do with these?
+      filename(nullptr),
+      name(nullptr),
+      firstlineno(-1),
+      _doc(nullptr),
+
       param_names(param_names),
       takes_varargs(takes_varargs),
       takes_kwargs(takes_kwargs),
@@ -171,7 +149,9 @@ BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const 
 BoxedCode::BoxedCode(BoxedString* filename, BoxedString* name, int firstline)
     : filename(filename),
       name(name),
-      _firstline(firstline),
+      firstlineno(firstline),
+      _doc(nullptr),
+
       param_names(ParamNames::empty()),
       takes_varargs(false),
       takes_kwargs(false),
@@ -273,7 +253,7 @@ void setupCode() {
 
     code_cls->giveAttrDescriptor("co_name", BoxedCode::co_name, NULL);
     code_cls->giveAttrDescriptor("co_filename", BoxedCode::co_filename, NULL);
-    code_cls->giveAttrDescriptor("co_firstlineno", BoxedCode::firstlineno, NULL);
+    code_cls->giveAttrDescriptor("co_firstlineno", BoxedCode::co_firstlineno, NULL);
     code_cls->giveAttrDescriptor("co_argcount", BoxedCode::argcount, NULL);
     code_cls->giveAttrDescriptor("co_varnames", BoxedCode::varnames, NULL);
     code_cls->giveAttrDescriptor("co_flags", BoxedCode::flags, NULL);

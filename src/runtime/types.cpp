@@ -364,7 +364,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(BoxedCode* code, llvm::ArrayRef<
         }
         // It's ok for modname to be NULL
 
-        this->doc = code->source->getDocString();
+        this->doc = xincref(code->_doc);
     } else {
         this->modname = PyString_InternFromString("__builtin__");
         this->doc = incref(Py_None);
@@ -379,7 +379,7 @@ BoxedFunction::BoxedFunction(BoxedCode* code, llvm::ArrayRef<Box*> defaults, Box
     : BoxedFunctionBase(code, defaults, closure, globals, can_change_defaults) {
 
     assert(!this->name);
-    this->name = incref(code->name);
+    this->name = xincref(code->name);
 }
 
 BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(BoxedCode* code, const char* name, const char* doc)

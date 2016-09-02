@@ -2261,4 +2261,77 @@ void flatten(AST_expr* root, std::vector<AST*>& output, bool expand_scopes) {
 
     root->accept(&visitor);
 }
+
+BoxedCode*& AST::getCode() {
+    switch (this->type) {
+        case AST_TYPE::Expression:
+            return ast_cast<AST_Expression>(this)->code;
+        case AST_TYPE::FunctionDef:
+            return ast_cast<AST_FunctionDef>(this)->code;
+        case AST_TYPE::ClassDef:
+            return ast_cast<AST_ClassDef>(this)->code;
+        case AST_TYPE::Module:
+            return ast_cast<AST_Module>(this)->code;
+        default:
+            break;
+    }
+    RELEASE_ASSERT(0, "%d", this->type);
+}
+
+InternedStringPool& AST::getStringpool() {
+    switch (this->type) {
+        case AST_TYPE::Expression:
+            return *ast_cast<AST_Expression>(this)->interned_strings;
+        case AST_TYPE::Module:
+            return *ast_cast<AST_Module>(this)->interned_strings;
+        default:
+            break;
+    }
+    RELEASE_ASSERT(0, "%d", this->type);
+}
+
+llvm::ArrayRef<AST_stmt*> AST::getBody() {
+    switch (this->type) {
+        case AST_TYPE::ClassDef:
+            return ((AST_ClassDef*)this)->body;
+        case AST_TYPE::Expression:
+            return ((AST_Expression*)this)->body;
+        case AST_TYPE::FunctionDef:
+            return ((AST_FunctionDef*)this)->body;
+        case AST_TYPE::Module:
+            return ((AST_Module*)this)->body;
+        default:
+            RELEASE_ASSERT(0, "unknown %d", this->type);
+    };
+}
+
+Box* AST::getDocString() {
+    auto body = this->getBody();
+    if (body.size() > 0 && body[0]->type == AST_TYPE::Expr
+        && static_cast<AST_Expr*>(body[0])->value->type == AST_TYPE::Str) {
+        return boxString(static_cast<AST_Str*>(static_cast<AST_Expr*>(body[0])->value)->str_data);
+    }
+
+    return incref(Py_None);
+}
+
+BORROWED(BoxedString*) AST::getName() noexcept {
+    static BoxedString* lambda_name = getStaticString("<lambda>");
+    static BoxedString* module_name = getStaticString("<module>");
+
+    switch (this->type) {
+        case AST_TYPE::ClassDef:
+            return ast_cast<AST_ClassDef>(this)->name.getBox();
+        case AST_TYPE::FunctionDef:
+            if (ast_cast<AST_FunctionDef>(this)->name != InternedString())
+                return ast_cast<AST_FunctionDef>(this)->name.getBox();
+            return lambda_name;
+        case AST_TYPE::Module:
+        case AST_TYPE::Expression:
+        case AST_TYPE::Suite:
+            return module_name;
+        default:
+            RELEASE_ASSERT(0, "%d", this->type);
+    }
+}
 }

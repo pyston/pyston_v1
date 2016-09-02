@@ -491,16 +491,18 @@ private:
 public:
     BoxedModule* parent_module;
     ScopingResults scoping;
-    AST* ast;
     CFG* cfg;
     FutureFlags future_flags;
     bool is_generator;
 
+    // This should really be an AST_TYPE::AST_TYPE, using that would require resolving a circular dependency
+    // between ast.h and core/types.h
+    int ast_type;
+
     LivenessAnalysis* getLiveness();
 
-    llvm::ArrayRef<AST_stmt*> getBody() const;
-
-    Box* getDocString();
+    // llvm::ArrayRef<AST_stmt*> getBody() const;
+    // Box* getDocString();
 
     SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, AST* ast);
     ~SourceInfo();

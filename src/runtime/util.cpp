@@ -251,7 +251,7 @@ extern "C" void dumpEx(void* p, int levels) {
             BoxedCode* code = f->code;
             if (code->source) {
                 printf("User-defined function '%s'\n", code->name->c_str());
-                printf("Defined at %s:%d\n", code->filename->c_str(), code->source->ast->lineno);
+                printf("Defined at %s:%d\n", code->filename->c_str(), code->firstlineno);
 
                 if (code->source->cfg && levels > 0) {
                     code->source->cfg->print();

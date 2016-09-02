@@ -929,7 +929,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args.size() == 1);
         assert(node->args[0]->type == AST_TYPE::Name);
 
-        RELEASE_ASSERT(source_info->ast->type == AST_TYPE::Module || source_info->ast->type == AST_TYPE::Suite,
+        RELEASE_ASSERT(source_info->ast_type == AST_TYPE::Module || source_info->ast_type == AST_TYPE::Suite,
                        "import * not supported in functions");
 
         Value module = visit_expr(node->args[0]);

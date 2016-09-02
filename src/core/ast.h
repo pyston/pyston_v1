@@ -188,6 +188,14 @@ public:
 #endif
     AST(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0)
         : type(type), lineno(lineno), col_offset(col_offset) {}
+
+    // These could be virtual methods, but since we already keep track of the type use a switch statement
+    // like everywhere else.
+    BoxedCode*& getCode();
+    InternedStringPool& getStringpool();
+    llvm::ArrayRef<AST_stmt*> getBody();
+    Box* getDocString();
+    BORROWED(BoxedString*) getName() noexcept;
 };
 
 class AST_expr : public AST {

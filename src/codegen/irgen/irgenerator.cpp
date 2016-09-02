@@ -988,7 +988,7 @@ private:
                 assert(node->args.size() == 1);
                 assert(node->args[0]->type == AST_TYPE::Name);
 
-                RELEASE_ASSERT(irstate->getSourceInfo()->ast->type == AST_TYPE::Module,
+                RELEASE_ASSERT(irstate->getSourceInfo()->ast_type == AST_TYPE::Module,
                                "import * not supported in functions (yet)");
 
                 CompilerVariable* module = evalExpr(node->args[0], unw_info);
@@ -1709,8 +1709,8 @@ private:
             // I think it's better to just not generate bad speculations:
             if (rtn->canConvertTo(speculated_type)) {
                 auto source = irstate->getSourceInfo();
-                printf("On %s:%d, function %s:\n", irstate->getCode()->filename->c_str(), source->getBody()[0]->lineno,
-                       irstate->getCode()->name->c_str());
+                printf("On %s:%d, function %s:\n", irstate->getCode()->filename->c_str(),
+                       irstate->getCode()->firstlineno, irstate->getCode()->name->c_str());
                 irstate->getSourceInfo()->cfg->print();
             }
             RELEASE_ASSERT(!rtn->canConvertTo(speculated_type), "%s %s", rtn->getType()->debugName().c_str(),

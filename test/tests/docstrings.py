@@ -55,3 +55,8 @@ class C4(object):
     ("a")
 assert C3.__doc__ is None
 """
+
+exec """
+"hello world"
+print __doc__
+"""

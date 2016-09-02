@@ -59,9 +59,9 @@ void BoxedCode::addVersion(CompiledFunction* compiled) {
 }
 
 SourceInfo::SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, AST* ast)
-    : parent_module(m), scoping(std::move(scoping)), ast(ast), cfg(NULL), future_flags(future_flags) {
+    : parent_module(m), scoping(std::move(scoping)), cfg(NULL), future_flags(future_flags), ast_type(ast->type) {
 
-    switch (ast->type) {
+    switch (ast_type) {
         case AST_TYPE::ClassDef:
         case AST_TYPE::Module:
         case AST_TYPE::Expression:
@@ -73,7 +73,7 @@ SourceInfo::SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags futur
             is_generator = containsYield(ast);
             break;
         default:
-            RELEASE_ASSERT(0, "Unknown type: %d", ast->type);
+            RELEASE_ASSERT(0, "Unknown type: %d", ast_type);
             break;
     }
 }

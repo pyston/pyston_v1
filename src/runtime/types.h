@@ -1080,7 +1080,9 @@ public:
 
     BoxedString* filename = nullptr;
     BoxedString* name = nullptr;
-    int _firstline;
+    int firstlineno;
+    // In CPython, this is just stored as consts[0]
+    Box* _doc = nullptr;
 
     const ParamNames param_names;
     const bool takes_varargs, takes_kwargs;
@@ -1109,10 +1111,9 @@ public:
                                         Box**, const std::vector<BoxedString*>*> InternalCallable;
     InternalCallable internal_callable;
 
-    BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, std::unique_ptr<SourceInfo> source,
-              ParamNames param_names, BoxedString* filename);
-    BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names = ParamNames::empty(),
-              BoxedString* filename = nullptr);
+    BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, int firstlineno, std::unique_ptr<SourceInfo> source,
+              ParamNames param_names, BoxedString* filename, BoxedString* name, Box* doc);
+    BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names = ParamNames::empty());
     ~BoxedCode();
 
     // The dummy constructor for PyCode_New:
@@ -1166,7 +1167,7 @@ public:
     // static BORROWED(Box*) filename(Box* b, void*) noexcept;
     static Box* co_name(Box* b, void*) noexcept;
     static Box* co_filename(Box* b, void*) noexcept;
-    static Box* firstlineno(Box* b, void*) noexcept;
+    static Box* co_firstlineno(Box* b, void*) noexcept;
     static Box* argcount(Box* b, void*) noexcept;
     static Box* varnames(Box* b, void*) noexcept;
     static Box* flags(Box* b, void*) noexcept;
