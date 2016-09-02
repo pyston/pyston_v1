@@ -35,7 +35,6 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "runtime/classobj.h"
-#include "runtime/code.h"
 #include "runtime/complex.h"
 #include "runtime/dict.h"
 #include "runtime/hiddenclass.h"
