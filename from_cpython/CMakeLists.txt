@@ -39,6 +39,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     _collectionsmodule.c
     _csv.c
     _functoolsmodule.c
+    _heapqmodule.c
     _iomodule.c
     _math.c
     _randommodule.c

@@ -23,6 +23,8 @@ cmp_lt(PyObject *x, PyObject *y)
         lt = PyString_FromString("__lt__");
         if (lt == NULL)
             return -1;
+        // Pyston change:
+        PyGC_RegisterStaticConstant(lt);
     }
     if (PyObject_HasAttr(x, lt))
         return PyObject_RichCompareBool(x, y, Py_LT);
@@ -621,7 +623,7 @@ maintains the heap invariant!\n");
 PyDoc_STRVAR(__about__,
 "Heap queues\n\
 \n\
-[explanation by François Pinard]\n\
+[explanation by FranÃ§ois Pinard]\n\
 \n\
 Heaps are arrays for which a[k] <= a[2*k+1] and a[k] <= a[2*k+2] for\n\
 all k, counting elements from 0.  For the sake of comparison,\n\
