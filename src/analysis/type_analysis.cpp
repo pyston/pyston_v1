@@ -93,17 +93,14 @@ private:
     ExprTypeMap& expr_types;
     TypeSpeculations& type_speculations;
     TypeAnalysis::SpeculationLevel speculation;
-    ScopeInfo* scope_info;
 
     BasicBlockTypePropagator(CFGBlock* block, TypeMap& initial, ExprTypeMap& expr_types,
-                             TypeSpeculations& type_speculations, TypeAnalysis::SpeculationLevel speculation,
-                             ScopeInfo* scope_info)
+                             TypeSpeculations& type_speculations, TypeAnalysis::SpeculationLevel speculation)
         : block(block),
           sym_table(initial),
           expr_types(expr_types),
           type_speculations(type_speculations),
-          speculation(speculation),
-          scope_info(scope_info) {}
+          speculation(speculation) {}
 
     void run() {
         for (int i = 0; i < block->body.size(); i++) {
@@ -429,8 +426,7 @@ private:
     }
 
     void* visit_name(AST_Name* node) override {
-        if (node->lookup_type == ScopeInfo::VarScopeType::UNKNOWN)
-            node->lookup_type = scope_info->getScopeTypeOfName(node->id);
+        assert(node->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
         auto name_scope = node->lookup_type;
 
         if (name_scope == ScopeInfo::VarScopeType::GLOBAL) {
@@ -671,10 +667,9 @@ private:
 
 public:
     static TypeMap propagate(CFGBlock* block, const TypeMap& starting, ExprTypeMap& expr_types,
-                             TypeSpeculations& type_speculations, TypeAnalysis::SpeculationLevel speculation,
-                             ScopeInfo* scope_info) {
+                             TypeSpeculations& type_speculations, TypeAnalysis::SpeculationLevel speculation) {
         TypeMap ending = starting;
-        BasicBlockTypePropagator(block, ending, expr_types, type_speculations, speculation, scope_info).run();
+        BasicBlockTypePropagator(block, ending, expr_types, type_speculations, speculation).run();
         return ending;
     }
 };
@@ -753,8 +748,8 @@ public:
         return changed;
     }
 
-    static PropagatingTypeAnalysis* doAnalysis(SpeculationLevel speculation, ScopeInfo* scope_info,
-                                               TypeMap&& initial_types, CFGBlock* initial_block) {
+    static PropagatingTypeAnalysis* doAnalysis(SpeculationLevel speculation, TypeMap&& initial_types,
+                                               CFGBlock* initial_block) {
         Timer _t("PropagatingTypeAnalysis::doAnalysis()");
 
         CFG* cfg = initial_block->cfg;
@@ -795,7 +790,7 @@ public:
             }
 
             TypeMap ending = BasicBlockTypePropagator::propagate(block, starting_types.find(block)->second, expr_types,
-                                                                 type_speculations, speculation, scope_info);
+                                                                 type_speculations, speculation);
 
             if (VERBOSITY("types") >= 3) {
                 printf("before (after):\n");
@@ -851,7 +846,7 @@ public:
 
 // public entry point:
 TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& arg_names, const std::vector<ConcreteCompilerType*>& arg_types,
-                             EffortLevel effort, TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info) {
+                             EffortLevel effort, TypeAnalysis::SpeculationLevel speculation) {
     // if (effort == EffortLevel::INTERPRETED) {
     // return new NullTypeAnalysis();
     //}
@@ -870,12 +865,11 @@ TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& arg_names, const std::v
 
     assert(i == arg_types.size());
 
-    return PropagatingTypeAnalysis::doAnalysis(speculation, scope_info, std::move(initial_types),
-                                               cfg->getStartingBlock());
+    return PropagatingTypeAnalysis::doAnalysis(speculation, std::move(initial_types), cfg->getStartingBlock());
 }
 
 TypeAnalysis* doTypeAnalysis(const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
-                             TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info) {
+                             TypeAnalysis::SpeculationLevel speculation) {
     auto cfg = entry_descriptor->md->source->cfg;
     auto&& vreg_info = cfg->getVRegInfo();
     TypeMap initial_types(vreg_info.getTotalNumOfVRegs());
@@ -884,7 +878,7 @@ TypeAnalysis* doTypeAnalysis(const OSREntryDescriptor* entry_descriptor, EffortL
         initial_types[p.first] = p.second;
     }
 
-    return PropagatingTypeAnalysis::doAnalysis(speculation, scope_info, std::move(initial_types),
+    return PropagatingTypeAnalysis::doAnalysis(speculation, std::move(initial_types),
                                                entry_descriptor->backedge->target);
 }
 }

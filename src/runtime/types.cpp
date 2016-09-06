@@ -326,7 +326,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, llvm::Arra
       modname(NULL),
       name(NULL),
       doc(NULL) {
-    assert((!globals) == (!md->source || md->source->scoping->areGlobalsFromModule()));
+    assert((!globals) == (!md->source || md->source->scoping.areGlobalsFromModule()));
 
     if (globals)
         ASSERT(globals->cls == dict_cls || globals->cls == module_cls, "%s", globals->cls->tp_name);
@@ -353,7 +353,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(FunctionMetadata* md, llvm::Arra
 
         Box* globals_for_name = globals;
         if (!globals_for_name) {
-            assert(md->source->scoping->areGlobalsFromModule());
+            assert(md->source->scoping.areGlobalsFromModule());
             globals_for_name = md->source->parent_module;
         }
 
@@ -1648,7 +1648,7 @@ static Box* function_new(BoxedClass* cls, Box* code, Box* globals, Box** _args) 
 
     FunctionMetadata* md = static_cast<BoxedCode*>(code)->f;
     RELEASE_ASSERT(md->source, "");
-    if (md->source->scoping->areGlobalsFromModule()) {
+    if (md->source->scoping.areGlobalsFromModule()) {
         RELEASE_ASSERT(unwrapAttrWrapper(globals) == md->source->parent_module, "");
         globals = NULL;
     } else {
@@ -1730,13 +1730,13 @@ static Box* function_globals(Box* self, void*) noexcept {
     assert(self->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(self);
     if (func->globals) {
-        assert(!func->md->source || !func->md->source->scoping->areGlobalsFromModule());
+        assert(!func->md->source || !func->md->source->scoping.areGlobalsFromModule());
         if (func->globals->cls == module_cls)
             return incref(func->globals->getAttrWrapper());
         return incref(func->globals);
     }
     assert(func->md->source);
-    assert(func->md->source->scoping->areGlobalsFromModule());
+    assert(func->md->source->scoping.areGlobalsFromModule());
 
     static BoxedString* dict_str = getStaticString("__dict__");
     return getattrInternal<CAPI>(func->md->source->parent_module, dict_str);

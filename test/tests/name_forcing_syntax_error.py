@@ -4,12 +4,6 @@
 
 # The logic beyond this error message is oddly complicated.
 
-try:
-    import __pyston__
-    __pyston__.setOption("LAZY_SCOPING_ANALYSIS", 0)
-except ImportError:
-    pass
-
 cases = [
 
 # protip: delete this first """ to get your editor to syntax-highlight the code

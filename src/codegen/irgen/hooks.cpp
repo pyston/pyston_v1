@@ -54,78 +54,6 @@
 
 namespace pyston {
 
-// TODO terrible place for these!
-ParamNames::ParamNames(AST* ast, InternedStringPool& pool)
-    : all_args_contains_names(1), takes_param_names(1), has_vararg_name(0), has_kwarg_name(0) {
-    if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef || ast->type == AST_TYPE::Expression
-        || ast->type == AST_TYPE::Suite) {
-    } else if (ast->type == AST_TYPE::FunctionDef || ast->type == AST_TYPE::Lambda) {
-        AST_arguments* arguments = ast->type == AST_TYPE::FunctionDef ? ast_cast<AST_FunctionDef>(ast)->args
-                                                                      : ast_cast<AST_Lambda>(ast)->args;
-        for (int i = 0; i < arguments->args.size(); i++) {
-            AST_expr* arg = arguments->args[i];
-            if (arg->type == AST_TYPE::Name) {
-                AST_Name* name = ast_cast<AST_Name>(arg);
-                all_args.emplace_back(name);
-            } else {
-                InternedString dot_arg_name = pool.get("." + std::to_string(i));
-                all_args.emplace_back(new AST_Name(dot_arg_name, AST_TYPE::Param, arg->lineno, arg->col_offset));
-            }
-        }
-
-        auto vararg_name = arguments->vararg;
-        if (vararg_name) {
-            has_vararg_name = 1;
-            all_args.emplace_back(vararg_name);
-        }
-
-        auto kwarg_name = arguments->kwarg;
-        if (kwarg_name) {
-            has_kwarg_name = 1;
-            all_args.emplace_back(kwarg_name);
-        }
-    } else {
-        RELEASE_ASSERT(0, "%d", ast->type);
-    }
-}
-
-ParamNames::ParamNames(const std::vector<const char*>& args, const char* vararg, const char* kwarg)
-    : all_args_contains_names(0),
-      takes_param_names(1),
-      has_vararg_name(vararg && *vararg),
-      has_kwarg_name(kwarg && *kwarg) {
-    all_args.reserve(args.size() + has_vararg_name + has_kwarg_name);
-    for (auto&& arg : args) {
-        all_args.emplace_back(arg);
-    }
-    if (has_vararg_name)
-        all_args.emplace_back(vararg);
-    if (has_kwarg_name)
-        all_args.emplace_back(kwarg);
-}
-
-std::vector<const char*> ParamNames::allArgsAsStr() const {
-    std::vector<const char*> ret;
-    ret.reserve(all_args.size());
-    if (all_args_contains_names) {
-        for (auto&& arg : all_args) {
-            ret.push_back(arg.name->id.c_str());
-        }
-    } else {
-        for (auto&& arg : all_args) {
-            ret.push_back(arg.str);
-        }
-    }
-    return ret;
-}
-
-InternedString SourceInfo::mangleName(InternedString id) {
-    assert(ast);
-    if (ast->type == AST_TYPE::Module)
-        return id;
-    return getScopeInfo()->mangleName(id);
-}
-
 llvm::ArrayRef<AST_stmt*> SourceInfo::getBody() const {
     switch (ast->type) {
         case AST_TYPE::ClassDef:
@@ -139,10 +67,6 @@ llvm::ArrayRef<AST_stmt*> SourceInfo::getBody() const {
         default:
             RELEASE_ASSERT(0, "unknown %d", ast->type);
     };
-}
-
-InternedStringPool& SourceInfo::getInternedStrings() {
-    return scoping->getInternedStrings();
 }
 
 BORROWED(BoxedString*) SourceInfo::getFn() {
@@ -180,12 +104,6 @@ Box* SourceInfo::getDocString() {
     }
 
     return incref(Py_None);
-}
-
-ScopeInfo* SourceInfo::getScopeInfo() {
-    if (!scope_info)
-        scope_info = scoping->getScopeInfoForNode(ast);
-    return scope_info;
 }
 
 LivenessAnalysis* SourceInfo::getLiveness() {
@@ -310,10 +228,7 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
         printf("%s", ss.str().c_str());
     }
 
-    // Do the analysis now if we had deferred it earlier:
-    if (source->cfg == NULL) {
-        source->cfg = computeCFG(source, f->param_names);
-    }
+    assert(source->cfg);
 
 
     CompiledFunction* cf = NULL;
@@ -362,42 +277,32 @@ CompiledFunction* compileFunction(FunctionMetadata* f, FunctionSpecialization* s
 }
 
 void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
-    FunctionMetadata* md;
-
     Timer _t("for compileModule()");
 
     const char* fn = PyModule_GetFilename(bm);
     RELEASE_ASSERT(fn, "");
 
     FutureFlags future_flags = getFutureFlags(m->body, fn);
-    ScopingAnalysis* scoping = new ScopingAnalysis(m, true);
+    computeAllCFGs(m, /* globals_from_module */ true, future_flags, autoDecref(boxString(fn)), bm);
 
-    auto fn_str = boxString(fn);
-    AUTO_DECREF(fn_str);
-    std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, future_flags, m, fn_str));
+    FunctionMetadata* md = metadataForAST(m);
+    assert(md);
 
     static BoxedString* doc_str = getStaticString("__doc__");
-    bm->setattr(doc_str, autoDecref(si->getDocString()), NULL);
+    bm->setattr(doc_str, autoDecref(md->source->getDocString()), NULL);
 
     static BoxedString* builtins_str = getStaticString("__builtins__");
     if (!bm->hasattr(builtins_str))
         bm->setattr(builtins_str, PyModule_GetDict(builtins_module), NULL);
 
-    md = new FunctionMetadata(0, false, false, std::move(si));
-
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_interpreted_module_toplevel");
     Box* r = astInterpretFunction(md, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     assert(r == Py_None);
     Py_DECREF(r);
-
-    // XXX for bjit testing
-    // r = astInterpretFunction(md, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-    // assert(r == None);
-    // Py_DECREF(r);
 }
 
 Box* evalOrExec(FunctionMetadata* md, Box* globals, Box* boxedLocals) {
-    RELEASE_ASSERT(!md->source->scoping->areGlobalsFromModule(), "");
+    RELEASE_ASSERT(!md->source->scoping.areGlobalsFromModule(), "");
 
     assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 
@@ -416,8 +321,6 @@ static FunctionMetadata* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_st
                                               PyCompilerFlags* flags) {
     Timer _t("for evalOrExec()");
 
-    ScopingAnalysis* scoping = new ScopingAnalysis(source, false);
-
     // `my_future_flags` are the future flags enabled in the exec's code.
     // `caller_future_flags` are the future flags of the source that the exec statement is in.
     // We need to enable features that are enabled in either.
@@ -429,10 +332,8 @@ static FunctionMetadata* compileForEvalOrExec(AST* source, llvm::ArrayRef<AST_st
         flags->cf_flags = future_flags;
     }
 
-    std::unique_ptr<SourceInfo> si(new SourceInfo(getCurrentModule(), scoping, future_flags, source, fn));
-
-    FunctionMetadata* md = new FunctionMetadata(0, false, false, std::move(si));
-    return md;
+    computeAllCFGs(source, /* globals_from_module */ false, future_flags, fn, getCurrentModule());
+    return metadataForAST(source);
 }
 
 static FunctionMetadata* compileExec(AST_Module* parsedModule, BoxedString* fn, PyCompilerFlags* flags) {
