@@ -1,4 +1,3 @@
-# expected: fail
 """Unit tests for the copy module."""
 
 import copy

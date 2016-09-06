@@ -1,4 +1,3 @@
-# expected: fail
 """Tests for sysconfig."""
 
 import unittest
