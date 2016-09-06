@@ -184,8 +184,6 @@ static void enableGdbSegfaultWatcher() {
 int handleArg(char code) {
     if (code == 'O')
         FORCE_OPTIMIZE = true;
-    else if (code == 't')
-        TRAP = true;
     else if (code == 'q')
         GLOBAL_VERBOSITY = 0;
     else if (code == 'v') {
@@ -207,7 +205,7 @@ int handleArg(char code) {
         PROFILE = true;
     } else if (code == 'j') {
         DUMPJIT = true;
-    } else if (code == 's') {
+    } else if (code == 'T') {
         Stats::setEnabled(true);
     } else if (code == 'S') {
         Py_NoSiteFlag = 1;
@@ -329,7 +327,7 @@ static int main(int argc, char** argv) noexcept {
 
         // Suppress getopt errors so we can throw them ourselves
         opterr = 0;
-        while ((code = getopt(argc, argv, "+:OqdIibpjtrsRSUvnxXEac:FuPTGm:")) != -1) {
+        while ((code = getopt(argc, argv, "+:OqdIibpjtrTRSUvnxXEac:FuPTGm:")) != -1) {
             if (code == 'c') {
                 assert(optarg);
                 command = optarg;

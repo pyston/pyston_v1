@@ -231,7 +231,7 @@ def get_test_options(fn, check_stats, run_memcheck):
         opts.expected = "success"
 
     if opts.collect_stats:
-        opts.jit_args = ['-s'] + opts.jit_args
+        opts.jit_args = ['-T'] + opts.jit_args
 
     return opts
 

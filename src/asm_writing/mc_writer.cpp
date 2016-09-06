@@ -121,10 +121,6 @@ private:
     int pops_required;
 
     inline void _emitByte(uint8_t b) {
-        if (TRAP) {
-            printf(" %02x", b);
-            fflush(stdout);
-        }
         assert(addr < end_addr);
         *addr++ = b;
     }

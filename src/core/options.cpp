@@ -36,7 +36,6 @@ bool CONTINUE_AFTER_FATAL = false;
 bool SHOW_DISASM = false;
 bool PROFILE = false;
 bool DUMPJIT = false;
-bool TRAP = false;
 bool USE_STRIPPED_STDLIB = true; // always true
 bool USE_REGALLOC_BASIC = false;
 bool PAUSE_AT_ABORT = false;
