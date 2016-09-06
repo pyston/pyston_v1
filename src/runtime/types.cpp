@@ -49,49 +49,50 @@
 #include "runtime/super.h"
 #include "runtime/util.h"
 
+extern "C" void initarray();
+extern "C" void init_ast();
+extern "C" void initbinascii();
 extern "C" void init_bisect();
+extern "C" void init_codecs();
+extern "C" void init_collections();
+extern "C" void initcStringIO();
+extern "C" void init_csv();
+extern "C" void initdatetime();
 extern "C" void initerrno();
+extern "C" void initfcntl();
+extern "C" void init_functools();
+extern "C" void initgc();
+extern "C" void init_heapq();
+extern "C" void initimp();
+extern "C" void init_io();
+extern "C" void inititertools();
+extern "C" void initmath();
+extern "C" void init_md5();
+extern "C" void initoperator();
+extern "C" void initposix();
+extern "C" void initpwd();
+extern "C" void init_random();
+extern "C" void initresource();
+extern "C" void initselect();
 extern "C" void init_sha();
 extern "C" void init_sha256();
 extern "C" void init_sha512();
-extern "C" void init_md5();
-extern "C" void init_random();
-extern "C" void init_sre();
-extern "C" void initmath();
-extern "C" void initoperator();
-extern "C" void initbinascii();
-extern "C" void initpwd();
-extern "C" void initposix();
-extern "C" void init_struct();
-extern "C" void initdatetime();
-extern "C" void init_functools();
-extern "C" void init_collections();
-extern "C" void inititertools();
-extern "C" void initresource();
 extern "C" void initsignal();
-extern "C" void initselect();
-extern "C" void initfcntl();
-extern "C" void inittime();
-extern "C" void initarray();
-extern "C" void initzlib();
-extern "C" void init_codecs();
 extern "C" void init_socket();
+extern "C" void init_sqlite3();
+extern "C" void init_sre();
+extern "C" void init_ssl();
+extern "C" void initstrop();
+extern "C" void init_struct();
+extern "C" void inittime();
+extern "C" void initunicodedata();
+extern "C" void init_weakref();
+extern "C" void initzipimport();
+extern "C" void initzlib();
+extern "C" void PyMarshal_Init();
 extern "C" void _PyUnicode_Init();
 extern "C" void _PyWarnings_Init() noexcept;
 extern "C" void _string_init();
-extern "C" void initunicodedata();
-extern "C" void init_weakref();
-extern "C" void initcStringIO();
-extern "C" void init_io();
-extern "C" void initzipimport();
-extern "C" void init_csv();
-extern "C" void init_ssl();
-extern "C" void init_sqlite3();
-extern "C" void PyMarshal_Init();
-extern "C" void initstrop();
-extern "C" void initgc();
-extern "C" void init_ast();
-extern "C" void initimp();
 
 namespace pyston {
 
@@ -4085,6 +4086,7 @@ struct _inittab _PyImport_Inittab[] = { { "array", initarray },
                                         { "errno", initerrno },
                                         { "fcntl", initfcntl },
                                         { "_functools", init_functools },
+                                        { "_heapq", init_heapq },
                                         { "imp", initimp },
                                         { "_io", init_io },
                                         { "itertools", inititertools },

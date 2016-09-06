@@ -92,7 +92,6 @@ test_getargs2           [unknown]
 test_global             SyntaxWarnings for global statements after uses
 test_gl                 [unknown]
 test_grammar            bug in our tokenizer
-test_heapq              [unknown]
 test_hotshot            [unknown]
 test_idle               [unknown]
 test_imageop            [unknown]
