@@ -272,7 +272,8 @@ extern "C" BORROWED(PyObject*) PyList_GetItem(PyObject* op, Py_ssize_t i) noexce
     try {
         return listGetitemUnboxed(static_cast<BoxedList*>(op), i);
     } catch (ExcInfo e) {
-        abort();
+        setCAPIException(e);
+        return NULL;
     }
 }
 

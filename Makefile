@@ -470,7 +470,8 @@ quick_check:
 
 Makefile.local:
 	echo "Creating default Makefile.local"
-	which ninja-build >/dev/null && echo "NINJA := ninja-build" >> Makefile.local
+	(which ninja-build >/dev/null && echo "NINJA := ninja-build" >> Makefile.local); true
+	touch Makefile.local
 
 llvm_up:
 	$(CPYTHON) $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC) $(LLVM_REVISION) ./llvm_patches
