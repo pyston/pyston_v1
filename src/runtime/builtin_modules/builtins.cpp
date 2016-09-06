@@ -2388,7 +2388,7 @@ void setupBuiltins() {
     builtins_module->giveAttrBorrowed("Ellipsis", Ellipsis);
     builtins_module->giveAttrBorrowed("None", Py_None);
 
-    builtins_module->giveAttrBorrowed("__debug__", Py_False);
+    builtins_module->giveAttrBorrowed("__debug__", Py_True);
 
     notimplemented_cls = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "NotImplementedType", false,
                                             NULL, NULL, false);

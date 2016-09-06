@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/parser.h"
 #include "core/types.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -63,6 +64,18 @@ static Box* dumpStats(Box* includeZeros) {
     Py_RETURN_NONE;
 }
 
+static Box* pyCompile(Box* fname, Box* force) {
+    if (fname->cls != str_cls)
+        raiseExcHelper(TypeError, "py_compile takes a string for the filename");
+
+    if (force->cls != bool_cls)
+        raiseExcHelper(TypeError, "py_compile takes a bool for 'force' argument");
+
+    caching_parse_file(static_cast<BoxedString*>(fname)->c_str(), /* future flags */ 0, force == Py_True);
+
+    Py_RETURN_NONE;
+}
+
 void setupPyston() {
     pyston_module = createModule(autoDecref(boxString("__pyston__")));
 
@@ -74,5 +87,8 @@ void setupPyston() {
     pyston_module->giveAttr("dumpStats",
                             new BoxedBuiltinFunctionOrMethod(
                                 BoxedCode::create((void*)dumpStats, NONE, 1, false, false, "dumpStats"), { Py_False }));
+
+    pyston_module->giveAttr(
+        "py_compile", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)pyCompile, UNKNOWN, 2, "pyCompile")));
 }
 }

@@ -1104,7 +1104,8 @@ static std::vector<char> _reparse(const char* fn, const std::string& cache_fn, A
 // Parsing the file is somewhat expensive since we have to shell out to cpython;
 // it's not a huge deal right now, but this caching version can significantly cut down
 // on the startup time (40ms -> 10ms).
-std::pair<AST_Module*, std::unique_ptr<ASTAllocator>> caching_parse_file(const char* fn, FutureFlags inherited_flags) {
+std::pair<AST_Module*, std::unique_ptr<ASTAllocator>> caching_parse_file(const char* fn, FutureFlags inherited_flags,
+                                                                         bool force_reparse) {
     std::ostringstream oss;
 
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_caching_parse_file");

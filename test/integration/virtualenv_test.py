@@ -5,19 +5,21 @@ import shutil
 
 VIRTUALENV_SCRIPT = os.path.dirname(__file__) + "/../lib/virtualenv/virtualenv.py"
 
-if os.path.exists("test_env"):
-    print "Removing the existing 'test_env/' directory"
-    subprocess.check_call(["rm", "-rf", "test_env"])
-    # shutil follows symlinks to directories, and deletes whatever those contain.
-    # shutil.rmtree("test_env")
+ENV_NAME = "test_env_" + os.path.basename(sys.executable)
 
-args = [sys.executable, VIRTUALENV_SCRIPT, "-p", sys.executable, "test_env"]
+if os.path.exists(ENV_NAME):
+    print "Removing the existing '%s/' directory" % ENV_NAME
+    subprocess.check_call(["rm", "-rf", ENV_NAME])
+    # shutil follows symlinks to directories, and deletes whatever those contain.
+    # shutil.rmtree(ENV_NAME)
+
+args = [sys.executable, VIRTUALENV_SCRIPT, "-p", sys.executable, ENV_NAME]
 print "Running", args
 subprocess.check_call(args)
 
-sh_script = """
+sh_script = ("""
 set -e
-. test_env/bin/activate
+. %s/bin/activate
 set -ux
 python -c 'import __future__'
 python -c 'import sys; print sys.executable'
@@ -36,7 +38,7 @@ python -c 'import sqlalchemy; print "sqlalchemy imports"'
 python -c 'from PIL import Image; print "Pillow imports"'
 python -c 'import decorator; print "decorator imports"'
 python -c 'import oauth2client; print "oauth2client imports"'
-""".strip()
+""" % ENV_NAME).strip()
 
 # print sh_script
 subprocess.check_call(["sh", "-c", sh_script], stdout=sys.stderr)

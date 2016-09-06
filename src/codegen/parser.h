@@ -15,6 +15,7 @@
 #ifndef PYSTON_CODEGEN_PARSER_H
 #define PYSTON_CODEGEN_PARSER_H
 
+#include "core/ast.h"
 #include "core/types.h"
 
 namespace pyston {
@@ -24,7 +25,8 @@ class ASTAllocator;
 
 std::pair<AST_Module*, std::unique_ptr<ASTAllocator>> parse_string(const char* code, FutureFlags inherited_flags);
 std::pair<AST_Module*, std::unique_ptr<ASTAllocator>> parse_file(const char* fn, FutureFlags inherited_flags);
-std::pair<AST_Module*, std::unique_ptr<ASTAllocator>> caching_parse_file(const char* fn, FutureFlags inherited_flags);
+std::pair<AST_Module*, std::unique_ptr<ASTAllocator>> caching_parse_file(const char* fn, FutureFlags inherited_flags,
+                                                                         bool force_reparse = false);
 }
 
 #endif

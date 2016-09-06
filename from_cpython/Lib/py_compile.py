@@ -3,14 +3,9 @@
 This module has intimate knowledge of the format of .pyc files.
 """
 
-import __builtin__
-import imp
-import marshal
-import os
+import __pyston__
 import sys
 import traceback
-
-MAGIC = imp.get_magic()
 
 __all__ = ["compile", "main", "PyCompileError"]
 
@@ -61,14 +56,7 @@ class PyCompileError(Exception):
         return self.msg
 
 
-def wr_long(f, x):
-    """Internal; write a 32-bit int to a file in little-endian order."""
-    f.write(chr( x        & 0xff))
-    f.write(chr((x >> 8)  & 0xff))
-    f.write(chr((x >> 16) & 0xff))
-    f.write(chr((x >> 24) & 0xff))
-
-def compile(file, cfile=None, dfile=None, doraise=False):
+def compile(file, cfile=None, dfile=None, doraise=False, force=False):
     """Byte-compile one Python source file to Python bytecode.
 
     Arguments:
@@ -103,14 +91,13 @@ def compile(file, cfile=None, dfile=None, doraise=False):
     directories).
 
     """
-    with open(file, 'U') as f:
-        try:
-            timestamp = long(os.fstat(f.fileno()).st_mtime)
-        except AttributeError:
-            timestamp = long(os.stat(file).st_mtime)
-        codestring = f.read()
+
+    # Pyston restrictions for things that we don't yet support
+    assert cfile is None or cfile == file + "c"
+    assert dfile is None
+
     try:
-        codeobject = __builtin__.compile(codestring, dfile or file,'exec')
+        __pyston__.py_compile(file, force)
     except Exception,err:
         py_exc = PyCompileError(err.__class__, err, dfile or file)
         if doraise:
@@ -118,15 +105,6 @@ def compile(file, cfile=None, dfile=None, doraise=False):
         else:
             sys.stderr.write(py_exc.msg + '\n')
             return
-    if cfile is None:
-        cfile = file + (__debug__ and 'c' or 'o')
-    with open(cfile, 'wb') as fc:
-        fc.write('\0\0\0\0')
-        wr_long(fc, timestamp)
-        marshal.dump(codeobject, fc)
-        fc.flush()
-        fc.seek(0, 0)
-        fc.write(MAGIC)
 
 def main(args=None):
     """Compile several source files.
