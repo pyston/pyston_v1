@@ -150,42 +150,6 @@ static int getLastLineno(llvm::ArrayRef<AST_stmt*> body, int default_lineno) {
         return default_lineno;
     return getLastLinenoSub(body.back());
 }
-#if 0
-int getLastLineno(AST* ast) {
-    switch (ast->type) {
-        case AST_TYPE::Lambda: {
-            auto lambda = ast_cast<AST_Lambda>(ast);
-            return getLastLinenoSub(lambda->body);
-        }
-        case AST_TYPE::Expression: {
-            auto expr = ast_cast<AST_Expression>(ast);
-            return getLastLinenoSub(expr->body);
-        }
-        case AST_TYPE::ClassDef: {
-            auto classdef = ast_cast<AST_ClassDef>(ast);
-            if (classdef->body.size() == 0)
-                return classdef->lineno;
-            return getLastLinenoSub(classdef->body.back());
-        }
-        case AST_TYPE::Module: {
-            auto module = ast_cast<AST_Module>(ast);
-            if (module->body.size() == 0) {
-                assert(module->lineno == 0);
-                return 1;
-            }
-            return getLastLinenoSub(module->body.back());
-        }
-        case AST_TYPE::FunctionDef: {
-            auto funcdef = ast_cast<AST_FunctionDef>(ast);
-            if (funcdef->body.size() == 0)
-                return funcdef->lineno;
-            return getLastLinenoSub(funcdef->body.back());
-        }
-        default:
-            RELEASE_ASSERT(0, "%d", ast->type);
-    }
-}
-#endif
 
 void CFGBlock::connectTo(CFGBlock* successor, bool allow_backedge) {
     assert(successors.size() <= 1);
@@ -846,7 +810,6 @@ private:
         return subscript;
     }
 
-    // void pushAssign(BST_expr* target, BST_expr* val);
     // We need this both on asts (ex assigning to the element name in a for loop), and
     // for bsts (desugaring an augassign)
     // TODO: we should get rid of this bst one, or at least not call it the same thing?
@@ -1259,25 +1222,6 @@ private:
         return rtn;
     }
 
-    // This is a helper function used for generators expressions and comprehensions.
-    //
-    // Generates a FunctionDef which produces scope for `node'. The function produced is empty, so you'd better fill it.
-    // `node' had better be a kind of node that scoping_analysis thinks can carry scope (see the switch (node->type)
-    // block in ScopingAnalysis::processNameUsages in analysis/scoping_analysis.cpp); e.g. a Lambda or GeneratorExp.
-    AST_MakeFunction* makeFunctionForScope(AST* node) {
-        AST_FunctionDef* func = new AST_FunctionDef();
-        func->lineno = node->lineno;
-        func->col_offset = node->col_offset;
-        // TODO this should be set off the type of the comprehension (ie <setcomp> or <dictcomp> or <genexpr>)
-        InternedString func_name = internString("<comprehension>");
-        func->name = func_name;
-        func->args = new AST_arguments();
-        func->args->vararg = NULL;
-        func->args->kwarg = NULL;
-        RELEASE_ASSERT(0, "should this just be the bare functiondef?");
-        return new AST_MakeFunction(func);
-    }
-
     // This is a helper function used for generator expressions and comprehensions.
     // TODO(rntz): use this to handle unscoped (i.e. list) comprehensions as well?
     void emitComprehensionLoops(int lineno, std::vector<AST_stmt*>* insert_point,
@@ -1308,7 +1252,7 @@ private:
         }
 
         do_yield(insert_point);
-        // RELEASE_ASSERT(0, "have to delete these new ast nodes");
+        // TODO: have to delete these new ast nodes
     }
 
     BST_expr* remapGeneratorExp(AST_GeneratorExp* node) {
@@ -1449,12 +1393,7 @@ private:
     }
 
     BST_arguments* remapArguments(AST_arguments* args) {
-        // TODO: once in BST we don't need the arguments struct except for evaluating defaults.
         auto rtn = new BST_arguments();
-        // for (auto a : args->args)
-        // rtn->args.push_back(remapExpr(a));
-        // rtn->kwarg = remapName(args->kwarg);
-        // rtn->vararg = remapName(args->vararg);
         for (auto expr : args->defaults)
             rtn->defaults.push_back(remapExpr(expr));
         return rtn;
@@ -1470,7 +1409,6 @@ private:
         auto bdef = new BST_FunctionDef();
         bdef->lineno = node->lineno;
         bdef->col_offset = node->col_offset;
-        // bdef->name = name;
 
         bdef->args = remapArguments(node->args);
 
@@ -1605,8 +1543,6 @@ private:
                 rtn = remapExtSlice(ast_cast<AST_ExtSlice>(node));
                 break;
             case AST_TYPE::Index:
-                // if (ast_cast<AST_Index>(node)->value->type == AST_TYPE::Num)
-                // return node;
                 rtn = remapIndex(ast_cast<AST_Index>(node));
                 break;
             case AST_TYPE::Slice:

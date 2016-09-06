@@ -340,16 +340,7 @@ public:
         return true;
     }
 
-    virtual bool visit_arguments(BST_arguments* node) {
-        if (node->kwarg)
-            _doSet(node->kwarg);
-        if (node->vararg)
-            _doSet(node->vararg);
-        for (int i = 0; i < node->args.size(); i++) {
-            _doSet(node->args[i]);
-        }
-        return true;
-    }
+    virtual bool visit_arguments(BST_arguments* node) { RELEASE_ASSERT(0, "this shouldn't get hit"); }
 
     virtual bool visit_exec(BST_Exec* node) { return true; }
 

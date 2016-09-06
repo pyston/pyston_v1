@@ -232,9 +232,7 @@ class BST_Name;
 class BST_arguments : public BST {
 public:
     // no lineno, col_offset attributes
-    std::vector<BST_expr*> args, defaults;
-
-    BST_Name* kwarg = NULL, * vararg = NULL;
+    std::vector<BST_expr*> defaults;
 
     virtual void accept(BSTVisitor* v);
 

@@ -61,11 +61,6 @@ void BST_arguments::accept(BSTVisitor* v) {
         return;
 
     visitVector(defaults, v);
-    visitVector(args, v);
-    if (kwarg)
-        kwarg->accept(v);
-    if (vararg)
-        vararg->accept(v);
 }
 
 void BST_Assert::accept(BSTVisitor* v) {
@@ -883,17 +878,13 @@ bool PrintVisitor::visit_alias(BST_alias* node) {
 }
 
 bool PrintVisitor::visit_arguments(BST_arguments* node) {
-    int nargs = node->args.size();
     int ndefault = node->defaults.size();
-    for (int i = 0; i < nargs; i++) {
+    for (int i = 0; i < ndefault; i++) {
         if (i > 0)
             stream << ", ";
 
-        node->args[i]->accept(this);
-        if (i >= nargs - ndefault) {
-            stream << "=";
-            node->defaults[i - (nargs - ndefault)]->accept(this);
-        }
+        stream << "<default " << i << ">=";
+        node->defaults[i]->accept(this);
     }
     return true;
 }
