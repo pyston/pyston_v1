@@ -727,13 +727,12 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
                     if (stmt->type == BST_TYPE::Assign) {
                         auto asgn = bst_cast<BST_Assign>(stmt);
-                        assert(asgn->targets.size() == 1);
-                        if (asgn->targets[0]->type == BST_TYPE::Name) {
-                            auto asname = bst_cast<BST_Name>(asgn->targets[0]);
+                        if (asgn->target->type == BST_TYPE::Name) {
+                            auto asname = bst_cast<BST_Name>(asgn->target);
                             assert(asname->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
 
                             InternedString name = asname->id;
-                            int vreg = bst_cast<BST_Name>(asgn->targets[0])->vreg;
+                            int vreg = bst_cast<BST_Name>(asgn->target)->vreg;
                             assert(name.c_str()[0] == '#'); // it must be a temporary
                             // You might think I need to check whether `name' is being assigned globally or locally,
                             // since a global assign doesn't affect the symbol table. However, the CFG pass only

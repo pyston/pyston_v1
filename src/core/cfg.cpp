@@ -786,9 +786,9 @@ private:
 
     BST_Compare* makeCompare(AST_TYPE::AST_TYPE oper, BST_expr* left, BST_expr* right) {
         auto compare = new BST_Compare();
-        compare->ops.push_back(oper);
+        compare->op = oper;
         compare->left = left;
-        compare->comparators.push_back(right);
+        compare->comparator = right;
         return compare;
     }
 
@@ -818,7 +818,7 @@ private:
         assign->value = val;
         assign->col_offset = val->col_offset;
         assign->lineno = val->lineno;
-        assign->targets.push_back(target);
+        assign->target = target;
         push_back(assign);
     }
 
@@ -829,7 +829,7 @@ private:
         assign->lineno = val->lineno;
 
         if (target->type == AST_TYPE::Name) {
-            assign->targets.push_back(makeName(ast_cast<AST_Name>(target)->id, AST_TYPE::Store, val->lineno, 0));
+            assign->target = makeName(ast_cast<AST_Name>(target)->id, AST_TYPE::Store, val->lineno, 0);
             push_back(assign);
         } else if (target->type == AST_TYPE::Subscript) {
             AST_Subscript* s = ast_cast<AST_Subscript>(target);
@@ -842,7 +842,7 @@ private:
             s_target->col_offset = s->col_offset;
             s_target->lineno = s->lineno;
 
-            assign->targets.push_back(s_target);
+            assign->target = s_target;
             push_back(assign);
         } else if (target->type == AST_TYPE::Attribute) {
             AST_Attribute* a = ast_cast<AST_Attribute>(target);
@@ -855,7 +855,7 @@ private:
             a_target->col_offset = a->col_offset;
             a_target->lineno = a->lineno;
 
-            assign->targets.push_back(a_target);
+            assign->target = a_target;
             push_back(assign);
         } else if (target->type == AST_TYPE::Tuple || target->type == AST_TYPE::List) {
             std::vector<AST_expr*>* elts;
@@ -876,7 +876,7 @@ private:
 
             // A little hackery: push the assign, even though we're not done constructing it yet,
             // so that we can iteratively push more stuff after it
-            assign->targets.push_back(new_target);
+            assign->target = new_target;
             push_back(assign);
 
             for (int i = 0; i < elts->size(); i++) {
@@ -895,7 +895,7 @@ private:
         assign->value = val;
         assign->col_offset = val->col_offset;
         assign->lineno = val->lineno;
-        assign->targets.push_back(makeName(id, AST_TYPE::Store, val->lineno, 0));
+        assign->target = makeName(id, AST_TYPE::Store, val->lineno, 0);
         push_back(assign);
     }
 
@@ -1122,12 +1122,11 @@ private:
             rtn->lineno = node->lineno;
             rtn->col_offset = node->col_offset;
 
-            rtn->ops = node->ops;
+            rtn->op = node->ops[0];
 
             rtn->left = remapExpr(node->left);
-            for (auto elt : node->comparators) {
-                rtn->comparators.push_back(remapExpr(elt));
-            }
+            assert(node->comparators.size() == 1);
+            rtn->comparator = remapExpr(node->comparators[0]);
             return rtn;
         } else {
             InternedString name = nodeName();
@@ -1146,10 +1145,10 @@ private:
                 val->lineno = node->lineno;
                 val->left = left;
                 if (i < node->ops.size() - 1)
-                    val->comparators.push_back(_dup(right));
+                    val->comparator = _dup(right);
                 else
-                    val->comparators.push_back(right);
-                val->ops.push_back(node->ops[i]);
+                    val->comparator = right;
+                val->op = node->ops[i];
 
                 pushAssign(name, val);
 
@@ -1754,9 +1753,8 @@ public:
 
         if (node->type == BST_TYPE::Assign) {
             BST_Assign* asgn = bst_cast<BST_Assign>(node);
-            assert(asgn->targets.size() == 1);
-            if (asgn->targets[0]->type == BST_TYPE::Name) {
-                BST_Name* target = bst_cast<BST_Name>(asgn->targets[0]);
+            if (asgn->target->type == BST_TYPE::Name) {
+                BST_Name* target = bst_cast<BST_Name>(asgn->target);
                 if (target->id.s()[0] != '#') {
 // assigning to a non-temporary
 #ifndef NDEBUG
@@ -1789,9 +1787,8 @@ public:
         // Deleting temporary names is safe, since we only use it to represent kills.
         if (node->type == BST_TYPE::Delete) {
             BST_Delete* del = bst_cast<BST_Delete>(node);
-            assert(del->targets.size() == 1);
-            if (del->targets[0]->type == BST_TYPE::Name) {
-                BST_Name* target = bst_cast<BST_Name>(del->targets[0]);
+            if (del->target->type == BST_TYPE::Name) {
+                BST_Name* target = bst_cast<BST_Name>(del->target);
                 if (target->id.s()[0] == '#') {
                     curblock->push_back(node);
                     return;
@@ -1836,7 +1833,7 @@ public:
         target->elts.push_back(makeName(exc_info.exc_type_name, AST_TYPE::Store, node->lineno));
         target->elts.push_back(makeName(exc_info.exc_value_name, AST_TYPE::Store, node->lineno));
         target->elts.push_back(makeName(exc_info.exc_traceback_name, AST_TYPE::Store, node->lineno));
-        exc_asgn->targets.push_back(target);
+        exc_asgn->target = target;
 
         exc_asgn->value = new BST_LangPrimitive(BST_LangPrimitive::LANDINGPAD);
         curblock->push_back(exc_asgn);
@@ -1897,10 +1894,8 @@ public:
         return true;
     }
 
-    bool visit_global(AST_Global* node) override {
-        BST_Global* newnode = new BST_Global();
-        newnode->names = std::move(node->names);
-        push_back(newnode);
+    bool visit_global(AST_Global*) override {
+        // nothing todo only the scoping analysis cares about this node
         return true;
     }
 
@@ -2183,9 +2178,6 @@ public:
 
     bool visit_delete(AST_Delete* node) override {
         for (auto t : node->targets) {
-            BST_Delete* astdel = new BST_Delete();
-            astdel->lineno = node->lineno;
-            astdel->col_offset = node->col_offset;
             BST_expr* target = NULL;
             switch (t->type) {
                 case AST_TYPE::Subscript: {
@@ -2235,11 +2227,13 @@ public:
                     RELEASE_ASSERT(0, "Unsupported del target: %d", t->type);
             }
 
-            if (target != NULL)
-                astdel->targets.push_back(target);
-
-            if (astdel->targets.size() > 0)
+            if (target != NULL) {
+                BST_Delete* astdel = new BST_Delete();
+                astdel->lineno = node->lineno;
+                astdel->col_offset = node->col_offset;
+                astdel->target = target;
                 push_back(astdel);
+            }
         }
 
         return true;
@@ -2271,7 +2265,7 @@ public:
                 remapped->nl = node->nl;
             }
 
-            remapped->values.push_back(remapExpr(v));
+            remapped->value = remapExpr(v);
             push_back(remapped);
 
             i++;
@@ -2447,7 +2441,7 @@ public:
     BST_stmt* makeKill(InternedString name) {
         // There might be a better way to represent this, maybe with a dedicated AST_Kill bytecode?
         auto del = new BST_Delete();
-        del->targets.push_back(makeName(name, AST_TYPE::Del, 0, 0, false));
+        del->target = makeName(name, AST_TYPE::Del, 0, 0, false);
         return del;
     }
 
@@ -2934,8 +2928,6 @@ public:
 
     AssignVRegsVisitor() : current_block(0), next_vreg(0) {}
 
-    bool visit_alias(BST_alias* node) override { RELEASE_ASSERT(0, "these should be removed by the cfg"); }
-
     bool visit_arguments(BST_arguments* node) override {
         for (BST_expr* d : node->defaults)
             d->accept(this);
@@ -2956,12 +2948,6 @@ public:
         node->args->accept(this);
         return true;
     }
-
-    bool visit_lambda(BST_Lambda* node) override {
-        node->args->accept(this);
-        return true;
-    }
-
 
     bool isNameUsedInSingleBlock(InternedString id) {
         assert(step != TrackBlockUsage);
@@ -3087,7 +3073,7 @@ static CFG* computeCFG(llvm::ArrayRef<AST_stmt*> body, AST_TYPE::AST_TYPE ast_ty
         auto module_name_value = new BST_Name(stringpool.get("__name__"), AST_TYPE::Load, lineno);
         fillScopingInfo(module_name_value, scoping);
 
-        module_assign->targets.push_back(module_name_target);
+        module_assign->target = module_name_target;
         module_assign->value = module_name_value;
 
         module_assign->lineno = lineno;
@@ -3100,7 +3086,7 @@ static CFG* computeCFG(llvm::ArrayRef<AST_stmt*> body, AST_TYPE::AST_TYPE ast_ty
                 BST_Assign* doc_assign = new BST_Assign();
                 auto doc_target_name = new BST_Name(stringpool.get("__doc__"), AST_TYPE::Store, lineno);
                 fillScopingInfo(doc_target_name, scoping);
-                doc_assign->targets.push_back(doc_target_name);
+                doc_assign->target = doc_target_name;
                 auto doc_val = new BST_Str();
                 doc_val->str_data = ast_cast<AST_Str>(first_expr->value)->str_data;
                 doc_val->str_type = ast_cast<AST_Str>(first_expr->value)->str_type;

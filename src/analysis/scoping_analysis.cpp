@@ -606,8 +606,6 @@ public:
     bool visit_while(AST_While* node) override { return false; }
     bool visit_with(AST_With* node) override { return false; }
     bool visit_yield(AST_Yield* node) override { return false; }
-    bool visit_branch(AST_Branch* node) override { return false; }
-    bool visit_jump(AST_Jump* node) override { return false; }
     bool visit_delete(AST_Delete* node) override { return false; }
 
     bool visit_global(AST_Global* node) override {

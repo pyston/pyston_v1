@@ -206,8 +206,6 @@ class AST_stmt : public AST {
 public:
     virtual void accept_stmt(ASTStmtVisitor* v) = 0;
 
-    int cxx_exception_count = 0;
-
     AST_stmt(AST_TYPE::AST_TYPE type) : AST(type) {}
 };
 
@@ -220,7 +218,6 @@ public:
 class AST_alias : public AST {
 public:
     InternedString name, asname;
-    int name_vreg = -1, asname_vreg = -1;
 
     virtual void accept(ASTVisitor* v);
 
@@ -351,9 +348,6 @@ public:
     AST_expr* starargs, *kwargs, *func;
     std::vector<AST_expr*> args;
     std::vector<AST_keyword*> keywords;
-
-    // used during execution stores all keyword names
-    std::unique_ptr<std::vector<BoxedString*>> keywords_names;
 
     virtual void accept(ASTVisitor* v);
 
@@ -723,25 +717,13 @@ public:
     // different bytecodes.
     ScopeInfo::VarScopeType lookup_type;
 
-    // These are only valid for lookup_type == FAST or CLOSURE
-    // The interpreter and baseline JIT store variables with FAST and CLOSURE scopes in an array (vregs) this specifies
-    // the zero based index of this variable inside the vregs array. If uninitialized it's value is -1.
-    int vreg;
-    bool is_kill = false;
-
-    // Only valid for lookup_type == DEREF:
-    DerefInfo deref_info = DerefInfo({ INT_MAX, INT_MAX });
-    // Only valid for lookup_type == CLOSURE:
-    int closure_offset = -1;
-
     virtual void accept(ASTVisitor* v);
 
     AST_Name(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0)
         : AST_expr(AST_TYPE::Name, lineno, col_offset),
           ctx_type(ctx_type),
           id(id),
-          lookup_type(ScopeInfo::VarScopeType::UNKNOWN),
-          vreg(-1) {}
+          lookup_type(ScopeInfo::VarScopeType::UNKNOWN) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Name;
 };
@@ -987,59 +969,11 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Yield;
 };
 
-class AST_MakeFunction : public AST_expr {
-public:
-    AST_FunctionDef* function_def;
-
-    virtual void accept(ASTVisitor* v);
-
-    AST_MakeFunction(AST_FunctionDef* fd)
-        : AST_expr(AST_TYPE::MakeFunction, fd->lineno, fd->col_offset), function_def(fd) {}
-
-    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::MakeFunction;
-};
-
-class AST_MakeClass : public AST_expr {
-public:
-    AST_ClassDef* class_def;
-
-    virtual void accept(ASTVisitor* v);
-
-    AST_MakeClass(AST_ClassDef* cd) : AST_expr(AST_TYPE::MakeClass, cd->lineno, cd->col_offset), class_def(cd) {}
-
-    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::MakeClass;
-};
-
 
 // AST pseudo-nodes that will get added during CFG-construction.  These don't exist in the input AST, but adding them in
 // lets us avoid creating a completely new IR for this phase
 
 class CFGBlock;
-
-class AST_Branch : public AST_stmt {
-public:
-    AST_expr* test;
-    CFGBlock* iftrue, *iffalse;
-
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(ASTStmtVisitor* v);
-
-    AST_Branch() : AST_stmt(AST_TYPE::Branch) {}
-
-    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Branch;
-};
-
-class AST_Jump : public AST_stmt {
-public:
-    CFGBlock* target;
-
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(ASTStmtVisitor* v);
-
-    AST_Jump() : AST_stmt(AST_TYPE::Jump) {}
-
-    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Jump;
-};
 
 class AST_ClsAttribute : public AST_expr {
 public:
@@ -1101,8 +1035,6 @@ template <typename T> T* ast_cast(AST* node) {
     ASSERT(!node || node->type == T::TYPE, "%d", node ? node->type : 0);
     return static_cast<T*>(node);
 }
-
-
 
 class ASTVisitor {
 protected:
@@ -1170,11 +1102,6 @@ public:
     virtual bool visit_while(AST_While* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_with(AST_With* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_yield(AST_Yield* node) { RELEASE_ASSERT(0, ""); }
-
-    virtual bool visit_makeclass(AST_MakeClass* node) { RELEASE_ASSERT(0, ""); }
-    virtual bool visit_makefunction(AST_MakeFunction* node) { RELEASE_ASSERT(0, ""); }
-    virtual bool visit_branch(AST_Branch* node) { RELEASE_ASSERT(0, ""); }
-    virtual bool visit_jump(AST_Jump* node) { RELEASE_ASSERT(0, ""); }
 };
 
 class NoopASTVisitor : public ASTVisitor {
@@ -1243,11 +1170,6 @@ public:
     virtual bool visit_while(AST_While* node) { return false; }
     virtual bool visit_with(AST_With* node) { return false; }
     virtual bool visit_yield(AST_Yield* node) { return false; }
-
-    virtual bool visit_branch(AST_Branch* node) { return false; }
-    virtual bool visit_jump(AST_Jump* node) { return false; }
-    virtual bool visit_makeclass(AST_MakeClass* node) { return false; }
-    virtual bool visit_makefunction(AST_MakeFunction* node) { return false; }
 };
 
 class ASTStmtVisitor {
@@ -1279,9 +1201,6 @@ public:
     virtual void visit_tryfinally(AST_TryFinally* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_while(AST_While* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_with(AST_With* node) { RELEASE_ASSERT(0, ""); }
-
-    virtual void visit_branch(AST_Branch* node) { RELEASE_ASSERT(0, ""); }
-    virtual void visit_jump(AST_Jump* node) { RELEASE_ASSERT(0, ""); }
 };
 
 void print_ast(AST* ast);
@@ -1358,17 +1277,12 @@ public:
     virtual bool visit_while(AST_While* node);
     virtual bool visit_with(AST_With* node);
     virtual bool visit_yield(AST_Yield* node);
-
-    virtual bool visit_branch(AST_Branch* node);
-    virtual bool visit_jump(AST_Jump* node);
-    virtual bool visit_makefunction(AST_MakeFunction* node);
-    virtual bool visit_makeclass(AST_MakeClass* node);
 };
 
 // Given an AST node, return a vector of the node plus all its descendents.
 // This is useful for analyses that care more about the constituent nodes than the
 // exact tree structure; ex, finding all "global" directives.
-void flatten(const llvm::SmallVector<AST_stmt*, 4>& roots, std::vector<AST*>& output, bool expand_scopes);
+void flatten(llvm::ArrayRef<AST_stmt*> roots, std::vector<AST*>& output, bool expand_scopes);
 void flatten(AST_expr* root, std::vector<AST*>& output, bool expand_scopes);
 // Similar to the flatten() function, but filters for a specific type of ast nodes:
 template <class T, class R> void findNodes(const R& roots, std::vector<T*>& output, bool expand_scopes) {
