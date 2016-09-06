@@ -35,7 +35,7 @@ class MDNode;
 
 namespace pyston {
 
-class AST_Invoke;
+class BST_Invoke;
 class CFGBlock;
 class GCBuilder;
 struct PatchpointInfo;
@@ -186,25 +186,25 @@ public:
     virtual void copySymbolsFrom(SymbolTable* st) = 0;
     virtual void run(const CFGBlock* block) = 0; // primary entry point
     virtual EndingState getEndingSymbolTable() = 0;
-    virtual void doSafePoint(AST_stmt* next_statement) = 0;
+    virtual void doSafePoint(BST_stmt* next_statement) = 0;
     virtual void addFrameStackmapArgs(PatchpointInfo* pp, std::vector<llvm::Value*>& stackmap_args) = 0;
     virtual void addOutgoingExceptionState(ExceptionState exception_state) = 0;
     virtual void setIncomingExceptionState(llvm::SmallVector<ExceptionState, 2> exc_state) = 0;
     virtual llvm::BasicBlock* getCXXExcDest(const UnwindInfo&) = 0;
     virtual llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* from_block, llvm::BasicBlock* final_dest,
-                                             AST_stmt* current_stmt, bool is_after_deopt = false) = 0;
+                                             BST_stmt* current_stmt, bool is_after_deopt = false) = 0;
     virtual CFGBlock* getCFGBlock() = 0;
 };
 
 std::tuple<llvm::Value*, llvm::Value*, llvm::Value*> createLandingpad(llvm::BasicBlock*);
 
 class IREmitter;
-class AST_Call;
+class BST_Call;
 IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator = NULL);
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                                CFGBlock* myblock, TypeAnalysis* types);
 
-std::vector<BoxedString*>* getKeywordNameStorage(AST_Call* node);
+std::vector<BoxedString*>* getKeywordNameStorage(BST_Call* node);
 }
 
 #endif

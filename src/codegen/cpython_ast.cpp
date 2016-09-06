@@ -724,6 +724,7 @@ public:
         switch (mod->kind) {
             case Module_kind: {
                 AST_Module* rtn = new AST_Module(llvm::make_unique<InternedStringPool>());
+                rtn->lineno = 1;
                 assert(!this->pool);
                 this->pool = rtn->interned_strings.get();
                 convertAll<stmt_ty>(mod->v.Module.body, rtn->body);
@@ -732,6 +733,7 @@ public:
             case Interactive_kind: {
                 this->interactive = 1;
                 AST_Module* rtn = new AST_Module(llvm::make_unique<InternedStringPool>());
+                rtn->lineno = 1;
                 assert(!this->pool);
                 this->pool = rtn->interned_strings.get();
                 convertAll<stmt_ty>(mod->v.Interactive.body, rtn->body);
@@ -739,6 +741,7 @@ public:
             }
             case Expression_kind: {
                 AST_Expression* rtn = new AST_Expression(llvm::make_unique<InternedStringPool>());
+                rtn->lineno = 1;
                 this->pool = rtn->interned_strings.get();
 
                 // instead of storing the expression inside the AST node we convert it directly to a return statement

@@ -33,7 +33,7 @@
 
 namespace pyston {
 
-class LivenessBBVisitor : public NoopASTVisitor {
+class LivenessBBVisitor : public NoopBSTVisitor {
 private:
     struct Status {
         enum Usage : char {
@@ -55,7 +55,7 @@ private:
     VRegMap<Status> statuses;
     LivenessAnalysis* analysis;
 
-    void _doLoad(int vreg, AST_Name* node) {
+    void _doLoad(int vreg, BST_Name* node) {
         Status& status = statuses[vreg];
         status.addUsage(Status::USED);
     }
@@ -76,11 +76,11 @@ public:
 
     bool firstIsDef(int vreg) const { return getStatusFirst(vreg) == Status::DEFINED; }
 
-    bool isKilledAt(AST_Name* node, bool is_live_at_end) { return node->is_kill; }
+    bool isKilledAt(BST_Name* node, bool is_live_at_end) { return node->is_kill; }
 
-    bool visit_import(AST_Import* node) { RELEASE_ASSERT(0, "these should all get removed by the cfg"); }
+    bool visit_import(BST_Import* node) { RELEASE_ASSERT(0, "these should all get removed by the cfg"); }
 
-    bool visit_classdef(AST_ClassDef* node) {
+    bool visit_classdef(BST_ClassDef* node) {
         for (auto e : node->bases)
             e->accept(this);
         for (auto e : node->decorator_list)
@@ -89,7 +89,7 @@ public:
         return true;
     }
 
-    bool visit_functiondef(AST_FunctionDef* node) {
+    bool visit_functiondef(BST_FunctionDef* node) {
         for (auto* d : node->decorator_list)
             d->accept(this);
         for (auto* d : node->args->defaults)
@@ -98,7 +98,7 @@ public:
         return true;
     }
 
-    bool visit_name(AST_Name* node) {
+    bool visit_name(BST_Name* node) {
         if (node->vreg == -1)
             return true;
 
@@ -119,7 +119,7 @@ public:
         return true;
     }
 
-    bool visit_alias(AST_alias* node) { RELEASE_ASSERT(0, "these should be removed by the cfg"); }
+    bool visit_alias(BST_alias* node) { RELEASE_ASSERT(0, "these should be removed by the cfg"); }
 };
 
 LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg), result_cache(cfg->getVRegInfo().getTotalNumOfVRegs()) {
@@ -127,7 +127,7 @@ LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg), result_cache(cfg->getVR
 
     for (CFGBlock* b : cfg->blocks) {
         auto visitor = new LivenessBBVisitor(this); // livenessCache unique_ptr will delete it.
-        for (AST_stmt* stmt : b->body) {
+        for (BST_stmt* stmt : b->body) {
             stmt->accept(visitor);
         }
         liveness_cache.insert(std::make_pair(b, std::unique_ptr<LivenessBBVisitor>(visitor)));
@@ -140,7 +140,7 @@ LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg), result_cache(cfg->getVR
 LivenessAnalysis::~LivenessAnalysis() {
 }
 
-bool LivenessAnalysis::isKill(AST_Name* node, CFGBlock* parent_block) {
+bool LivenessAnalysis::isKill(BST_Name* node, CFGBlock* parent_block) {
     if (node->id.s()[0] != '#')
         return false;
 
@@ -232,7 +232,7 @@ public:
     virtual void processBB(Map& starting, CFGBlock* block) const;
 };
 
-class DefinednessVisitor : public ASTVisitor {
+class DefinednessVisitor : public BSTVisitor {
 private:
     typedef DefinednessBBAnalyzer::Map Map;
     Map& state;
@@ -242,13 +242,13 @@ private:
         state[vreg] = DefinednessAnalysis::Defined;
     }
 
-    void _doSet(AST* t) {
+    void _doSet(BST* t) {
         switch (t->type) {
-            case AST_TYPE::Attribute:
+            case BST_TYPE::Attribute:
                 // doesn't affect definedness (yet?)
                 break;
-            case AST_TYPE::Name: {
-                auto name = ast_cast<AST_Name>(t);
+            case BST_TYPE::Name: {
+                auto name = bst_cast<BST_Name>(t);
                 if (name->lookup_type == ScopeInfo::VarScopeType::FAST
                     || name->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
                     assert(name->vreg != -1);
@@ -262,10 +262,10 @@ private:
                 }
                 break;
             }
-            case AST_TYPE::Subscript:
+            case BST_TYPE::Subscript:
                 break;
-            case AST_TYPE::Tuple: {
-                AST_Tuple* tt = ast_cast<AST_Tuple>(t);
+            case BST_TYPE::Tuple: {
+                BST_Tuple* tt = bst_cast<BST_Tuple>(t);
                 for (int i = 0; i < tt->elts.size(); i++) {
                     _doSet(tt->elts[i]);
                 }
@@ -279,21 +279,21 @@ private:
 public:
     DefinednessVisitor(Map& state) : state(state) {}
 
-    virtual bool visit_assert(AST_Assert* node) { return true; }
-    virtual bool visit_branch(AST_Branch* node) { return true; }
-    virtual bool visit_expr(AST_Expr* node) { return true; }
-    virtual bool visit_global(AST_Global* node) { return true; }
-    virtual bool visit_invoke(AST_Invoke* node) { return false; }
-    virtual bool visit_jump(AST_Jump* node) { return true; }
-    virtual bool visit_pass(AST_Pass* node) { return true; }
-    virtual bool visit_print(AST_Print* node) { return true; }
-    virtual bool visit_raise(AST_Raise* node) { return true; }
-    virtual bool visit_return(AST_Return* node) { return true; }
+    virtual bool visit_assert(BST_Assert* node) { return true; }
+    virtual bool visit_branch(BST_Branch* node) { return true; }
+    virtual bool visit_expr(BST_Expr* node) { return true; }
+    virtual bool visit_global(BST_Global* node) { return true; }
+    virtual bool visit_invoke(BST_Invoke* node) { return false; }
+    virtual bool visit_jump(BST_Jump* node) { return true; }
+    virtual bool visit_pass(BST_Pass* node) { return true; }
+    virtual bool visit_print(BST_Print* node) { return true; }
+    virtual bool visit_raise(BST_Raise* node) { return true; }
+    virtual bool visit_return(BST_Return* node) { return true; }
 
-    virtual bool visit_delete(AST_Delete* node) {
+    virtual bool visit_delete(BST_Delete* node) {
         for (auto t : node->targets) {
-            if (t->type == AST_TYPE::Name) {
-                AST_Name* name = ast_cast<AST_Name>(t);
+            if (t->type == BST_TYPE::Name) {
+                BST_Name* name = bst_cast<BST_Name>(t);
                 if (name->lookup_type != ScopeInfo::VarScopeType::GLOBAL
                     && name->lookup_type != ScopeInfo::VarScopeType::NAME) {
                     assert(name->vreg != -1);
@@ -302,27 +302,27 @@ public:
                     assert(name->vreg == -1);
             } else {
                 // The CFG pass should reduce all deletes to the "basic" deletes on names/attributes/subscripts.
-                // If not, probably the best way to do this would be to just do a full AST traversal
-                // and look for AST_Name's with a ctx of Del
-                assert(t->type == AST_TYPE::Attribute || t->type == AST_TYPE::Subscript);
+                // If not, probably the best way to do this would be to just do a full BST traversal
+                // and look for BST_Name's with a ctx of Del
+                assert(t->type == BST_TYPE::Attribute || t->type == BST_TYPE::Subscript);
             }
         }
         return true;
     }
 
-    virtual bool visit_classdef(AST_ClassDef* node) {
+    virtual bool visit_classdef(BST_ClassDef* node) {
         assert(0 && "I think this isn't needed");
         //_doSet(node->name);
         return true;
     }
 
-    virtual bool visit_functiondef(AST_FunctionDef* node) {
+    virtual bool visit_functiondef(BST_FunctionDef* node) {
         assert(0 && "I think this isn't needed");
         //_doSet(node->name);
         return true;
     }
 
-    virtual bool visit_alias(AST_alias* node) {
+    virtual bool visit_alias(BST_alias* node) {
         int vreg = node->name_vreg;
         if (node->asname.s().size())
             vreg = node->asname_vreg;
@@ -330,28 +330,19 @@ public:
         _doSet(vreg);
         return true;
     }
-    virtual bool visit_import(AST_Import* node) { return false; }
-    virtual bool visit_importfrom(AST_ImportFrom* node) { return false; }
+    virtual bool visit_import(BST_Import* node) { return false; }
+    virtual bool visit_importfrom(BST_ImportFrom* node) { return false; }
 
-    virtual bool visit_assign(AST_Assign* node) {
+    virtual bool visit_assign(BST_Assign* node) {
         for (int i = 0; i < node->targets.size(); i++) {
             _doSet(node->targets[i]);
         }
         return true;
     }
 
-    virtual bool visit_arguments(AST_arguments* node) {
-        if (node->kwarg)
-            _doSet(node->kwarg);
-        if (node->vararg)
-            _doSet(node->vararg);
-        for (int i = 0; i < node->args.size(); i++) {
-            _doSet(node->args[i]);
-        }
-        return true;
-    }
+    virtual bool visit_arguments(BST_arguments* node) { RELEASE_ASSERT(0, "this shouldn't get hit"); }
 
-    virtual bool visit_exec(AST_Exec* node) { return true; }
+    virtual bool visit_exec(BST_Exec* node) { return true; }
 
     friend class DefinednessBBAnalyzer;
 };
@@ -537,7 +528,7 @@ std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames& args, CFG* cf
         initial_map[vreg] = DefinednessAnalysis::Undefined;
     }
 
-    for (AST_Name* n : args.allArgsAsName()) {
+    for (BST_Name* n : args.allArgsAsName()) {
         ScopeInfo::VarScopeType vst = n->lookup_type;
         assert(vst != ScopeInfo::VarScopeType::UNKNOWN);
         assert(vst != ScopeInfo::VarScopeType::GLOBAL); // global-and-local error

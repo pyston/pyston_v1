@@ -29,7 +29,7 @@
 #include "analysis/scoping_analysis.h"
 #include "codegen/baseline_jit.h"
 #include "codegen/compvars.h"
-#include "core/ast.h"
+#include "core/bst.h"
 #include "core/cfg.h"
 #include "core/util.h"
 #include "runtime/types.h"
@@ -58,24 +58,14 @@ void BoxedCode::addVersion(CompiledFunction* compiled) {
     }
 }
 
-SourceInfo::SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, AST* ast)
-    : parent_module(m), scoping(std::move(scoping)), cfg(NULL), future_flags(future_flags), ast_type(ast->type) {
-
-    switch (ast_type) {
-        case AST_TYPE::ClassDef:
-        case AST_TYPE::Module:
-        case AST_TYPE::Expression:
-        case AST_TYPE::Suite:
-            is_generator = false;
-            break;
-        case AST_TYPE::FunctionDef:
-        case AST_TYPE::Lambda:
-            is_generator = containsYield(ast);
-            break;
-        default:
-            RELEASE_ASSERT(0, "Unknown type: %d", ast_type);
-            break;
-    }
+SourceInfo::SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, int ast_type,
+                       bool is_generator)
+    : parent_module(m),
+      scoping(std::move(scoping)),
+      cfg(NULL),
+      future_flags(future_flags),
+      is_generator(is_generator),
+      ast_type(ast_type) {
 }
 
 SourceInfo::~SourceInfo() {

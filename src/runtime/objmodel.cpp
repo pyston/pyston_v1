@@ -33,7 +33,7 @@
 #include "codegen/parser.h"
 #include "codegen/type_recording.h"
 #include "codegen/unwinding.h"
-#include "core/ast.h"
+#include "core/bst.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -136,7 +136,7 @@ extern "C" void xdecrefAndRethrow(void* cxa_ptr, int num, ...) {
     rawReraise(e.type, e.value, e.traceback);
 }
 
-extern "C" Box* deopt(AST_expr* expr, Box* value) {
+extern "C" Box* deopt(BST_expr* expr, Box* value) {
     ASSERT(ENABLE_FRAME_INTROSPECTION, "deopt will not work with frame introspection turned off");
 
     STAT_TIMER(t0, "us_timer_deopt", 10);

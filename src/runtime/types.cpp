@@ -30,7 +30,6 @@
 #include "codegen/ast_interpreter.h"
 #include "codegen/entry.h"
 #include "codegen/unwinding.h"
-#include "core/ast.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"

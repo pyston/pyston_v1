@@ -26,6 +26,7 @@
 #include "codegen/irgen.h"
 #include "codegen/irgen/util.h"
 #include "codegen/patchpoints.h"
+#include "core/bst.h"
 #include "core/options.h"
 #include "core/types.h"
 #include "runtime/float.h"

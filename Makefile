@@ -425,7 +425,6 @@ ARGS ?=
 ifneq ($(BR),)
 	override GDB_CMDS := --ex "break $(BR)" $(GDB_CMDS)
 endif
-$(call add_unittest,gc)
 $(call add_unittest,analysis)
 
 

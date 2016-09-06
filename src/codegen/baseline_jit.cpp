@@ -226,7 +226,7 @@ RewriterVar* JitFragmentWriter::imm(void* val) {
     return loadConst((uint64_t)val);
 }
 
-RewriterVar* JitFragmentWriter::emitAugbinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
+RewriterVar* JitFragmentWriter::emitAugbinop(BST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
     return emitPPCall((void*)augbinop, { lhs, rhs, imm(op_type) }, 2 * 320, true /* record type */, node)
         .first->setType(RefType::OWNED);
 }
@@ -239,12 +239,12 @@ RewriterVar* JitFragmentWriter::emitApplySlice(RewriterVar* target, RewriterVar*
     return emitPPCall((void*)applySlice, { target, lower, upper }, 256).first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitBinop(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
+RewriterVar* JitFragmentWriter::emitBinop(BST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
     return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2 * 240, true /* record type */, node)
         .first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
+RewriterVar* JitFragmentWriter::emitCallattr(BST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
                                              const llvm::ArrayRef<RewriterVar*> args,
                                              std::vector<BoxedString*>* keyword_names) {
 #if ENABLE_BASELINEJIT_ICS
@@ -298,7 +298,7 @@ RewriterVar* JitFragmentWriter::emitCallattr(AST_expr* node, RewriterVar* obj, B
 #endif
 }
 
-RewriterVar* JitFragmentWriter::emitCompare(AST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
+RewriterVar* JitFragmentWriter::emitCompare(BST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
     if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot) {
         RewriterVar* cmp_result = lhs->cmp(op_type == AST_TYPE::IsNot ? AST_TYPE::NotEq : AST_TYPE::Eq, rhs);
         return call(false, (void*)boxBool, cmp_result)->setType(RefType::OWNED);
@@ -372,7 +372,7 @@ RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar
     return r;
 }
 
-RewriterVar* JitFragmentWriter::emitDeref(AST_Name* name) {
+RewriterVar* JitFragmentWriter::emitDeref(BST_Name* name) {
     return call(false, (void*)ASTInterpreterJitInterface::derefHelper, getInterp(), imm(name))->setType(RefType::OWNED);
 }
 
@@ -380,12 +380,12 @@ RewriterVar* JitFragmentWriter::emitExceptionMatches(RewriterVar* v, RewriterVar
     return call(false, (void*)exceptionMatchesHelper, v, cls)->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitGetAttr(RewriterVar* obj, BoxedString* s, AST_expr* node) {
+RewriterVar* JitFragmentWriter::emitGetAttr(RewriterVar* obj, BoxedString* s, BST_expr* node) {
     return emitPPCall((void*)getattr, { obj, imm(s) }, 2 * 256, true /* record type */, node)
         .first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitGetBlockLocal(AST_Name* name) {
+RewriterVar* JitFragmentWriter::emitGetBlockLocal(BST_Name* name) {
     auto s = name->id;
     auto vreg = name->vreg;
     auto it = local_syms.find(s);
@@ -398,7 +398,7 @@ RewriterVar* JitFragmentWriter::emitGetBlockLocal(AST_Name* name) {
     return it->second;
 }
 
-void JitFragmentWriter::emitKillTemporary(AST_Name* name) {
+void JitFragmentWriter::emitKillTemporary(BST_Name* name) {
     if (!local_syms.count(name->id))
         emitSetLocal(name, false, imm(nullptr));
 }
@@ -427,12 +427,12 @@ RewriterVar* JitFragmentWriter::emitGetGlobal(BoxedString* s) {
     return emitPPCall((void*)getGlobal, { globals, imm(s) }, 128).first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitGetItem(AST_expr* node, RewriterVar* value, RewriterVar* slice) {
+RewriterVar* JitFragmentWriter::emitGetItem(BST_expr* node, RewriterVar* value, RewriterVar* slice) {
     return emitPPCall((void*)getitem, { value, slice }, 256, true /* record type */, node)
         .first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitGetLocal(AST_Name* name) {
+RewriterVar* JitFragmentWriter::emitGetLocal(BST_Name* name) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitGetLocal start");
     auto vreg = name->vreg;
@@ -500,7 +500,7 @@ RewriterVar* JitFragmentWriter::emitRepr(RewriterVar* v) {
     return call(false, (void*)repr, v)->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitRuntimeCall(AST_expr* node, RewriterVar* obj, ArgPassSpec argspec,
+RewriterVar* JitFragmentWriter::emitRuntimeCall(BST_expr* node, RewriterVar* obj, ArgPassSpec argspec,
                                                 const llvm::ArrayRef<RewriterVar*> args,
                                                 std::vector<BoxedString*>* keyword_names) {
 #if ENABLE_BASELINEJIT_ICS
@@ -637,7 +637,7 @@ void JitFragmentWriter::emitJump(CFGBlock* b) {
         comment("BJIT: emitJump() end");
 }
 
-void JitFragmentWriter::emitOSRPoint(AST_Jump* node) {
+void JitFragmentWriter::emitOSRPoint(BST_Jump* node) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitOSRPoint() start");
     addAction([=]() { _emitOSRPoint(); }, { getInterp() }, ActionType::NORMAL);
@@ -679,12 +679,12 @@ void JitFragmentWriter::emitReturn(RewriterVar* v) {
     v->refConsumed();
 }
 
-void JitFragmentWriter::emitSetAttr(AST_expr* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr) {
+void JitFragmentWriter::emitSetAttr(BST_expr* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr) {
     auto rtn = emitPPCall((void*)setattr, { obj, imm(s), attr }, 2 * 256, false /* don't record type */, node);
     attr->refConsumed(rtn.second);
 }
 
-void JitFragmentWriter::emitSetBlockLocal(AST_Name* name, STOLEN(RewriterVar*) v) {
+void JitFragmentWriter::emitSetBlockLocal(BST_Name* name, STOLEN(RewriterVar*) v) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitSetBlockLocal() start");
     auto vreg = name->vreg;
@@ -699,7 +699,7 @@ void JitFragmentWriter::emitSetBlockLocal(AST_Name* name, STOLEN(RewriterVar*) v
         comment("BJIT: emitSetBlockLocal() end");
 }
 
-void JitFragmentWriter::emitSetCurrentInst(AST_stmt* node) {
+void JitFragmentWriter::emitSetCurrentInst(BST_stmt* node) {
     getInterp()->setAttr(ASTInterpreterJitInterface::getCurrentInstOffset(), imm(node));
 }
 
@@ -728,7 +728,7 @@ void JitFragmentWriter::emitSetItemName(BoxedString* s, RewriterVar* v) {
     emitSetItem(emitGetBoxedLocals(), imm(s), v);
 }
 
-void JitFragmentWriter::emitSetLocal(AST_Name* name, bool set_closure, STOLEN(RewriterVar*) v) {
+void JitFragmentWriter::emitSetLocal(BST_Name* name, bool set_closure, STOLEN(RewriterVar*) v) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitSetLocal() start");
     auto vreg = name->vreg;
@@ -922,7 +922,7 @@ uint64_t JitFragmentWriter::asUInt(InternedString s) {
 
 std::pair<RewriterVar*, RewriterAction*>
 JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, unsigned short pp_size,
-                              bool should_record_type, AST* ast_node, llvm::ArrayRef<RewriterVar*> additional_uses) {
+                              bool should_record_type, BST* ast_node, llvm::ArrayRef<RewriterVar*> additional_uses) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitPPCall() start");
 #if ENABLE_BASELINEJIT_ICS
@@ -1125,7 +1125,7 @@ void JitFragmentWriter::_emitOSRPoint() {
 }
 
 void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
-                                    unsigned short pp_size, AST* ast_node, llvm::ArrayRef<RewriterVar*> vars_to_bump) {
+                                    unsigned short pp_size, BST* ast_node, llvm::ArrayRef<RewriterVar*> vars_to_bump) {
     assembler::Register r = allocReg(assembler::R11);
 
     if (args.size() > 6) { // only 6 args can get passed in registers.

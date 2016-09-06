@@ -42,7 +42,7 @@ Box* recordType(TypeRecorder* self, Box* obj) {
     return obj;
 }
 
-BoxedClass* predictClassFor(AST* node) {
+BoxedClass* predictClassFor(BST* node) {
     ICInfo* ic = ICInfo::getICInfoForNode(node);
     if (!ic || !ic->getTypeRecorder())
         return NULL;

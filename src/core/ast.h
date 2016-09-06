@@ -160,10 +160,9 @@ static const char* stringify(int n) {
 };
 
 class ASTVisitor;
-class ExprVisitor;
-class StmtVisitor;
-class SliceVisitor;
+class ASTStmtVisitor;
 class AST_keyword;
+class AST_stmt;
 
 class AST {
 public:
@@ -191,24 +190,21 @@ public:
 
     // These could be virtual methods, but since we already keep track of the type use a switch statement
     // like everywhere else.
-    BoxedCode*& getCode();
     InternedStringPool& getStringpool();
     llvm::ArrayRef<AST_stmt*> getBody();
-    Box* getDocString();
     BORROWED(BoxedString*) getName() noexcept;
 };
+Box* getDocString(llvm::ArrayRef<AST_stmt*> body);
 
 class AST_expr : public AST {
 public:
-    virtual void* accept_expr(ExprVisitor* v) = 0;
-
     AST_expr(AST_TYPE::AST_TYPE type) : AST(type) {}
     AST_expr(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0) : AST(type, lineno, col_offset) {}
 };
 
 class AST_stmt : public AST {
 public:
-    virtual void accept_stmt(StmtVisitor* v) = 0;
+    virtual void accept_stmt(ASTStmtVisitor* v) = 0;
 
     int cxx_exception_count = 0;
 
@@ -217,7 +213,6 @@ public:
 
 class AST_slice : public AST {
 public:
-    virtual void* accept_slice(SliceVisitor* s) = 0;
     AST_slice(AST_TYPE::AST_TYPE type) : AST(type) {}
     AST_slice(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0) : AST(type, lineno, col_offset) {}
 };
@@ -255,7 +250,7 @@ public:
     AST_expr* msg, *test;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Assert() : AST_stmt(AST_TYPE::Assert) {}
 
@@ -268,7 +263,7 @@ public:
     AST_expr* value;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Assign() : AST_stmt(AST_TYPE::Assign) {}
 
@@ -282,7 +277,7 @@ public:
     AST_TYPE::AST_TYPE op_type;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_AugAssign() : AST_stmt(AST_TYPE::AugAssign) {}
 
@@ -295,7 +290,6 @@ public:
     AST_expr* left, *right;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_AugBinOp() : AST_expr(AST_TYPE::AugBinOp) {}
 
@@ -309,7 +303,6 @@ public:
     InternedString attr;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_Attribute() : AST_expr(AST_TYPE::Attribute) {}
 
@@ -325,7 +318,6 @@ public:
     AST_expr* left, *right;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_BinOp() : AST_expr(AST_TYPE::BinOp) {}
 
@@ -338,7 +330,6 @@ public:
     std::vector<AST_expr*> values;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_BoolOp() : AST_expr(AST_TYPE::BoolOp) {}
 
@@ -348,7 +339,7 @@ public:
 class AST_Break : public AST_stmt {
 public:
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Break() : AST_stmt(AST_TYPE::Break) {}
 
@@ -365,7 +356,6 @@ public:
     std::unique_ptr<std::vector<BoxedString*>> keywords_names;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_Call() : AST_expr(AST_TYPE::Call) {}
 
@@ -379,7 +369,6 @@ public:
     AST_expr* left;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_Compare() : AST_expr(AST_TYPE::Compare) {}
 
@@ -402,13 +391,11 @@ public:
 class AST_ClassDef : public AST_stmt {
 public:
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     std::vector<AST_expr*> bases, decorator_list;
     std::vector<AST_stmt*> body;
     InternedString name;
-
-    BoxedCode* code;
 
     AST_ClassDef() : AST_stmt(AST_TYPE::ClassDef) {}
 
@@ -418,7 +405,7 @@ public:
 class AST_Continue : public AST_stmt {
 public:
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Continue() : AST_stmt(AST_TYPE::Continue) {}
 
@@ -430,7 +417,6 @@ public:
     std::vector<AST_expr*> keys, values;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_Dict() : AST_expr(AST_TYPE::Dict) {}
 
@@ -443,7 +429,6 @@ public:
     AST_expr* key, *value;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_DictComp() : AST_expr(AST_TYPE::DictComp) {}
 
@@ -454,7 +439,7 @@ class AST_Delete : public AST_stmt {
 public:
     std::vector<AST_expr*> targets;
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Delete() : AST_stmt(AST_TYPE::Delete) {}
 
@@ -464,7 +449,6 @@ public:
 class AST_Ellipsis : public AST_slice {
 public:
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_slice(SliceVisitor* v);
 
     AST_Ellipsis() : AST_slice(AST_TYPE::Ellipsis) {}
 
@@ -476,7 +460,7 @@ public:
     AST_expr* value;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Expr() : AST_stmt(AST_TYPE::Expr) {}
     AST_Expr(AST_expr* value) : AST_stmt(AST_TYPE::Expr), value(value) {}
@@ -504,7 +488,7 @@ public:
     AST_expr* locals;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Exec() : AST_stmt(AST_TYPE::Exec) {}
 
@@ -519,8 +503,6 @@ public:
     // this should be an expr but we convert it into a AST_Return(AST_expr) to make the code simpler
     AST_stmt* body;
 
-    BoxedCode* code;
-
     virtual void accept(ASTVisitor* v);
 
     AST_Expression(std::unique_ptr<InternedStringPool> interned_strings)
@@ -534,7 +516,6 @@ public:
     std::vector<AST_slice*> dims;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_slice(SliceVisitor* v);
 
     AST_ExtSlice() : AST_slice(AST_TYPE::ExtSlice) {}
 
@@ -547,7 +528,7 @@ public:
     AST_expr* target, *iter;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_For() : AST_stmt(AST_TYPE::For) {}
 
@@ -561,10 +542,8 @@ public:
     InternedString name; // if the name is not set this is a lambda
     AST_arguments* args;
 
-    BoxedCode* code;
-
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_FunctionDef() : AST_stmt(AST_TYPE::FunctionDef) {}
 
@@ -577,7 +556,6 @@ public:
     AST_expr* elt;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_GeneratorExp() : AST_expr(AST_TYPE::GeneratorExp) {}
 
@@ -589,7 +567,7 @@ public:
     std::vector<InternedString> names;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Global() : AST_stmt(AST_TYPE::Global) {}
 
@@ -602,7 +580,7 @@ public:
     AST_expr* test;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_If() : AST_stmt(AST_TYPE::If) {}
 
@@ -614,7 +592,6 @@ public:
     AST_expr* body, *test, *orelse;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_IfExp() : AST_expr(AST_TYPE::IfExp) {}
 
@@ -626,7 +603,7 @@ public:
     std::vector<AST_alias*> names;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Import() : AST_stmt(AST_TYPE::Import) {}
 
@@ -640,7 +617,7 @@ public:
     int level;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_ImportFrom() : AST_stmt(AST_TYPE::ImportFrom) {}
 
@@ -652,7 +629,6 @@ public:
     AST_expr* value;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_slice(SliceVisitor* v);
 
     AST_Index() : AST_slice(AST_TYPE::Index) {}
 
@@ -678,7 +654,6 @@ public:
     AST_expr* body;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_Lambda() : AST_expr(AST_TYPE::Lambda) {}
 
@@ -691,7 +666,6 @@ public:
     AST_TYPE::AST_TYPE ctx_type;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_List() : AST_expr(AST_TYPE::List) {}
 
@@ -704,7 +678,6 @@ public:
     AST_expr* elt;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_ListComp() : AST_expr(AST_TYPE::ListComp) {}
 
@@ -717,8 +690,6 @@ public:
 
     // no lineno, col_offset attributes
     std::vector<AST_stmt*> body;
-
-    BoxedCode* code;
 
     virtual void accept(ASTVisitor* v);
 
@@ -764,7 +735,6 @@ public:
     int closure_offset = -1;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_Name(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0)
         : AST_expr(AST_TYPE::Name, lineno, col_offset),
@@ -795,7 +765,6 @@ public:
     std::string n_long;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_Num() : AST_expr(AST_TYPE::Num) {}
 
@@ -807,7 +776,6 @@ public:
     AST_expr* value;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_Repr() : AST_expr(AST_TYPE::Repr) {}
 
@@ -817,7 +785,7 @@ public:
 class AST_Pass : public AST_stmt {
 public:
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Pass() : AST_stmt(AST_TYPE::Pass) {}
 
@@ -831,7 +799,7 @@ public:
     std::vector<AST_expr*> values;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Print() : AST_stmt(AST_TYPE::Print) {}
 
@@ -847,7 +815,7 @@ public:
     AST_expr* arg0, *arg1, *arg2;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Raise() : AST_stmt(AST_TYPE::Raise), arg0(NULL), arg1(NULL), arg2(NULL) {}
 
@@ -859,7 +827,7 @@ public:
     AST_expr* value;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Return() : AST_stmt(AST_TYPE::Return) {}
 
@@ -871,7 +839,6 @@ public:
     std::vector<AST_expr*> elts;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_Set() : AST_expr(AST_TYPE::Set) {}
 
@@ -884,7 +851,6 @@ public:
     AST_expr* elt;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_SetComp() : AST_expr(AST_TYPE::SetComp) {}
 
@@ -896,7 +862,6 @@ public:
     AST_expr* lower, *upper, *step;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_slice(SliceVisitor* v);
 
     AST_Slice() : AST_slice(AST_TYPE::Slice) {}
 
@@ -916,7 +881,6 @@ public:
     std::string str_data;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_Str() : AST_expr(AST_TYPE::Str), str_type(UNSET) {}
     AST_Str(std::string s) : AST_expr(AST_TYPE::Str), str_type(STR), str_data(std::move(s)) {}
@@ -931,7 +895,6 @@ public:
     AST_TYPE::AST_TYPE ctx_type;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_Subscript() : AST_expr(AST_TYPE::Subscript) {}
 
@@ -944,7 +907,7 @@ public:
     std::vector<AST_ExceptHandler*> handlers;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_TryExcept() : AST_stmt(AST_TYPE::TryExcept) {}
 
@@ -956,7 +919,7 @@ public:
     std::vector<AST_stmt*> body, finalbody;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_TryFinally() : AST_stmt(AST_TYPE::TryFinally) {}
 
@@ -969,7 +932,6 @@ public:
     AST_TYPE::AST_TYPE ctx_type;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_Tuple() : AST_expr(AST_TYPE::Tuple) {}
 
@@ -982,7 +944,6 @@ public:
     AST_TYPE::AST_TYPE op_type;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_UnaryOp() : AST_expr(AST_TYPE::UnaryOp) {}
 
@@ -995,7 +956,7 @@ public:
     std::vector<AST_stmt*> body, orelse;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_While() : AST_stmt(AST_TYPE::While) {}
 
@@ -1008,7 +969,7 @@ public:
     std::vector<AST_stmt*> body;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_With() : AST_stmt(AST_TYPE::With) {}
 
@@ -1020,7 +981,6 @@ public:
     AST_expr* value;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_Yield() : AST_expr(AST_TYPE::Yield) {}
 
@@ -1032,7 +992,6 @@ public:
     AST_FunctionDef* function_def;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_MakeFunction(AST_FunctionDef* fd)
         : AST_expr(AST_TYPE::MakeFunction, fd->lineno, fd->col_offset), function_def(fd) {}
@@ -1045,7 +1004,6 @@ public:
     AST_ClassDef* class_def;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_MakeClass(AST_ClassDef* cd) : AST_expr(AST_TYPE::MakeClass, cd->lineno, cd->col_offset), class_def(cd) {}
 
@@ -1064,7 +1022,7 @@ public:
     CFGBlock* iftrue, *iffalse;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Branch() : AST_stmt(AST_TYPE::Branch) {}
 
@@ -1076,7 +1034,7 @@ public:
     CFGBlock* target;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Jump() : AST_stmt(AST_TYPE::Jump) {}
 
@@ -1089,7 +1047,6 @@ public:
     InternedString attr;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_ClsAttribute() : AST_expr(AST_TYPE::ClsAttribute) {}
 
@@ -1103,7 +1060,7 @@ public:
     CFGBlock* normal_dest, *exc_dest;
 
     virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
+    virtual void accept_stmt(ASTStmtVisitor* v);
 
     AST_Invoke(AST_stmt* stmt) : AST_stmt(AST_TYPE::Invoke), stmt(stmt) {}
 
@@ -1134,7 +1091,6 @@ public:
     std::vector<AST_expr*> args;
 
     virtual void accept(ASTVisitor* v);
-    virtual void* accept_expr(ExprVisitor* v);
 
     AST_LangPrimitive(Opcodes opcode) : AST_expr(AST_TYPE::LangPrimitive), opcode(opcode) {}
 
@@ -1294,44 +1250,10 @@ public:
     virtual bool visit_makefunction(AST_MakeFunction* node) { return false; }
 };
 
-class ExprVisitor {
+class ASTStmtVisitor {
 protected:
 public:
-    virtual ~ExprVisitor() {}
-
-    virtual void* visit_augbinop(AST_AugBinOp* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_attribute(AST_Attribute* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_binop(AST_BinOp* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_boolop(AST_BoolOp* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_call(AST_Call* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_clsattribute(AST_ClsAttribute* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_compare(AST_Compare* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_dict(AST_Dict* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_dictcomp(AST_DictComp* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_generatorexp(AST_GeneratorExp* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_ifexp(AST_IfExp* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_lambda(AST_Lambda* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_langprimitive(AST_LangPrimitive* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_list(AST_List* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_listcomp(AST_ListComp* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_name(AST_Name* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_num(AST_Num* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_repr(AST_Repr* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_set(AST_Set* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_setcomp(AST_SetComp* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_str(AST_Str* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_subscript(AST_Subscript* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_tuple(AST_Tuple* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_unaryop(AST_UnaryOp* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_yield(AST_Yield* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_makeclass(AST_MakeClass* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_makefunction(AST_MakeFunction* node) { RELEASE_ASSERT(0, ""); }
-};
-
-class StmtVisitor {
-protected:
-public:
-    virtual ~StmtVisitor() {}
+    virtual ~ASTStmtVisitor() {}
 
     virtual void visit_assert(AST_Assert* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_assign(AST_Assign* node) { RELEASE_ASSERT(0, ""); }
@@ -1362,17 +1284,8 @@ public:
     virtual void visit_jump(AST_Jump* node) { RELEASE_ASSERT(0, ""); }
 };
 
-class SliceVisitor {
-public:
-    virtual ~SliceVisitor() {}
-    virtual void* visit_ellipsis(AST_Ellipsis* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_extslice(AST_ExtSlice* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_index(AST_Index* node) { RELEASE_ASSERT(0, ""); }
-    virtual void* visit_slice(AST_Slice* node) { RELEASE_ASSERT(0, ""); }
-};
-
 void print_ast(AST* ast);
-class PrintVisitor : public ASTVisitor {
+class ASTPrintVisitor : public ASTVisitor {
 private:
     llvm::raw_ostream& stream;
     int indent;
@@ -1380,8 +1293,8 @@ private:
     void printOp(AST_TYPE::AST_TYPE op_type);
 
 public:
-    PrintVisitor(int indent = 0, llvm::raw_ostream& stream = llvm::outs()) : stream(stream), indent(indent) {}
-    virtual ~PrintVisitor() {}
+    ASTPrintVisitor(int indent = 0, llvm::raw_ostream& stream = llvm::outs()) : stream(stream), indent(indent) {}
+    virtual ~ASTPrintVisitor() {}
     void flush() { stream.flush(); }
 
     virtual bool visit_alias(AST_alias* node);

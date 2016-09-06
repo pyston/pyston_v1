@@ -22,7 +22,7 @@
 
 #include "codegen/ast_interpreter.h" // interpreter_instr_addr
 #include "codegen/unwinding.h"       // getCFForAddress
-#include "core/ast.h"
+#include "core/bst.h"
 #include "core/stats.h"        // StatCounter
 #include "core/types.h"        // for ExcInfo
 #include "core/util.h"         // Timer

@@ -16,7 +16,6 @@
 #include <sstream>
 
 #include "codegen/baseline_jit.h"
-#include "core/ast.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
 

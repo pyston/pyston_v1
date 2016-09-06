@@ -18,7 +18,6 @@
 #include "pythread.h"
 
 #include "codegen/unwinding.h"
-#include "core/ast.h"
 #include "core/cfg.h"
 #include "runtime/types.h"
 
@@ -141,7 +140,7 @@ public:
             return boxInt(f->_linenumber);
         }
 
-        AST_stmt* stmt = f->frame_info->stmt;
+        BST_stmt* stmt = f->frame_info->stmt;
         ASSERT(stmt->lineno > 0 && stmt->lineno < 1000000, "%d", stmt->lineno);
         return boxInt(stmt->lineno);
     }

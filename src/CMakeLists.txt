@@ -65,6 +65,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		codegen/type_recording.cpp
 		codegen/unwinding.cpp
 		core/ast.cpp
+		core/bst.cpp
 		core/cfg.cpp
 		core/options.cpp
 		core/stats.cpp

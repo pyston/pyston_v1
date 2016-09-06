@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "core/ast.h"
+#include "core/bst.h"
 
 #include <cassert>
 #include <cstdio>
@@ -28,241 +28,42 @@
 namespace pyston {
 
 #ifdef DEBUG_LINE_NUMBERS
-int AST::next_lineno = 100000;
+int BST::next_lineno = 100000;
 
-AST::AST(AST_TYPE::AST_TYPE type) : type(type), lineno(++next_lineno) {
+BST::BST(BST_TYPE::BST_TYPE type) : type(type), lineno(++next_lineno) {
     // if (lineno == 100644)
     // raise(SIGTRAP);
 }
 
 #endif
 
-llvm::StringRef getOpSymbol(int op_type) {
-    switch (op_type) {
-        case AST_TYPE::Add:
-            return "+";
-        case AST_TYPE::BitAnd:
-            return "&";
-        case AST_TYPE::BitOr:
-            return "|";
-        case AST_TYPE::BitXor:
-            return "^";
-        case AST_TYPE::Div:
-        case AST_TYPE::TrueDiv:
-            return "/";
-        case AST_TYPE::DivMod:
-            return "divmod()";
-        case AST_TYPE::Eq:
-            return "==";
-        case AST_TYPE::FloorDiv:
-            return "//";
-        case AST_TYPE::LShift:
-            return "<<";
-        case AST_TYPE::Lt:
-            return "<";
-        case AST_TYPE::LtE:
-            return "<=";
-        case AST_TYPE::Gt:
-            return ">";
-        case AST_TYPE::GtE:
-            return ">=";
-        case AST_TYPE::In:
-            return "in";
-        case AST_TYPE::Invert:
-            return "~";
-        case AST_TYPE::Is:
-            return "is";
-        case AST_TYPE::IsNot:
-            return "is not";
-        case AST_TYPE::Mod:
-            return "%";
-        case AST_TYPE::Mult:
-            return "*";
-        case AST_TYPE::Not:
-            return "not";
-        case AST_TYPE::NotEq:
-            return "!=";
-        case AST_TYPE::NotIn:
-            return "not in";
-        case AST_TYPE::Pow:
-            return "**";
-        case AST_TYPE::RShift:
-            return ">>";
-        case AST_TYPE::Sub:
-            return "-";
-        case AST_TYPE::UAdd:
-            return "+";
-        case AST_TYPE::USub:
-            return "-";
-        default:
-            fprintf(stderr, "Unknown op type (" __FILE__ ":" STRINGIFY(__LINE__) "): %d\n", op_type);
-            abort();
-    }
-}
-
-std::string getInplaceOpSymbol(int op_type) {
-    return std::string(getOpSymbol(op_type)) + '=';
-}
-
-BORROWED(BoxedString*) getOpName(int op_type) {
-    assert(op_type != AST_TYPE::Is);
-    assert(op_type != AST_TYPE::IsNot);
-
-    static BoxedString* strAdd, *strBitAnd, *strBitOr, *strBitXor, *strDiv, *strTrueDiv, *strDivMod, *strEq,
-        *strFloorDiv, *strLShift, *strLt, *strLtE, *strGt, *strGtE, *strIn, *strInvert, *strMod, *strMult, *strNot,
-        *strNotEq, *strPow, *strRShift, *strSub, *strUAdd, *strUSub;
-
-    static bool initialized = false;
-    if (!initialized) {
-        strAdd = getStaticString("__add__");
-        strBitAnd = getStaticString("__and__");
-        strBitOr = getStaticString("__or__");
-        strBitXor = getStaticString("__xor__");
-        strDiv = getStaticString("__div__");
-        strTrueDiv = getStaticString("__truediv__");
-        strDivMod = getStaticString("__divmod__");
-        strEq = getStaticString("__eq__");
-        strFloorDiv = getStaticString("__floordiv__");
-        strLShift = getStaticString("__lshift__");
-        strLt = getStaticString("__lt__");
-        strLtE = getStaticString("__le__");
-        strGt = getStaticString("__gt__");
-        strGtE = getStaticString("__ge__");
-        strIn = getStaticString("__contains__");
-        strInvert = getStaticString("__invert__");
-        strMod = getStaticString("__mod__");
-        strMult = getStaticString("__mul__");
-        strNot = getStaticString("__nonzero__");
-        strNotEq = getStaticString("__ne__");
-        strPow = getStaticString("__pow__");
-        strRShift = getStaticString("__rshift__");
-        strSub = getStaticString("__sub__");
-        strUAdd = getStaticString("__pos__");
-        strUSub = getStaticString("__neg__");
-
-        initialized = true;
-    }
-
-    switch (op_type) {
-        case AST_TYPE::Add:
-            return strAdd;
-        case AST_TYPE::BitAnd:
-            return strBitAnd;
-        case AST_TYPE::BitOr:
-            return strBitOr;
-        case AST_TYPE::BitXor:
-            return strBitXor;
-        case AST_TYPE::Div:
-            return strDiv;
-        case AST_TYPE::TrueDiv:
-            return strTrueDiv;
-        case AST_TYPE::DivMod:
-            return strDivMod;
-        case AST_TYPE::Eq:
-            return strEq;
-        case AST_TYPE::FloorDiv:
-            return strFloorDiv;
-        case AST_TYPE::LShift:
-            return strLShift;
-        case AST_TYPE::Lt:
-            return strLt;
-        case AST_TYPE::LtE:
-            return strLtE;
-        case AST_TYPE::Gt:
-            return strGt;
-        case AST_TYPE::GtE:
-            return strGtE;
-        case AST_TYPE::In:
-            return strIn;
-        case AST_TYPE::Invert:
-            return strInvert;
-        case AST_TYPE::Mod:
-            return strMod;
-        case AST_TYPE::Mult:
-            return strMult;
-        case AST_TYPE::Not:
-            return strNot;
-        case AST_TYPE::NotEq:
-            return strNotEq;
-        case AST_TYPE::Pow:
-            return strPow;
-        case AST_TYPE::RShift:
-            return strRShift;
-        case AST_TYPE::Sub:
-            return strSub;
-        case AST_TYPE::UAdd:
-            return strUAdd;
-        case AST_TYPE::USub:
-            return strUSub;
-        default:
-            fprintf(stderr, "Unknown op type (" __FILE__ ":" STRINGIFY(__LINE__) "): %d\n", op_type);
-            abort();
-    }
-}
-
-BoxedString* getInplaceOpName(int op_type) {
-    BoxedString* normal_name = getOpName(op_type);
-    // TODO inefficient
-    return internStringImmortal(("__i" + normal_name->s().substr(2).str()).c_str());
-}
-
-// Maybe better name is "swapped" -- it's what the runtime will try if the normal op
-// name fails, it will switch the order of the lhs/rhs and call the reverse op.
-// Calling it "reverse" because that's what I'm assuming the 'r' stands for in ex __radd__
-int getReverseCmpOp(int op_type, bool& success) {
-    success = true;
-    if (op_type == AST_TYPE::Lt)
-        return AST_TYPE::Gt;
-    if (op_type == AST_TYPE::LtE)
-        return AST_TYPE::GtE;
-    if (op_type == AST_TYPE::Gt)
-        return AST_TYPE::Lt;
-    if (op_type == AST_TYPE::GtE)
-        return AST_TYPE::LtE;
-    if (op_type == AST_TYPE::NotEq)
-        return AST_TYPE::NotEq;
-    if (op_type == AST_TYPE::Eq)
-        return AST_TYPE::Eq;
-    success = false;
-    return op_type;
-}
-
-BoxedString* getReverseOpName(int op_type) {
-    bool reversed = false;
-    op_type = getReverseCmpOp(op_type, reversed);
-    if (reversed)
-        return getOpName(op_type);
-    BoxedString* normal_name = getOpName(op_type);
-    // TODO inefficient
-    return internStringImmortal(("__r" + normal_name->s().substr(2).str()).c_str());
-}
-
-template <class T> static void visitVector(const std::vector<T*>& vec, ASTVisitor* v) {
+template <class T> static void visitVector(const std::vector<T*>& vec, BSTVisitor* v) {
     for (int i = 0; i < vec.size(); i++) {
         vec[i]->accept(v);
     }
 }
 
-void AST_alias::accept(ASTVisitor* v) {
+static void visitCFG(CFG* cfg, BSTVisitor* v) {
+    for (auto bb : cfg->blocks)
+        for (auto e : bb->body)
+            e->accept(v);
+}
+
+void BST_alias::accept(BSTVisitor* v) {
     bool skip = v->visit_alias(this);
     if (skip)
         return;
 }
 
-void AST_arguments::accept(ASTVisitor* v) {
+void BST_arguments::accept(BSTVisitor* v) {
     bool skip = v->visit_arguments(this);
     if (skip)
         return;
 
     visitVector(defaults, v);
-    visitVector(args, v);
-    if (kwarg)
-        kwarg->accept(v);
-    if (vararg)
-        vararg->accept(v);
 }
 
-void AST_Assert::accept(ASTVisitor* v) {
+void BST_Assert::accept(BSTVisitor* v) {
     bool skip = v->visit_assert(this);
     if (skip)
         return;
@@ -272,11 +73,11 @@ void AST_Assert::accept(ASTVisitor* v) {
         msg->accept(v);
 }
 
-void AST_Assert::accept_stmt(ASTStmtVisitor* v) {
+void BST_Assert::accept_stmt(StmtVisitor* v) {
     v->visit_assert(this);
 }
 
-void AST_Assign::accept(ASTVisitor* v) {
+void BST_Assign::accept(BSTVisitor* v) {
     bool skip = v->visit_assign(this);
     if (skip)
         return;
@@ -291,11 +92,11 @@ void AST_Assign::accept(ASTVisitor* v) {
     }
 }
 
-void AST_Assign::accept_stmt(ASTStmtVisitor* v) {
+void BST_Assign::accept_stmt(StmtVisitor* v) {
     v->visit_assign(this);
 }
 
-void AST_AugAssign::accept(ASTVisitor* v) {
+void BST_AugAssign::accept(BSTVisitor* v) {
     bool skip = v->visit_augassign(this);
     if (skip)
         return;
@@ -304,11 +105,11 @@ void AST_AugAssign::accept(ASTVisitor* v) {
     target->accept(v);
 }
 
-void AST_AugAssign::accept_stmt(ASTStmtVisitor* v) {
+void BST_AugAssign::accept_stmt(StmtVisitor* v) {
     v->visit_augassign(this);
 }
 
-void AST_AugBinOp::accept(ASTVisitor* v) {
+void BST_AugBinOp::accept(BSTVisitor* v) {
     bool skip = v->visit_augbinop(this);
     if (skip)
         return;
@@ -317,7 +118,11 @@ void AST_AugBinOp::accept(ASTVisitor* v) {
     right->accept(v);
 }
 
-void AST_Attribute::accept(ASTVisitor* v) {
+void* BST_AugBinOp::accept_expr(ExprVisitor* v) {
+    return v->visit_augbinop(this);
+}
+
+void BST_Attribute::accept(BSTVisitor* v) {
     bool skip = v->visit_attribute(this);
     if (skip)
         return;
@@ -325,7 +130,11 @@ void AST_Attribute::accept(ASTVisitor* v) {
     value->accept(v);
 }
 
-void AST_BinOp::accept(ASTVisitor* v) {
+void* BST_Attribute::accept_expr(ExprVisitor* v) {
+    return v->visit_attribute(this);
+}
+
+void BST_BinOp::accept(BSTVisitor* v) {
     bool skip = v->visit_binop(this);
     if (skip)
         return;
@@ -334,7 +143,11 @@ void AST_BinOp::accept(ASTVisitor* v) {
     right->accept(v);
 }
 
-void AST_BoolOp::accept(ASTVisitor* v) {
+void* BST_BinOp::accept_expr(ExprVisitor* v) {
+    return v->visit_binop(this);
+}
+
+void BST_BoolOp::accept(BSTVisitor* v) {
     bool skip = v->visit_boolop(this);
     if (skip)
         return;
@@ -342,17 +155,21 @@ void AST_BoolOp::accept(ASTVisitor* v) {
     visitVector(values, v);
 }
 
-void AST_Break::accept(ASTVisitor* v) {
+void* BST_BoolOp::accept_expr(ExprVisitor* v) {
+    return v->visit_boolop(this);
+}
+
+void BST_Break::accept(BSTVisitor* v) {
     bool skip = v->visit_break(this);
     if (skip)
         return;
 }
 
-void AST_Break::accept_stmt(ASTStmtVisitor* v) {
+void BST_Break::accept_stmt(StmtVisitor* v) {
     v->visit_break(this);
 }
 
-void AST_Call::accept(ASTVisitor* v) {
+void BST_Call::accept(BSTVisitor* v) {
     bool skip = v->visit_call(this);
     if (skip)
         return;
@@ -366,7 +183,11 @@ void AST_Call::accept(ASTVisitor* v) {
         kwargs->accept(v);
 }
 
-void AST_Compare::accept(ASTVisitor* v) {
+void* BST_Call::accept_expr(ExprVisitor* v) {
+    return v->visit_call(this);
+}
+
+void BST_Compare::accept(BSTVisitor* v) {
     bool skip = v->visit_compare(this);
     if (skip)
         return;
@@ -375,7 +196,11 @@ void AST_Compare::accept(ASTVisitor* v) {
     visitVector(comparators, v);
 }
 
-void AST_comprehension::accept(ASTVisitor* v) {
+void* BST_Compare::accept_expr(ExprVisitor* v) {
+    return v->visit_compare(this);
+}
+
+void BST_comprehension::accept(BSTVisitor* v) {
     bool skip = v->visit_comprehension(this);
     if (skip)
         return;
@@ -387,31 +212,31 @@ void AST_comprehension::accept(ASTVisitor* v) {
     }
 }
 
-void AST_ClassDef::accept(ASTVisitor* v) {
+void BST_ClassDef::accept(BSTVisitor* v) {
     bool skip = v->visit_classdef(this);
     if (skip)
         return;
 
     visitVector(this->bases, v);
     visitVector(this->decorator_list, v);
-    visitVector(this->body, v);
+    visitCFG(this->code->source->cfg, v);
 }
 
-void AST_ClassDef::accept_stmt(ASTStmtVisitor* v) {
+void BST_ClassDef::accept_stmt(StmtVisitor* v) {
     v->visit_classdef(this);
 }
 
-void AST_Continue::accept(ASTVisitor* v) {
+void BST_Continue::accept(BSTVisitor* v) {
     bool skip = v->visit_continue(this);
     if (skip)
         return;
 }
 
-void AST_Continue::accept_stmt(ASTStmtVisitor* v) {
+void BST_Continue::accept_stmt(StmtVisitor* v) {
     v->visit_continue(this);
 }
 
-void AST_Delete::accept(ASTVisitor* v) {
+void BST_Delete::accept(BSTVisitor* v) {
     bool skip = v->visit_delete(this);
     if (skip)
         return;
@@ -419,11 +244,11 @@ void AST_Delete::accept(ASTVisitor* v) {
     visitVector(this->targets, v);
 }
 
-void AST_Delete::accept_stmt(ASTStmtVisitor* v) {
+void BST_Delete::accept_stmt(StmtVisitor* v) {
     v->visit_delete(this);
 }
 
-void AST_Dict::accept(ASTVisitor* v) {
+void BST_Dict::accept(BSTVisitor* v) {
     bool skip = v->visit_dict(this);
     if (skip)
         return;
@@ -434,7 +259,11 @@ void AST_Dict::accept(ASTVisitor* v) {
     }
 }
 
-void AST_DictComp::accept(ASTVisitor* v) {
+void* BST_Dict::accept_expr(ExprVisitor* v) {
+    return v->visit_dict(this);
+}
+
+void BST_DictComp::accept(BSTVisitor* v) {
     bool skip = v->visit_dictcomp(this);
     if (skip)
         return;
@@ -447,13 +276,21 @@ void AST_DictComp::accept(ASTVisitor* v) {
     key->accept(v);
 }
 
-void AST_Ellipsis::accept(ASTVisitor* v) {
+void* BST_DictComp::accept_expr(ExprVisitor* v) {
+    return v->visit_dictcomp(this);
+}
+
+void BST_Ellipsis::accept(BSTVisitor* v) {
     bool skip = v->visit_ellipsis(this);
     if (skip)
         return;
 }
 
-void AST_ExceptHandler::accept(ASTVisitor* v) {
+void* BST_Ellipsis::accept_slice(SliceVisitor* v) {
+    return v->visit_ellipsis(this);
+}
+
+void BST_ExceptHandler::accept(BSTVisitor* v) {
     bool skip = v->visit_excepthandler(this);
     if (skip)
         return;
@@ -465,7 +302,7 @@ void AST_ExceptHandler::accept(ASTVisitor* v) {
     visitVector(body, v);
 }
 
-void AST_Exec::accept(ASTVisitor* v) {
+void BST_Exec::accept(BSTVisitor* v) {
     bool skip = v->visit_exec(this);
     if (skip)
         return;
@@ -478,11 +315,11 @@ void AST_Exec::accept(ASTVisitor* v) {
         locals->accept(v);
 }
 
-void AST_Exec::accept_stmt(ASTStmtVisitor* v) {
+void BST_Exec::accept_stmt(StmtVisitor* v) {
     v->visit_exec(this);
 }
 
-void AST_Expr::accept(ASTVisitor* v) {
+void BST_Expr::accept(BSTVisitor* v) {
     bool skip = v->visit_expr(this);
     if (skip)
         return;
@@ -490,19 +327,23 @@ void AST_Expr::accept(ASTVisitor* v) {
     value->accept(v);
 }
 
-void AST_Expr::accept_stmt(ASTStmtVisitor* v) {
+void BST_Expr::accept_stmt(StmtVisitor* v) {
     v->visit_expr(this);
 }
 
 
-void AST_ExtSlice::accept(ASTVisitor* v) {
+void BST_ExtSlice::accept(BSTVisitor* v) {
     bool skip = v->visit_extslice(this);
     if (skip)
         return;
     visitVector(dims, v);
 }
 
-void AST_For::accept(ASTVisitor* v) {
+void* BST_ExtSlice::accept_slice(SliceVisitor* v) {
+    return v->visit_extslice(this);
+}
+
+void BST_For::accept(BSTVisitor* v) {
     bool skip = v->visit_for(this);
     if (skip)
         return;
@@ -513,25 +354,25 @@ void AST_For::accept(ASTVisitor* v) {
     visitVector(orelse, v);
 }
 
-void AST_For::accept_stmt(ASTStmtVisitor* v) {
+void BST_For::accept_stmt(StmtVisitor* v) {
     v->visit_for(this);
 }
 
-void AST_FunctionDef::accept(ASTVisitor* v) {
+void BST_FunctionDef::accept(BSTVisitor* v) {
     bool skip = v->visit_functiondef(this);
     if (skip)
         return;
 
     visitVector(decorator_list, v);
     args->accept(v);
-    visitVector(body, v);
+    visitCFG(code->source->cfg, v);
 }
 
-void AST_FunctionDef::accept_stmt(ASTStmtVisitor* v) {
+void BST_FunctionDef::accept_stmt(StmtVisitor* v) {
     v->visit_functiondef(this);
 }
 
-void AST_GeneratorExp::accept(ASTVisitor* v) {
+void BST_GeneratorExp::accept(BSTVisitor* v) {
     bool skip = v->visit_generatorexp(this);
     if (skip)
         return;
@@ -543,17 +384,21 @@ void AST_GeneratorExp::accept(ASTVisitor* v) {
     elt->accept(v);
 }
 
-void AST_Global::accept(ASTVisitor* v) {
+void* BST_GeneratorExp::accept_expr(ExprVisitor* v) {
+    return v->visit_generatorexp(this);
+}
+
+void BST_Global::accept(BSTVisitor* v) {
     bool skip = v->visit_global(this);
     if (skip)
         return;
 }
 
-void AST_Global::accept_stmt(ASTStmtVisitor* v) {
+void BST_Global::accept_stmt(StmtVisitor* v) {
     v->visit_global(this);
 }
 
-void AST_If::accept(ASTVisitor* v) {
+void BST_If::accept(BSTVisitor* v) {
     bool skip = v->visit_if(this);
     if (skip)
         return;
@@ -563,11 +408,11 @@ void AST_If::accept(ASTVisitor* v) {
     visitVector(orelse, v);
 }
 
-void AST_If::accept_stmt(ASTStmtVisitor* v) {
+void BST_If::accept_stmt(StmtVisitor* v) {
     v->visit_if(this);
 }
 
-void AST_IfExp::accept(ASTVisitor* v) {
+void BST_IfExp::accept(BSTVisitor* v) {
     bool skip = v->visit_ifexp(this);
     if (skip)
         return;
@@ -577,7 +422,11 @@ void AST_IfExp::accept(ASTVisitor* v) {
     this->orelse->accept(v);
 }
 
-void AST_Import::accept(ASTVisitor* v) {
+void* BST_IfExp::accept_expr(ExprVisitor* v) {
+    return v->visit_ifexp(this);
+}
+
+void BST_Import::accept(BSTVisitor* v) {
     bool skip = v->visit_import(this);
     if (skip)
         return;
@@ -585,11 +434,11 @@ void AST_Import::accept(ASTVisitor* v) {
     visitVector(names, v);
 }
 
-void AST_Import::accept_stmt(ASTStmtVisitor* v) {
+void BST_Import::accept_stmt(StmtVisitor* v) {
     v->visit_import(this);
 }
 
-void AST_ImportFrom::accept(ASTVisitor* v) {
+void BST_ImportFrom::accept(BSTVisitor* v) {
     bool skip = v->visit_importfrom(this);
     if (skip)
         return;
@@ -597,11 +446,11 @@ void AST_ImportFrom::accept(ASTVisitor* v) {
     visitVector(names, v);
 }
 
-void AST_ImportFrom::accept_stmt(ASTStmtVisitor* v) {
+void BST_ImportFrom::accept_stmt(StmtVisitor* v) {
     v->visit_importfrom(this);
 }
 
-void AST_Index::accept(ASTVisitor* v) {
+void BST_Index::accept(BSTVisitor* v) {
     bool skip = v->visit_index(this);
     if (skip)
         return;
@@ -609,7 +458,11 @@ void AST_Index::accept(ASTVisitor* v) {
     this->value->accept(v);
 }
 
-void AST_Invoke::accept(ASTVisitor* v) {
+void* BST_Index::accept_slice(SliceVisitor* v) {
+    return v->visit_index(this);
+}
+
+void BST_Invoke::accept(BSTVisitor* v) {
     bool skip = v->visit_invoke(this);
     if (skip)
         return;
@@ -617,11 +470,11 @@ void AST_Invoke::accept(ASTVisitor* v) {
     this->stmt->accept(v);
 }
 
-void AST_Invoke::accept_stmt(ASTStmtVisitor* v) {
+void BST_Invoke::accept_stmt(StmtVisitor* v) {
     return v->visit_invoke(this);
 }
 
-void AST_keyword::accept(ASTVisitor* v) {
+void BST_keyword::accept(BSTVisitor* v) {
     bool skip = v->visit_keyword(this);
     if (skip)
         return;
@@ -629,7 +482,7 @@ void AST_keyword::accept(ASTVisitor* v) {
     value->accept(v);
 }
 
-void AST_Lambda::accept(ASTVisitor* v) {
+void BST_Lambda::accept(BSTVisitor* v) {
     bool skip = v->visit_lambda(this);
     if (skip)
         return;
@@ -638,7 +491,11 @@ void AST_Lambda::accept(ASTVisitor* v) {
     body->accept(v);
 }
 
-void AST_LangPrimitive::accept(ASTVisitor* v) {
+void* BST_Lambda::accept_expr(ExprVisitor* v) {
+    return v->visit_lambda(this);
+}
+
+void BST_LangPrimitive::accept(BSTVisitor* v) {
     bool skip = v->visit_langprimitive(this);
     if (skip)
         return;
@@ -646,7 +503,11 @@ void AST_LangPrimitive::accept(ASTVisitor* v) {
     visitVector(args, v);
 }
 
-void AST_List::accept(ASTVisitor* v) {
+void* BST_LangPrimitive::accept_expr(ExprVisitor* v) {
+    return v->visit_langprimitive(this);
+}
+
+void BST_List::accept(BSTVisitor* v) {
     bool skip = v->visit_list(this);
     if (skip)
         return;
@@ -654,7 +515,11 @@ void AST_List::accept(ASTVisitor* v) {
     visitVector(elts, v);
 }
 
-void AST_ListComp::accept(ASTVisitor* v) {
+void* BST_List::accept_expr(ExprVisitor* v) {
+    return v->visit_list(this);
+}
+
+void BST_ListComp::accept(BSTVisitor* v) {
     bool skip = v->visit_listcomp(this);
     if (skip)
         return;
@@ -666,7 +531,11 @@ void AST_ListComp::accept(ASTVisitor* v) {
     elt->accept(v);
 }
 
-void AST_Module::accept(ASTVisitor* v) {
+void* BST_ListComp::accept_expr(ExprVisitor* v) {
+    return v->visit_listcomp(this);
+}
+
+void BST_Module::accept(BSTVisitor* v) {
     bool skip = v->visit_module(this);
     if (skip)
         return;
@@ -674,7 +543,7 @@ void AST_Module::accept(ASTVisitor* v) {
     visitVector(body, v);
 }
 
-void AST_Expression::accept(ASTVisitor* v) {
+void BST_Expression::accept(BSTVisitor* v) {
     bool skip = v->visit_expression(this);
     if (skip)
         return;
@@ -682,7 +551,7 @@ void AST_Expression::accept(ASTVisitor* v) {
     body->accept(v);
 }
 
-void AST_Suite::accept(ASTVisitor* v) {
+void BST_Suite::accept(BSTVisitor* v) {
     bool skip = v->visit_suite(this);
     if (skip)
         return;
@@ -690,23 +559,31 @@ void AST_Suite::accept(ASTVisitor* v) {
     visitVector(body, v);
 }
 
-void AST_Name::accept(ASTVisitor* v) {
+void BST_Name::accept(BSTVisitor* v) {
     bool skip = v->visit_name(this);
 }
 
-void AST_Num::accept(ASTVisitor* v) {
+void* BST_Name::accept_expr(ExprVisitor* v) {
+    return v->visit_name(this);
+}
+
+void BST_Num::accept(BSTVisitor* v) {
     bool skip = v->visit_num(this);
 }
 
-void AST_Pass::accept(ASTVisitor* v) {
+void* BST_Num::accept_expr(ExprVisitor* v) {
+    return v->visit_num(this);
+}
+
+void BST_Pass::accept(BSTVisitor* v) {
     bool skip = v->visit_pass(this);
 }
 
-void AST_Pass::accept_stmt(ASTStmtVisitor* v) {
+void BST_Pass::accept_stmt(StmtVisitor* v) {
     v->visit_pass(this);
 }
 
-void AST_Print::accept(ASTVisitor* v) {
+void BST_Print::accept(BSTVisitor* v) {
     bool skip = v->visit_print(this);
     if (skip)
         return;
@@ -716,11 +593,11 @@ void AST_Print::accept(ASTVisitor* v) {
     visitVector(values, v);
 }
 
-void AST_Print::accept_stmt(ASTStmtVisitor* v) {
+void BST_Print::accept_stmt(StmtVisitor* v) {
     v->visit_print(this);
 }
 
-void AST_Raise::accept(ASTVisitor* v) {
+void BST_Raise::accept(BSTVisitor* v) {
     bool skip = v->visit_raise(this);
     if (skip)
         return;
@@ -733,11 +610,11 @@ void AST_Raise::accept(ASTVisitor* v) {
         arg2->accept(v);
 }
 
-void AST_Raise::accept_stmt(ASTStmtVisitor* v) {
+void BST_Raise::accept_stmt(StmtVisitor* v) {
     v->visit_raise(this);
 }
 
-void AST_Repr::accept(ASTVisitor* v) {
+void BST_Repr::accept(BSTVisitor* v) {
     bool skip = v->visit_repr(this);
     if (skip)
         return;
@@ -745,7 +622,11 @@ void AST_Repr::accept(ASTVisitor* v) {
     value->accept(v);
 }
 
-void AST_Return::accept(ASTVisitor* v) {
+void* BST_Repr::accept_expr(ExprVisitor* v) {
+    return v->visit_repr(this);
+}
+
+void BST_Return::accept(BSTVisitor* v) {
     bool skip = v->visit_return(this);
     if (skip)
         return;
@@ -754,11 +635,11 @@ void AST_Return::accept(ASTVisitor* v) {
         value->accept(v);
 }
 
-void AST_Return::accept_stmt(ASTStmtVisitor* v) {
+void BST_Return::accept_stmt(StmtVisitor* v) {
     v->visit_return(this);
 }
 
-void AST_Set::accept(ASTVisitor* v) {
+void BST_Set::accept(BSTVisitor* v) {
     bool skip = v->visit_set(this);
     if (skip)
         return;
@@ -766,7 +647,11 @@ void AST_Set::accept(ASTVisitor* v) {
     visitVector(elts, v);
 }
 
-void AST_SetComp::accept(ASTVisitor* v) {
+void* BST_Set::accept_expr(ExprVisitor* v) {
+    return v->visit_set(this);
+}
+
+void BST_SetComp::accept(BSTVisitor* v) {
     bool skip = v->visit_setcomp(this);
     if (skip)
         return;
@@ -778,7 +663,11 @@ void AST_SetComp::accept(ASTVisitor* v) {
     elt->accept(v);
 }
 
-void AST_Slice::accept(ASTVisitor* v) {
+void* BST_SetComp::accept_expr(ExprVisitor* v) {
+    return v->visit_setcomp(this);
+}
+
+void BST_Slice::accept(BSTVisitor* v) {
     bool skip = v->visit_slice(this);
     if (skip)
         return;
@@ -791,13 +680,21 @@ void AST_Slice::accept(ASTVisitor* v) {
         step->accept(v);
 }
 
-void AST_Str::accept(ASTVisitor* v) {
+void* BST_Slice::accept_slice(SliceVisitor* v) {
+    return v->visit_slice(this);
+}
+
+void BST_Str::accept(BSTVisitor* v) {
     bool skip = v->visit_str(this);
     if (skip)
         return;
 }
 
-void AST_Subscript::accept(ASTVisitor* v) {
+void* BST_Str::accept_expr(ExprVisitor* v) {
+    return v->visit_str(this);
+}
+
+void BST_Subscript::accept(BSTVisitor* v) {
     bool skip = v->visit_subscript(this);
     if (skip)
         return;
@@ -806,7 +703,11 @@ void AST_Subscript::accept(ASTVisitor* v) {
     this->slice->accept(v);
 }
 
-void AST_TryExcept::accept(ASTVisitor* v) {
+void* BST_Subscript::accept_expr(ExprVisitor* v) {
+    return v->visit_subscript(this);
+}
+
+void BST_TryExcept::accept(BSTVisitor* v) {
     bool skip = v->visit_tryexcept(this);
     if (skip)
         return;
@@ -816,11 +717,11 @@ void AST_TryExcept::accept(ASTVisitor* v) {
     visitVector(handlers, v);
 }
 
-void AST_TryExcept::accept_stmt(ASTStmtVisitor* v) {
+void BST_TryExcept::accept_stmt(StmtVisitor* v) {
     v->visit_tryexcept(this);
 }
 
-void AST_TryFinally::accept(ASTVisitor* v) {
+void BST_TryFinally::accept(BSTVisitor* v) {
     bool skip = v->visit_tryfinally(this);
     if (skip)
         return;
@@ -829,11 +730,11 @@ void AST_TryFinally::accept(ASTVisitor* v) {
     visitVector(finalbody, v);
 }
 
-void AST_TryFinally::accept_stmt(ASTStmtVisitor* v) {
+void BST_TryFinally::accept_stmt(StmtVisitor* v) {
     v->visit_tryfinally(this);
 }
 
-void AST_Tuple::accept(ASTVisitor* v) {
+void BST_Tuple::accept(BSTVisitor* v) {
     bool skip = v->visit_tuple(this);
     if (skip)
         return;
@@ -841,7 +742,11 @@ void AST_Tuple::accept(ASTVisitor* v) {
     visitVector(elts, v);
 }
 
-void AST_UnaryOp::accept(ASTVisitor* v) {
+void* BST_Tuple::accept_expr(ExprVisitor* v) {
+    return v->visit_tuple(this);
+}
+
+void BST_UnaryOp::accept(BSTVisitor* v) {
     bool skip = v->visit_unaryop(this);
     if (skip)
         return;
@@ -849,7 +754,11 @@ void AST_UnaryOp::accept(ASTVisitor* v) {
     operand->accept(v);
 }
 
-void AST_While::accept(ASTVisitor* v) {
+void* BST_UnaryOp::accept_expr(ExprVisitor* v) {
+    return v->visit_unaryop(this);
+}
+
+void BST_While::accept(BSTVisitor* v) {
     bool skip = v->visit_while(this);
     if (skip)
         return;
@@ -859,11 +768,11 @@ void AST_While::accept(ASTVisitor* v) {
     visitVector(orelse, v);
 }
 
-void AST_While::accept_stmt(ASTStmtVisitor* v) {
+void BST_While::accept_stmt(StmtVisitor* v) {
     v->visit_while(this);
 }
 
-void AST_With::accept(ASTVisitor* v) {
+void BST_With::accept(BSTVisitor* v) {
     bool skip = v->visit_with(this);
     if (skip)
         return;
@@ -874,11 +783,11 @@ void AST_With::accept(ASTVisitor* v) {
     visitVector(body, v);
 }
 
-void AST_With::accept_stmt(ASTStmtVisitor* v) {
+void BST_With::accept_stmt(StmtVisitor* v) {
     v->visit_with(this);
 }
 
-void AST_Yield::accept(ASTVisitor* v) {
+void BST_Yield::accept(BSTVisitor* v) {
     bool skip = v->visit_yield(this);
     if (skip)
         return;
@@ -887,7 +796,11 @@ void AST_Yield::accept(ASTVisitor* v) {
         value->accept(v);
 }
 
-void AST_Branch::accept(ASTVisitor* v) {
+void* BST_Yield::accept_expr(ExprVisitor* v) {
+    return v->visit_yield(this);
+}
+
+void BST_Branch::accept(BSTVisitor* v) {
     bool skip = v->visit_branch(this);
     if (skip)
         return;
@@ -895,21 +808,21 @@ void AST_Branch::accept(ASTVisitor* v) {
     test->accept(v);
 }
 
-void AST_Branch::accept_stmt(ASTStmtVisitor* v) {
+void BST_Branch::accept_stmt(StmtVisitor* v) {
     v->visit_branch(this);
 }
 
-void AST_Jump::accept(ASTVisitor* v) {
+void BST_Jump::accept(BSTVisitor* v) {
     bool skip = v->visit_jump(this);
     if (skip)
         return;
 }
 
-void AST_Jump::accept_stmt(ASTStmtVisitor* v) {
+void BST_Jump::accept_stmt(StmtVisitor* v) {
     v->visit_jump(this);
 }
 
-void AST_ClsAttribute::accept(ASTVisitor* v) {
+void BST_ClsAttribute::accept(BSTVisitor* v) {
     bool skip = v->visit_clsattribute(this);
     if (skip)
         return;
@@ -917,7 +830,11 @@ void AST_ClsAttribute::accept(ASTVisitor* v) {
     value->accept(v);
 }
 
-void AST_MakeFunction::accept(ASTVisitor* v) {
+void* BST_ClsAttribute::accept_expr(ExprVisitor* v) {
+    return v->visit_clsattribute(this);
+}
+
+void BST_MakeFunction::accept(BSTVisitor* v) {
     bool skip = v->visit_makefunction(this);
     if (skip)
         return;
@@ -925,7 +842,11 @@ void AST_MakeFunction::accept(ASTVisitor* v) {
     function_def->accept(v);
 }
 
-void AST_MakeClass::accept(ASTVisitor* v) {
+void* BST_MakeFunction::accept_expr(ExprVisitor* v) {
+    return v->visit_makefunction(this);
+}
+
+void BST_MakeClass::accept(BSTVisitor* v) {
     bool skip = v->visit_makeclass(this);
     if (skip)
         return;
@@ -933,42 +854,42 @@ void AST_MakeClass::accept(ASTVisitor* v) {
     class_def->accept(v);
 }
 
-void print_ast(AST* ast) {
-    ASTPrintVisitor v;
-    ast->accept(&v);
+void* BST_MakeClass::accept_expr(ExprVisitor* v) {
+    return v->visit_makeclass(this);
+}
+
+void print_bst(BST* bst) {
+    PrintVisitor v;
+    bst->accept(&v);
     v.flush();
 }
 
-void ASTPrintVisitor::printIndent() {
+void PrintVisitor::printIndent() {
     for (int i = 0; i < indent; i++) {
         stream << ' ';
     }
 }
 
-bool ASTPrintVisitor::visit_alias(AST_alias* node) {
+bool PrintVisitor::visit_alias(BST_alias* node) {
     stream << node->name.s();
     if (node->asname.s().size())
         stream << " as " << node->asname.s();
     return true;
 }
 
-bool ASTPrintVisitor::visit_arguments(AST_arguments* node) {
-    int nargs = node->args.size();
+bool PrintVisitor::visit_arguments(BST_arguments* node) {
     int ndefault = node->defaults.size();
-    for (int i = 0; i < nargs; i++) {
+    for (int i = 0; i < ndefault; i++) {
         if (i > 0)
             stream << ", ";
 
-        node->args[i]->accept(this);
-        if (i >= nargs - ndefault) {
-            stream << "=";
-            node->defaults[i - (nargs - ndefault)]->accept(this);
-        }
+        stream << "<default " << i << ">=";
+        node->defaults[i]->accept(this);
     }
     return true;
 }
 
-bool ASTPrintVisitor::visit_assert(AST_Assert* node) {
+bool PrintVisitor::visit_assert(BST_Assert* node) {
     stream << "assert ";
     node->test->accept(this);
     if (node->msg) {
@@ -978,7 +899,7 @@ bool ASTPrintVisitor::visit_assert(AST_Assert* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_assign(AST_Assign* node) {
+bool PrintVisitor::visit_assign(BST_Assign* node) {
     for (int i = 0; i < node->targets.size(); i++) {
         node->targets[i]->accept(this);
         stream << " = ";
@@ -987,39 +908,39 @@ bool ASTPrintVisitor::visit_assign(AST_Assign* node) {
     return true;
 }
 
-void ASTPrintVisitor::printOp(AST_TYPE::AST_TYPE op_type) {
+void PrintVisitor::printOp(AST_TYPE::AST_TYPE op_type) {
     switch (op_type) {
-        case AST_TYPE::Add:
+        case BST_TYPE::Add:
             stream << '+';
             break;
-        case AST_TYPE::BitAnd:
+        case BST_TYPE::BitAnd:
             stream << '&';
             break;
-        case AST_TYPE::BitOr:
+        case BST_TYPE::BitOr:
             stream << '|';
             break;
-        case AST_TYPE::BitXor:
+        case BST_TYPE::BitXor:
             stream << '^';
             break;
-        case AST_TYPE::Div:
+        case BST_TYPE::Div:
             stream << '/';
             break;
-        case AST_TYPE::LShift:
+        case BST_TYPE::LShift:
             stream << "<<";
             break;
-        case AST_TYPE::RShift:
+        case BST_TYPE::RShift:
             stream << ">>";
             break;
-        case AST_TYPE::Pow:
+        case BST_TYPE::Pow:
             stream << "**";
             break;
-        case AST_TYPE::Mod:
+        case BST_TYPE::Mod:
             stream << '%';
             break;
-        case AST_TYPE::Mult:
+        case BST_TYPE::Mult:
             stream << '*';
             break;
-        case AST_TYPE::Sub:
+        case BST_TYPE::Sub:
             stream << '-';
             break;
         default:
@@ -1028,7 +949,7 @@ void ASTPrintVisitor::printOp(AST_TYPE::AST_TYPE op_type) {
     }
 }
 
-bool ASTPrintVisitor::visit_augassign(AST_AugAssign* node) {
+bool PrintVisitor::visit_augassign(BST_AugAssign* node) {
     node->target->accept(this);
     printOp(node->op_type);
     stream << '=';
@@ -1036,7 +957,7 @@ bool ASTPrintVisitor::visit_augassign(AST_AugAssign* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_augbinop(AST_AugBinOp* node) {
+bool PrintVisitor::visit_augbinop(BST_AugBinOp* node) {
     node->left->accept(this);
     stream << '=';
     printOp(node->op_type);
@@ -1044,31 +965,31 @@ bool ASTPrintVisitor::visit_augbinop(AST_AugBinOp* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_attribute(AST_Attribute* node) {
+bool PrintVisitor::visit_attribute(BST_Attribute* node) {
     node->value->accept(this);
     stream << '.';
     stream << node->attr.s();
     return true;
 }
 
-bool ASTPrintVisitor::visit_binop(AST_BinOp* node) {
+bool PrintVisitor::visit_binop(BST_BinOp* node) {
     node->left->accept(this);
     printOp(node->op_type);
     node->right->accept(this);
     return true;
 }
 
-bool ASTPrintVisitor::visit_boolop(AST_BoolOp* node) {
+bool PrintVisitor::visit_boolop(BST_BoolOp* node) {
     for (int i = 0; i < node->values.size(); i++) {
         node->values[i]->accept(this);
 
         if (i == node->values.size() - 1)
             continue;
         switch (node->op_type) {
-            case AST_TYPE::And:
+            case BST_TYPE::And:
                 stream << " and ";
                 break;
-            case AST_TYPE::Or:
+            case BST_TYPE::Or:
                 stream << " or ";
                 break;
             default:
@@ -1079,12 +1000,12 @@ bool ASTPrintVisitor::visit_boolop(AST_BoolOp* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_break(AST_Break* node) {
+bool PrintVisitor::visit_break(BST_Break* node) {
     stream << "break";
     return true;
 }
 
-bool ASTPrintVisitor::visit_call(AST_Call* node) {
+bool PrintVisitor::visit_call(BST_Call* node) {
     node->func->accept(this);
     stream << "(";
 
@@ -1117,7 +1038,7 @@ bool ASTPrintVisitor::visit_call(AST_Call* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_compare(AST_Compare* node) {
+bool PrintVisitor::visit_compare(BST_Compare* node) {
     node->left->accept(this);
 
     for (int i = 0; i < node->ops.size(); i++) {
@@ -1130,13 +1051,13 @@ bool ASTPrintVisitor::visit_compare(AST_Compare* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_comprehension(AST_comprehension* node) {
+bool PrintVisitor::visit_comprehension(BST_comprehension* node) {
     stream << "for ";
     node->target->accept(this);
     stream << " in ";
     node->iter->accept(this);
 
-    for (AST_expr* i : node->ifs) {
+    for (BST_expr* i : node->ifs) {
         stream << " if ";
         i->accept(this);
     }
@@ -1144,7 +1065,7 @@ bool ASTPrintVisitor::visit_comprehension(AST_comprehension* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_classdef(AST_ClassDef* node) {
+bool PrintVisitor::visit_classdef(BST_ClassDef* node) {
     for (int i = 0, n = node->decorator_list.size(); i < n; i++) {
         stream << "@";
         node->decorator_list[i]->accept(this);
@@ -1160,22 +1081,27 @@ bool ASTPrintVisitor::visit_classdef(AST_ClassDef* node) {
     stream << ")";
 
     indent += 4;
+    stream << '\n';
+    printIndent();
+    stream << "...";
+#if 0
     for (int i = 0, n = node->body.size(); i < n; i++) {
         stream << "\n";
         printIndent();
         node->body[i]->accept(this);
     }
+#endif
     indent -= 4;
 
     return true;
 }
 
-bool ASTPrintVisitor::visit_continue(AST_Continue* node) {
+bool PrintVisitor::visit_continue(BST_Continue* node) {
     stream << "continue";
     return true;
 }
 
-bool ASTPrintVisitor::visit_delete(AST_Delete* node) {
+bool PrintVisitor::visit_delete(BST_Delete* node) {
     stream << "del ";
     for (int i = 0; i < node->targets.size(); i++) {
         if (i > 0)
@@ -1185,7 +1111,7 @@ bool ASTPrintVisitor::visit_delete(AST_Delete* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_dict(AST_Dict* node) {
+bool PrintVisitor::visit_dict(BST_Dict* node) {
     stream << "{";
     for (int i = 0; i < node->keys.size(); i++) {
         if (i > 0)
@@ -1198,7 +1124,7 @@ bool ASTPrintVisitor::visit_dict(AST_Dict* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_dictcomp(AST_DictComp* node) {
+bool PrintVisitor::visit_dictcomp(BST_DictComp* node) {
     stream << "{";
     node->key->accept(this);
     stream << ":";
@@ -1211,12 +1137,12 @@ bool ASTPrintVisitor::visit_dictcomp(AST_DictComp* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_ellipsis(AST_Ellipsis*) {
+bool PrintVisitor::visit_ellipsis(BST_Ellipsis*) {
     stream << "...";
     return true;
 }
 
-bool ASTPrintVisitor::visit_excepthandler(AST_ExceptHandler* node) {
+bool PrintVisitor::visit_excepthandler(BST_ExceptHandler* node) {
     stream << "except";
     if (node->type) {
         stream << " ";
@@ -1229,7 +1155,7 @@ bool ASTPrintVisitor::visit_excepthandler(AST_ExceptHandler* node) {
     stream << ":\n";
 
     indent += 4;
-    for (AST* subnode : node->body) {
+    for (BST* subnode : node->body) {
         printIndent();
         subnode->accept(this);
         stream << "\n";
@@ -1238,7 +1164,7 @@ bool ASTPrintVisitor::visit_excepthandler(AST_ExceptHandler* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_exec(AST_Exec* node) {
+bool PrintVisitor::visit_exec(BST_Exec* node) {
     stream << "exec ";
 
     node->body->accept(this);
@@ -1255,11 +1181,11 @@ bool ASTPrintVisitor::visit_exec(AST_Exec* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_expr(AST_Expr* node) {
+bool PrintVisitor::visit_expr(BST_Expr* node) {
     return false;
 }
 
-bool ASTPrintVisitor::visit_extslice(AST_ExtSlice* node) {
+bool PrintVisitor::visit_extslice(BST_ExtSlice* node) {
     for (int i = 0; i < node->dims.size(); ++i) {
         if (i > 0)
             stream << ", ";
@@ -1268,12 +1194,12 @@ bool ASTPrintVisitor::visit_extslice(AST_ExtSlice* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_for(AST_For* node) {
+bool PrintVisitor::visit_for(BST_For* node) {
     stream << "<for loop>\n";
     return true;
 }
 
-bool ASTPrintVisitor::visit_functiondef(AST_FunctionDef* node) {
+bool PrintVisitor::visit_functiondef(BST_FunctionDef* node) {
     for (auto d : node->decorator_list) {
         stream << "@";
         d->accept(this);
@@ -1291,16 +1217,21 @@ bool ASTPrintVisitor::visit_functiondef(AST_FunctionDef* node) {
     stream << ")";
 
     indent += 4;
+    stream << '\n';
+    printIndent();
+    stream << "...";
+#if 0
     for (int i = 0; i < node->body.size(); i++) {
         stream << "\n";
         printIndent();
         node->body[i]->accept(this);
     }
+#endif
     indent -= 4;
     return true;
 }
 
-bool ASTPrintVisitor::visit_generatorexp(AST_GeneratorExp* node) {
+bool PrintVisitor::visit_generatorexp(BST_GeneratorExp* node) {
     stream << "[";
     node->elt->accept(this);
     for (auto c : node->generators) {
@@ -1311,7 +1242,7 @@ bool ASTPrintVisitor::visit_generatorexp(AST_GeneratorExp* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_global(AST_Global* node) {
+bool PrintVisitor::visit_global(BST_Global* node) {
     stream << "global ";
     for (int i = 0; i < node->names.size(); i++) {
         if (i > 0)
@@ -1321,7 +1252,7 @@ bool ASTPrintVisitor::visit_global(AST_Global* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_if(AST_If* node) {
+bool PrintVisitor::visit_if(BST_If* node) {
     stream << "if ";
     node->test->accept(this);
     stream << ":\n";
@@ -1338,7 +1269,7 @@ bool ASTPrintVisitor::visit_if(AST_If* node) {
         printIndent();
         bool elif = false;
 
-        if (node->orelse.size() == 1 && node->orelse[0]->type == AST_TYPE::If)
+        if (node->orelse.size() == 1 && node->orelse[0]->type == BST_TYPE::If)
             elif = true;
 
         if (elif) {
@@ -1359,7 +1290,7 @@ bool ASTPrintVisitor::visit_if(AST_If* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_ifexp(AST_IfExp* node) {
+bool PrintVisitor::visit_ifexp(BST_IfExp* node) {
     node->body->accept(this);
     stream << " if ";
     node->test->accept(this);
@@ -1368,7 +1299,7 @@ bool ASTPrintVisitor::visit_ifexp(AST_IfExp* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_import(AST_Import* node) {
+bool PrintVisitor::visit_import(BST_Import* node) {
     stream << "import ";
     for (int i = 0; i < node->names.size(); i++) {
         if (i > 0)
@@ -1378,7 +1309,7 @@ bool ASTPrintVisitor::visit_import(AST_Import* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_importfrom(AST_ImportFrom* node) {
+bool PrintVisitor::visit_importfrom(BST_ImportFrom* node) {
     stream << "from " << node->module.s() << " import ";
     for (int i = 0; i < node->names.size(); i++) {
         if (i > 0)
@@ -1388,17 +1319,17 @@ bool ASTPrintVisitor::visit_importfrom(AST_ImportFrom* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_index(AST_Index* node) {
+bool PrintVisitor::visit_index(BST_Index* node) {
     return false;
 }
 
-bool ASTPrintVisitor::visit_invoke(AST_Invoke* node) {
+bool PrintVisitor::visit_invoke(BST_Invoke* node) {
     stream << "invoke " << node->normal_dest->idx << " " << node->exc_dest->idx << ": ";
     node->stmt->accept(this);
     return true;
 }
 
-bool ASTPrintVisitor::visit_lambda(AST_Lambda* node) {
+bool PrintVisitor::visit_lambda(BST_Lambda* node) {
     stream << "lambda ";
     node->args->accept(this);
     stream << ": ";
@@ -1406,46 +1337,46 @@ bool ASTPrintVisitor::visit_lambda(AST_Lambda* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
+bool PrintVisitor::visit_langprimitive(BST_LangPrimitive* node) {
     stream << ":";
     switch (node->opcode) {
-        case AST_LangPrimitive::CHECK_EXC_MATCH:
+        case BST_LangPrimitive::CHECK_EXC_MATCH:
             stream << "CHECK_EXC_MATCH";
             break;
-        case AST_LangPrimitive::LANDINGPAD:
+        case BST_LangPrimitive::LANDINGPAD:
             stream << "LANDINGPAD";
             break;
-        case AST_LangPrimitive::LOCALS:
+        case BST_LangPrimitive::LOCALS:
             stream << "LOCALS";
             break;
-        case AST_LangPrimitive::GET_ITER:
+        case BST_LangPrimitive::GET_ITER:
             stream << "GET_ITER";
             break;
-        case AST_LangPrimitive::IMPORT_FROM:
+        case BST_LangPrimitive::IMPORT_FROM:
             stream << "IMPORT_FROM";
             break;
-        case AST_LangPrimitive::IMPORT_NAME:
+        case BST_LangPrimitive::IMPORT_NAME:
             stream << "IMPORT_NAME";
             break;
-        case AST_LangPrimitive::IMPORT_STAR:
+        case BST_LangPrimitive::IMPORT_STAR:
             stream << "IMPORT_STAR";
             break;
-        case AST_LangPrimitive::NONE:
+        case BST_LangPrimitive::NONE:
             stream << "NONE";
             break;
-        case AST_LangPrimitive::NONZERO:
+        case BST_LangPrimitive::NONZERO:
             stream << "NONZERO";
             break;
-        case AST_LangPrimitive::SET_EXC_INFO:
+        case BST_LangPrimitive::SET_EXC_INFO:
             stream << "SET_EXC_INFO";
             break;
-        case AST_LangPrimitive::UNCACHE_EXC_INFO:
+        case BST_LangPrimitive::UNCACHE_EXC_INFO:
             stream << "UNCACHE_EXC_INFO";
             break;
-        case AST_LangPrimitive::HASNEXT:
+        case BST_LangPrimitive::HASNEXT:
             stream << "HASNEXT";
             break;
-        case AST_LangPrimitive::PRINT_EXPR:
+        case BST_LangPrimitive::PRINT_EXPR:
             stream << "PRINT_EXPR";
             break;
         default:
@@ -1461,7 +1392,7 @@ bool ASTPrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_list(AST_List* node) {
+bool PrintVisitor::visit_list(BST_List* node) {
     stream << "[";
     for (int i = 0, n = node->elts.size(); i < n; ++i) {
         if (i > 0)
@@ -1472,7 +1403,7 @@ bool ASTPrintVisitor::visit_list(AST_List* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_listcomp(AST_ListComp* node) {
+bool PrintVisitor::visit_listcomp(BST_ListComp* node) {
     stream << "[";
     node->elt->accept(this);
     for (auto c : node->generators) {
@@ -1483,13 +1414,13 @@ bool ASTPrintVisitor::visit_listcomp(AST_ListComp* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_keyword(AST_keyword* node) {
+bool PrintVisitor::visit_keyword(BST_keyword* node) {
     stream << node->arg.s() << "=";
     node->value->accept(this);
     return true;
 }
 
-bool ASTPrintVisitor::visit_module(AST_Module* node) {
+bool PrintVisitor::visit_module(BST_Module* node) {
     // stream << "<module>\n";
     for (int i = 0; i < node->body.size(); i++) {
         node->body[i]->accept(this);
@@ -1498,13 +1429,13 @@ bool ASTPrintVisitor::visit_module(AST_Module* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_expression(AST_Expression* node) {
+bool PrintVisitor::visit_expression(BST_Expression* node) {
     node->body->accept(this);
     stream << "\n";
     return true;
 }
 
-bool ASTPrintVisitor::visit_suite(AST_Suite* node) {
+bool PrintVisitor::visit_suite(BST_Suite* node) {
     for (int i = 0; i < node->body.size(); i++) {
         printIndent();
         node->body[i]->accept(this);
@@ -1513,7 +1444,7 @@ bool ASTPrintVisitor::visit_suite(AST_Suite* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_name(AST_Name* node) {
+bool PrintVisitor::visit_name(BST_Name* node) {
     stream << node->id.s();
 #if 0
     if (node->lookup_type == ScopeInfo::VarScopeType::UNKNOWN)
@@ -1536,7 +1467,7 @@ bool ASTPrintVisitor::visit_name(AST_Name* node) {
     return false;
 }
 
-bool ASTPrintVisitor::visit_num(AST_Num* node) {
+bool PrintVisitor::visit_num(BST_Num* node) {
     if (node->num_type == AST_Num::INT) {
         stream << node->n_int;
     } else if (node->num_type == AST_Num::LONG) {
@@ -1551,12 +1482,12 @@ bool ASTPrintVisitor::visit_num(AST_Num* node) {
     return false;
 }
 
-bool ASTPrintVisitor::visit_pass(AST_Pass* node) {
+bool PrintVisitor::visit_pass(BST_Pass* node) {
     stream << "pass";
     return true;
 }
 
-bool ASTPrintVisitor::visit_print(AST_Print* node) {
+bool PrintVisitor::visit_print(BST_Print* node) {
     stream << "print ";
     if (node->dest) {
         stream << ">>";
@@ -1573,7 +1504,7 @@ bool ASTPrintVisitor::visit_print(AST_Print* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_raise(AST_Raise* node) {
+bool PrintVisitor::visit_raise(BST_Raise* node) {
     stream << "raise";
     if (node->arg0) {
         stream << " ";
@@ -1590,19 +1521,19 @@ bool ASTPrintVisitor::visit_raise(AST_Raise* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_repr(AST_Repr* node) {
+bool PrintVisitor::visit_repr(BST_Repr* node) {
     stream << "`";
     node->value->accept(this);
     stream << "`";
     return true;
 }
 
-bool ASTPrintVisitor::visit_return(AST_Return* node) {
+bool PrintVisitor::visit_return(BST_Return* node) {
     stream << "return ";
     return false;
 }
 
-bool ASTPrintVisitor::visit_set(AST_Set* node) {
+bool PrintVisitor::visit_set(BST_Set* node) {
     // An empty set literal is not writeable in Python (it's a dictionary),
     // but we sometimes generate it (ex in set comprehension lowering).
     // Just to make it clear when printing, print empty set literals as "SET{}".
@@ -1624,7 +1555,7 @@ bool ASTPrintVisitor::visit_set(AST_Set* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_setcomp(AST_SetComp* node) {
+bool PrintVisitor::visit_setcomp(BST_SetComp* node) {
     stream << "{";
     node->elt->accept(this);
     for (auto c : node->generators) {
@@ -1635,7 +1566,7 @@ bool ASTPrintVisitor::visit_setcomp(AST_SetComp* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_slice(AST_Slice* node) {
+bool PrintVisitor::visit_slice(BST_Slice* node) {
     stream << "<slice>(";
     if (node->lower)
         node->lower->accept(this);
@@ -1651,7 +1582,7 @@ bool ASTPrintVisitor::visit_slice(AST_Slice* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_str(AST_Str* node) {
+bool PrintVisitor::visit_str(BST_Str* node) {
     if (node->str_type == AST_Str::STR) {
         stream << "\"" << node->str_data << "\"";
     } else if (node->str_type == AST_Str::UNICODE) {
@@ -1662,7 +1593,7 @@ bool ASTPrintVisitor::visit_str(AST_Str* node) {
     return false;
 }
 
-bool ASTPrintVisitor::visit_subscript(AST_Subscript* node) {
+bool PrintVisitor::visit_subscript(BST_Subscript* node) {
     node->value->accept(this);
     stream << "[";
     node->slice->accept(this);
@@ -1670,16 +1601,16 @@ bool ASTPrintVisitor::visit_subscript(AST_Subscript* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_tryexcept(AST_TryExcept* node) {
+bool PrintVisitor::visit_tryexcept(BST_TryExcept* node) {
     stream << "try:\n";
     indent += 4;
-    for (AST* subnode : node->body) {
+    for (BST* subnode : node->body) {
         printIndent();
         subnode->accept(this);
         stream << "\n";
     }
     indent -= 4;
-    for (AST_ExceptHandler* handler : node->handlers) {
+    for (BST_ExceptHandler* handler : node->handlers) {
         printIndent();
         handler->accept(this);
     }
@@ -1688,7 +1619,7 @@ bool ASTPrintVisitor::visit_tryexcept(AST_TryExcept* node) {
         printIndent();
         stream << "else:\n";
         indent += 4;
-        for (AST* subnode : node->orelse) {
+        for (BST* subnode : node->orelse) {
             printIndent();
             subnode->accept(this);
             stream << "\n";
@@ -1698,14 +1629,14 @@ bool ASTPrintVisitor::visit_tryexcept(AST_TryExcept* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_tryfinally(AST_TryFinally* node) {
-    if (node->body.size() == 1 && node->body[0]->type == AST_TYPE::TryExcept) {
+bool PrintVisitor::visit_tryfinally(BST_TryFinally* node) {
+    if (node->body.size() == 1 && node->body[0]->type == BST_TYPE::TryExcept) {
         node->body[0]->accept(this);
         printIndent();
         stream << "finally:\n";
 
         indent += 4;
-        for (AST* subnode : node->finalbody) {
+        for (BST* subnode : node->finalbody) {
             printIndent();
             subnode->accept(this);
             stream << "\n";
@@ -1714,7 +1645,7 @@ bool ASTPrintVisitor::visit_tryfinally(AST_TryFinally* node) {
     } else {
         stream << "try:\n";
         indent += 4;
-        for (AST* subnode : node->body) {
+        for (BST* subnode : node->body) {
             printIndent();
             subnode->accept(this);
             stream << "\n";
@@ -1724,7 +1655,7 @@ bool ASTPrintVisitor::visit_tryfinally(AST_TryFinally* node) {
         printIndent();
         stream << "finally:\n";
         indent += 4;
-        for (AST* subnode : node->finalbody) {
+        for (BST* subnode : node->finalbody) {
             printIndent();
             subnode->accept(this);
             stream << "\n";
@@ -1734,7 +1665,7 @@ bool ASTPrintVisitor::visit_tryfinally(AST_TryFinally* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_tuple(AST_Tuple* node) {
+bool PrintVisitor::visit_tuple(BST_Tuple* node) {
     stream << "(";
     int n = node->elts.size();
     for (int i = 0; i < n; i++) {
@@ -1748,18 +1679,18 @@ bool ASTPrintVisitor::visit_tuple(AST_Tuple* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_unaryop(AST_UnaryOp* node) {
+bool PrintVisitor::visit_unaryop(BST_UnaryOp* node) {
     switch (node->op_type) {
-        case AST_TYPE::Invert:
+        case BST_TYPE::Invert:
             stream << "~";
             break;
-        case AST_TYPE::Not:
+        case BST_TYPE::Not:
             stream << "not ";
             break;
-        case AST_TYPE::UAdd:
+        case BST_TYPE::UAdd:
             stream << "+";
             break;
-        case AST_TYPE::USub:
+        case BST_TYPE::USub:
             stream << "-";
             break;
         default:
@@ -1772,7 +1703,7 @@ bool ASTPrintVisitor::visit_unaryop(AST_UnaryOp* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_while(AST_While* node) {
+bool PrintVisitor::visit_while(BST_While* node) {
     stream << "while ";
     node->test->accept(this);
     stream << "\n";
@@ -1799,7 +1730,7 @@ bool ASTPrintVisitor::visit_while(AST_While* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_with(AST_With* node) {
+bool PrintVisitor::visit_with(BST_With* node) {
     stream << "with ";
     node->context_expr->accept(this);
     if (node->optional_vars) {
@@ -1820,26 +1751,26 @@ bool ASTPrintVisitor::visit_with(AST_With* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_yield(AST_Yield* node) {
+bool PrintVisitor::visit_yield(BST_Yield* node) {
     stream << "yield ";
     if (node->value)
         node->value->accept(this);
     return true;
 }
 
-bool ASTPrintVisitor::visit_branch(AST_Branch* node) {
+bool PrintVisitor::visit_branch(BST_Branch* node) {
     stream << "if ";
     node->test->accept(this);
     stream << " goto " << node->iftrue->idx << " else goto " << node->iffalse->idx;
     return true;
 }
 
-bool ASTPrintVisitor::visit_jump(AST_Jump* node) {
+bool PrintVisitor::visit_jump(BST_Jump* node) {
     stream << "goto " << node->target->idx;
     return true;
 }
 
-bool ASTPrintVisitor::visit_clsattribute(AST_ClsAttribute* node) {
+bool PrintVisitor::visit_clsattribute(BST_ClsAttribute* node) {
     // printf("getclsattr(");
     // node->value->accept(this);
     // printf(", '%s')", node->attr.c_str());
@@ -1848,283 +1779,283 @@ bool ASTPrintVisitor::visit_clsattribute(AST_ClsAttribute* node) {
     return true;
 }
 
-bool ASTPrintVisitor::visit_makefunction(AST_MakeFunction* node) {
+bool PrintVisitor::visit_makefunction(BST_MakeFunction* node) {
     stream << "make_";
     return false;
 }
 
-bool ASTPrintVisitor::visit_makeclass(AST_MakeClass* node) {
+bool PrintVisitor::visit_makeclass(BST_MakeClass* node) {
     stream << "make_";
     return false;
 }
 
-class FlattenVisitor : public ASTVisitor {
+class FlattenVisitor : public BSTVisitor {
 private:
-    std::vector<AST*>* output;
+    std::vector<BST*>* output;
     bool expand_scopes;
 
 public:
-    FlattenVisitor(std::vector<AST*>* output, bool expand_scopes) : output(output), expand_scopes(expand_scopes) {
+    FlattenVisitor(std::vector<BST*>* output, bool expand_scopes) : output(output), expand_scopes(expand_scopes) {
         assert(expand_scopes && "not sure if this works properly");
     }
 
-    virtual bool visit_alias(AST_alias* node) {
+    virtual bool visit_alias(BST_alias* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_arguments(AST_arguments* node) {
+    virtual bool visit_arguments(BST_arguments* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_assert(AST_Assert* node) {
+    virtual bool visit_assert(BST_Assert* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_assign(AST_Assign* node) {
+    virtual bool visit_assign(BST_Assign* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_augassign(AST_AugAssign* node) {
+    virtual bool visit_augassign(BST_AugAssign* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_augbinop(AST_AugBinOp* node) {
+    virtual bool visit_augbinop(BST_AugBinOp* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_attribute(AST_Attribute* node) {
+    virtual bool visit_attribute(BST_Attribute* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_binop(AST_BinOp* node) {
+    virtual bool visit_binop(BST_BinOp* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_boolop(AST_BoolOp* node) {
+    virtual bool visit_boolop(BST_BoolOp* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_break(AST_Break* node) {
+    virtual bool visit_break(BST_Break* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_call(AST_Call* node) {
+    virtual bool visit_call(BST_Call* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_classdef(AST_ClassDef* node) {
+    virtual bool visit_classdef(BST_ClassDef* node) {
         output->push_back(node);
         return !expand_scopes;
     }
-    virtual bool visit_compare(AST_Compare* node) {
+    virtual bool visit_compare(BST_Compare* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_comprehension(AST_comprehension* node) {
+    virtual bool visit_comprehension(BST_comprehension* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_continue(AST_Continue* node) {
+    virtual bool visit_continue(BST_Continue* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_delete(AST_Delete* node) {
+    virtual bool visit_delete(BST_Delete* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_dict(AST_Dict* node) {
+    virtual bool visit_dict(BST_Dict* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_dictcomp(AST_DictComp* node) {
+    virtual bool visit_dictcomp(BST_DictComp* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_ellipsis(AST_Ellipsis* node) {
+    virtual bool visit_ellipsis(BST_Ellipsis* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_excepthandler(AST_ExceptHandler* node) {
+    virtual bool visit_excepthandler(BST_ExceptHandler* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_exec(AST_Exec* node) {
+    virtual bool visit_exec(BST_Exec* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_expr(AST_Expr* node) {
+    virtual bool visit_expr(BST_Expr* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_extslice(AST_ExtSlice* node) {
+    virtual bool visit_extslice(BST_ExtSlice* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_for(AST_For* node) {
+    virtual bool visit_for(BST_For* node) {
         output->push_back(node);
         return !expand_scopes;
     }
-    virtual bool visit_functiondef(AST_FunctionDef* node) {
+    virtual bool visit_functiondef(BST_FunctionDef* node) {
         output->push_back(node);
         return !expand_scopes;
     }
-    virtual bool visit_generatorexp(AST_GeneratorExp* node) {
+    virtual bool visit_generatorexp(BST_GeneratorExp* node) {
         output->push_back(node);
         return !expand_scopes;
     }
-    virtual bool visit_global(AST_Global* node) {
+    virtual bool visit_global(BST_Global* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_if(AST_If* node) {
+    virtual bool visit_if(BST_If* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_ifexp(AST_IfExp* node) {
+    virtual bool visit_ifexp(BST_IfExp* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_import(AST_Import* node) {
+    virtual bool visit_import(BST_Import* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_importfrom(AST_ImportFrom* node) {
+    virtual bool visit_importfrom(BST_ImportFrom* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_index(AST_Index* node) {
+    virtual bool visit_index(BST_Index* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_invoke(AST_Invoke* node) {
+    virtual bool visit_invoke(BST_Invoke* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_keyword(AST_keyword* node) {
+    virtual bool visit_keyword(BST_keyword* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_lambda(AST_Lambda* node) {
+    virtual bool visit_lambda(BST_Lambda* node) {
         output->push_back(node);
         return !expand_scopes;
     }
-    virtual bool visit_langprimitive(AST_LangPrimitive* node) {
+    virtual bool visit_langprimitive(BST_LangPrimitive* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_list(AST_List* node) {
+    virtual bool visit_list(BST_List* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_listcomp(AST_ListComp* node) {
+    virtual bool visit_listcomp(BST_ListComp* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_module(AST_Module* node) {
+    virtual bool visit_module(BST_Module* node) {
         output->push_back(node);
         return !expand_scopes;
     }
-    virtual bool visit_name(AST_Name* node) {
+    virtual bool visit_name(BST_Name* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_num(AST_Num* node) {
+    virtual bool visit_num(BST_Num* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_pass(AST_Pass* node) {
+    virtual bool visit_pass(BST_Pass* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_print(AST_Print* node) {
+    virtual bool visit_print(BST_Print* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_raise(AST_Raise* node) {
+    virtual bool visit_raise(BST_Raise* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_repr(AST_Repr* node) {
+    virtual bool visit_repr(BST_Repr* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_return(AST_Return* node) {
+    virtual bool visit_return(BST_Return* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_set(AST_Set* node) {
+    virtual bool visit_set(BST_Set* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_setcomp(AST_SetComp* node) {
+    virtual bool visit_setcomp(BST_SetComp* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_slice(AST_Slice* node) {
+    virtual bool visit_slice(BST_Slice* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_str(AST_Str* node) {
+    virtual bool visit_str(BST_Str* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_subscript(AST_Subscript* node) {
+    virtual bool visit_subscript(BST_Subscript* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_tryexcept(AST_TryExcept* node) {
+    virtual bool visit_tryexcept(BST_TryExcept* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_tryfinally(AST_TryFinally* node) {
+    virtual bool visit_tryfinally(BST_TryFinally* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_tuple(AST_Tuple* node) {
+    virtual bool visit_tuple(BST_Tuple* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_unaryop(AST_UnaryOp* node) {
+    virtual bool visit_unaryop(BST_UnaryOp* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_while(AST_While* node) {
+    virtual bool visit_while(BST_While* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_with(AST_With* node) {
+    virtual bool visit_with(BST_With* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_yield(AST_Yield* node) {
+    virtual bool visit_yield(BST_Yield* node) {
         output->push_back(node);
         return false;
     }
 
-    virtual bool visit_branch(AST_Branch* node) {
+    virtual bool visit_branch(BST_Branch* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_jump(AST_Jump* node) {
+    virtual bool visit_jump(BST_Jump* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_clsattribute(AST_ClsAttribute* node) {
+    virtual bool visit_clsattribute(BST_ClsAttribute* node) {
         output->push_back(node);
         return false;
     }
 
-    virtual bool visit_makeclass(AST_MakeClass* node) {
+    virtual bool visit_makeclass(BST_MakeClass* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_makefunction(AST_MakeFunction* node) {
+    virtual bool visit_makefunction(BST_MakeFunction* node) {
         output->push_back(node);
         return false;
     }
 };
 
-void flatten(const llvm::SmallVector<AST_stmt*, 4>& roots, std::vector<AST*>& output, bool expand_scopes) {
+void flatten(const llvm::SmallVector<BST_stmt*, 4>& roots, std::vector<BST*>& output, bool expand_scopes) {
     FlattenVisitor visitor(&output, expand_scopes);
 
     for (int i = 0; i < roots.size(); i++) {
@@ -2132,67 +2063,9 @@ void flatten(const llvm::SmallVector<AST_stmt*, 4>& roots, std::vector<AST*>& ou
     }
 }
 
-void flatten(AST_expr* root, std::vector<AST*>& output, bool expand_scopes) {
+void flatten(BST_expr* root, std::vector<BST*>& output, bool expand_scopes) {
     FlattenVisitor visitor(&output, expand_scopes);
 
     root->accept(&visitor);
-}
-
-InternedStringPool& AST::getStringpool() {
-    switch (this->type) {
-        case AST_TYPE::Expression:
-            return *ast_cast<AST_Expression>(this)->interned_strings;
-        case AST_TYPE::Module:
-            return *ast_cast<AST_Module>(this)->interned_strings;
-        default:
-            break;
-    }
-    RELEASE_ASSERT(0, "%d", this->type);
-}
-
-llvm::ArrayRef<AST_stmt*> AST::getBody() {
-    switch (this->type) {
-        case AST_TYPE::ClassDef:
-            return ((AST_ClassDef*)this)->body;
-        case AST_TYPE::Expression:
-            return ((AST_Expression*)this)->body;
-        case AST_TYPE::FunctionDef:
-            return ((AST_FunctionDef*)this)->body;
-        case AST_TYPE::Module:
-            return ((AST_Module*)this)->body;
-        default:
-            RELEASE_ASSERT(0, "unknown %d", this->type);
-    };
-}
-
-Box* getDocString(llvm::ArrayRef<AST_stmt*> body) {
-    if (body.size() > 0 && body[0]->type == AST_TYPE::Expr
-        && static_cast<AST_Expr*>(body[0])->value->type == AST_TYPE::Str) {
-        auto expr = static_cast<AST_Expr*>(body[0]);
-        auto str = static_cast<AST_Str*>(expr->value);
-        return boxString(str->str_data);
-    }
-
-    return incref(Py_None);
-}
-
-BORROWED(BoxedString*) AST::getName() noexcept {
-    static BoxedString* lambda_name = getStaticString("<lambda>");
-    static BoxedString* module_name = getStaticString("<module>");
-
-    switch (this->type) {
-        case AST_TYPE::ClassDef:
-            return ast_cast<AST_ClassDef>(this)->name.getBox();
-        case AST_TYPE::FunctionDef:
-            if (ast_cast<AST_FunctionDef>(this)->name != InternedString())
-                return ast_cast<AST_FunctionDef>(this)->name.getBox();
-            return lambda_name;
-        case AST_TYPE::Module:
-        case AST_TYPE::Expression:
-        case AST_TYPE::Suite:
-            return module_name;
-        default:
-            RELEASE_ASSERT(0, "%d", this->type);
-    }
 }
 }
