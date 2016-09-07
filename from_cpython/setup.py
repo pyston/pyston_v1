@@ -8,9 +8,6 @@ from glob import glob
 from platform import machine as platform_machine
 import sysconfig
 
-from distutils import log
-from distutils import text_file
-from distutils.errors import *
 from distutils.core import Extension, setup
 from distutils.command.build_ext import build_ext
 from distutils.command.install import install
@@ -29,11 +26,6 @@ def get_platform():
     return sys.platform
 host_platform = get_platform()
 
-# Were we compiled --with-pydebug or with #define Py_DEBUG?
-COMPILED_WITH_PYDEBUG = ('--with-pydebug' in sysconfig.get_config_var("CONFIG_ARGS"))
-
-# This global variable is used to hold the list of modules to be disabled.
-disabled_module_list = []
 
 def add_dir_to_list(dirlist, dir):
     """Add the directory 'dir' to the list 'dirlist' (at the front) if
@@ -154,6 +146,15 @@ def find_module_file(module, dirlist):
         log.info("WARNING: multiple copies of %s found"%module)
     return os.path.join(list[0], module)
 
+# Pyston change: find the real path of source file
+def relpath(fn):
+    r =  os.path.join(os.path.dirname(__file__), fn)
+    return r
+
+
+# This global variable is used to hold the list of modules to be disabled.
+disabled_module_list = []
+
 class PyBuildExt(build_ext):
 
     def __init__(self, dist):
@@ -182,7 +183,7 @@ class PyBuildExt(build_ext):
             # Maybe running on Windows but not using CYGWIN?
             raise ValueError("No source directory; cannot proceed.")
         srcdir = os.path.abspath(srcdir)
-        moddirlist = [os.path.join(srcdir, 'Modules')]
+        moddirlist = [os.path.join(srcdir, '../from_cpython/Modules')]
 
         # Platform-dependent module source and include directories
         incdirlist = []
@@ -194,9 +195,10 @@ class PyBuildExt(build_ext):
             moddirlist.append(macmoddir)
             incdirlist.append(os.path.join(srcdir, 'Mac/Include'))
 
+        # Pyston change: Pyston doesn't use this for now.
         # Fix up the paths for scripts, too
-        self.distribution.scripts = [os.path.join(srcdir, filename)
-                                     for filename in self.distribution.scripts]
+        # self.distribution.scripts = [os.path.join(srcdir, filename)
+        #                              for filename in self.distribution.scripts]
 
         # Python header files
         headers = [sysconfig.get_config_h_filename()]
@@ -220,34 +222,35 @@ class PyBuildExt(build_ext):
             if ext.name in sys.builtin_module_names:
                 self.extensions.remove(ext)
 
-        # Parse Modules/Setup and Modules/Setup.local to figure out which
-        # modules are turned on in the file.
-        remove_modules = []
-        for filename in ('Modules/Setup', 'Modules/Setup.local'):
-            input = text_file.TextFile(filename, join_lines=1)
-            while 1:
-                line = input.readline()
-                if not line: break
-                line = line.split()
-                remove_modules.append(line[0])
-            input.close()
-
-        for ext in self.extensions[:]:
-            if ext.name in remove_modules:
-                self.extensions.remove(ext)
-
-        # When you run "make CC=altcc" or something similar, you really want
-        # those environment variables passed into the setup.py phase.  Here's
-        # a small set of useful ones.
-        compiler = os.environ.get('CC')
-        args = {}
-        # unfortunately, distutils doesn't let us provide separate C and C++
-        # compilers
-        if compiler is not None:
-            (ccshared,cflags) = sysconfig.get_config_vars('CCSHARED','CFLAGS')
-            args['compiler_so'] = compiler + ' ' + ccshared + ' ' + cflags
-        self.compiler.set_executables(**args)
-
+        # Pyston change: comment this out, we don't have this file, so didn't
+        # use this block of code
+        # # Parse Modules/Setup and Modules/Setup.local to figure out which
+        # # modules are turned on in the file.
+        # remove_modules = []
+        # for filename in ('Modules/Setup', 'Modules/Setup.local'):
+        #     input = text_file.TextFile(filename, join_lines=1)
+        #     while 1:
+        #         line = input.readline()
+        #         if not line: break
+        #         line = line.split()
+        #         remove_modules.append(line[0])
+        #     input.close()
+        #
+        # for ext in self.extensions[:]:
+        #     if ext.name in remove_modules:
+        #         self.extensions.remove(ext)
+        #
+        # # When you run "make CC=altcc" or something similar, you really want
+        # # those environment variables passed into the setup.py phase.  Here's
+        # # a small set of useful ones.
+        # compiler = os.environ.get('CC')
+        # args = {}
+        # # unfortunately, distutils doesn't let us provide separate C and C++
+        # # compilers
+        # if compiler is not None:
+        #     (ccshared,cflags) = sysconfig.get_config_vars('CCSHARED','CFLAGS')
+        #     args['compiler_so'] = compiler + ' ' + ccshared + ' ' + cflags
+        # self.compiler.set_executables(**args)
         build_ext.build_extensions(self)
 
         longest = max([len(e.name) for e in self.extensions])
@@ -440,9 +443,10 @@ class PyBuildExt(build_ext):
         if not cross_compiling:
             add_dir_to_list(self.compiler.library_dirs, '/usr/local/lib')
             add_dir_to_list(self.compiler.include_dirs, '/usr/local/include')
-        if cross_compiling:
-            self.add_gcc_paths()
-        self.add_multiarch_paths()
+        # Pyston change: we don't support cross compiling yet
+        # if cross_compiling:
+        #     self.add_gcc_paths()
+        # self.add_multiarch_paths()
 
         # Add paths specified in the environment variables LDFLAGS and
         # CPPFLAGS for header and library files.
@@ -506,7 +510,8 @@ class PyBuildExt(build_ext):
                 add_dir_to_list(inc_dirs, d)
             for d in (
                 '/lib64', '/usr/lib64',
-                '/lib', '/usr/lib',
+                # Pyston change: add addtional search path for lib
+                '/lib', '/usr/lib', '/usr/lib/x86_64-linux-gnu'
                 ):
                 add_dir_to_list(lib_dirs, d)
         exts = []
@@ -561,64 +566,86 @@ class PyBuildExt(build_ext):
         # on pretty much any POSIXish platform.
         #
 
+        # Pyston change: the _weakref module is handled by from_cpython/CMakefile.txt
         # Some modules that are normally always on:
         #exts.append( Extension('_weakref', ['_weakref.c']) )
 
         # array objects
-        exts.append( Extension('array', ['arraymodule.c']) )
+        # Pyston change: the array module is handled by from_cpython/CMakefile
+        # exts.append( Extension('array', ['arraymodule.c']) )
         # complex math library functions
-        exts.append( Extension('cmath', ['cmathmodule.c', '_math.c'],
-                               depends=['_math.h'],
-                               libraries=math_libs) )
+        exts.append( Extension('cmath', sources = map(relpath, [
+            "Modules/cmathmodule.c",]),
+            depends=['_math.h'],
+        ))
         # math library functions, e.g. sin()
         exts.append( Extension('math',  ['mathmodule.c', '_math.c'],
                                depends=['_math.h'],
                                libraries=math_libs) )
-        # fast string operations implemented in C
-        exts.append( Extension('strop', ['stropmodule.c']) )
-        # time operations and variables
-        exts.append( Extension('time', ['timemodule.c'],
-                               libraries=math_libs) )
-        exts.append( Extension('datetime', ['datetimemodule.c', 'timemodule.c'],
-                               libraries=math_libs) )
-        # fast iterator tools implemented in C
-        exts.append( Extension("itertools", ["itertoolsmodule.c"]) )
+        # Pyston change: the modules list in this section are handled by from_cpython/CMakefile.txt
+        # # fast string operations implemented in C
+        # exts.append( Extension('strop', ['stropmodule.c']) )
+        # # time operations and variables
+        # exts.append( Extension('time', ['timemodule.c'],
+        #                        libraries=math_libs) )
+        # # Pyston change: the datetime handled by from_cpython/CMakefile.txt
+        # exts.append( Extension('datetime', ['datetimemodule.c', 'timemodule.c'],
+        #                        libraries=math_libs) )
+        # # Pyston change: comment out, handled by from_cpython/CMakefile.txt
+        # # fast iterator tools implemented in C
+        # exts.append( Extension("itertools", ["itertoolsmodule.c"]) )
         # code that will be builtins in the future, but conflict with the
         #  current builtins
-        exts.append( Extension('future_builtins', ['future_builtins.c']) )
-        # random number generator implemented in C
-        exts.append( Extension("_random", ["_randommodule.c"]) )
-        # high-performance collections
-        exts.append( Extension("_collections", ["_collectionsmodule.c"]) )
-        # bisect
-        exts.append( Extension("_bisect", ["_bisectmodule.c"]) )
-        # heapq
-        exts.append( Extension("_heapq", ["_heapqmodule.c"]) )
-        # operator.add() and similar goodies
-        exts.append( Extension('operator', ['operator.c']) )
-        # Python 3.1 _io library
-        exts.append( Extension("_io",
-            ["_io/bufferedio.c", "_io/bytesio.c", "_io/fileio.c",
-             "_io/iobase.c", "_io/_iomodule.c", "_io/stringio.c", "_io/textio.c"],
-             depends=["_io/_iomodule.h"], include_dirs=["Modules/_io"]))
-        # _functools
-        exts.append( Extension("_functools", ["_functoolsmodule.c"]) )
-        # _json speedups
-        exts.append( Extension("_json", ["_json.c"]) )
-        # Python C API test module
-        exts.append( Extension('_testcapi', ['_testcapimodule.c'],
-                               depends=['testcapi_long.h']) )
-        # profilers (_lsprof is for cProfile.py)
-        exts.append( Extension('_hotshot', ['_hotshot.c']) )
-        exts.append( Extension('_lsprof', ['_lsprof.c', 'rotatingtree.c']) )
+        exts.append( Extension('future_builtins',  sources = map(relpath, [
+            "Modules/future_builtins.c",
+        ])) )
+
+        # Pyston change: comment out, those modules are handled by from_cpython/CMakefile.txt
+        # # random number generator implemented in C
+        # exts.append( Extension("_random", ["_randommodule.c"]) )
+        # # Pyston change: handled by from_cpython/CMakefile.txt
+        # # high-performance collections
+        # exts.append( Extension("_collections", ["_collectionsmodule.c"]) )
+        # Pyston change: the bisect module handled by from_cpython/CMakefile.txt
+        # # bisect
+        # exts.append( Extension("_bisect", ["_bisectmodule.c"]) )
+        # Pyston change: the _heapq module handled by from_cpython/CMakefile.txt
+        # # heapq
+        # exts.append( Extension("_heapq", ["_heapqmodule.c"]) )
+
+        # Pyston change: the operator module handled by from_cpython/CMakefile
+        # # operator.add() and similar goodies
+        # exts.append( Extension('operator', ['operator.c']) )
+
+        # Pyston change: io module handled by from_cpython/CMakefile.txt
+        # # Python 3.1 _io library
+        # exts.append( Extension("_io",
+        #                        ["_io/bufferedio.c", "_io/bytesio.c", "_io/fileio.c",
+        #                         "_io/iobase.c", "_io/_iomodule.c", "_io/stringio.c", "_io/textio.c"],
+        #                        depends=["_io/_iomodule.h"], include_dirs=["Modules/_io"]))
+        # Pyston change: handled by from_cpython/CMakefile.txt
+        # # _functools
+        # exts.append( Extension("_functools", ["_functoolsmodule.c"]) )
+        # # _json speedups
+        # exts.append( Extension("_json", ["_json.c"]) )
+        # # Python C API test module
+        # exts.append( Extension('_testcapi', ['_testcapimodule.c'],
+        #                        depends=['testcapi_long.h']) )
+        # # profilers (_lsprof is for cProfile.py)
+        # exts.append( Extension('_hotshot', ['_hotshot.c']) )
+        # exts.append( Extension('_lsprof', ['_lsprof.c', 'rotatingtree.c']) )
+        # Pyston change: the unicodedata module handled by from_cpython/CMakefile.txt
         # static Unicode character database
-        if have_unicode:
-            exts.append( Extension('unicodedata', ['unicodedata.c']) )
-        else:
-            missing.append('unicodedata')
+        # if have_unicode:
+        #     exts.append( Extension('unicodedata', ['unicodedata.c']) )
+        # else:
+        #     missing.append('unicodedata')
+
         # access to ISO C locale support
-        data = open('pyconfig.h').read()
-        m = re.search(r"#s*define\s+WITH_LIBINTL\s+1\s*", data)
+        # data = open('pyconfig.h').read()
+        # m = re.search(r"#s*define\s+WITH_LIBINTL\s+1\s*", data)
+        # Pyston change: hard code the variable for now
+        m = None
         if m is not None:
             locale_libs = ['intl']
         else:
@@ -628,51 +655,65 @@ class PyBuildExt(build_ext):
         else:
             locale_extra_link_args = []
 
-
-        exts.append( Extension('_locale', ['_localemodule.c'],
-                               libraries=locale_libs,
-                               extra_link_args=locale_extra_link_args) )
+        exts.append( Extension('_locale', sources = map(relpath, [ 
+            "Modules/_localemodule.c",
+        ])) )
 
         # Modules with some UNIX dependencies -- on by default:
         # (If you have a really backward UNIX, select and socket may not be
         # supported...)
 
         # fcntl(2) and ioctl(2)
-        libs = []
-        if (config_h_vars.get('FLOCK_NEEDS_LIBBSD', False)):
-            # May be necessary on AIX for flock function
-            libs = ['bsd']
-        exts.append( Extension('fcntl', ['fcntlmodule.c'], libraries=libs) )
+        # Pyston change: handled by from_cpython/CMakefile.txt
+        # libs = []
+        # if (config_h_vars.get('FLOCK_NEEDS_LIBBSD', False)):
+        #     # May be necessary on AIX for flock function
+        #     libs = ['bsd']
+        # exts.append( Extension('fcntl', ['fcntlmodule.c'], libraries=libs) )
         # pwd(3)
-        exts.append( Extension('pwd', ['pwdmodule.c']) )
+        # Pyston change: the pwd module handled by from_cpython/CMakefile.txt
+        # exts.append( Extension('pwd', ['pwdmodule.c']) )
         # grp(3)
-        exts.append( Extension('grp', ['grpmodule.c']) )
+        exts.append( Extension('grp', sources = map(relpath, [
+            "Modules/grpmodule.c",
+        ])) )
         # spwd, shadow passwords
-        if (config_h_vars.get('HAVE_GETSPNAM', False) or
-                config_h_vars.get('HAVE_GETSPENT', False)):
-            exts.append( Extension('spwd', ['spwdmodule.c']) )
-        else:
-            missing.append('spwd')
+        # Pyston change: handled by from_cpython/CMakefile.txt
+        # if (config_h_vars.get('HAVE_GETSPNAM', False) or
+        #         config_h_vars.get('HAVE_GETSPENT', False)):
+        #     exts.append( Extension('spwd', ['spwdmodule.c']) )
+        # else:
+        #     missing.append('spwd')
 
+        # Pyston change: the select module handled by from_cpython/CMakefile.txt
         # select(2); not on ancient System V
-        exts.append( Extension('select', ['selectmodule.c']) )
+        # exts.append( Extension('select', ['selectmodule.c']) )
 
         # Fred Drake's interface to the Python parser
-        exts.append( Extension('parser', ['parsermodule.c']) )
+        exts.append( Extension('parser',  sources = map(relpath, [
+            "Modules/parsermodule.c",
+        ])) )
 
         # cStringIO and cPickle
-        exts.append( Extension('cStringIO', ['cStringIO.c']) )
-        exts.append( Extension('cPickle', ['cPickle.c']) )
+        exts.append( Extension('cStringIO', sources = map(relpath, [
+            "Modules/cStringIO.c",
+        ])) )
+        exts.append( Extension('cPickle', sources = map(relpath, [
+            "Modules/cPickle.c",
+        ])) )
 
         # Memory-mapped files (also works on Win32).
         if host_platform not in ['atheos']:
-            exts.append( Extension('mmap', ['mmapmodule.c']) )
+            exts.append( Extension('mmap', sources = map(relpath, [
+                "Modules/mmapmodule.c",
+            ])) )
         else:
             missing.append('mmap')
 
         # Lance Ellinghaus's syslog module
         # syslog daemon interface
-        exts.append( Extension('syslog', ['syslogmodule.c']) )
+        # Pyston change: disable the those modules in this setup.py
+        # exts.append( Extension('syslog', ['syslogmodule.c']) )
 
         # George Neville-Neil's timing module:
         # Deprecated in PEP 4 http://www.python.org/peps/pep-0004.html
@@ -691,7 +732,8 @@ class PyBuildExt(build_ext):
         # Operations on audio samples
         # According to #993173, this one should actually work fine on
         # 64-bit platforms.
-        exts.append( Extension('audioop', ['audioop.c']) )
+        # Pyston change: disable the audioop modules in this setup.py
+        # exts.append( Extension('audioop', ['audioop.c']) )
 
         # Disabled on 64-bit platforms
         if sys.maxint != 9223372036854775807L:
@@ -761,28 +803,29 @@ class PyBuildExt(build_ext):
                                                      ['/usr/lib/termcap'],
                                                      'termcap'):
                 readline_libs.append('termcap')
-            exts.append( Extension('readline', ['readline.c'],
-                                   library_dirs=['/usr/lib/termcap'],
-                                   extra_link_args=readline_extra_link_args,
-                                   libraries=readline_libs) )
+            exts.append( Extension('readline', sources = map(relpath, [
+                "Modules/readline.c",
+            ])))
         else:
             missing.append('readline')
 
+        # Pyston change: disable the crypt module in this setup.py
         # crypt module.
+        # if self.compiler.find_library_file(lib_dirs, 'crypt'):
+        #     libs = ['crypt']
+        # else:
+        #     libs = []
+        # exts.append( Extension('crypt', ['cryptmodule.c'], libraries=libs) )
 
-        if self.compiler.find_library_file(lib_dirs, 'crypt'):
-            libs = ['crypt']
-        else:
-            libs = []
-        exts.append( Extension('crypt', ['cryptmodule.c'], libraries=libs) )
-
+        # Pyston change: handled by from_cpython/CMakefile.txt
         # CSV files
-        exts.append( Extension('_csv', ['_csv.c']) )
+        # exts.append( Extension('_csv', ['_csv.c']) )
 
+        # Pyston change: disable the _socket module in this setup.py
         # socket(2)
-        exts.append( Extension('_socket', ['socketmodule.c', 'timemodule.c'],
-                               depends=['socketmodule.h'],
-                               libraries=math_libs) )
+        # exts.append( Extension('_socket', ['socketmodule.c', 'timemodule.c'],
+        #                        depends=['socketmodule.h'],
+        #                        libraries=math_libs) )
         # Detect SSL support for the socket module (via _ssl)
         search_for_ssl_incs_in = [
                               '/usr/local/ssl/include',
@@ -801,15 +844,17 @@ class PyBuildExt(build_ext):
                                       '/usr/contrib/ssl/lib/'
                                      ] )
 
-        if (ssl_incs is not None and
-            ssl_libs is not None):
-            exts.append( Extension('_ssl', ['_ssl.c'],
-                                   include_dirs = ssl_incs,
-                                   library_dirs = ssl_libs,
-                                   libraries = ['ssl', 'crypto'],
-                                   depends = ['socketmodule.h']), )
-        else:
-            missing.append('_ssl')
+        # Pyston change: the _ssl module is handled by
+        # from_cpython/CMakefiles.txy
+        # if (ssl_incs is not None and
+        #     ssl_libs is not None):
+        #     exts.append( Extension('_ssl', ['_ssl.c'],
+        #                            include_dirs = ssl_incs,
+        #                            library_dirs = ssl_libs,
+        #                            libraries = ['ssl', 'crypto'],
+        #                            depends = ['socketmodule.h']), )
+        # else:
+        #     missing.append('_ssl')
 
         # find out which version of OpenSSL we have
         openssl_ver = 0
@@ -838,33 +883,38 @@ class PyBuildExt(build_ext):
         have_usable_openssl = (have_any_openssl and
                                openssl_ver >= min_openssl_ver)
 
-        if have_any_openssl:
-            if have_usable_openssl:
-                # The _hashlib module wraps optimized implementations
-                # of hash functions from the OpenSSL library.
-                exts.append( Extension('_hashlib', ['_hashopenssl.c'],
-                                       include_dirs = ssl_incs,
-                                       library_dirs = ssl_libs,
-                                       libraries = ['ssl', 'crypto']) )
-            else:
-                print ("warning: openssl 0x%08x is too old for _hashlib" %
-                       openssl_ver)
-                missing.append('_hashlib')
-        if COMPILED_WITH_PYDEBUG or not have_usable_openssl:
-            # The _sha module implements the SHA1 hash algorithm.
-            exts.append( Extension('_sha', ['shamodule.c']) )
-            # The _md5 module implements the RSA Data Security, Inc. MD5
-            # Message-Digest Algorithm, described in RFC 1321.  The
-            # necessary files md5.c and md5.h are included here.
-            exts.append( Extension('_md5',
-                            sources = ['md5module.c', 'md5.c'],
-                            depends = ['md5.h']) )
+        # Pyston change: didn't support hashlib yet.
+        # if have_any_openssl:
+        #     if have_usable_openssl:
+        #         # The _hashlib module wraps optimized implementations
+        #         # of hash functions from the OpenSSL library.
+        #         exts.append( Extension('_hashlib', ['_hashopenssl.c'],
+        #                                include_dirs = ssl_incs,
+        #                                library_dirs = ssl_libs,
+        #                                libraries = ['ssl', 'crypto']) )
+        #     else:
+        #         print ("warning: openssl 0x%08x is too old for _hashlib" %
+        #                openssl_ver)
+        #         missing.append('_hashlib')
+        # Pyston change: the shaXXX module handled by from_cpython/CMakefile
+        # if COMPILED_WITH_PYDEBUG or not have_usable_openssl:
+        #     # The _sha module implements the SHA1 hash algorithm.
+        #     exts.append( Extension('_sha', ['shamodule.c']) )
 
-        min_sha2_openssl_ver = 0x00908000
-        if COMPILED_WITH_PYDEBUG or openssl_ver < min_sha2_openssl_ver:
-            # OpenSSL doesn't do these until 0.9.8 so we'll bring our own hash
-            exts.append( Extension('_sha256', ['sha256module.c']) )
-            exts.append( Extension('_sha512', ['sha512module.c']) )
+        # Pyston change: the md5 module handled by from_cpython/CMakefile
+        #     # The _md5 module implements the RSA Data Security, Inc. MD5
+        #     # Message-Digest Algorithm, described in RFC 1321.  The
+        #     # necessary files md5.c and md5.h are included here.
+        #     exts.append( Extension('_md5',
+        #                     sources = ['md5module.c', 'md5.c'],
+        #                     depends = ['md5.h']) )
+        #
+        # Pyston change: the shaXXX module handled by from_cpython/CMakefile
+        # min_sha2_openssl_ver = 0x00908000
+        # if COMPILED_WITH_PYDEBUG or openssl_ver < min_sha2_openssl_ver:
+        #     # OpenSSL doesn't do these until 0.9.8 so we'll bring our own hash
+        #     exts.append( Extension('_sha256', ['sha256module.c']) )
+        #     exts.append( Extension('_sha512', ['sha512module.c']) )
 
         # Modules that provide persistent dictionary-like semantics.  You will
         # probably want to arrange for at least one of them to be available on
@@ -1074,12 +1124,13 @@ class PyBuildExt(build_ext):
             # correct and most trouble free, but may cause problems in
             # some unusual system configurations (e.g. the directory
             # is on an NFS server that goes away).
-            exts.append(Extension('_bsddb', ['_bsddb.c'],
-                                  depends = ['bsddb.h'],
-                                  library_dirs=dblib_dir,
-                                  runtime_library_dirs=dblib_dir,
-                                  include_dirs=db_incs,
-                                  libraries=dblibs))
+        # Pyston change: we don't suport bsddb module yet.
+        #     exts.append(Extension('_bsddb', ['_bsddb.c'],
+        #                           depends = ['bsddb.h'],
+        #                           library_dirs=dblib_dir,
+        #                           runtime_library_dirs=dblib_dir,
+        #                           include_dirs=db_incs,
+        #                           libraries=dblibs))
         else:
             if db_setup_debug: print "db: no appropriate library found"
             db_incs = None
@@ -1182,15 +1233,16 @@ class PyBuildExt(build_ext):
             else:
                 sqlite_extra_link_args = ()
 
-            exts.append(Extension('_sqlite3', sqlite_srcs,
-                                  define_macros=sqlite_defines,
-                                  include_dirs=["Modules/_sqlite",
-                                                sqlite_incdir],
-                                  library_dirs=sqlite_libdir,
-                                  extra_link_args=sqlite_extra_link_args,
-                                  libraries=["sqlite3",]))
-        else:
-            missing.append('_sqlite3')
+        # Pyston change: we don't suport sqlite yet.
+        #     exts.append(Extension('_sqlite3', sqlite_srcs,
+        #                           define_macros=sqlite_defines,
+        #                           include_dirs=["Modules/_sqlite",
+        #                                         sqlite_incdir],
+        #                           library_dirs=sqlite_libdir,
+        #                           extra_link_args=sqlite_extra_link_args,
+        #                           libraries=["sqlite3",]))
+        # else:
+        #     missing.append('_sqlite3')
 
         # Look for Berkeley db 1.85.   Note that it is built as a different
         # module name so it can be included even when later versions are
@@ -1232,10 +1284,13 @@ class PyBuildExt(build_ext):
         dbm_order = ['gdbm']
         # The standard Unix dbm module:
         if host_platform not in ['cygwin']:
-            config_args = [arg.strip("'")
-                           for arg in sysconfig.get_config_var("CONFIG_ARGS").split()]
-            dbm_args = [arg for arg in config_args
-                        if arg.startswith('--with-dbmliborder=')]
+            # Pyston change: hard code the dbm_args, Pyston don't support
+            # CONFIG_ARGS yet.
+            dbm_args = None
+            # config_args = [arg.strip("'")
+            #                for arg in sysconfig.get_config_var("CONFIG_ARGS").split()]
+            # dbm_args = [arg for arg in config_args
+            #             if arg.startswith('--with-dbmliborder=')]
             if dbm_args:
                 dbm_order = [arg.split('=')[-1] for arg in dbm_args][-1].split(":")
             else:
@@ -1299,40 +1354,47 @@ class PyBuildExt(build_ext):
                                                ],
                                            libraries=dblibs)
                         break
-            if dbmext is not None:
-                exts.append(dbmext)
-            else:
-                missing.append('dbm')
 
-        # Anthony Baxter's gdbm module.  GNU dbm(3) will require -lgdbm:
-        if ('gdbm' in dbm_order and
-            self.compiler.find_library_file(lib_dirs, 'gdbm')):
-            exts.append( Extension('gdbm', ['gdbmmodule.c'],
-                                   libraries = ['gdbm'] ) )
-        else:
-            missing.append('gdbm')
+        # Pyston change: we don't support those dbm modules yet
+        #     if dbmext is not None:
+        #         exts.append(dbmext)
+        #     else:
+        #         missing.append('dbm')
+        #
+        # # Anthony Baxter's gdbm module.  GNU dbm(3) will require -lgdbm:
+        # if ('gdbm' in dbm_order and
+        #     self.compiler.find_library_file(lib_dirs, 'gdbm')):
+        #     exts.append( Extension('gdbm', ['gdbmmodule.c'],
+        #                            libraries = ['gdbm'] ) )
+        # else:
+        #     missing.append('gdbm')
 
         # Unix-only modules
         if host_platform not in ['win32']:
             # Steen Lumholt's termios module
-            exts.append( Extension('termios', ['termios.c']) )
-            # Jeremy Hylton's rlimit interface
-            if host_platform not in ['atheos']:
-                exts.append( Extension('resource', ['resource.c']) )
-            else:
-                missing.append('resource')
+            exts.append( Extension('termios', sources = map(relpath, [
+                "Modules/termios.c",
+            ])) )
 
-            # Sun yellow pages. Some systems have the functions in libc.
-            if (host_platform not in ['cygwin', 'atheos', 'qnx6'] and
-                find_file('rpcsvc/yp_prot.h', inc_dirs, []) is not None):
-                if (self.compiler.find_library_file(lib_dirs, 'nsl')):
-                    libs = ['nsl']
-                else:
-                    libs = []
-                exts.append( Extension('nis', ['nismodule.c'],
-                                       libraries = libs) )
-            else:
-                missing.append('nis')
+            # Pyston change: the resource module handled by from_cpython/CMakefile
+            # # Jeremy Hylton's rlimit interface
+            # if host_platform not in ['atheos']:
+            #     exts.append( Extension('resource', ['resource.c']) )
+            # else:
+            #     missing.append('resource')
+            #
+            # Pyston change: we don't support nis module yet
+            # # Sun yellow pages. Some systems have the functions in libc.
+            # if (host_platform not in ['cygwin', 'atheos', 'qnx6'] and
+            #     find_file('rpcsvc/yp_prot.h', inc_dirs, []) is not None):
+            #     if (self.compiler.find_library_file(lib_dirs, 'nsl')):
+            #         libs = ['nsl']
+            #     else:
+            #         libs = []
+            #     exts.append( Extension('nis', ['nismodule.c'],
+            #                            libraries = libs) )
+            # else:
+            #     missing.append('nis')
         else:
             missing.extend(['nis', 'resource', 'termios'])
 
@@ -1348,7 +1410,9 @@ class PyBuildExt(build_ext):
             curses_libs = [curses_library]
             curses_incs = find_file('curses.h', inc_dirs,
                                     [os.path.join(d, 'ncursesw') for d in inc_dirs])
-            exts.append( Extension('_curses', ['_cursesmodule.c'],
+            exts.append( Extension('_curses',
+                                   sources = map(relpath,
+                                                 [ "Modules/_cursesmodule.c", ]),
                                    include_dirs = curses_incs,
                                    libraries = curses_libs) )
         elif curses_library == 'curses' and host_platform != 'darwin':
@@ -1365,16 +1429,18 @@ class PyBuildExt(build_ext):
                                    libraries = curses_libs) )
         else:
             missing.append('_curses')
-
-        # If the curses module is enabled, check for the panel module
-        if (module_enabled(exts, '_curses') and
-            self.compiler.find_library_file(lib_dirs, panel_library)):
-            exts.append( Extension('_curses_panel', ['_curses_panel.c'],
-                                   include_dirs = curses_incs,
-                                   libraries = [panel_library] + curses_libs) )
-        else:
-            missing.append('_curses_panel')
-
+        # Pyston change: disable these modules in this setup.py
+        # # If the curses module is enabled, check for the panel module
+        # if (module_enabled(exts, '_curses') and
+        #     self.compiler.find_library_file(lib_dirs, panel_library)):
+        #     exts.append( Extension('_curses_panel', ['_curses_panel.c'],
+        #                            include_dirs = curses_incs,
+        #                            libraries = [panel_library] + curses_libs) )
+        # else:
+        #     missing.append('_curses_panel')
+        #
+        # Pyston change: the zlib module is handled by from_cpython/CMakefile
+        # And the code of build zlib in below is untested.
         # Andrew Kuchling's zlib module.  Note that some versions of zlib
         # 1.1.3 have security problems.  See CERT Advisory CA-2002-07:
         # http://www.cert.org/advisories/CA-2002-07.html
@@ -1420,28 +1486,30 @@ class PyBuildExt(build_ext):
         else:
             missing.append('zlib')
 
-        # Helper module for various ascii-encoders.  Uses zlib for an optimized
-        # crc32 if we have it.  Otherwise binascii uses its own.
-        if have_zlib:
-            extra_compile_args = ['-DUSE_ZLIB_CRC32']
-            libraries = ['z']
-            extra_link_args = zlib_extra_link_args
-        else:
-            extra_compile_args = []
-            libraries = []
-            extra_link_args = []
-        exts.append( Extension('binascii', ['binascii.c'],
-                               extra_compile_args = extra_compile_args,
-                               libraries = libraries,
-                               extra_link_args = extra_link_args) )
-
+        # Pyston change: handled by from_cpython/CMakefile
+        # # Helper module for various ascii-encoders.  Uses zlib for an optimized
+        # # crc32 if we have it.  Otherwise binascii uses its own.
+        # if have_zlib:
+        #     extra_compile_args = ['-DUSE_ZLIB_CRC32']
+        #     libraries = ['z']
+        #     extra_link_args = zlib_extra_link_args
+        # else:
+        #     extra_compile_args = []
+        #     libraries = []
+        #     extra_link_args = []
+        # exts.append( Extension('binascii', ['binascii.c'],
+        #                        extra_compile_args = extra_compile_args,
+        #                        libraries = libraries,
+        #                        extra_link_args = extra_link_args) )
+        #
         # Gustavo Niemeyer's bz2 module.
         if (self.compiler.find_library_file(lib_dirs, 'bz2')):
             if host_platform == "darwin":
                 bz2_extra_link_args = ('-Wl,-search_paths_first',)
             else:
                 bz2_extra_link_args = ()
-            exts.append( Extension('bz2', ['bz2module.c'],
+            exts.append( Extension('bz2', sources = map(relpath,
+                                                        [ "Modules/bz2module.c", ]),
                                    libraries = ['bz2'],
                                    extra_link_args = bz2_extra_link_args) )
         else:
@@ -1458,81 +1526,86 @@ class PyBuildExt(build_ext):
         #
         # More information on Expat can be found at www.libexpat.org.
         #
-        if '--with-system-expat' in sysconfig.get_config_var("CONFIG_ARGS"):
-            expat_inc = []
-            define_macros = []
-            expat_lib = ['expat']
-            expat_sources = []
-            expat_depends = []
-        else:
-            expat_inc = [os.path.join(os.getcwd(), srcdir, 'Modules', 'expat')]
-            define_macros = [
-                ('HAVE_EXPAT_CONFIG_H', '1'),
-            ]
-            expat_lib = []
-            expat_sources = ['expat/xmlparse.c',
-                             'expat/xmlrole.c',
-                             'expat/xmltok.c']
-            expat_depends = ['expat/ascii.h',
-                             'expat/asciitab.h',
-                             'expat/expat.h',
-                             'expat/expat_config.h',
-                             'expat/expat_external.h',
-                             'expat/internal.h',
-                             'expat/latin1tab.h',
-                             'expat/utf8tab.h',
-                             'expat/xmlrole.h',
-                             'expat/xmltok.h',
-                             'expat/xmltok_impl.h'
-                             ]
 
+        # Pyston change: Pyston don't support CONFIG_ARGS yet
+        # if '--with-system-expat' in sysconfig.get_config_var("CONFIG_ARGS"):
+        #     expat_inc = []
+        #     define_macros = []
+        #     expat_lib = ['expat']
+        #     expat_sources = []
+        #     expat_depends = []
+        # else:
+        #     expat_inc = [os.path.join(os.getcwd(), srcdir, 'Modules', 'expat')]
+        define_macros = [('HAVE_EXPAT_CONFIG_H', '1'),]
+        expat_sources = map(relpath, ['Modules/expat/xmlparse.c',
+                                      'Modules/expat/xmlrole.c',
+                                      'Modules/expat/xmltok.c',
+                                      'Modules/pyexpat.c'])
+
+        expat_depends = map(relpath, ['Modules/expat/ascii.h',
+                                      'Modules/expat/asciitab.h',
+                                      'Modules/expat/expat.h',
+                                      'Modules/expat/expat_config.h',
+                                      'Modules/expat/expat_external.h',
+                                      'Modules/expat/internal.h',
+                                      'Modules/expat/latin1tab.h',
+                                      'Modules/expat/utf8tab.h',
+                                      'Modules/expat/xmlrole.h',
+                                      'Modules/expat/xmltok.h',
+                                      'Modules/expat/xmltok_impl.h'
+                                      ])
         exts.append(Extension('pyexpat',
                               define_macros = define_macros,
-                              include_dirs = expat_inc,
-                              libraries = expat_lib,
-                              sources = ['pyexpat.c'] + expat_sources,
+                              include_dirs = [relpath('Modules/expat')],
+                              sources = expat_sources,
                               depends = expat_depends,
                               ))
+        # Pyston change: we don't need this complicated configuration for now.
+        #     expat_inc = [os.path.join(os.getcwd(), srcdir, 'Modules', 'expat')]
 
         # Fredrik Lundh's cElementTree module.  Note that this also
         # uses expat (via the CAPI hook in pyexpat).
+        #
+        # if os.path.isfile(os.path.join(srcdir, 'Modules', '_elementtree.c')):
+        #     define_macros.append(('USE_PYEXPAT_CAPI', None))
+        # elementtree depends on expat
 
-        if os.path.isfile(os.path.join(srcdir, 'Modules', '_elementtree.c')):
-            define_macros.append(('USE_PYEXPAT_CAPI', None))
-            exts.append(Extension('_elementtree',
-                                  define_macros = define_macros,
-                                  include_dirs = expat_inc,
-                                  libraries = expat_lib,
-                                  sources = ['_elementtree.c'],
-                                  depends = ['pyexpat.c'] + expat_sources +
-                                      expat_depends,
-                                  ))
-        else:
-            missing.append('_elementtree')
+        define_macros = define_macros + [('USE_PYEXPAT_CAPI', None),]
 
-        # Hye-Shik Chang's CJKCodecs modules.
-        if have_unicode:
-            exts.append(Extension('_multibytecodec',
-                                  ['cjkcodecs/multibytecodec.c']))
-            for loc in ('kr', 'jp', 'cn', 'tw', 'hk', 'iso2022'):
-                exts.append(Extension('_codecs_%s' % loc,
-                                      ['cjkcodecs/_codecs_%s.c' % loc]))
-        else:
-            missing.append('_multibytecodec')
-            for loc in ('kr', 'jp', 'cn', 'tw', 'hk', 'iso2022'):
-                missing.append('_codecs_%s' % loc)
+        exts.append(Extension('_elementtree',
+                              define_macros = define_macros,
+                              include_dirs = [relpath('Modules/expat')],
+                              # libraries = pyexpat.libraries,
+                              sources = [relpath('Modules/_elementtree.c')],
+                              depends = expat_depends,
+                              ))
+        # else:
+        #     missing.append('_elementtree')
 
-        # Dynamic loading module
-        if sys.maxint == 0x7fffffff:
-            # This requires sizeof(int) == sizeof(long) == sizeof(char*)
-            dl_inc = find_file('dlfcn.h', [], inc_dirs)
-            if (dl_inc is not None) and (host_platform not in ['atheos']):
-                exts.append( Extension('dl', ['dlmodule.c']) )
-            else:
-                missing.append('dl')
-        else:
-            missing.append('dl')
-
+        # Pyston change: disable those modules in setup.py for now
+        # # Hye-Shik Chang's CJKCodecs modules.
+        # if have_unicode:
+        #     exts.append(Extension('_multibytecodec',
+        #                           ['cjkcodecs/multibytecodec.c']))
+        #     for loc in ('kr', 'jp', 'cn', 'tw', 'hk', 'iso2022'):
+        #         exts.append(Extension('_codecs_%s' % loc,
+        #                               ['cjkcodecs/_codecs_%s.c' % loc]))
+        # else:
+        #     missing.append('_multibytecodec')
+        #     for loc in ('kr', 'jp', 'cn', 'tw', 'hk', 'iso2022'):
+        #         missing.append('_codecs_%s' % loc)
+        # #
+        # # Dynamic loading module
+        # if sys.maxint == 0x7fffffff:
+        #     # This requires sizeof(int) == sizeof(long) == sizeof(char*)
+        #     dl_inc = find_file('dlfcn.h', [], inc_dirs)
+        #     if (dl_inc is not None) and (host_platform not in ['atheos']):
+        #         exts.append( Extension('dl', ['dlmodule.c']) )
+        #     else:
+        #         missing.append('dl')
+        # else:
+        #     missing.append('dl')
+        #
         # Thomas Heller's _ctypes module
         self.detect_ctypes(inc_dirs, lib_dirs)
 
@@ -1576,42 +1649,39 @@ class PyBuildExt(build_ext):
                                    ]
 
         else:
-            multiprocessing_srcs = [ '_multiprocessing/multiprocessing.c',
-                                     '_multiprocessing/socket_connection.c'
-                                   ]
-            if (sysconfig.get_config_var('HAVE_SEM_OPEN') and not
-                sysconfig.get_config_var('POSIX_SEMAPHORES_NOT_ENABLED')):
-                multiprocessing_srcs.append('_multiprocessing/semaphore.c')
-
-        if sysconfig.get_config_var('WITH_THREAD'):
-            exts.append ( Extension('_multiprocessing', multiprocessing_srcs,
-                                    define_macros=macros.items(),
-                                    include_dirs=["Modules/_multiprocessing"]))
-        else:
-            missing.append('_multiprocessing')
+            multiprocessing_srcs = map(relpath, [
+                "Modules/_multiprocessing/multiprocessing.c",
+                "Modules/_multiprocessing/socket_connection.c",
+                "Modules/_multiprocessing/semaphore.c",
+            ])
+        # if sysconfig.get_config_var('WITH_THREAD'):
+        exts.append( Extension('_multiprocessing', multiprocessing_srcs,
+                                include_dirs=["Modules/_multiprocessing"]))
+        # else:
+        #     missing.append('_multiprocessing')
 
         # End multiprocessing
 
-
-        # Platform-specific libraries
-        if host_platform == 'linux2':
-            # Linux-specific modules
-            exts.append( Extension('linuxaudiodev', ['linuxaudiodev.c']) )
-        else:
-            missing.append('linuxaudiodev')
-
-        if (host_platform in ('linux2', 'freebsd4', 'freebsd5', 'freebsd6',
-                        'freebsd7', 'freebsd8')
-            or host_platform.startswith("gnukfreebsd")):
-            exts.append( Extension('ossaudiodev', ['ossaudiodev.c']) )
-        else:
-            missing.append('ossaudiodev')
-
-        if host_platform == 'sunos5':
-            # SunOS specific modules
-            exts.append( Extension('sunaudiodev', ['sunaudiodev.c']) )
-        else:
-            missing.append('sunaudiodev')
+        # Pyston change: disable these modules in this setup.py
+        # # Platform-specific libraries
+        # if host_platform == 'linux2':
+        #     # Linux-specific modules
+        #     exts.append( Extension('linuxaudiodev', ['linuxaudiodev.c']) )
+        # else:
+        #     missing.append('linuxaudiodev')
+        #
+        # if (host_platform in ('linux2', 'freebsd4', 'freebsd5', 'freebsd6',
+        #                 'freebsd7', 'freebsd8')
+        #     or host_platform.startswith("gnukfreebsd")):
+        #     exts.append( Extension('ossaudiodev', ['ossaudiodev.c']) )
+        # else:
+        #     missing.append('ossaudiodev')
+        #
+        # if host_platform == 'sunos5':
+        #     # SunOS specific modules
+        #     exts.append( Extension('sunaudiodev', ['sunaudiodev.c']) )
+        # else:
+        #     missing.append('sunaudiodev')
 
         if host_platform == 'darwin':
             # _scproxy
@@ -1622,6 +1692,7 @@ class PyBuildExt(build_ext):
                 ]))
 
 
+        # Pyston change: this code is untested in Mac
         if host_platform == 'darwin' and ("--disable-toolbox-glue" not in
                 sysconfig.get_config_var("CONFIG_ARGS")):
 
@@ -1720,12 +1791,12 @@ class PyBuildExt(build_ext):
 
 
         self.extensions.extend(exts)
-
-        # Call the method for detecting whether _tkinter can be compiled
-        self.detect_tkinter(inc_dirs, lib_dirs)
-
-        if '_tkinter' not in [e.name for e in self.extensions]:
-            missing.append('_tkinter')
+        # Pyston change: disbale the tk module
+        # # Call the method for detecting whether _tkinter can be compiled
+        # self.detect_tkinter(inc_dirs, lib_dirs)
+        #
+        # if '_tkinter' not in [e.name for e in self.extensions]:
+        #     missing.append('_tkinter')
 
 ##         # Uncomment these lines if you want to play with xxmodule.c
 ##         ext = Extension('xx', ['xxmodule.c'])
@@ -2055,11 +2126,12 @@ class PyBuildExt(build_ext):
         include_dirs = []
         extra_compile_args = []
         extra_link_args = []
-        sources = ['_ctypes/_ctypes.c',
-                   '_ctypes/callbacks.c',
-                   '_ctypes/callproc.c',
-                   '_ctypes/stgdict.c',
-                   '_ctypes/cfield.c']
+        sources = map(relpath, ["Modules/_ctypes/_ctypes.c",
+                                "Modules/_ctypes/callbacks.c",
+                                "Modules/_ctypes/callproc.c",
+                                "Modules/_ctypes/stgdict.c",
+                                "Modules/_ctypes/cfield.c"
+                                ])
         depends = ['_ctypes/ctypes.h']
 
         if host_platform == 'darwin':
@@ -2092,18 +2164,22 @@ class PyBuildExt(build_ext):
                         sources=sources,
                         depends=depends)
         ext_test = Extension('_ctypes_test',
-                             sources=['_ctypes/_ctypes_test.c'])
+                             sources= map(relpath, ['Modules/_ctypes/_ctypes_test.c']))
         self.extensions.extend([ext, ext_test])
 
-        if not '--with-system-ffi' in sysconfig.get_config_var("CONFIG_ARGS"):
-            return
+        # Pyston change: Pyston don't support CONFIG_ARGS yet.
+        # if not '--with-system-ffi' in sysconfig.get_config_var("CONFIG_ARGS"):
+        #     return
 
         if host_platform == 'darwin':
             # OS X 10.5 comes with libffi.dylib; the include files are
             # in /usr/include/ffi
             inc_dirs.append('/usr/include/ffi')
 
-        ffi_inc = [sysconfig.get_config_var("LIBFFI_INCLUDEDIR")]
+        # Pyston change: still hard code the ffi include dir
+        # because we don't support this variable configuration in get_config_var yet
+        ffi_inc = ['/usr/include/x86_64-linux-gnu']
+        # ffi_inc = [sysconfig.get_config_var("LIBFFI_INCLUDEDIR")]
         if not ffi_inc or ffi_inc[0] == '':
             ffi_inc = find_file('ffi.h', [], inc_dirs)
         if ffi_inc is not None:
@@ -2206,29 +2282,18 @@ def main():
     # turn off warnings when deprecated modules are imported
     import warnings
     warnings.filterwarnings("ignore",category=DeprecationWarning)
-    setup(# PyPI Metadata (PEP 301)
-          name = "Python",
-          version = sys.version.split()[0],
-          url = "http://www.python.org/%s" % sys.version[:3],
-          maintainer = "Guido van Rossum and the Python community",
-          maintainer_email = "python-dev@python.org",
-          description = "A high-level object-oriented programming language",
-          long_description = SUMMARY.strip(),
-          license = "PSF license",
-          classifiers = filter(None, CLASSIFIERS.split("\n")),
-          platforms = ["Many"],
-
+    setup(
+          name = "Pyston",
+          version = "1.0",
+          description = "Pyston shared modules",
           # Build info
-          cmdclass = {'build_ext':PyBuildExt, 'install':PyBuildInstall,
-                      'install_lib':PyBuildInstallLib},
+          cmdclass = {'build_ext':PyBuildExt,},
           # The struct module is defined here, because build_ext won't be
           # called unless there's at least one extension module defined.
-          ext_modules=[Extension('_struct', ['_struct.c'])],
+          ext_modules = [Extension("_struct", sources = map(relpath, [
+              "Modules/_struct.c",
+          ]))]
 
-          # Scripts to install
-          scripts = ['Tools/scripts/pydoc', 'Tools/scripts/idle',
-                     'Tools/scripts/2to3',
-                     'Lib/smtpd.py']
         )
 
 # --install-platlib
