@@ -146,7 +146,7 @@ namespace AST_TYPE {
 #define GENERATE_ENUM(ENUM, N) ENUM = N,
 #define GENERATE_STRING(STRING, N) m[N] = #STRING;
 
-enum AST_TYPE { FOREACH_TYPE(GENERATE_ENUM) };
+enum AST_TYPE : unsigned char { FOREACH_TYPE(GENERATE_ENUM) };
 
 static const char* stringify(int n) {
     static std::map<int, const char*> m;
@@ -730,7 +730,7 @@ public:
 
 class AST_Num : public AST_expr {
 public:
-    enum NumType {
+    enum NumType : unsigned char {
         // These values must correspond to the values in parse_ast.py
         INT = 0x10,
         FLOAT = 0x20,
@@ -852,7 +852,7 @@ public:
 
 class AST_Str : public AST_expr {
 public:
-    enum StrType {
+    enum StrType : unsigned char {
         UNSET = 0x00,
         STR = 0x10,
         UNICODE = 0x20,
@@ -1007,7 +1007,7 @@ public:
 // These are basically bytecodes, framed as pseudo-AST-nodes.
 class AST_LangPrimitive : public AST_expr {
 public:
-    enum Opcodes {
+    enum Opcodes : unsigned char {
         LANDINGPAD, // grabs the info about the last raised exception
         LOCALS,
         GET_ITER,

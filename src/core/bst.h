@@ -147,7 +147,7 @@ namespace BST_TYPE {
 #define GENERATE_ENUM(ENUM, N) ENUM = N,
 #define GENERATE_STRING(STRING, N) m[N] = #STRING;
 
-enum BST_TYPE { FOREACH_TYPE(GENERATE_ENUM) };
+enum BST_TYPE : unsigned char { FOREACH_TYPE(GENERATE_ENUM) };
 
 static const char* stringify(int n) {
     static std::map<int, const char*> m;
@@ -758,7 +758,7 @@ public:
 // These are basically bytecodes, framed as pseudo-BST-nodes.
 class BST_LangPrimitive : public BST_expr {
 public:
-    enum Opcodes {
+    enum Opcodes : unsigned char {
         LANDINGPAD, // grabs the info about the last raised exception
         LOCALS,
         GET_ITER,
