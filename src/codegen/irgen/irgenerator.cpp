@@ -1137,19 +1137,16 @@ private:
     }
 
     CompilerVariable* evalCompare(BST_Compare* node, const UnwindInfo& unw_info) {
-        RELEASE_ASSERT(node->ops.size() == 1, "");
-
         CompilerVariable* left = evalExpr(node->left, unw_info);
-        CompilerVariable* right = evalExpr(node->comparators[0], unw_info);
+        CompilerVariable* right = evalExpr(node->comparator, unw_info);
 
         assert(left);
         assert(right);
 
-        if (node->ops[0] == AST_TYPE::Is || node->ops[0] == AST_TYPE::IsNot) {
-            return doIs(emitter, left, right, node->ops[0] == AST_TYPE::IsNot);
-        }
+        if (node->op == AST_TYPE::Is || node->op == AST_TYPE::IsNot)
+            return doIs(emitter, left, right, node->op == AST_TYPE::IsNot);
 
-        CompilerVariable* rtn = _evalBinExp(node, left, right, node->ops[0], Compare, unw_info);
+        CompilerVariable* rtn = _evalBinExp(node, left, right, node->op, Compare, unw_info);
         return rtn;
     }
 
@@ -2084,27 +2081,24 @@ private:
     void doAssign(BST_Assign* node, const UnwindInfo& unw_info) {
         CompilerVariable* val = evalExpr(node->value, unw_info);
 
-        for (int i = 0; i < node->targets.size(); i++) {
-            _doSet(node->targets[i], val, unw_info);
-        }
+        _doSet(node->target, val, unw_info);
     }
 
     void doDelete(BST_Delete* node, const UnwindInfo& unw_info) {
-        for (BST_expr* target : node->targets) {
-            switch (target->type) {
-                case BST_TYPE::Subscript:
-                    _doDelitem(static_cast<BST_Subscript*>(target), unw_info);
-                    break;
-                case BST_TYPE::Attribute:
-                    _doDelAttr(static_cast<BST_Attribute*>(target), unw_info);
-                    break;
-                case BST_TYPE::Name:
-                    _doDelName(static_cast<BST_Name*>(target), unw_info);
-                    break;
-                default:
-                    ASSERT(0, "Unsupported del target: %d", target->type);
-                    abort();
-            }
+        BST_expr* target = node->target;
+        switch (target->type) {
+            case BST_TYPE::Subscript:
+                _doDelitem(static_cast<BST_Subscript*>(target), unw_info);
+                break;
+            case BST_TYPE::Attribute:
+                _doDelAttr(static_cast<BST_Attribute*>(target), unw_info);
+                break;
+            case BST_TYPE::Name:
+                _doDelName(static_cast<BST_Name*>(target), unw_info);
+                break;
+            default:
+                ASSERT(0, "Unsupported del target: %d", target->type);
+                abort();
         }
     }
 
@@ -2237,11 +2231,10 @@ private:
         }
         assert(dest);
 
-        assert(node->values.size() <= 1);
         ConcreteCompilerVariable* converted;
 
-        if (node->values.size() == 1) {
-            CompilerVariable* var = evalExpr(node->values[0], unw_info);
+        if (node->value) {
+            CompilerVariable* var = evalExpr(node->value, unw_info);
             converted = var->makeConverted(emitter, var->getBoxType());
         } else {
             converted = new ConcreteCompilerVariable(UNKNOWN, getNullPtr(g.llvm_value_type_ptr));
@@ -2561,15 +2554,6 @@ private:
                 if ((((BST_Expr*)node)->value)->type != BST_TYPE::Str)
                     doExpr(bst_cast<BST_Expr>(node), unw_info);
                 break;
-            // case BST_TYPE::If:
-            // doIf(bst_cast<BST_If>(node));
-            // break;
-            // case BST_TYPE::Import:
-            //     doImport(bst_cast<BST_Import>(node), unw_info);
-            //     break;
-            // case BST_TYPE::ImportFrom:
-            //     doImportFrom(bst_cast<BST_ImportFrom>(node), unw_info);
-            //     break;
             case BST_TYPE::Global:
                 // Should have been handled already
                 break;

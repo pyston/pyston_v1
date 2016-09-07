@@ -219,8 +219,7 @@ private:
         }
 
         if (VERBOSITY() >= 2 && rtn == UNDEF) {
-            printf("Think %s.%s is undefined, at %d:%d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno,
-                   node->col_offset);
+            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno);
             print_bst(node);
             printf("\n");
         }
@@ -231,8 +230,7 @@ private:
         CompilerType* t = getType(node->value);
         CompilerType* rtn = t->getattrType(node->attr, true);
         if (VERBOSITY() >= 2 && rtn == UNDEF) {
-            printf("Think %s.%s is undefined, at %d:%d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno,
-                   node->col_offset);
+            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno);
             print_bst(node);
             printf("\n");
         }
@@ -297,21 +295,6 @@ private:
         return rtn;
     }
 
-    void* visit_boolop(BST_BoolOp* node) override {
-        int n = node->values.size();
-
-        CompilerType* rtn = NULL;
-        for (int i = 0; i < n; i++) {
-            CompilerType* t = getType(node->values[i]);
-            if (rtn == NULL)
-                rtn = t;
-            else if (rtn != t)
-                rtn = UNKNOWN;
-        }
-
-        return rtn;
-    }
-
     void* visit_call(BST_Call* node) override {
         CompilerType* func = getType(node->func);
 
@@ -349,29 +332,24 @@ private:
     }
 
     void* visit_compare(BST_Compare* node) override {
-        if (node->ops.size() == 1) {
-            CompilerType* left = getType(node->left);
-            CompilerType* right = getType(node->comparators[0]);
+        CompilerType* left = getType(node->left);
+        CompilerType* right = getType(node->comparator);
 
-            AST_TYPE::AST_TYPE op_type = node->ops[0];
-            if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot || op_type == AST_TYPE::In
-                || op_type == AST_TYPE::NotIn) {
-                assert(node->ops.size() == 1 && "I don't think this should happen");
-                return BOOL;
-            }
-
-            BoxedString* name = getOpName(node->ops[0]);
-            CompilerType* attr_type = left->getattrType(name, true);
-
-            if (attr_type == UNDEF)
-                attr_type = UNKNOWN;
-
-            std::vector<CompilerType*> arg_types;
-            arg_types.push_back(right);
-            return attr_type->callType(ArgPassSpec(2), arg_types, NULL);
-        } else {
-            return UNKNOWN;
+        AST_TYPE::AST_TYPE op_type = node->op;
+        if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot || op_type == AST_TYPE::In
+            || op_type == AST_TYPE::NotIn) {
+            return BOOL;
         }
+
+        BoxedString* name = getOpName(node->op);
+        CompilerType* attr_type = left->getattrType(name, true);
+
+        if (attr_type == UNDEF)
+            attr_type = UNKNOWN;
+
+        std::vector<CompilerType*> arg_types;
+        arg_types.push_back(right);
+        return attr_type->callType(ArgPassSpec(2), arg_types, NULL);
     }
 
     void* visit_dict(BST_Dict* node) override {
@@ -541,9 +519,7 @@ private:
 
     void visit_assign(BST_Assign* node) override {
         CompilerType* t = getType(node->value);
-        for (int i = 0; i < node->targets.size(); i++) {
-            _doSet(node->targets[i], t);
-        }
+        _doSet(node->target, t);
     }
 
     void visit_branch(BST_Branch* node) override {
@@ -569,27 +545,26 @@ private:
     }
 
     void visit_delete(BST_Delete* node) override {
-        for (BST_expr* target : node->targets) {
-            switch (target->type) {
-                case BST_TYPE::Subscript:
-                    getType(bst_cast<BST_Subscript>(target)->value);
-                    break;
-                case BST_TYPE::Attribute:
-                    getType(bst_cast<BST_Attribute>(target)->value);
-                    break;
-                case BST_TYPE::Name: {
-                    auto name = bst_cast<BST_Name>(target);
-                    assert(name->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
-                    if (name->lookup_type == ScopeInfo::VarScopeType::FAST
-                        || name->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
-                        sym_table[name->vreg] = NULL;
-                    } else
-                        assert(name->vreg == -1);
-                    break;
-                }
-                default:
-                    RELEASE_ASSERT(0, "%d", target->type);
+        BST_expr* target = node->target;
+        switch (target->type) {
+            case BST_TYPE::Subscript:
+                getType(bst_cast<BST_Subscript>(target)->value);
+                break;
+            case BST_TYPE::Attribute:
+                getType(bst_cast<BST_Attribute>(target)->value);
+                break;
+            case BST_TYPE::Name: {
+                auto name = bst_cast<BST_Name>(target);
+                assert(name->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
+                if (name->lookup_type == ScopeInfo::VarScopeType::FAST
+                    || name->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
+                    sym_table[name->vreg] = NULL;
+                } else
+                    assert(name->vreg == -1);
+                break;
             }
+            default:
+                RELEASE_ASSERT(0, "%d", target->type);
         }
     }
 
@@ -617,12 +592,6 @@ private:
         return t;
     }
 
-    void visit_global(BST_Global* node) override {}
-
-    void visit_import(BST_Import* node) override { assert(0 && "this should get removed by cfg"); }
-
-    void visit_importfrom(BST_ImportFrom* node) override { assert(0 && "this should get removed by cfg"); }
-
     void visit_exec(BST_Exec* node) override {
         getType(node->body);
         if (node->globals)
@@ -634,17 +603,13 @@ private:
     void visit_invoke(BST_Invoke* node) override { node->stmt->accept_stmt(this); }
 
     void visit_jump(BST_Jump* node) override {}
-    void visit_pass(BST_Pass* node) override {}
 
     void visit_print(BST_Print* node) override {
         if (node->dest)
             getType(node->dest);
 
-        if (EXPAND_UNNEEDED) {
-            for (int i = 0; i < node->values.size(); i++) {
-                getType(node->values[i]);
-            }
-        }
+        if (EXPAND_UNNEEDED && node->value)
+            getType(node->value);
     }
 
     void visit_raise(BST_Raise* node) override {

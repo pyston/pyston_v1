@@ -88,8 +88,6 @@ private:
     Value visit_compare(BST_Compare* node);
     Value visit_delete(BST_Delete* node);
     Value visit_exec(BST_Exec* node);
-    Value visit_global(BST_Global* node);
-    Value visit_module(BST_Module* node);
     Value visit_print(BST_Print* node);
     Value visit_raise(BST_Raise* node);
     Value visit_return(BST_Return* node);
@@ -1055,10 +1053,6 @@ Value ASTInterpreter::visit_stmt(BST_stmt* node) {
                 throw e;
             }
             return rtn;
-        case BST_TYPE::Global:
-            rtn = visit_global((BST_Global*)node);
-            ASTInterpreterJitInterface::pendingCallsCheckHelper();
-            break;
 
         // pseudo
         case BST_TYPE::Branch:
@@ -1308,111 +1302,98 @@ Value ASTInterpreter::visit_assert(BST_Assert* node) {
     return Value();
 }
 
-Value ASTInterpreter::visit_global(BST_Global* node) {
-#ifndef NDEBUG
-    for (auto name : node->names) {
-        assert(!getSymVRegMap().count(name));
-    }
-#endif
-    return Value();
-}
-
 Value ASTInterpreter::visit_delete(BST_Delete* node) {
-    for (BST_expr* target_ : node->targets) {
-        switch (target_->type) {
-            case BST_TYPE::Subscript: {
-                BST_Subscript* sub = (BST_Subscript*)target_;
-                Value value = visit_expr(sub->value);
-                AUTO_DECREF(value.o);
+    BST_expr* target_ = node->target;
+    switch (target_->type) {
+        case BST_TYPE::Subscript: {
+            BST_Subscript* sub = (BST_Subscript*)target_;
+            Value value = visit_expr(sub->value);
+            AUTO_DECREF(value.o);
 
-                bool is_slice = (sub->slice->type == BST_TYPE::Slice) && (((BST_Slice*)sub->slice)->step == NULL);
-                if (is_slice) {
-                    BST_Slice* slice = (BST_Slice*)sub->slice;
-                    Value lower = slice->lower ? visit_expr(slice->lower) : Value();
-                    AUTO_XDECREF(lower.o);
-                    Value upper = slice->upper ? visit_expr(slice->upper) : Value();
-                    AUTO_XDECREF(upper.o);
-                    assert(slice->step == NULL);
+            bool is_slice = (sub->slice->type == BST_TYPE::Slice) && (((BST_Slice*)sub->slice)->step == NULL);
+            if (is_slice) {
+                BST_Slice* slice = (BST_Slice*)sub->slice;
+                Value lower = slice->lower ? visit_expr(slice->lower) : Value();
+                AUTO_XDECREF(lower.o);
+                Value upper = slice->upper ? visit_expr(slice->upper) : Value();
+                AUTO_XDECREF(upper.o);
+                assert(slice->step == NULL);
 
-                    if (jit)
-                        jit->emitAssignSlice(value, lower, upper, jit->imm(0ul));
-                    assignSlice(value.o, lower.o, upper.o, NULL);
-                } else {
-                    Value slice = visit_slice(sub->slice);
-                    AUTO_DECREF(slice.o);
-                    if (jit)
-                        jit->emitDelItem(value, slice);
-                    delitem(value.o, slice.o);
-                }
-                break;
-            }
-            case BST_TYPE::Attribute: {
-                BST_Attribute* attr = (BST_Attribute*)target_;
-                Value target = visit_expr(attr->value);
-                AUTO_DECREF(target.o);
-                BoxedString* str = attr->attr.getBox();
                 if (jit)
-                    jit->emitDelAttr(target, str);
-                delattr(target.o, str);
-                break;
+                    jit->emitAssignSlice(value, lower, upper, jit->imm(0ul));
+                assignSlice(value.o, lower.o, upper.o, NULL);
+            } else {
+                Value slice = visit_slice(sub->slice);
+                AUTO_DECREF(slice.o);
+                if (jit)
+                    jit->emitDelItem(value, slice);
+                delitem(value.o, slice.o);
             }
-            case BST_TYPE::Name: {
-                BST_Name* target = (BST_Name*)target_;
-                assert(target->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
-
-                ScopeInfo::VarScopeType vst = target->lookup_type;
-                if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-                    if (jit)
-                        jit->emitDelGlobal(target->id.getBox());
-                    delGlobal(frame_info.globals, target->id.getBox());
-                    continue;
-                } else if (vst == ScopeInfo::VarScopeType::NAME) {
-                    if (jit)
-                        jit->emitDelName(target->id);
-                    ASTInterpreterJitInterface::delNameHelper(this, target->id);
-                } else {
-                    assert(vst == ScopeInfo::VarScopeType::FAST);
-
-                    assert(getVRegInfo().getVReg(target->id) == target->vreg);
-
-                    if (target->id.s()[0] == '#') {
-                        assert(vregs[target->vreg] != NULL);
-                        if (jit)
-                            jit->emitKillTemporary(target);
-                    } else {
-                        abortJITing();
-                        if (vregs[target->vreg] == 0) {
-                            assertNameDefined(0, target->id.c_str(), NameError, true /* local_var_msg */);
-                            return Value();
-                        }
-                    }
-
-                    frame_info.num_vregs = std::max(frame_info.num_vregs, target->vreg + 1);
-                    Py_DECREF(vregs[target->vreg]);
-                    vregs[target->vreg] = NULL;
-                }
-                break;
-            }
-            default:
-                ASSERT(0, "Unsupported del target: %d", target_->type);
-                abort();
+            break;
         }
+        case BST_TYPE::Attribute: {
+            BST_Attribute* attr = (BST_Attribute*)target_;
+            Value target = visit_expr(attr->value);
+            AUTO_DECREF(target.o);
+            BoxedString* str = attr->attr.getBox();
+            if (jit)
+                jit->emitDelAttr(target, str);
+            delattr(target.o, str);
+            break;
+        }
+        case BST_TYPE::Name: {
+            BST_Name* target = (BST_Name*)target_;
+            assert(target->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
+
+            ScopeInfo::VarScopeType vst = target->lookup_type;
+            if (vst == ScopeInfo::VarScopeType::GLOBAL) {
+                if (jit)
+                    jit->emitDelGlobal(target->id.getBox());
+                delGlobal(frame_info.globals, target->id.getBox());
+                break;
+            } else if (vst == ScopeInfo::VarScopeType::NAME) {
+                if (jit)
+                    jit->emitDelName(target->id);
+                ASTInterpreterJitInterface::delNameHelper(this, target->id);
+            } else {
+                assert(vst == ScopeInfo::VarScopeType::FAST);
+
+                assert(getVRegInfo().getVReg(target->id) == target->vreg);
+
+                if (target->id.s()[0] == '#') {
+                    assert(vregs[target->vreg] != NULL);
+                    if (jit)
+                        jit->emitKillTemporary(target);
+                } else {
+                    abortJITing();
+                    if (vregs[target->vreg] == 0) {
+                        assertNameDefined(0, target->id.c_str(), NameError, true /* local_var_msg */);
+                        return Value();
+                    }
+                }
+
+                frame_info.num_vregs = std::max(frame_info.num_vregs, target->vreg + 1);
+                Py_DECREF(vregs[target->vreg]);
+                vregs[target->vreg] = NULL;
+            }
+            break;
+        }
+        default:
+            ASSERT(0, "Unsupported del target: %d", target_->type);
+            abort();
     }
     return Value();
 }
 
 Value ASTInterpreter::visit_assign(BST_Assign* node) {
-    assert(node->targets.size() == 1 && "cfg should have lowered it to a single target");
-
     Value v = visit_expr(node->value);
-    doStore(node->targets[0], v);
+    doStore(node->target, v);
     return Value();
 }
 
 Value ASTInterpreter::visit_print(BST_Print* node) {
-    assert(node->values.size() <= 1 && "cfg should have lowered it to 0 or 1 values");
     Value dest = node->dest ? visit_expr(node->dest) : Value();
-    Value var = node->values.size() ? visit_expr(node->values[0]) : Value();
+    Value var = node->value ? visit_expr(node->value) : Value();
 
     if (jit)
         jit->emitPrint(dest, var, node->nl);
@@ -1442,12 +1423,11 @@ Value ASTInterpreter::visit_exec(BST_Exec* node) {
 }
 
 Value ASTInterpreter::visit_compare(BST_Compare* node) {
-    RELEASE_ASSERT(node->comparators.size() == 1, "not implemented");
     Value left = visit_expr(node->left);
     AUTO_DECREF(left.o);
-    Value right = visit_expr(node->comparators[0]);
+    Value right = visit_expr(node->comparator);
     AUTO_DECREF(right.o);
-    return doBinOp(node, left, right, node->ops[0], BinExpType::Compare);
+    return doBinOp(node, left, right, node->op, BinExpType::Compare);
 }
 
 Value ASTInterpreter::visit_expr(BST_expr* node) {
@@ -2127,9 +2107,8 @@ extern "C" Box* astInterpretDeoptFromASM(BoxedCode* code, BST_expr* after_expr, 
         if (enclosing_stmt->type == BST_TYPE::Assign) {
             auto asgn = bst_cast<BST_Assign>(enclosing_stmt);
             RELEASE_ASSERT(asgn->value == after_expr, "%p %p", asgn->value, after_expr);
-            assert(asgn->targets.size() == 1);
-            assert(asgn->targets[0]->type == BST_TYPE::Name);
-            auto name = bst_cast<BST_Name>(asgn->targets[0]);
+            assert(asgn->target->type == BST_TYPE::Name);
+            auto name = bst_cast<BST_Name>(asgn->target);
             assert(name->id.s()[0] == '#');
             interpreter.addSymbol(name->vreg, expr_val, true);
             break;
