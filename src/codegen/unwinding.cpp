@@ -490,7 +490,7 @@ static const LineInfo lineInfoForFrameInfo(FrameInfo* frame_info) {
     auto* code = frame_info->code;
     assert(code);
 
-    return LineInfo(current_stmt->lineno, current_stmt->col_offset, code->filename, code->name);
+    return LineInfo(current_stmt->lineno, code->filename, code->name);
 }
 
 // A class that converts a C stack trace to a Python stack trace.

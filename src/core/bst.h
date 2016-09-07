@@ -171,7 +171,7 @@ public:
     virtual ~BST() {}
 
     const BST_TYPE::BST_TYPE type;
-    uint32_t lineno, col_offset;
+    uint32_t lineno;
 
     virtual void accept(BSTVisitor* v) = 0;
 
@@ -185,10 +185,9 @@ private:
 public:
     BST(BST_TYPE::BST_TYPE type);
 #else
-    BST(BST_TYPE::BST_TYPE type) : type(type), lineno(0), col_offset(0) {}
+    BST(BST_TYPE::BST_TYPE type) : type(type), lineno(0) {}
 #endif
-    BST(BST_TYPE::BST_TYPE type, uint32_t lineno, uint32_t col_offset = 0)
-        : type(type), lineno(lineno), col_offset(col_offset) {}
+    BST(BST_TYPE::BST_TYPE type, uint32_t lineno) : type(type), lineno(lineno) {}
 };
 
 class BST_expr : public BST {
@@ -196,7 +195,7 @@ public:
     virtual void* accept_expr(ExprVisitor* v) = 0;
 
     BST_expr(BST_TYPE::BST_TYPE type) : BST(type) {}
-    BST_expr(BST_TYPE::BST_TYPE type, uint32_t lineno, uint32_t col_offset = 0) : BST(type, lineno, col_offset) {}
+    BST_expr(BST_TYPE::BST_TYPE type, uint32_t lineno) : BST(type, lineno) {}
 };
 
 class BST_stmt : public BST {
@@ -212,14 +211,14 @@ class BST_slice : public BST {
 public:
     virtual void* accept_slice(SliceVisitor* s) = 0;
     BST_slice(BST_TYPE::BST_TYPE type) : BST(type) {}
-    BST_slice(BST_TYPE::BST_TYPE type, uint32_t lineno, uint32_t col_offset = 0) : BST(type, lineno, col_offset) {}
+    BST_slice(BST_TYPE::BST_TYPE type, uint32_t lineno) : BST(type, lineno) {}
 };
 
 class BST_Name;
 
 class BST_arguments : public BST {
 public:
-    // no lineno, col_offset attributes
+    // no lineno attributes
     std::vector<BST_expr*> defaults;
 
     virtual void accept(BSTVisitor* v);
@@ -445,7 +444,7 @@ public:
 
 class BST_keyword : public BST {
 public:
-    // no lineno, col_offset attributes
+    // no lineno attributes
     BST_expr* value;
     InternedString arg;
 
@@ -493,8 +492,8 @@ public:
     virtual void accept(BSTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    BST_Name(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0)
-        : BST_expr(BST_TYPE::Name, lineno, col_offset),
+    BST_Name(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno)
+        : BST_expr(BST_TYPE::Name, lineno),
           ctx_type(ctx_type),
           id(id),
           lookup_type(ScopeInfo::VarScopeType::UNKNOWN),
@@ -676,8 +675,7 @@ public:
     virtual void accept(BSTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    BST_MakeFunction(BST_FunctionDef* fd)
-        : BST_expr(BST_TYPE::MakeFunction, fd->lineno, fd->col_offset), function_def(fd) {}
+    BST_MakeFunction(BST_FunctionDef* fd) : BST_expr(BST_TYPE::MakeFunction, fd->lineno), function_def(fd) {}
 
     static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::MakeFunction;
 };
@@ -689,7 +687,7 @@ public:
     virtual void accept(BSTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    BST_MakeClass(BST_ClassDef* cd) : BST_expr(BST_TYPE::MakeClass, cd->lineno, cd->col_offset), class_def(cd) {}
+    BST_MakeClass(BST_ClassDef* cd) : BST_expr(BST_TYPE::MakeClass, cd->lineno), class_def(cd) {}
 
     static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::MakeClass;
 };

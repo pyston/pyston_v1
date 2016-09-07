@@ -997,11 +997,10 @@ void raiseSyntaxErrorHelper(llvm::StringRef file, llvm::StringRef func, AST* nod
 // A data structure used for storing information for tracebacks.
 struct LineInfo {
 public:
-    int line, column;
+    int line;
     BoxedString* file, *func;
 
-    LineInfo(int line, int column, BoxedString* file, BoxedString* func)
-        : line(line), column(column), file(file), func(func) {}
+    LineInfo(int line, BoxedString* file, BoxedString* func) : line(line), file(file), func(func) {}
 };
 
 // A data structure to simplify passing around all the data about a thrown exception.
