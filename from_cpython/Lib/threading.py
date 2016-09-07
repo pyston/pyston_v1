@@ -93,6 +93,8 @@ def setprofile(func):
     run() method is called.
 
     """
+    # This would otherwise fail at thread-creation time:
+    assert 0, "threading.setprofile not supported in Pyston yet"
     global _profile_hook
     _profile_hook = func
 
@@ -103,6 +105,8 @@ def settrace(func):
     method is called.
 
     """
+    # This would otherwise fail at thread-creation time:
+    assert 0, "threading.settrace not supported in Pyston yet"
     global _trace_hook
     _trace_hook = func
 
