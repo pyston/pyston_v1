@@ -25,6 +25,7 @@
 #include "codegen/irgen/hooks.h"
 #include "codegen/parser.h"
 #include "codegen/unwinding.h"
+#include "core/ast.h"
 #include "runtime/inline/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/util.h"
@@ -87,7 +88,9 @@ extern "C" PyObject* load_source_module(char* name, char* pathname, FILE* fp) no
     AUTO_DECREF(name_boxed);
     try {
         BoxedModule* module = createModule(name_boxed, pathname);
-        AST_Module* ast = caching_parse_file(pathname, /* future_flags = */ 0);
+        std::unique_ptr<ASTAllocator> ast_allocator;
+        AST_Module* ast;
+        std::tie(ast, ast_allocator) = caching_parse_file(pathname, /* future_flags = */ 0);
         assert(ast);
         compileAndRunModule(ast, module);
         Box* r = getSysModulesDict()->getOrNull(name_boxed);
@@ -118,7 +121,9 @@ extern "C" PyObject* PyImport_ExecCodeModuleEx(const char* name, PyObject* co, c
 
         static BoxedString* file_str = getStaticString("__file__");
         module->setattr(file_str, autoDecref(boxString(pathname)), NULL);
-        AST_Module* ast = parse_string(code->data(), /* future_flags = */ 0);
+        AST_Module* ast;
+        std::unique_ptr<ASTAllocator> ast_allocator;
+        std::tie(ast, ast_allocator) = parse_string(code->data(), /* future_flags = */ 0);
         compileAndRunModule(ast, module);
         return incref(module);
     } catch (ExcInfo e) {

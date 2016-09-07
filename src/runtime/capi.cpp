@@ -37,6 +37,7 @@
 #include "capi/types.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/unwinding.h"
+#include "core/ast.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/classobj.h"
@@ -847,8 +848,8 @@ extern "C" int PyRun_InteractiveOneFlags(FILE* fp, const char* filename, PyCompi
     bool failed = false;
     try {
         assert(mod->kind == Interactive_kind);
-        AST_Module* pyston_module = static_cast<AST_Module*>(cpythonToPystonAST(mod, filename));
-        compileAndRunModule(pyston_module, static_cast<BoxedModule*>(m));
+        auto res = cpythonToPystonAST(mod, filename);
+        compileAndRunModule((AST_Module*)res.first, static_cast<BoxedModule*>(m));
     } catch (ExcInfo e) {
         setCAPIException(e);
         failed = true;
