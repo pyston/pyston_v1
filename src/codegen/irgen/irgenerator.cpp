@@ -713,9 +713,8 @@ public:
         return rtn.getInstruction();
     }
 
-    llvm::Value* createDeopt(BST_stmt* current_stmt, BST_expr* node, llvm::Value* node_value) override {
-        llvm::Instruction* v = createIC(createDeoptIC(), (void*)pyston::deopt,
-                                        { embedRelocatablePtr(node, g.llvm_bstexpr_type_ptr), node_value },
+    llvm::Value* createDeopt(BST_stmt* current_stmt, llvm::Value* node_value) override {
+        llvm::Instruction* v = createIC(createDeoptIC(), (void*)pyston::deopt, { node_value },
                                         UnwindInfo(current_stmt, NULL, /* is_after_deopt*/ true));
         llvm::Value* rtn = createAfter<llvm::IntToPtrInst>(v, v, g.llvm_value_type_ptr, "");
         setType(rtn, RefType::OWNED);
@@ -753,17 +752,6 @@ public:
 
 IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator) {
     return new IREmitterImpl(irstate, curblock, irgenerator);
-}
-
-std::vector<BoxedString*>* getKeywordNameStorage(BST_Call* node) {
-    if (!node->keywords_names) {
-        node->keywords_names = llvm::make_unique<std::vector<BoxedString*>>();
-        for (auto kw : node->keywords) {
-            node->keywords_names->push_back(kw->arg.getBox());
-        }
-    }
-
-    return node->keywords_names.get();
 }
 
 const std::string CREATED_CLOSURE_NAME = "#created_closure";
@@ -828,7 +816,7 @@ public:
     virtual CFGBlock* getCFGBlock() override { return myblock; }
 
 private:
-    OpInfo getOpInfoForNode(BST* ast, const UnwindInfo& unw_info) {
+    OpInfo getOpInfoForNode(BST_stmt* ast, const UnwindInfo& unw_info) {
         assert(ast);
 
         return OpInfo(irstate->getEffortLevel(), unw_info, ICInfo::getICInfoForNode(ast));
@@ -836,7 +824,7 @@ private:
 
     OpInfo getEmptyOpInfo(const UnwindInfo& unw_info) { return OpInfo(irstate->getEffortLevel(), unw_info, NULL); }
 
-    void createExprTypeGuard(llvm::Value* check_val, BST* node, llvm::Value* node_value, BST_stmt* current_statement) {
+    void createExprTypeGuard(llvm::Value* check_val, llvm::Value* node_value, BST_stmt* current_statement) {
         assert(check_val->getType() == g.i1);
 
         llvm::Metadata* md_vals[]
@@ -857,7 +845,7 @@ private:
 
         curblock = deopt_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
-        llvm::Value* v = emitter.createDeopt(current_statement, (BST_expr*)node, node_value);
+        llvm::Value* v = emitter.createDeopt(current_statement, node_value);
         llvm::Instruction* ret_inst = emitter.getBuilder()->CreateRet(v);
         irstate->getRefcounts()->refConsumed(v, ret_inst);
 
@@ -865,237 +853,188 @@ private:
         emitter.getBuilder()->SetInsertPoint(curblock);
     }
 
-    CompilerVariable* evalAttribute(BST_Attribute* node, const UnwindInfo& unw_info) {
-        CompilerVariable* value = evalExpr(node->value, unw_info);
+    CompilerVariable* evalCheckExcMatch(BST_CheckExcMatch* node, const UnwindInfo& unw_info) {
+        CompilerVariable* obj = evalVReg(node->vreg_value);
+        CompilerVariable* cls = evalVReg(node->vreg_cls);
 
-        CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), node->attr.getBox(), false);
-        return rtn;
+        ConcreteCompilerVariable* converted_obj = obj->makeConverted(emitter, obj->getBoxType());
+        ConcreteCompilerVariable* converted_cls = cls->makeConverted(emitter, cls->getBoxType());
+
+        llvm::Value* v = emitter.createCall(unw_info, g.funcs.exceptionMatches,
+                                            { converted_obj->getValue(), converted_cls->getValue() });
+        assert(v->getType() == g.i1);
+
+        return boolFromI1(emitter, v);
     }
 
-    CompilerVariable* evalClsAttribute(BST_ClsAttribute* node, const UnwindInfo& unw_info) {
-        CompilerVariable* value = evalExpr(node->value, unw_info);
-        CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), node->attr.getBox(), true);
-        return rtn;
-    }
+    CompilerVariable* evalLandingpad(BST_Landingpad* node, const UnwindInfo& unw_info) {
+        ConcreteCompilerVariable* exc_type;
+        ConcreteCompilerVariable* exc_value;
+        ConcreteCompilerVariable* exc_tb;
 
-    CompilerVariable* evalLangPrimitive(BST_LangPrimitive* node, const UnwindInfo& unw_info) {
-        switch (node->opcode) {
-            case BST_LangPrimitive::CHECK_EXC_MATCH: {
-                assert(node->args.size() == 2);
-                CompilerVariable* obj = evalExpr(node->args[0], unw_info);
-                CompilerVariable* cls = evalExpr(node->args[1], unw_info);
-
-                ConcreteCompilerVariable* converted_obj = obj->makeConverted(emitter, obj->getBoxType());
-                ConcreteCompilerVariable* converted_cls = cls->makeConverted(emitter, cls->getBoxType());
-
-                llvm::Value* v = emitter.createCall(unw_info, g.funcs.exceptionMatches,
-                                                    { converted_obj->getValue(), converted_cls->getValue() });
-                assert(v->getType() == g.i1);
-
-                return boolFromI1(emitter, v);
-            }
-            case BST_LangPrimitive::LANDINGPAD: {
-                ConcreteCompilerVariable* exc_type;
-                ConcreteCompilerVariable* exc_value;
-                ConcreteCompilerVariable* exc_tb;
-
-                if (this->incoming_exc_state.size()) {
-                    if (incoming_exc_state.size() == 1) {
-                        exc_type = this->incoming_exc_state[0].exc_type;
-                        exc_value = this->incoming_exc_state[0].exc_value;
-                        exc_tb = this->incoming_exc_state[0].exc_tb;
-                    } else {
-                        llvm::PHINode* phi_exc_type
-                            = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, incoming_exc_state.size());
-                        llvm::PHINode* phi_exc_value
-                            = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, incoming_exc_state.size());
-                        llvm::PHINode* phi_exc_tb
-                            = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, incoming_exc_state.size());
-                        emitter.setType(phi_exc_type, RefType::OWNED);
-                        emitter.setType(phi_exc_value, RefType::OWNED);
-                        emitter.setType(phi_exc_tb, RefType::OWNED);
-                        for (auto e : this->incoming_exc_state) {
-                            phi_exc_type->addIncoming(e.exc_type->getValue(), e.from_block);
-                            phi_exc_value->addIncoming(e.exc_value->getValue(), e.from_block);
-                            phi_exc_tb->addIncoming(e.exc_tb->getValue(), e.from_block);
-                            emitter.refConsumed(e.exc_type->getValue(), e.from_block->getTerminator());
-                            emitter.refConsumed(e.exc_value->getValue(), e.from_block->getTerminator());
-                            emitter.refConsumed(e.exc_tb->getValue(), e.from_block->getTerminator());
-                        }
-                        exc_type = new ConcreteCompilerVariable(UNKNOWN, phi_exc_type);
-                        exc_value = new ConcreteCompilerVariable(UNKNOWN, phi_exc_value);
-                        exc_tb = new ConcreteCompilerVariable(UNKNOWN, phi_exc_tb);
-                    }
-                } else {
-                    // There can be no incoming exception if the irgenerator was able to prove that
-                    // an exception would not get thrown.
-                    // For example, the cfg code will conservatively assume that any name-access can
-                    // trigger an exception, but the irgenerator will know that definitely-defined
-                    // local symbols will not throw.
-                    emitter.getBuilder()->CreateUnreachable();
-
-                    // Hacky: create a new BB for any more code that we might generate
-                    llvm::BasicBlock* continue_bb
-                        = llvm::BasicBlock::Create(g.context, "cant_reach", irstate->getLLVMFunction());
-                    emitter.setCurrentBasicBlock(continue_bb);
-
-                    exc_type = exc_value = exc_tb = undefVariable();
-                    // TODO: we should just call endBlock instead.  It looks like the implementation
-                    // of that has some issues though, and it might end up generating code as well.  ANd
-                    // then I'm not sure that the higher-level irgen.cpp would handle that well.
-                    // endBlock(DEAD);
+        if (this->incoming_exc_state.size()) {
+            if (incoming_exc_state.size() == 1) {
+                exc_type = this->incoming_exc_state[0].exc_type;
+                exc_value = this->incoming_exc_state[0].exc_value;
+                exc_tb = this->incoming_exc_state[0].exc_tb;
+            } else {
+                llvm::PHINode* phi_exc_type
+                    = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, incoming_exc_state.size());
+                llvm::PHINode* phi_exc_value
+                    = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, incoming_exc_state.size());
+                llvm::PHINode* phi_exc_tb
+                    = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, incoming_exc_state.size());
+                emitter.setType(phi_exc_type, RefType::OWNED);
+                emitter.setType(phi_exc_value, RefType::OWNED);
+                emitter.setType(phi_exc_tb, RefType::OWNED);
+                for (auto e : this->incoming_exc_state) {
+                    phi_exc_type->addIncoming(e.exc_type->getValue(), e.from_block);
+                    phi_exc_value->addIncoming(e.exc_value->getValue(), e.from_block);
+                    phi_exc_tb->addIncoming(e.exc_tb->getValue(), e.from_block);
+                    emitter.refConsumed(e.exc_type->getValue(), e.from_block->getTerminator());
+                    emitter.refConsumed(e.exc_value->getValue(), e.from_block->getTerminator());
+                    emitter.refConsumed(e.exc_tb->getValue(), e.from_block->getTerminator());
                 }
-
-                // clear this out to signal that we consumed them:
-                this->incoming_exc_state.clear();
-
-                return makeTuple({ exc_type, exc_value, exc_tb });
+                exc_type = new ConcreteCompilerVariable(UNKNOWN, phi_exc_type);
+                exc_value = new ConcreteCompilerVariable(UNKNOWN, phi_exc_value);
+                exc_tb = new ConcreteCompilerVariable(UNKNOWN, phi_exc_tb);
             }
-            case BST_LangPrimitive::LOCALS: {
-                return new ConcreteCompilerVariable(UNKNOWN, irstate->getBoxedLocalsVar());
-            }
-            case BST_LangPrimitive::GET_ITER: {
-                assert(node->args.size() == 1);
-                CompilerVariable* obj = evalExpr(node->args[0], unw_info);
-                auto rtn = obj->getPystonIter(emitter, getOpInfoForNode(node, unw_info));
-                return rtn;
-            }
-            case BST_LangPrimitive::IMPORT_FROM: {
-                assert(node->args.size() == 2);
-                assert(node->args[0]->type == BST_TYPE::Name);
-                assert(node->args[1]->type == BST_TYPE::Str);
+        } else {
+            // There can be no incoming exception if the irgenerator was able to prove that
+            // an exception would not get thrown.
+            // For example, the cfg code will conservatively assume that any name-access can
+            // trigger an exception, but the irgenerator will know that definitely-defined
+            // local symbols will not throw.
+            emitter.getBuilder()->CreateUnreachable();
 
-                CompilerVariable* module = evalExpr(node->args[0], unw_info);
-                ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
+            // Hacky: create a new BB for any more code that we might generate
+            llvm::BasicBlock* continue_bb
+                = llvm::BasicBlock::Create(g.context, "cant_reach", irstate->getLLVMFunction());
+            emitter.setCurrentBasicBlock(continue_bb);
 
-                auto ast_str = bst_cast<BST_Str>(node->args[1]);
-                assert(ast_str->str_type == AST_Str::STR);
-                const std::string& name = ast_str->str_data;
-                assert(name.size());
-
-                llvm::Value* name_arg
-                    = embedRelocatablePtr(irstate->getSourceInfo()->parent_module->getStringConstant(name, true),
-                                          g.llvm_boxedstring_type_ptr);
-                emitter.setType(name_arg, RefType::BORROWED);
-                llvm::Value* r
-                    = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(), name_arg);
-                emitter.setType(r, RefType::OWNED);
-
-                CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r);
-                return v;
-            }
-            case BST_LangPrimitive::IMPORT_STAR: {
-                assert(node->args.size() == 1);
-                assert(node->args[0]->type == BST_TYPE::Name);
-
-                RELEASE_ASSERT(irstate->getSourceInfo()->ast_type == BST_TYPE::Module,
-                               "import * not supported in functions (yet)");
-
-                CompilerVariable* module = evalExpr(node->args[0], unw_info);
-                ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
-
-                llvm::Value* r = emitter.createCall2(unw_info, g.funcs.importStar, converted_module->getValue(),
-                                                     irstate->getGlobals());
-                emitter.setType(r, RefType::OWNED);
-                CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r);
-                return v;
-            }
-            case BST_LangPrimitive::IMPORT_NAME: {
-                assert(node->args.size() == 3);
-                assert(node->args[0]->type == BST_TYPE::Num);
-                assert(static_cast<BST_Num*>(node->args[0])->num_type == AST_Num::INT);
-                assert(node->args[2]->type == BST_TYPE::Str);
-
-                int level = static_cast<BST_Num*>(node->args[0])->n_int;
-
-                // TODO this could be a constant Box* too
-                CompilerVariable* froms = evalExpr(node->args[1], unw_info);
-                ConcreteCompilerVariable* converted_froms = froms->makeConverted(emitter, froms->getBoxType());
-
-                auto ast_str = bst_cast<BST_Str>(node->args[2]);
-                assert(ast_str->str_type == AST_Str::STR);
-                const std::string& module_name = ast_str->str_data;
-
-                llvm::Value* imported = emitter.createCall(
-                    unw_info, g.funcs.import,
-                    { getConstantInt(level, g.i32), converted_froms->getValue(),
-                      emitter.setType(embedRelocatablePtr(module_name.c_str(), g.i8_ptr), RefType::BORROWED),
-                      getConstantInt(module_name.size(), g.i64) });
-                emitter.setType(imported, RefType::OWNED);
-                ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported);
-                return v;
-            }
-            case BST_LangPrimitive::NONE: {
-                return emitter.getNone();
-            }
-            case BST_LangPrimitive::NONZERO: {
-                assert(node->args.size() == 1);
-                CompilerVariable* obj = evalExpr(node->args[0], unw_info);
-
-                CompilerVariable* rtn = obj->nonzero(emitter, getOpInfoForNode(node, unw_info));
-                return rtn;
-            }
-            case BST_LangPrimitive::HASNEXT: {
-                assert(node->args.size() == 1);
-                CompilerVariable* obj = evalExpr(node->args[0], unw_info);
-
-                CompilerVariable* rtn = obj->hasnext(emitter, getOpInfoForNode(node, unw_info));
-                return rtn;
-            }
-            case BST_LangPrimitive::SET_EXC_INFO: {
-                assert(node->args.size() == 3);
-                CompilerVariable* type = evalExpr(node->args[0], unw_info);
-                CompilerVariable* value = evalExpr(node->args[1], unw_info);
-                CompilerVariable* traceback = evalExpr(node->args[2], unw_info);
-
-                auto* builder = emitter.getBuilder();
-
-                llvm::Value* frame_info = irstate->getFrameInfoVar();
-
-                ConcreteCompilerVariable* converted_type = type->makeConverted(emitter, UNKNOWN);
-                ConcreteCompilerVariable* converted_value = value->makeConverted(emitter, UNKNOWN);
-                ConcreteCompilerVariable* converted_traceback = traceback->makeConverted(emitter, UNKNOWN);
-
-                auto inst = emitter.createCall(UnwindInfo::cantUnwind(), g.funcs.setFrameExcInfo,
-                                               { frame_info, converted_type->getValue(), converted_value->getValue(),
-                                                 converted_traceback->getValue() },
-                                               NOEXC);
-                emitter.refConsumed(converted_type->getValue(), inst);
-                emitter.refConsumed(converted_value->getValue(), inst);
-                emitter.refConsumed(converted_traceback->getValue(), inst);
-
-                return emitter.getNone();
-            }
-            case BST_LangPrimitive::UNCACHE_EXC_INFO: {
-                assert(node->args.empty());
-
-                auto* builder = emitter.getBuilder();
-
-                llvm::Value* frame_info = irstate->getFrameInfoVar();
-                llvm::Constant* v = getNullPtr(g.llvm_value_type_ptr);
-                emitter.setType(v, RefType::BORROWED);
-
-                emitter.createCall(UnwindInfo::cantUnwind(), g.funcs.setFrameExcInfo, { frame_info, v, v, v }, NOEXC);
-
-                return emitter.getNone();
-            }
-            case BST_LangPrimitive::PRINT_EXPR: {
-                assert(node->args.size() == 1);
-
-                CompilerVariable* obj = evalExpr(node->args[0], unw_info);
-                ConcreteCompilerVariable* converted = obj->makeConverted(emitter, obj->getBoxType());
-
-                emitter.createCall(unw_info, g.funcs.printExprHelper, converted->getValue());
-
-                return emitter.getNone();
-            }
-            default:
-                RELEASE_ASSERT(0, "%d", node->opcode);
+            exc_type = exc_value = exc_tb = undefVariable();
+            // TODO: we should just call endBlock instead.  It looks like the implementation
+            // of that has some issues though, and it might end up generating code as well.  ANd
+            // then I'm not sure that the higher-level irgen.cpp would handle that well.
+            // endBlock(DEAD);
         }
+
+        // clear this out to signal that we consumed them:
+        this->incoming_exc_state.clear();
+
+        return makeTuple({ exc_type, exc_value, exc_tb });
     }
 
-    CompilerVariable* _evalBinExp(BST* node, CompilerVariable* left, CompilerVariable* right, AST_TYPE::AST_TYPE type,
-                                  BinExpType exp_type, const UnwindInfo& unw_info) {
+    CompilerVariable* evalLocals(BST_Locals* node, const UnwindInfo& unw_info) {
+        return new ConcreteCompilerVariable(UNKNOWN, irstate->getBoxedLocalsVar());
+    }
+
+    CompilerVariable* evalGetIter(BST_GetIter* node, const UnwindInfo& unw_info) {
+        CompilerVariable* obj = evalVReg(node->vreg_value);
+        auto rtn = obj->getPystonIter(emitter, getOpInfoForNode(node, unw_info));
+        return rtn;
+    }
+
+    CompilerVariable* evalImportFrom(BST_ImportFrom* node, const UnwindInfo& unw_info) {
+        CompilerVariable* module = evalVReg(node->vreg_module);
+        ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
+
+        CompilerVariable* name = evalVReg(node->vreg_name);
+        ConcreteCompilerVariable* converted_name = name->makeConverted(emitter, name->getBoxType());
+
+        llvm::Value* r = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(),
+                                             converted_name->getValue());
+        emitter.setType(r, RefType::OWNED);
+
+        CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r);
+        return v;
+    }
+
+    CompilerVariable* evalImportStar(BST_ImportStar* node, const UnwindInfo& unw_info) {
+        RELEASE_ASSERT(irstate->getSourceInfo()->ast_type == AST_TYPE::Module,
+                       "import * not supported in functions (yet)");
+
+        CompilerVariable* module = evalVReg(node->vreg_name);
+        ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
+
+        llvm::Value* r
+            = emitter.createCall2(unw_info, g.funcs.importStar, converted_module->getValue(), irstate->getGlobals());
+        emitter.setType(r, RefType::OWNED);
+        CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r);
+        return v;
+    }
+
+    CompilerVariable* evalImportName(BST_ImportName* node, const UnwindInfo& unw_info) {
+        int level = node->level;
+        CompilerVariable* froms = evalVReg(node->vreg_from);
+        ConcreteCompilerVariable* converted_froms = froms->makeConverted(emitter, froms->getBoxType());
+
+        CompilerVariable* name = evalVReg(node->vreg_name);
+        ConcreteCompilerVariable* converted_name = name->makeConverted(emitter, name->getBoxType());
+
+        llvm::Value* imported
+            = emitter.createCall(unw_info, g.funcs.import, { getConstantInt(level, g.i32), converted_froms->getValue(),
+                                                             converted_name->getValue() });
+        emitter.setType(imported, RefType::OWNED);
+        ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported);
+        return v;
+    }
+
+    CompilerVariable* evalNonzero(BST_Nonzero* node, const UnwindInfo& unw_info) {
+        CompilerVariable* obj = evalVReg(node->vreg_value);
+
+        CompilerVariable* rtn = obj->nonzero(emitter, getOpInfoForNode(node, unw_info));
+        return rtn;
+    }
+
+    CompilerVariable* evalHasNext(BST_HasNext* node, const UnwindInfo& unw_info) {
+        CompilerVariable* obj = evalVReg(node->vreg_value);
+
+        CompilerVariable* rtn = obj->hasnext(emitter, getOpInfoForNode(node, unw_info));
+        return rtn;
+    }
+
+    void doSetExcInfo(BST_SetExcInfo* node, const UnwindInfo& unw_info) {
+        CompilerVariable* type = evalVReg(node->vreg_type);
+        CompilerVariable* value = evalVReg(node->vreg_value);
+        CompilerVariable* traceback = evalVReg(node->vreg_traceback);
+
+        auto* builder = emitter.getBuilder();
+
+        llvm::Value* frame_info = irstate->getFrameInfoVar();
+
+        ConcreteCompilerVariable* converted_type = type->makeConverted(emitter, UNKNOWN);
+        ConcreteCompilerVariable* converted_value = value->makeConverted(emitter, UNKNOWN);
+        ConcreteCompilerVariable* converted_traceback = traceback->makeConverted(emitter, UNKNOWN);
+
+        auto inst = emitter.createCall(
+            UnwindInfo::cantUnwind(), g.funcs.setFrameExcInfo,
+            { frame_info, converted_type->getValue(), converted_value->getValue(), converted_traceback->getValue() },
+            NOEXC);
+        emitter.refConsumed(converted_type->getValue(), inst);
+        emitter.refConsumed(converted_value->getValue(), inst);
+        emitter.refConsumed(converted_traceback->getValue(), inst);
+    }
+
+    void doUncacheExcInfo(BST_UncacheExcInfo* node, const UnwindInfo& unw_info) {
+        auto* builder = emitter.getBuilder();
+
+        llvm::Value* frame_info = irstate->getFrameInfoVar();
+        llvm::Constant* v = getNullPtr(g.llvm_value_type_ptr);
+        emitter.setType(v, RefType::BORROWED);
+
+        emitter.createCall(UnwindInfo::cantUnwind(), g.funcs.setFrameExcInfo, { frame_info, v, v, v }, NOEXC);
+    }
+
+    void doPrintExpr(BST_PrintExpr* node, const UnwindInfo& unw_info) {
+        CompilerVariable* obj = evalVReg(node->vreg_value);
+        ConcreteCompilerVariable* converted = obj->makeConverted(emitter, obj->getBoxType());
+
+        emitter.createCall(unw_info, g.funcs.printExprHelper, converted->getValue());
+    }
+
+    CompilerVariable* _evalBinExp(BST_stmt* node, CompilerVariable* left, CompilerVariable* right,
+                                  AST_TYPE::AST_TYPE type, BinExpType exp_type, const UnwindInfo& unw_info) {
         assert(left);
         assert(right);
 
@@ -1117,36 +1056,35 @@ private:
     }
 
     CompilerVariable* evalBinOp(BST_BinOp* node, const UnwindInfo& unw_info) {
-        CompilerVariable* left = evalExpr(node->left, unw_info);
-        CompilerVariable* right = evalExpr(node->right, unw_info);
+        CompilerVariable* left = evalVReg(node->vreg_left);
+        CompilerVariable* right = evalVReg(node->vreg_right);
 
         assert(node->op_type != AST_TYPE::Is && node->op_type != AST_TYPE::IsNot && "not tested yet");
 
-        CompilerVariable* rtn = this->_evalBinExp(node, left, right, node->op_type, BinOp, unw_info);
-        return rtn;
+        return this->_evalBinExp(node, left, right, node->op_type, BinOp, unw_info);
     }
 
     CompilerVariable* evalAugBinOp(BST_AugBinOp* node, const UnwindInfo& unw_info) {
-        CompilerVariable* left = evalExpr(node->left, unw_info);
-        CompilerVariable* right = evalExpr(node->right, unw_info);
+        CompilerVariable* left = evalVReg(node->vreg_left);
+        CompilerVariable* right = evalVReg(node->vreg_right);
 
         assert(node->op_type != AST_TYPE::Is && node->op_type != AST_TYPE::IsNot && "not tested yet");
 
-        CompilerVariable* rtn = this->_evalBinExp(node, left, right, node->op_type, AugBinOp, unw_info);
-        return rtn;
+        return this->_evalBinExp(node, left, right, node->op_type, AugBinOp, unw_info);
     }
 
     CompilerVariable* evalCompare(BST_Compare* node, const UnwindInfo& unw_info) {
-        CompilerVariable* left = evalExpr(node->left, unw_info);
-        CompilerVariable* right = evalExpr(node->comparator, unw_info);
+        CompilerVariable* left = evalVReg(node->vreg_left);
+        CompilerVariable* right = evalVReg(node->vreg_comparator);
 
         assert(left);
         assert(right);
 
+        CompilerVariable* rtn = NULL;
         if (node->op == AST_TYPE::Is || node->op == AST_TYPE::IsNot)
-            return doIs(emitter, left, right, node->op == AST_TYPE::IsNot);
-
-        CompilerVariable* rtn = _evalBinExp(node, left, right, node->op, Compare, unw_info);
+            rtn = doIs(emitter, left, right, node->op == AST_TYPE::IsNot);
+        else
+            rtn = _evalBinExp(node, left, right, node->op, Compare, unw_info);
         return rtn;
     }
 
@@ -1155,45 +1093,45 @@ private:
         bool callattr_clsonly = false;
         InternedString attr;
         CompilerVariable* func;
-        if (node->func->type == BST_TYPE::Attribute) {
+        int* vreg_elts = NULL;
+        if (node->type == BST_TYPE::CallAttr) {
             is_callattr = true;
             callattr_clsonly = false;
-            BST_Attribute* attr_ast = bst_cast<BST_Attribute>(node->func);
-            func = evalExpr(attr_ast->value, unw_info);
+            auto* attr_ast = bst_cast<BST_CallAttr>(node);
+            vreg_elts = bst_cast<BST_CallAttr>(node)->elts;
+            func = evalVReg(attr_ast->vreg_value);
             attr = attr_ast->attr;
-        } else if (node->func->type == BST_TYPE::ClsAttribute) {
+        } else if (node->type == BST_TYPE::CallClsAttr) {
             is_callattr = true;
             callattr_clsonly = true;
-            BST_ClsAttribute* attr_ast = bst_cast<BST_ClsAttribute>(node->func);
-            func = evalExpr(attr_ast->value, unw_info);
+            auto* attr_ast = bst_cast<BST_CallClsAttr>(node);
+            vreg_elts = bst_cast<BST_CallClsAttr>(node)->elts;
+            func = evalVReg(attr_ast->vreg_value);
             attr = attr_ast->attr;
         } else {
             is_callattr = false;
-            func = evalExpr(node->func, unw_info);
+            auto* attr_ast = bst_cast<BST_CallFunc>(node);
+            vreg_elts = bst_cast<BST_CallFunc>(node)->elts;
+            func = evalVReg(attr_ast->vreg_func);
         }
 
         std::vector<CompilerVariable*> args;
         std::vector<BoxedString*>* keyword_names = NULL;
-        if (node->keywords.size())
-            keyword_names = getKeywordNameStorage(node);
+        if (node->num_keywords)
+            keyword_names = node->keywords_names.get();
 
-        for (int i = 0; i < node->args.size(); i++) {
-            CompilerVariable* a = evalExpr(node->args[i], unw_info);
+        for (int i = 0; i < node->num_args + node->num_keywords; i++) {
+            CompilerVariable* a = evalVReg(vreg_elts[i]);
             args.push_back(a);
         }
 
-        for (int i = 0; i < node->keywords.size(); i++) {
-            CompilerVariable* a = evalExpr(node->keywords[i]->value, unw_info);
-            args.push_back(a);
-        }
+        if (node->vreg_starargs != VREG_UNDEFINED)
+            args.push_back(evalVReg(node->vreg_starargs));
+        if (node->vreg_kwargs != VREG_UNDEFINED)
+            args.push_back(evalVReg(node->vreg_kwargs));
 
-        if (node->starargs)
-            args.push_back(evalExpr(node->starargs, unw_info));
-        if (node->kwargs)
-            args.push_back(evalExpr(node->kwargs, unw_info));
-
-        struct ArgPassSpec argspec(node->args.size(), node->keywords.size(), node->starargs != NULL,
-                                   node->kwargs != NULL);
+        struct ArgPassSpec argspec(node->num_args, node->num_keywords, node->vreg_starargs != VREG_UNDEFINED,
+                                   node->vreg_kwargs != VREG_UNDEFINED);
 
 
         // if (VERBOSITY("irgen") >= 1)
@@ -1213,24 +1151,7 @@ private:
     CompilerVariable* evalDict(BST_Dict* node, const UnwindInfo& unw_info) {
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
         emitter.setType(v, RefType::OWNED);
-        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v);
-        if (node->keys.size()) {
-            static BoxedString* setitem_str = getStaticString("__setitem__");
-            CompilerVariable* setitem = rtn->getattr(emitter, getEmptyOpInfo(unw_info), setitem_str, true);
-            for (int i = 0; i < node->keys.size(); i++) {
-                CompilerVariable* value = evalExpr(node->values[i], unw_info);
-                CompilerVariable* key = evalExpr(node->keys[i], unw_info);
-                assert(key);
-                assert(value);
-
-                std::vector<CompilerVariable*> args;
-                args.push_back(key);
-                args.push_back(value);
-                // TODO should use callattr
-                CompilerVariable* rtn = setitem->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(2), args, NULL);
-            }
-        }
-        return rtn;
+        return new ConcreteCompilerVariable(DICT, v);
     }
 
     void _addAnnotation(const char* message) {
@@ -1241,13 +1162,10 @@ private:
         inst->setMetadata(message, mdnode);
     }
 
-    CompilerVariable* evalIndex(BST_Index* node, const UnwindInfo& unw_info) { return evalExpr(node->value, unw_info); }
-
-
     CompilerVariable* evalList(BST_List* node, const UnwindInfo& unw_info) {
         std::vector<CompilerVariable*> elts;
-        for (int i = 0; i < node->elts.size(); i++) {
-            CompilerVariable* value = evalExpr(node->elts[i], unw_info);
+        for (int i = 0; i < node->num_elts; i++) {
+            CompilerVariable* value = evalVReg(node->elts[i]);
             elts.push_back(value);
         }
 
@@ -1260,7 +1178,7 @@ private:
             v, *llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(f->getType())->getElementType())
                     ->param_begin());
 
-        for (int i = 0; i < node->elts.size(); i++) {
+        for (int i = 0; i < node->num_elts; i++) {
             CompilerVariable* elt = elts[i];
             ConcreteCompilerVariable* converted = elt->makeConverted(emitter, elt->getBoxType());
 
@@ -1276,7 +1194,7 @@ private:
         return new ConcreteCompilerVariable(typeFromClass(ellipsis_cls), ellipsis);
     }
 
-    ConcreteCompilerVariable* _getGlobal(BST_Name* node, const UnwindInfo& unw_info) {
+    ConcreteCompilerVariable* _getGlobal(BST_LoadName* node, const UnwindInfo& unw_info) {
         if (node->id.s() == "None")
             return emitter.getNone();
 
@@ -1304,19 +1222,52 @@ private:
         }
     }
 
-    CompilerVariable* evalName(BST_Name* node, const UnwindInfo& unw_info) {
-        auto&& scope_info = irstate->getScopeInfo();
+    CompilerVariable* evalVReg(int vreg, bool is_kill = true) {
+        assert(vreg != VREG_UNDEFINED);
+        if (vreg < 0) {
+            Box* o = irstate->getCode()->constant_vregs.getConstant(vreg);
+            if (o->cls == int_cls) {
+                return makeInt(((BoxedInt*)o)->n);
+            } else if (o->cls == float_cls) {
+                return makeFloat(((BoxedFloat*)o)->d);
+            } else if (o->cls == complex_cls) {
+                return makePureImaginary(emitter, o);
+            } else if (o->cls == long_cls) {
+                return makeLong(emitter, o);
+            } else if (o->cls == str_cls) {
+                llvm::Value* rtn = embedRelocatablePtr(o, g.llvm_value_type_ptr);
+                emitter.setType(rtn, RefType::BORROWED);
+                return new ConcreteCompilerVariable(STR, rtn);
+            } else if (o->cls == unicode_cls) {
+                llvm::Value* rtn = embedRelocatablePtr(o, g.llvm_value_type_ptr);
+                emitter.setType(rtn, RefType::BORROWED);
+                return new ConcreteCompilerVariable(typeFromClass(unicode_cls), rtn);
+            } else if (o->cls == none_cls) {
+                return emitter.getNone();
+            } else if (o->cls == ellipsis_cls) {
+                return getEllipsis();
+            } else {
+                RELEASE_ASSERT(0, "");
+            }
+        }
+        CompilerVariable* rtn = symbol_table[vreg];
+        if (is_kill) {
+            symbol_table[vreg] = NULL;
+            popDefinedVar(vreg, true /* allow_missing */);
+        }
+        return rtn;
+    }
 
-        bool is_kill = irstate->getLiveness()->isKill(node, myblock);
-        assert(!is_kill || node->id.s()[0] == '#');
+
+    CompilerVariable* evalLoadName(BST_LoadName* node, const UnwindInfo& unw_info) {
+        // LoadName is never a kill
+        auto&& scope_info = irstate->getScopeInfo();
 
         ScopeInfo::VarScopeType vst = node->lookup_type;
         assert(vst != ScopeInfo::VarScopeType::UNKNOWN);
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-            assert(!is_kill);
             return _getGlobal(node, unw_info);
         } else if (vst == ScopeInfo::VarScopeType::DEREF) {
-            assert(!is_kill);
             assert(scope_info.takesClosure());
 
             // This is the information on how to look up the variable in the closure object.
@@ -1376,6 +1327,7 @@ private:
             return new ConcreteCompilerVariable(UNKNOWN, r);
         } else {
             // vst is one of {FAST, CLOSURE}
+            assert(node->vreg >= 0);
             if (!symbol_table[node->vreg]) {
                 // TODO should mark as DEAD here, though we won't end up setting all the names appropriately
                 // state = DEAD;
@@ -1402,29 +1354,12 @@ private:
             }
 
             CompilerVariable* rtn = symbol_table[node->vreg];
-            if (is_kill)
-                symbol_table[node->vreg] = NULL;
             return rtn;
         }
     }
 
-    CompilerVariable* evalNum(BST_Num* node, const UnwindInfo& unw_info) {
-        // We can operate on ints and floats unboxed, so don't box those at first;
-        // complex and long's have to get boxed so box them immediately.
-        if (node->num_type == AST_Num::INT) {
-            return makeInt(node->n_int);
-        } else if (node->num_type == AST_Num::FLOAT) {
-            return makeFloat(node->n_float);
-        } else if (node->num_type == AST_Num::COMPLEX) {
-            return makePureImaginary(emitter,
-                                     irstate->getSourceInfo()->parent_module->getPureImaginaryConstant(node->n_float));
-        } else {
-            return makeLong(emitter, irstate->getSourceInfo()->parent_module->getLongConstant(node->n_long));
-        }
-    }
-
     CompilerVariable* evalRepr(BST_Repr* node, const UnwindInfo& unw_info) {
-        CompilerVariable* var = evalExpr(node->value, unw_info);
+        CompilerVariable* var = evalVReg(node->vreg_value);
         ConcreteCompilerVariable* cvar = var->makeConverted(emitter, var->getBoxType());
 
         std::vector<llvm::Value*> args{ cvar->getValue() };
@@ -1438,8 +1373,8 @@ private:
 
     CompilerVariable* evalSet(BST_Set* node, const UnwindInfo& unw_info) {
         std::vector<CompilerVariable*> elts;
-        for (int i = 0; i < node->elts.size(); i++) {
-            CompilerVariable* value = evalExpr(node->elts[i], unw_info);
+        for (int i = 0; i < node->num_elts; i++) {
+            CompilerVariable* value = evalVReg(node->elts[i]);
             elts.push_back(value);
         }
 
@@ -1461,55 +1396,43 @@ private:
         return rtn;
     }
 
-    CompilerVariable* evalSlice(BST_Slice* node, const UnwindInfo& unw_info) {
+    CompilerVariable* evalMakeSlice(BST_MakeSlice* node, const UnwindInfo& unw_info) {
         CompilerVariable* start, *stop, *step;
-        start = node->lower ? evalExpr(node->lower, unw_info) : NULL;
-        stop = node->upper ? evalExpr(node->upper, unw_info) : NULL;
-        step = node->step ? evalExpr(node->step, unw_info) : NULL;
+        start = node->vreg_lower != VREG_UNDEFINED ? evalVReg(node->vreg_lower) : NULL;
+        stop = node->vreg_upper != VREG_UNDEFINED ? evalVReg(node->vreg_upper) : NULL;
+        step = node->vreg_step != VREG_UNDEFINED ? evalVReg(node->vreg_step) : NULL;
 
         return makeSlice(start, stop, step);
     }
 
-    CompilerVariable* evalExtSlice(BST_ExtSlice* node, const UnwindInfo& unw_info) {
-        std::vector<CompilerVariable*> elts;
-        for (auto* e : node->dims) {
-            elts.push_back(evalSlice(e, unw_info));
-        }
 
-        CompilerVariable* rtn = makeTuple(elts);
+    CompilerVariable* evalLoadAttr(BST_LoadAttr* node, const UnwindInfo& unw_info) {
+        CompilerVariable* value = evalVReg(node->vreg_value);
+        CompilerVariable* rtn
+            = value->getattr(emitter, getOpInfoForNode(node, unw_info), node->attr.getBox(), node->clsonly);
         return rtn;
     }
 
-    CompilerVariable* evalStr(BST_Str* node, const UnwindInfo& unw_info) {
-        if (node->str_type == AST_Str::STR) {
-            llvm::Value* rtn
-                = embedRelocatablePtr(irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data, true),
-                                      g.llvm_value_type_ptr);
-            emitter.setType(rtn, RefType::BORROWED);
-
-            return new ConcreteCompilerVariable(STR, rtn);
-        } else if (node->str_type == AST_Str::UNICODE) {
-            llvm::Value* rtn = embedRelocatablePtr(
-                irstate->getSourceInfo()->parent_module->getUnicodeConstant(node->str_data), g.llvm_value_type_ptr);
-            emitter.setType(rtn, RefType::BORROWED);
-
-            return new ConcreteCompilerVariable(typeFromClass(unicode_cls), rtn);
-        } else {
-            RELEASE_ASSERT(0, "%d", node->str_type);
-        }
+    CompilerVariable* evalLoadSub(BST_LoadSub* node, const UnwindInfo& unw_info) {
+        CompilerVariable* value = evalVReg(node->vreg_value);
+        CompilerVariable* slice = evalVReg(node->vreg_slice);
+        CompilerVariable* rtn = value->getitem(emitter, getOpInfoForNode(node, unw_info), slice);
+        return rtn;
     }
 
-    CompilerVariable* evalSubscript(BST_Subscript* node, const UnwindInfo& unw_info) {
-        CompilerVariable* value = evalExpr(node->value, unw_info);
-        CompilerVariable* slice = evalSlice(node->slice, unw_info);
+    CompilerVariable* evalLoadSubSlice(BST_LoadSubSlice* node, const UnwindInfo& unw_info) {
+        CompilerVariable* value = evalVReg(node->vreg_value);
+        CompilerVariable* lower = node->vreg_lower != VREG_UNDEFINED ? evalVReg(node->vreg_lower) : NULL;
+        CompilerVariable* upper = node->vreg_upper != VREG_UNDEFINED ? evalVReg(node->vreg_upper) : NULL;
+        CompilerVariable* slice = makeSlice(lower, upper, NULL);
         CompilerVariable* rtn = value->getitem(emitter, getOpInfoForNode(node, unw_info), slice);
         return rtn;
     }
 
     CompilerVariable* evalTuple(BST_Tuple* node, const UnwindInfo& unw_info) {
         std::vector<CompilerVariable*> elts;
-        for (int i = 0; i < node->elts.size(); i++) {
-            CompilerVariable* value = evalExpr(node->elts[i], unw_info);
+        for (int i = 0; i < node->num_elts; i++) {
+            CompilerVariable* value = evalVReg(node->elts[i]);
             elts.push_back(value);
         }
 
@@ -1518,7 +1441,7 @@ private:
     }
 
     CompilerVariable* evalUnaryOp(BST_UnaryOp* node, const UnwindInfo& unw_info) {
-        CompilerVariable* operand = evalExpr(node->operand, unw_info);
+        CompilerVariable* operand = evalVReg(node->vreg_operand);
 
         if (node->op_type == AST_TYPE::Not) {
             CompilerVariable* rtn = operand->nonzero(emitter, getOpInfoForNode(node, unw_info));
@@ -1536,7 +1459,7 @@ private:
     }
 
     CompilerVariable* evalYield(BST_Yield* node, const UnwindInfo& unw_info) {
-        CompilerVariable* value = node->value ? evalExpr(node->value, unw_info) : emitter.getNone();
+        CompilerVariable* value = node->vreg_value != VREG_UNDEFINED ? evalVReg(node->vreg_value) : emitter.getNone();
         ConcreteCompilerVariable* convertedValue = value->makeConverted(emitter, value->getBoxType());
 
         std::vector<llvm::Value*> args;
@@ -1564,19 +1487,12 @@ private:
         assert(mkclass->type == BST_TYPE::MakeClass && mkclass->class_def->type == BST_TYPE::ClassDef);
         BST_ClassDef* node = mkclass->class_def;
 
-
-        std::vector<CompilerVariable*> bases;
-        for (auto b : node->bases) {
-            CompilerVariable* base = evalExpr(b, unw_info);
-            bases.push_back(base);
-        }
-
-        CompilerVariable* _bases_tuple = makeTuple(bases);
+        CompilerVariable* _bases_tuple = evalVReg(node->vreg_bases_tuple);
         ConcreteCompilerVariable* bases_tuple = _bases_tuple->makeConverted(emitter, _bases_tuple->getBoxType());
 
         std::vector<CompilerVariable*> decorators;
-        for (auto d : node->decorator_list) {
-            decorators.push_back(evalExpr(d, unw_info));
+        for (int i = 0; i < node->num_decorator; ++i) {
+            decorators.push_back(evalVReg(node->decorator[i]));
         }
 
         BoxedCode* code = node->code;
@@ -1622,13 +1538,13 @@ private:
         return cls;
     }
 
-    CompilerVariable* _createFunction(BST_FunctionDef* node, const UnwindInfo& unw_info, BST_arguments* args) {
+    CompilerVariable* _createFunction(BST_FunctionDef* node, const UnwindInfo& unw_info) {
         BoxedCode* code = node->code;
         assert(code);
 
         std::vector<ConcreteCompilerVariable*> defaults;
-        for (auto d : args->defaults) {
-            CompilerVariable* e = evalExpr(d, unw_info);
+        for (int i = 0; i < node->num_defaults; ++i) {
+            CompilerVariable* e = evalVReg(node->elts[node->num_decorator + i]);
             ConcreteCompilerVariable* converted = e->makeConverted(emitter, e->getBoxType());
             defaults.push_back(converted);
         }
@@ -1654,11 +1570,11 @@ private:
     CompilerVariable* evalMakeFunction(BST_MakeFunction* mkfn, const UnwindInfo& unw_info) {
         BST_FunctionDef* node = mkfn->function_def;
         std::vector<CompilerVariable*> decorators;
-        for (auto d : node->decorator_list) {
-            decorators.push_back(evalExpr(d, unw_info));
+        for (int i = 0; i < node->num_decorator; ++i) {
+            decorators.push_back(evalVReg(node->elts[i]));
         }
 
-        CompilerVariable* func = _createFunction(node, unw_info, node->args);
+        CompilerVariable* func = _createFunction(node, unw_info);
 
         for (int i = decorators.size() - 1; i >= 0; i--) {
             func = decorators[i]->call(emitter, getOpInfoForNode(node, unw_info), ArgPassSpec(1), { func }, NULL);
@@ -1696,7 +1612,7 @@ private:
                 printf("Speculating that %s is actually %s, at ", rtn->getType()->debugName().c_str(),
                        speculated_type->debugName().c_str());
                 fflush(stdout);
-                print_bst(node);
+                print_bst(node, irstate->getCode()->constant_vregs);
                 llvm::outs().flush();
                 printf("\n");
             }
@@ -1708,7 +1624,7 @@ private:
                 auto source = irstate->getSourceInfo();
                 printf("On %s:%d, function %s:\n", irstate->getCode()->filename->c_str(),
                        irstate->getCode()->firstlineno, irstate->getCode()->name->c_str());
-                irstate->getSourceInfo()->cfg->print();
+                irstate->getSourceInfo()->cfg->print(irstate->getCode()->constant_vregs);
             }
             RELEASE_ASSERT(!rtn->canConvertTo(speculated_type), "%s %s", rtn->getType()->debugName().c_str(),
                            speculated_type->debugName().c_str());
@@ -1718,7 +1634,7 @@ private:
 
             llvm::Value* guard_check = old_rtn->makeClassCheck(emitter, speculated_class);
             assert(guard_check->getType() == g.i1);
-            createExprTypeGuard(guard_check, node, old_rtn->getValue(), unw_info.current_stmt);
+            createExprTypeGuard(guard_check, old_rtn->getValue(), unw_info.current_stmt);
 
             rtn = unboxVar(speculated_type, old_rtn->getValue());
         }
@@ -1729,113 +1645,8 @@ private:
         return rtn;
     }
 
-    CompilerVariable* evalSlice(BST_slice* node, const UnwindInfo& unw_info) {
-        // printf("%d expr: %d\n", node->type, node->lineno);
-        if (node->lineno) {
-            emitter.getBuilder()->SetCurrentDebugLocation(
-                llvm::DebugLoc::get(node->lineno, 0, irstate->getFuncDbgInfo()));
-        }
-
-        CompilerVariable* rtn = NULL;
-        switch (node->type) {
-            case BST_TYPE::ExtSlice:
-                rtn = evalExtSlice(bst_cast<BST_ExtSlice>(node), unw_info);
-                break;
-            case BST_TYPE::Ellipsis:
-                rtn = getEllipsis();
-                break;
-            case BST_TYPE::Index:
-                rtn = evalIndex(bst_cast<BST_Index>(node), unw_info);
-                break;
-            case BST_TYPE::Slice:
-                rtn = evalSlice(bst_cast<BST_Slice>(node), unw_info);
-                break;
-            default:
-                printf("Unhandled slice type: %d (irgenerator.cpp:" STRINGIFY(__LINE__) ")\n", node->type);
-                exit(1);
-        }
-        return evalSliceExprPost(node, unw_info, rtn);
-    }
-
-    CompilerVariable* evalExpr(BST_expr* node, const UnwindInfo& unw_info) {
-        // printf("%d expr: %d\n", node->type, node->lineno);
-        if (node->lineno) {
-            emitter.getBuilder()->SetCurrentDebugLocation(
-                llvm::DebugLoc::get(node->lineno, 0, irstate->getFuncDbgInfo()));
-        }
-
-        CompilerVariable* rtn = NULL;
-        switch (node->type) {
-            case BST_TYPE::Attribute:
-                rtn = evalAttribute(bst_cast<BST_Attribute>(node), unw_info);
-                break;
-            case BST_TYPE::AugBinOp:
-                rtn = evalAugBinOp(bst_cast<BST_AugBinOp>(node), unw_info);
-                break;
-            case BST_TYPE::BinOp:
-                rtn = evalBinOp(bst_cast<BST_BinOp>(node), unw_info);
-                break;
-            case BST_TYPE::Call:
-                rtn = evalCall(bst_cast<BST_Call>(node), unw_info);
-                break;
-            case BST_TYPE::Compare:
-                rtn = evalCompare(bst_cast<BST_Compare>(node), unw_info);
-                break;
-            case BST_TYPE::Dict:
-                rtn = evalDict(bst_cast<BST_Dict>(node), unw_info);
-                break;
-            case BST_TYPE::List:
-                rtn = evalList(bst_cast<BST_List>(node), unw_info);
-                break;
-            case BST_TYPE::Name:
-                rtn = evalName(bst_cast<BST_Name>(node), unw_info);
-                break;
-            case BST_TYPE::Num:
-                rtn = evalNum(bst_cast<BST_Num>(node), unw_info);
-                break;
-            case BST_TYPE::Repr:
-                rtn = evalRepr(bst_cast<BST_Repr>(node), unw_info);
-                break;
-            case BST_TYPE::Set:
-                rtn = evalSet(bst_cast<BST_Set>(node), unw_info);
-                break;
-            case BST_TYPE::Str:
-                rtn = evalStr(bst_cast<BST_Str>(node), unw_info);
-                break;
-            case BST_TYPE::Subscript:
-                rtn = evalSubscript(bst_cast<BST_Subscript>(node), unw_info);
-                break;
-            case BST_TYPE::Tuple:
-                rtn = evalTuple(bst_cast<BST_Tuple>(node), unw_info);
-                break;
-            case BST_TYPE::UnaryOp:
-                rtn = evalUnaryOp(bst_cast<BST_UnaryOp>(node), unw_info);
-                break;
-            case BST_TYPE::Yield:
-                rtn = evalYield(bst_cast<BST_Yield>(node), unw_info);
-                break;
-
-            // pseudo-nodes
-            case BST_TYPE::ClsAttribute:
-                rtn = evalClsAttribute(bst_cast<BST_ClsAttribute>(node), unw_info);
-                break;
-            case BST_TYPE::LangPrimitive:
-                rtn = evalLangPrimitive(bst_cast<BST_LangPrimitive>(node), unw_info);
-                break;
-            case BST_TYPE::MakeClass:
-                rtn = evalMakeClass(bst_cast<BST_MakeClass>(node), unw_info);
-                break;
-            case BST_TYPE::MakeFunction:
-                rtn = evalMakeFunction(bst_cast<BST_MakeFunction>(node), unw_info);
-                break;
-            default:
-                printf("Unhandled expr type: %d (irgenerator.cpp:" STRINGIFY(__LINE__) ")\n", node->type);
-                exit(1);
-        }
-        return evalSliceExprPost(node, unw_info, rtn);
-    }
-
     void setDefinedVar(int vreg, llvm::Value* val) {
+        assert(vreg >= 0);
         // printf("Setting definedness var for %s\n", name.c_str());
         assert(val->getType() == BOOL->llvmType());
         llvm::Value*& cur = definedness_vars[vreg];
@@ -1844,6 +1655,7 @@ private:
     }
 
     llvm::Value* getDefinedVar(int vreg, bool allow_missing = false) {
+        assert(vreg >= 0);
         auto r = definedness_vars[vreg];
         if (!r)
             assert(allow_missing);
@@ -1851,6 +1663,7 @@ private:
     }
 
     llvm::Value* popDefinedVar(int vreg, bool allow_missing = false) {
+        assert(vreg >= 0);
         llvm::Value* rtn = getDefinedVar(vreg, allow_missing);
         definedness_vars[vreg] = NULL;
         if (!allow_missing)
@@ -1925,7 +1738,7 @@ private:
             bool maybe_was_undefined = popDefinedVar(vreg, true);
 
             if (vst == ScopeInfo::VarScopeType::CLOSURE) {
-                size_t offset = irstate->getScopeInfo().getClosureOffset(node);
+                size_t offset = node->closure_offset;
 
                 // This is basically `closure->elts[offset] = val;`
                 llvm::Value* gep = getClosureElementGep(emitter, irstate->getCreatedClosure(), offset);
@@ -1945,8 +1758,74 @@ private:
         }
     }
 
-    void _doSetattr(BST_Attribute* target, CompilerVariable* val, const UnwindInfo& unw_info) {
-        CompilerVariable* t = evalExpr(target->value, unw_info);
+    void doStoreName(BST_StoreName* node, const UnwindInfo& unw_info) {
+        CompilerVariable* val = evalVReg(node->vreg_value);
+
+        assert(node->id.s() != "None");
+        assert(node->id.s() != FRAME_INFO_PTR_NAME);
+        assert(val->getType()->isUsable());
+
+        auto vst = node->lookup_type;
+        assert(vst != ScopeInfo::VarScopeType::UNKNOWN);
+        assert(vst != ScopeInfo::VarScopeType::DEREF);
+
+        auto name = node->id;
+        auto vreg = node->vreg;
+
+        if (vst == ScopeInfo::VarScopeType::GLOBAL) {
+            if (irstate->getSourceInfo()->scoping.areGlobalsFromModule()) {
+                auto parent_module = irstate->getGlobals();
+                ConcreteCompilerVariable* module = new ConcreteCompilerVariable(MODULE, parent_module);
+                module->setattr(emitter, getEmptyOpInfo(unw_info), name.getBox(), val);
+            } else {
+                auto converted = val->makeConverted(emitter, val->getBoxType());
+                auto cs = emitter.createCall3(
+                    unw_info, g.funcs.setGlobal, irstate->getGlobals(),
+                    emitter.setType(embedRelocatablePtr(name.getBox(), g.llvm_boxedstring_type_ptr), RefType::BORROWED),
+                    converted->getValue());
+                emitter.refConsumed(converted->getValue(), cs);
+            }
+        } else if (vst == ScopeInfo::VarScopeType::NAME) {
+            // TODO inefficient
+            llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
+            llvm::Value* attr = embedRelocatablePtr(name.getBox(), g.llvm_boxedstring_type_ptr);
+            emitter.setType(attr, RefType::BORROWED);
+            emitter.createCall3(unw_info, g.funcs.boxedLocalsSet, boxedLocals, attr,
+                                val->makeConverted(emitter, UNKNOWN)->getValue());
+        } else {
+            // FAST or CLOSURE
+
+            CompilerVariable* prev = symbol_table[vreg];
+            symbol_table[vreg] = val;
+
+            // Clear out the is_defined name since it is now definitely defined:
+            assert(!isIsDefinedName(name.s()));
+            bool maybe_was_undefined = popDefinedVar(vreg, true);
+
+            if (vst == ScopeInfo::VarScopeType::CLOSURE) {
+                size_t offset = node->closure_offset;
+
+                // This is basically `closure->elts[offset] = val;`
+                llvm::Value* gep = getClosureElementGep(emitter, irstate->getCreatedClosure(), offset);
+                if (prev) {
+                    auto load = emitter.getBuilder()->CreateLoad(gep);
+                    emitter.setType(load, RefType::OWNED);
+                    if (maybe_was_undefined)
+                        emitter.setNullable(load, true);
+                }
+                llvm::Value* v = val->makeConverted(emitter, UNKNOWN)->getValue();
+                auto store = emitter.getBuilder()->CreateStore(v, gep);
+                emitter.refConsumed(v, store);
+            }
+
+            auto&& get_llvm_val = [&]() { return val->makeConverted(emitter, UNKNOWN)->getValue(); };
+            _setVRegIfUserVisible(vreg, get_llvm_val, prev, maybe_was_undefined);
+        }
+    }
+
+    void doStoreAttr(BST_StoreAttr* target, const UnwindInfo& unw_info) {
+        CompilerVariable* val = evalVReg(target->vreg_value);
+        CompilerVariable* t = evalVReg(target->vreg_target);
         t->setattr(emitter, getEmptyOpInfo(unw_info), target->attr.getBox(), val);
     }
 
@@ -1974,84 +1853,79 @@ private:
         }
     }
 
-    void _doSetitem(BST_Subscript* target, CompilerVariable* val, const UnwindInfo& unw_info) {
-        CompilerVariable* tget = evalExpr(target->value, unw_info);
+    void doStoreSub(BST_StoreSub* target, const UnwindInfo& unw_info) {
+        CompilerVariable* val = evalVReg(target->vreg_value);
+        CompilerVariable* tget = evalVReg(target->vreg_target);
 
-        CompilerVariable* slice = evalSlice(target->slice, unw_info);
+        CompilerVariable* slice = evalVReg(target->vreg_slice);
         ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
         ConcreteCompilerVariable* converted_val = val->makeConverted(emitter, val->getBoxType());
 
-        if (slice->getType() == UNBOXED_SLICE && !extractSlice(slice).step) {
-            _assignSlice(converted_target->getValue(), converted_val->getValue(), extractSlice(slice), unw_info);
+        assert(!(slice->getType() == UNBOXED_SLICE && !extractSlice(slice).step));
+        ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
+
+        // TODO add a CompilerVariable::setattr, which can (similar to getitem)
+        // statically-resolve the function if possible, and only fall back to
+        // patchpoints if it couldn't.
+        bool do_patchpoint = ENABLE_ICSETITEMS;
+        if (do_patchpoint) {
+            auto pp = createSetitemIC();
+
+            std::vector<llvm::Value*> llvm_args;
+            llvm_args.push_back(converted_target->getValue());
+            llvm_args.push_back(converted_slice->getValue());
+            llvm_args.push_back(converted_val->getValue());
+
+            emitter.createIC(std::move(pp), (void*)pyston::setitem, llvm_args, unw_info);
         } else {
-            ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
-
-            // TODO add a CompilerVariable::setattr, which can (similar to getitem)
-            // statically-resolve the function if possible, and only fall back to
-            // patchpoints if it couldn't.
-            bool do_patchpoint = ENABLE_ICSETITEMS;
-            if (do_patchpoint) {
-                auto pp = createSetitemIC();
-
-                std::vector<llvm::Value*> llvm_args;
-                llvm_args.push_back(converted_target->getValue());
-                llvm_args.push_back(converted_slice->getValue());
-                llvm_args.push_back(converted_val->getValue());
-
-                emitter.createIC(std::move(pp), (void*)pyston::setitem, llvm_args, unw_info);
-            } else {
-                emitter.createCall3(unw_info, g.funcs.setitem, converted_target->getValue(),
-                                    converted_slice->getValue(), converted_val->getValue());
-            }
+            emitter.createCall3(unw_info, g.funcs.setitem, converted_target->getValue(), converted_slice->getValue(),
+                                converted_val->getValue());
         }
     }
 
-    void _doUnpackTuple(BST_Tuple* target, CompilerVariable* val, const UnwindInfo& unw_info) {
-        int ntargets = target->elts.size();
+    void doStoreSubSlice(BST_StoreSubSlice* target, const UnwindInfo& unw_info) {
+        CompilerVariable* val = evalVReg(target->vreg_value);
+        CompilerVariable* tget = evalVReg(target->vreg_target);
 
+        CompilerVariable* lower = target->vreg_lower != VREG_UNDEFINED ? evalVReg(target->vreg_lower) : NULL;
+        CompilerVariable* upper = target->vreg_upper != VREG_UNDEFINED ? evalVReg(target->vreg_upper) : NULL;
+        CompilerVariable* slice = makeSlice(lower, upper, NULL);
+        ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
+        ConcreteCompilerVariable* converted_val = val->makeConverted(emitter, val->getBoxType());
+
+        _assignSlice(converted_target->getValue(), converted_val->getValue(), extractSlice(slice), unw_info);
+    }
+
+    void doUnpackIntoArray(BST_UnpackIntoArray* target, const UnwindInfo& unw_info) {
+        int ntargets = target->num_elts;
+
+        CompilerVariable* val = evalVReg(target->vreg_src);
         std::vector<CompilerVariable*> unpacked = val->unpack(emitter, getOpInfoForNode(target, unw_info), ntargets);
-
-#ifndef NDEBUG
-        for (auto e : target->elts) {
-            ASSERT(e->type == BST_TYPE::Name && bst_cast<BST_Name>(e)->id.s()[0] == '#',
-                   "should only be unpacking tuples into cfg-generated names!");
-        }
-#endif
 
         for (int i = 0; i < ntargets; i++) {
             CompilerVariable* thisval = unpacked[i];
-            _doSet(target->elts[i], thisval, unw_info);
+            _doSet(target->vreg_dst[i], thisval, unw_info);
         }
     }
 
-    void _doSet(BST* target, CompilerVariable* val, const UnwindInfo& unw_info) {
-        switch (target->type) {
-            case BST_TYPE::Attribute:
-                _doSetattr(bst_cast<BST_Attribute>(target), val, unw_info);
-                break;
-            case BST_TYPE::Name:
-                _doSet(bst_cast<BST_Name>(target), val, unw_info);
-                break;
-            case BST_TYPE::Subscript:
-                _doSetitem(bst_cast<BST_Subscript>(target), val, unw_info);
-                break;
-            case BST_TYPE::Tuple:
-                _doUnpackTuple(bst_cast<BST_Tuple>(target), val, unw_info);
-                break;
-            default:
-                ASSERT(0, "Unknown type for IRGenerator: %d", target->type);
-                abort();
+    void _doSet(int vreg, CompilerVariable* val, const UnwindInfo& unw_info) {
+        if (vreg == VREG_UNDEFINED) {
+            // nothing todo
+            return;
         }
+
+        CompilerVariable* prev = symbol_table[vreg];
+        symbol_table[vreg] = val;
+
+        // Clear out the is_defined name since it is now definitely defined:
+        bool maybe_was_undefined = popDefinedVar(vreg, true);
+
+        auto&& get_llvm_val = [&]() { return val->makeConverted(emitter, UNKNOWN)->getValue(); };
+        _setVRegIfUserVisible(vreg, get_llvm_val, prev, maybe_was_undefined);
     }
 
     void doAssert(BST_Assert* node, const UnwindInfo& unw_info) {
         // cfg translates all asserts into only 'assert 0' on the failing path.
-        BST_expr* test = node->test;
-        assert(test->type == BST_TYPE::Num);
-        BST_Num* num = bst_cast<BST_Num>(test);
-        assert(num->num_type == AST_Num::INT);
-        assert(num->n_int == 0);
-
         std::vector<llvm::Value*> llvm_args;
 
         // We could patchpoint this or try to avoid the overhead, but this should only
@@ -2064,8 +1938,8 @@ private:
             RefType::OWNED));
 
         ConcreteCompilerVariable* converted_msg = NULL;
-        if (node->msg) {
-            CompilerVariable* msg = evalExpr(node->msg, unw_info);
+        if (node->vreg_msg != VREG_UNDEFINED) {
+            CompilerVariable* msg = evalVReg(node->vreg_msg);
             converted_msg = msg->makeConverted(emitter, msg->getBoxType());
             llvm_args.push_back(converted_msg->getValue());
         } else {
@@ -2078,66 +1952,52 @@ private:
         endBlock(DEAD);
     }
 
-    void doAssign(BST_Assign* node, const UnwindInfo& unw_info) {
-        CompilerVariable* val = evalExpr(node->value, unw_info);
-
-        _doSet(node->target, val, unw_info);
-    }
-
-    void doDelete(BST_Delete* node, const UnwindInfo& unw_info) {
-        BST_expr* target = node->target;
-        switch (target->type) {
-            case BST_TYPE::Subscript:
-                _doDelitem(static_cast<BST_Subscript*>(target), unw_info);
-                break;
-            case BST_TYPE::Attribute:
-                _doDelAttr(static_cast<BST_Attribute*>(target), unw_info);
-                break;
-            case BST_TYPE::Name:
-                _doDelName(static_cast<BST_Name*>(target), unw_info);
-                break;
-            default:
-                ASSERT(0, "Unsupported del target: %d", target->type);
-                abort();
-        }
+    CompilerVariable* evalAssign(BST_CopyVReg* node, const UnwindInfo& unw_info) {
+        return evalVReg(node->vreg_src, false /* don't kill */);
     }
 
     // invoke delitem in objmodel.cpp, which will invoke the listDelitem of list
-    void _doDelitem(BST_Subscript* target, const UnwindInfo& unw_info) {
-        CompilerVariable* tget = evalExpr(target->value, unw_info);
-        CompilerVariable* slice = evalSlice(target->slice, unw_info);
+    void doDeleteSub(BST_DeleteSub* target, const UnwindInfo& unw_info) {
+        CompilerVariable* tget = evalVReg(target->vreg_value);
+        CompilerVariable* slice = evalVReg(target->vreg_slice);
 
         ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
 
-        if (slice->getType() == UNBOXED_SLICE && !extractSlice(slice).step) {
-            _assignSlice(converted_target->getValue(),
-                         emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED), extractSlice(slice),
-                         unw_info);
+        assert(!(slice->getType() == UNBOXED_SLICE && !extractSlice(slice).step));
+        ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
+
+        bool do_patchpoint = ENABLE_ICDELITEMS;
+        if (do_patchpoint) {
+            auto pp = createDelitemIC();
+
+            std::vector<llvm::Value*> llvm_args;
+            llvm_args.push_back(converted_target->getValue());
+            llvm_args.push_back(converted_slice->getValue());
+
+            emitter.createIC(std::move(pp), (void*)pyston::delitem, llvm_args, unw_info);
         } else {
-            ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
-
-            bool do_patchpoint = ENABLE_ICDELITEMS;
-            if (do_patchpoint) {
-                auto pp = createDelitemIC();
-
-                std::vector<llvm::Value*> llvm_args;
-                llvm_args.push_back(converted_target->getValue());
-                llvm_args.push_back(converted_slice->getValue());
-
-                emitter.createIC(std::move(pp), (void*)pyston::delitem, llvm_args, unw_info);
-            } else {
-                emitter.createCall2(unw_info, g.funcs.delitem, converted_target->getValue(),
-                                    converted_slice->getValue());
-            }
+            emitter.createCall2(unw_info, g.funcs.delitem, converted_target->getValue(), converted_slice->getValue());
         }
     }
+    void doDeleteSubSlice(BST_DeleteSubSlice* target, const UnwindInfo& unw_info) {
+        CompilerVariable* tget = evalVReg(target->vreg_value);
+        CompilerVariable* lower = target->vreg_lower != VREG_UNDEFINED ? evalVReg(target->vreg_lower) : NULL;
+        CompilerVariable* upper = target->vreg_upper != VREG_UNDEFINED ? evalVReg(target->vreg_upper) : NULL;
+        CompilerVariable* slice = makeSlice(lower, upper, NULL);
 
-    void _doDelAttr(BST_Attribute* node, const UnwindInfo& unw_info) {
-        CompilerVariable* value = evalExpr(node->value, unw_info);
+        ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
+
+        _assignSlice(converted_target->getValue(),
+                     emitter.setType(getNullPtr(g.llvm_value_type_ptr), RefType::BORROWED), extractSlice(slice),
+                     unw_info);
+    }
+
+    void _doDelAttr(BST_DeleteAttr* node, const UnwindInfo& unw_info) {
+        CompilerVariable* value = evalVReg(node->vreg_value);
         value->delattr(emitter, getEmptyOpInfo(unw_info), node->attr.getBox());
     }
 
-    void _doDelName(BST_Name* target, const UnwindInfo& unw_info) {
+    void _doDelName(BST_DeleteName* target, const UnwindInfo& unw_info) {
         // Hack: we don't have a bytecode for temporary-kills:
         if (target->id.s()[0] == '#') {
             // The refcounter will automatically delete this object.
@@ -2196,20 +2056,20 @@ private:
     }
 
     void doExec(BST_Exec* node, const UnwindInfo& unw_info) {
-        CompilerVariable* body = evalExpr(node->body, unw_info);
+        CompilerVariable* body = evalVReg(node->vreg_body);
         llvm::Value* vbody = body->makeConverted(emitter, body->getBoxType())->getValue();
 
         llvm::Value* vglobals;
-        if (node->globals) {
-            CompilerVariable* globals = evalExpr(node->globals, unw_info);
+        if (node->vreg_globals != VREG_UNDEFINED) {
+            CompilerVariable* globals = evalVReg(node->vreg_globals);
             vglobals = globals->makeConverted(emitter, globals->getBoxType())->getValue();
         } else {
             vglobals = getNullPtr(g.llvm_value_type_ptr);
         }
 
         llvm::Value* vlocals;
-        if (node->locals) {
-            CompilerVariable* locals = evalExpr(node->locals, unw_info);
+        if (node->vreg_locals != VREG_UNDEFINED) {
+            CompilerVariable* locals = evalVReg(node->vreg_locals);
             vlocals = locals->makeConverted(emitter, locals->getBoxType())->getValue();
         } else {
             vlocals = getNullPtr(g.llvm_value_type_ptr);
@@ -2222,8 +2082,8 @@ private:
 
     void doPrint(BST_Print* node, const UnwindInfo& unw_info) {
         ConcreteCompilerVariable* dest = NULL;
-        if (node->dest) {
-            auto d = evalExpr(node->dest, unw_info);
+        if (node->vreg_dest != VREG_UNDEFINED) {
+            auto d = evalVReg(node->vreg_dest);
             dest = d->makeConverted(emitter, d->getBoxType());
         } else {
             dest = new ConcreteCompilerVariable(UNKNOWN,
@@ -2233,8 +2093,8 @@ private:
 
         ConcreteCompilerVariable* converted;
 
-        if (node->value) {
-            CompilerVariable* var = evalExpr(node->value, unw_info);
+        if (node->vreg_value != VREG_UNDEFINED) {
+            CompilerVariable* var = evalVReg(node->vreg_value);
             converted = var->makeConverted(emitter, var->getBoxType());
         } else {
             converted = new ConcreteCompilerVariable(UNKNOWN, getNullPtr(g.llvm_value_type_ptr));
@@ -2248,10 +2108,10 @@ private:
         assert(!unw_info.hasHandler());
 
         CompilerVariable* val;
-        if (node->value == NULL) {
+        if (node->vreg_value == VREG_UNDEFINED) {
             val = emitter.getNone();
         } else {
-            val = evalExpr(node->value, unw_info);
+            val = evalVReg(node->vreg_value);
         }
         assert(val);
 
@@ -2282,7 +2142,7 @@ private:
         assert(node->iftrue->idx > myblock->idx);
         assert(node->iffalse->idx > myblock->idx);
 
-        CompilerVariable* val = evalExpr(node->test, unw_info);
+        CompilerVariable* val = evalVReg(node->vreg_test);
         assert(val);
 
         // We could call nonzero here if there is no try-catch block?
@@ -2298,8 +2158,6 @@ private:
 
         emitter.getBuilder()->CreateCondBr(v, iftrue, iffalse);
     }
-
-    void doExpr(BST_Expr* node, const UnwindInfo& unw_info) { CompilerVariable* var = evalExpr(node->value, unw_info); }
 
     void doOSRExit(llvm::BasicBlock* normal_target, BST_Jump* osr_key) {
         RELEASE_ASSERT(0, "I don't think this can get hit any more and it has not been updated");
@@ -2486,9 +2344,9 @@ private:
         else
             target_exception_style = irstate->getExceptionStyle();
 
-        if (node->arg0 == NULL) {
-            assert(!node->arg1);
-            assert(!node->arg2);
+        if (node->vreg_arg0 == VREG_UNDEFINED) {
+            assert(node->vreg_arg1 == VREG_UNDEFINED);
+            assert(node->vreg_arg2 == VREG_UNDEFINED);
 
             llvm::Value* exc_info = emitter.getBuilder()->CreateConstInBoundsGEP2_32(irstate->getFrameInfoVar(), 0, 0);
             if (target_exception_style == CAPI) {
@@ -2504,9 +2362,9 @@ private:
         }
 
         std::vector<llvm::Value*> args;
-        for (auto a : { node->arg0, node->arg1, node->arg2 }) {
-            if (a) {
-                CompilerVariable* v = evalExpr(a, unw_info);
+        for (auto a : { node->vreg_arg0, node->vreg_arg1, node->vreg_arg2 }) {
+            if (a != VREG_UNDEFINED) {
+                CompilerVariable* v = evalVReg(a);
                 ConcreteCompilerVariable* converted = v->makeConverted(emitter, v->getBoxType());
                 args.push_back(converted->getValue());
             } else {
@@ -2541,23 +2399,20 @@ private:
             case BST_TYPE::Assert:
                 doAssert(bst_cast<BST_Assert>(node), unw_info);
                 break;
-            case BST_TYPE::Assign:
-                doAssign(bst_cast<BST_Assign>(node), unw_info);
+            case BST_TYPE::DeleteAttr:
+                _doDelAttr(bst_cast<BST_DeleteAttr>(node), unw_info);
                 break;
-            case BST_TYPE::Delete:
-                doDelete(bst_cast<BST_Delete>(node), unw_info);
+            case BST_TYPE::DeleteSub:
+                doDeleteSub(bst_cast<BST_DeleteSub>(node), unw_info);
+                break;
+            case BST_TYPE::DeleteSubSlice:
+                doDeleteSubSlice(bst_cast<BST_DeleteSubSlice>(node), unw_info);
+                break;
+            case BST_TYPE::DeleteName:
+                _doDelName(bst_cast<BST_DeleteName>(node), unw_info);
                 break;
             case BST_TYPE::Exec:
                 doExec(bst_cast<BST_Exec>(node), unw_info);
-                break;
-            case BST_TYPE::Expr:
-                if ((((BST_Expr*)node)->value)->type != BST_TYPE::Str)
-                    doExpr(bst_cast<BST_Expr>(node), unw_info);
-                break;
-            case BST_TYPE::Global:
-                // Should have been handled already
-                break;
-            case BST_TYPE::Pass:
                 break;
             case BST_TYPE::Print:
                 doPrint(bst_cast<BST_Print>(node), unw_info);
@@ -2565,6 +2420,21 @@ private:
             case BST_TYPE::Return:
                 assert(!unw_info.hasHandler());
                 doReturn(bst_cast<BST_Return>(node), unw_info);
+                break;
+            case BST_TYPE::StoreName:
+                doStoreName(bst_cast<BST_StoreName>(node), unw_info);
+                break;
+            case BST_TYPE::StoreAttr:
+                doStoreAttr(bst_cast<BST_StoreAttr>(node), unw_info);
+                break;
+            case BST_TYPE::StoreSub:
+                doStoreSub(bst_cast<BST_StoreSub>(node), unw_info);
+                break;
+            case BST_TYPE::StoreSubSlice:
+                doStoreSubSlice(bst_cast<BST_StoreSubSlice>(node), unw_info);
+                break;
+            case BST_TYPE::UnpackIntoArray:
+                doUnpackIntoArray(bst_cast<BST_UnpackIntoArray>(node), unw_info);
                 break;
             case BST_TYPE::Branch:
                 assert(!unw_info.hasHandler());
@@ -2591,13 +2461,117 @@ private:
             case BST_TYPE::Raise:
                 doRaise(bst_cast<BST_Raise>(node), unw_info);
                 break;
-            default:
-                printf("Unhandled stmt type at " __FILE__ ":" STRINGIFY(__LINE__) ": %d\n", node->type);
-                exit(1);
+            case BST_TYPE::SetExcInfo:
+                doSetExcInfo((BST_SetExcInfo*)node, unw_info);
+                break;
+            case BST_TYPE::UncacheExcInfo:
+                doUncacheExcInfo((BST_UncacheExcInfo*)node, unw_info);
+                break;
+            case BST_TYPE::PrintExpr:
+                doPrintExpr((BST_PrintExpr*)node, unw_info);
+                break;
+
+            // Handle all cases which are derived from BST_stmt_with_dest
+            default: {
+                CompilerVariable* rtn = NULL;
+                switch (node->type) {
+                    case BST_TYPE::CopyVReg:
+                        rtn = evalAssign(bst_cast<BST_CopyVReg>(node), unw_info);
+                        break;
+                    case BST_TYPE::BinOp:
+                        rtn = evalBinOp(bst_cast<BST_BinOp>(node), unw_info);
+                        break;
+                    case BST_TYPE::AugBinOp:
+                        rtn = evalAugBinOp(bst_cast<BST_AugBinOp>(node), unw_info);
+                        break;
+                    case BST_TYPE::CallFunc:
+                    case BST_TYPE::CallAttr:
+                    case BST_TYPE::CallClsAttr:
+                        rtn = evalCall((BST_Call*)node, unw_info);
+                        break;
+                    case BST_TYPE::Compare:
+                        rtn = evalCompare(bst_cast<BST_Compare>(node), unw_info);
+                        break;
+                    case BST_TYPE::Dict:
+                        rtn = evalDict(bst_cast<BST_Dict>(node), unw_info);
+                        break;
+                    case BST_TYPE::List:
+                        rtn = evalList(bst_cast<BST_List>(node), unw_info);
+                        break;
+                    case BST_TYPE::Repr:
+                        rtn = evalRepr(bst_cast<BST_Repr>(node), unw_info);
+                        break;
+                    case BST_TYPE::Set:
+                        rtn = evalSet(bst_cast<BST_Set>(node), unw_info);
+                        break;
+                    case BST_TYPE::Tuple:
+                        rtn = evalTuple(bst_cast<BST_Tuple>(node), unw_info);
+                        break;
+                    case BST_TYPE::UnaryOp:
+                        rtn = evalUnaryOp(bst_cast<BST_UnaryOp>(node), unw_info);
+                        break;
+                    case BST_TYPE::Yield:
+                        rtn = evalYield(bst_cast<BST_Yield>(node), unw_info);
+                        break;
+                    case BST_TYPE::Landingpad:
+                        rtn = evalLandingpad((BST_Landingpad*)node, unw_info);
+                        break;
+                    case BST_TYPE::Locals:
+                        rtn = evalLocals((BST_Locals*)node, unw_info);
+                        break;
+                    case BST_TYPE::LoadName:
+                        rtn = evalLoadName((BST_LoadName*)node, unw_info);
+                        break;
+                    case BST_TYPE::LoadAttr:
+                        rtn = evalLoadAttr((BST_LoadAttr*)node, unw_info);
+                        break;
+                    case BST_TYPE::LoadSub:
+                        rtn = evalLoadSub((BST_LoadSub*)node, unw_info);
+                        break;
+                    case BST_TYPE::LoadSubSlice:
+                        rtn = evalLoadSubSlice((BST_LoadSubSlice*)node, unw_info);
+                        break;
+                    case BST_TYPE::GetIter:
+                        rtn = evalGetIter((BST_GetIter*)node, unw_info);
+                        break;
+                    case BST_TYPE::ImportFrom:
+                        rtn = evalImportFrom((BST_ImportFrom*)node, unw_info);
+                        break;
+                    case BST_TYPE::ImportName:
+                        rtn = evalImportName((BST_ImportName*)node, unw_info);
+                        break;
+                    case BST_TYPE::ImportStar:
+                        rtn = evalImportStar((BST_ImportStar*)node, unw_info);
+                        break;
+                    case BST_TYPE::Nonzero:
+                        rtn = evalNonzero((BST_Nonzero*)node, unw_info);
+                        break;
+                    case BST_TYPE::CheckExcMatch:
+                        rtn = evalCheckExcMatch((BST_CheckExcMatch*)node, unw_info);
+                        break;
+                    case BST_TYPE::HasNext:
+                        rtn = evalHasNext((BST_HasNext*)node, unw_info);
+                        break;
+                    case BST_TYPE::MakeClass:
+                        rtn = evalMakeClass(bst_cast<BST_MakeClass>(node), unw_info);
+                        break;
+                    case BST_TYPE::MakeFunction:
+                        rtn = evalMakeFunction(bst_cast<BST_MakeFunction>(node), unw_info);
+                        break;
+                    case BST_TYPE::MakeSlice:
+                        rtn = evalMakeSlice(bst_cast<BST_MakeSlice>(node), unw_info);
+                        break;
+                    default:
+                        printf("Unhandled stmt type at " __FILE__ ":" STRINGIFY(__LINE__) ": %d\n", node->type);
+                        exit(1);
+                }
+                rtn = evalSliceExprPost((BST_stmt_with_dest*)node, unw_info, rtn);
+                _doSet(((BST_stmt_with_dest*)node)->vreg_dst, rtn, unw_info);
+            }
         }
     }
 
-    void loadArgument(BST_expr* name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {
+    void loadArgument(BST_Name* name, ConcreteCompilerType* t, llvm::Value* v, const UnwindInfo& unw_info) {
         CompilerVariable* var = unboxVar(t, v);
         _doSet(name, var, unw_info);
     }
@@ -2973,7 +2947,7 @@ public:
 
 #if ENABLE_SAMPLING_PROFILER
             auto stmt = block->body[i];
-            if (!(i == 0 && stmt->type == BST_TYPE::Assign) && stmt->lineno > 0) // could be a landingpad
+            if (stmt->type != BST_TYPE::Landigpad && stmt->lineno > 0)
                 doSafePoint(block->body[i]);
 #endif
 

@@ -2762,6 +2762,15 @@ public:
 
         return new ConcreteCompilerVariable(SLICE, rtn);
     }
+
+    CompilerVariable* dup(VAR* v, DupCache& cache) override {
+        // TODO copied from UnknownType
+        auto& rtn = cache[v];
+        if (rtn == NULL) {
+            rtn = new VAR(this, v->getValue());
+        }
+        return rtn;
+    }
 } _UNBOXED_SLICE;
 CompilerType* UNBOXED_SLICE = &_UNBOXED_SLICE;
 

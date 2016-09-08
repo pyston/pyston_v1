@@ -37,7 +37,8 @@ TEST_F(AnalysisTest, augassign) {
     FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
 
     auto scoping = std::make_shared<ScopingAnalysis>(module, true);
-    auto module_code = computeAllCFGs(module, true, future_flags, boxString(fn), NULL);
+    BoxedModule* main_module = createModule(autoDecref(boxString("__main__")), "<string>");
+    auto module_code = computeAllCFGs(module, true, future_flags, boxString(fn), main_module);
 
     assert(module->body[0]->type == AST_TYPE::FunctionDef);
     AST_FunctionDef* func = static_cast<AST_FunctionDef*>(module->body[0]);
@@ -51,8 +52,14 @@ TEST_F(AnalysisTest, augassign) {
     ParamNames param_names(args, *module->interned_strings.get());
 
     // Hack to get at the cfg:
-    auto node = module_code->source->cfg->blocks[0]->body[0];
-    CFG* cfg = bst_cast<BST_MakeFunction>(bst_cast<BST_Assign>(node)->value)->function_def->code->source->cfg;
+    CFG* cfg = NULL;
+    for (BST_stmt* stmt : module_code->source->cfg->blocks[0]->body) {
+        if (stmt->type !=  BST_TYPE::MakeFunction)
+            continue;
+        cfg = bst_cast<BST_MakeFunction>(stmt)->function_def->code->source->cfg;
+        break;
+    }
+    assert(cfg);
 
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
     auto&& vregs = cfg->getVRegInfo();
@@ -85,11 +92,18 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
 
     FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
 
-    auto module_code = computeAllCFGs(module, true, future_flags, boxString(fn), NULL);
+    BoxedModule* main_module = createModule(autoDecref(boxString("__main__")), "<string>");
+    auto module_code = computeAllCFGs(module, true, future_flags, boxString(fn), main_module);
 
     // Hack to get at the cfg:
-    auto node = module_code->source->cfg->blocks[0]->body[0];
-    auto code = bst_cast<BST_MakeFunction>(bst_cast<BST_Assign>(node)->value)->function_def->code;
+    BoxedCode* code = NULL;
+    for (BST_stmt* stmt : module_code->source->cfg->blocks[0]->body) {
+        if (stmt->type !=  BST_TYPE::MakeFunction)
+            continue;
+        code = bst_cast<BST_MakeFunction>(stmt)->function_def->code;
+        break;
+    }
+    assert(code);
     CFG* cfg = code->source->cfg;
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
 
@@ -99,7 +113,7 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
 
     InternedString i_str = module->interned_strings->get("i");
     InternedString idi_str = module->interned_strings->get("!is_defined_i");
-    InternedString iter_str = module->interned_strings->get("#iter_3");
+    InternedString iter_str = module->interned_strings->get("#iter_4");
 
     CFGBlock* loop_backedge = cfg->blocks[5];
     ASSERT_EQ(6, loop_backedge->idx);

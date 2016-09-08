@@ -226,7 +226,7 @@ RewriterVar* JitFragmentWriter::imm(void* val) {
     return loadConst((uint64_t)val);
 }
 
-RewriterVar* JitFragmentWriter::emitAugbinop(BST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
+RewriterVar* JitFragmentWriter::emitAugbinop(BST_stmt* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
     return emitPPCall((void*)augbinop, { lhs, rhs, imm(op_type) }, 2 * 320, true /* record type */, node)
         .first->setType(RefType::OWNED);
 }
@@ -239,12 +239,12 @@ RewriterVar* JitFragmentWriter::emitApplySlice(RewriterVar* target, RewriterVar*
     return emitPPCall((void*)applySlice, { target, lower, upper }, 256).first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitBinop(BST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
+RewriterVar* JitFragmentWriter::emitBinop(BST_stmt* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
     return emitPPCall((void*)binop, { lhs, rhs, imm(op_type) }, 2 * 240, true /* record type */, node)
         .first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitCallattr(BST_expr* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
+RewriterVar* JitFragmentWriter::emitCallattr(BST_stmt* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
                                              const llvm::ArrayRef<RewriterVar*> args,
                                              std::vector<BoxedString*>* keyword_names) {
 #if ENABLE_BASELINEJIT_ICS
@@ -298,7 +298,7 @@ RewriterVar* JitFragmentWriter::emitCallattr(BST_expr* node, RewriterVar* obj, B
 #endif
 }
 
-RewriterVar* JitFragmentWriter::emitCompare(BST_expr* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
+RewriterVar* JitFragmentWriter::emitCompare(BST_stmt* node, RewriterVar* lhs, RewriterVar* rhs, int op_type) {
     if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot) {
         RewriterVar* cmp_result = lhs->cmp(op_type == AST_TYPE::IsNot ? AST_TYPE::NotEq : AST_TYPE::Eq, rhs);
         return call(false, (void*)boxBool, cmp_result)->setType(RefType::OWNED);
@@ -372,7 +372,7 @@ RewriterVar* JitFragmentWriter::emitCreateTuple(const llvm::ArrayRef<RewriterVar
     return r;
 }
 
-RewriterVar* JitFragmentWriter::emitDeref(BST_Name* name) {
+RewriterVar* JitFragmentWriter::emitDeref(BST_LoadName* name) {
     return call(false, (void*)ASTInterpreterJitInterface::derefHelper, getInterp(), imm(name))->setType(RefType::OWNED);
 }
 
@@ -380,27 +380,38 @@ RewriterVar* JitFragmentWriter::emitExceptionMatches(RewriterVar* v, RewriterVar
     return call(false, (void*)exceptionMatchesHelper, v, cls)->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitGetAttr(RewriterVar* obj, BoxedString* s, BST_expr* node) {
+RewriterVar* JitFragmentWriter::emitGetAttr(BST_stmt* node, RewriterVar* obj, BoxedString* s) {
     return emitPPCall((void*)getattr, { obj, imm(s) }, 2 * 256, true /* record type */, node)
         .first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitGetBlockLocal(BST_Name* name) {
-    auto s = name->id;
-    auto vreg = name->vreg;
-    auto it = local_syms.find(s);
+RewriterVar* JitFragmentWriter::emitGetBlockLocal(InternedString name, int vreg) {
+    auto it = local_syms.find(vreg);
     if (it == local_syms.end()) {
-        auto r = emitGetLocal(name);
+        auto r = emitGetLocal(name, vreg);
         assert(r->reftype == RefType::OWNED);
-        emitSetBlockLocal(name, r);
+        emitSetBlockLocal(vreg, r);
         return r;
     }
     return it->second;
 }
 
-void JitFragmentWriter::emitKillTemporary(BST_Name* name) {
-    if (!local_syms.count(name->id))
-        emitSetLocal(name, false, imm(nullptr));
+RewriterVar* JitFragmentWriter::emitGetBlockLocalMustExist(int vreg) {
+    auto it = local_syms.find(vreg);
+    if (it == local_syms.end()) {
+        assert(vreg >= 0);
+        RewriterVar* r = vregs_array->getAttr(vreg * 8);
+        r->incref();
+        r->setType(RefType::OWNED);
+        emitSetBlockLocal(vreg, r);
+        return r;
+    }
+    return it->second;
+}
+
+void JitFragmentWriter::emitKillTemporary(int vreg) {
+    if (!local_syms.count(vreg))
+        emitSetLocal(vreg, imm(nullptr));
 }
 
 RewriterVar* JitFragmentWriter::emitGetBoxedLocal(BoxedString* s) {
@@ -427,22 +438,20 @@ RewriterVar* JitFragmentWriter::emitGetGlobal(BoxedString* s) {
     return emitPPCall((void*)getGlobal, { globals, imm(s) }, 128).first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitGetItem(BST_expr* node, RewriterVar* value, RewriterVar* slice) {
+RewriterVar* JitFragmentWriter::emitGetItem(BST_stmt* node, RewriterVar* value, RewriterVar* slice) {
     return emitPPCall((void*)getitem, { value, slice }, 256, true /* record type */, node)
         .first->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitGetLocal(BST_Name* name) {
+RewriterVar* JitFragmentWriter::emitGetLocal(InternedString name, int vreg) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitGetLocal start");
-    auto vreg = name->vreg;
-    auto s = name->id;
     assert(vreg >= 0);
     // TODO Can we use BORROWED here? Not sure if there are cases when we can't rely on borrowing the ref
     // from the vregs array.  Safer like this.
     RewriterVar* val_var = vregs_array->getAttr(vreg * 8);
     if (known_non_null_vregs.count(vreg) == 0) {
-        addAction([=]() { _emitGetLocal(val_var, s.c_str()); }, { val_var }, ActionType::NORMAL);
+        addAction([=]() { _emitGetLocal(val_var, name.c_str()); }, { val_var }, ActionType::NORMAL);
         known_non_null_vregs.insert(vreg);
     } else {
         val_var->incref();
@@ -450,6 +459,16 @@ RewriterVar* JitFragmentWriter::emitGetLocal(BST_Name* name) {
     val_var->setType(RefType::OWNED);
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitGetLocal end");
+    return val_var;
+}
+
+RewriterVar* JitFragmentWriter::emitGetLocalMustExist(int vreg) {
+    assert(vreg >= 0);
+    // TODO Can we use BORROWED here? Not sure if there are cases when we can't rely on borrowing the ref
+    // from the vregs array.  Safer like this.
+    RewriterVar* val_var = vregs_array->getAttr(vreg * 8);
+    val_var->incref();
+    val_var->setType(RefType::OWNED);
     return val_var;
 }
 
@@ -463,13 +482,12 @@ RewriterVar* JitFragmentWriter::emitHasnext(RewriterVar* v) {
     return rtn;
 }
 
-RewriterVar* JitFragmentWriter::emitImportFrom(RewriterVar* module, BoxedString* name) {
-    return call(false, (void*)importFrom, module, imm(name))->setType(RefType::OWNED);
+RewriterVar* JitFragmentWriter::emitImportFrom(RewriterVar* module, RewriterVar* name) {
+    return call(false, (void*)importFrom, module, name)->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitImportName(int level, RewriterVar* from_imports, llvm::StringRef module_name) {
-    return call(false, (void*)import, imm(level), from_imports, imm(const_cast<char*>(module_name.data())),
-                imm(module_name.size()))->setType(RefType::OWNED);
+RewriterVar* JitFragmentWriter::emitImportName(int level, RewriterVar* from_imports, RewriterVar* module_name) {
+    return call(false, (void*)import, imm(level), from_imports, module_name)->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitImportStar(RewriterVar* module) {
@@ -500,7 +518,7 @@ RewriterVar* JitFragmentWriter::emitRepr(RewriterVar* v) {
     return call(false, (void*)repr, v)->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitRuntimeCall(BST_expr* node, RewriterVar* obj, ArgPassSpec argspec,
+RewriterVar* JitFragmentWriter::emitRuntimeCall(BST_stmt* node, RewriterVar* obj, ArgPassSpec argspec,
                                                 const llvm::ArrayRef<RewriterVar*> args,
                                                 std::vector<BoxedString*>* keyword_names) {
 #if ENABLE_BASELINEJIT_ICS
@@ -679,22 +697,20 @@ void JitFragmentWriter::emitReturn(RewriterVar* v) {
     v->refConsumed();
 }
 
-void JitFragmentWriter::emitSetAttr(BST_expr* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr) {
+void JitFragmentWriter::emitSetAttr(BST_stmt* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr) {
     auto rtn = emitPPCall((void*)setattr, { obj, imm(s), attr }, 2 * 256, false /* don't record type */, node);
     attr->refConsumed(rtn.second);
 }
 
-void JitFragmentWriter::emitSetBlockLocal(BST_Name* name, STOLEN(RewriterVar*) v) {
+void JitFragmentWriter::emitSetBlockLocal(int vreg, STOLEN(RewriterVar*) v) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitSetBlockLocal() start");
-    auto vreg = name->vreg;
-    auto s = name->id;
-    RewriterVar* prev = local_syms[name->id];
+    RewriterVar* prev = local_syms[vreg];
     // if we never set this sym before in this BB and the symbol gets accessed in several blocks clear it because it
     // could have been set in a previous block.
     if (!prev && !block->cfg->getVRegInfo().isBlockLocalVReg(vreg))
-        emitSetLocal(name, false, imm(nullptr)); // clear out the vreg
-    local_syms[s] = v;
+        emitSetLocal(vreg, imm(nullptr)); // clear out the vreg
+    local_syms[vreg] = v;
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitSetBlockLocal() end");
 }
@@ -728,30 +744,36 @@ void JitFragmentWriter::emitSetItemName(BoxedString* s, RewriterVar* v) {
     emitSetItem(emitGetBoxedLocals(), imm(s), v);
 }
 
-void JitFragmentWriter::emitSetLocal(BST_Name* name, bool set_closure, STOLEN(RewriterVar*) v) {
+void JitFragmentWriter::emitSetLocal(int vreg, STOLEN(RewriterVar*) v) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitSetLocal() start");
-    auto vreg = name->vreg;
     assert(vreg >= 0);
-    if (set_closure) {
-        call(false, (void*)ASTInterpreterJitInterface::setLocalClosureHelper, getInterp(), imm(name), v);
-        v->refConsumed();
-    } else {
-        // TODO With definedness analysis, we could know whether we needed to emit an decref/xdecref/neither.
-        // The issue is that definedness analysis is somewhat expensive to compute, so we don't compute it
-        // for the bjit.  We could try calculating it (which would require some re-plumbing), which might help
-        // but I suspect is not that big a deal as long as the llvm jit implements this kind of optimization.
-        bool prev_nullable = known_non_null_vregs.count(vreg) == 0;
+    // TODO With definedness analysis, we could know whether we needed to emit an decref/xdecref/neither.
+    // The issue is that definedness analysis is somewhat expensive to compute, so we don't compute it
+    // for the bjit.  We could try calculating it (which would require some re-plumbing), which might help
+    // but I suspect is not that big a deal as long as the llvm jit implements this kind of optimization.
+    bool prev_nullable = known_non_null_vregs.count(vreg) == 0;
 
-        assert(!block->cfg->getVRegInfo().isBlockLocalVReg(vreg));
-        vregs_array->replaceAttr(8 * vreg, v, prev_nullable);
-        if (v->isContantNull())
-            known_non_null_vregs.erase(vreg);
-        else
-            known_non_null_vregs.insert(vreg);
-    }
+    assert(!block->cfg->getVRegInfo().isBlockLocalVReg(vreg));
+    vregs_array->replaceAttr(8 * vreg, v, prev_nullable);
+    if (v->isContantNull())
+        known_non_null_vregs.erase(vreg);
+    else
+        known_non_null_vregs.insert(vreg);
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitSetLocal() end");
+}
+
+void JitFragmentWriter::emitSetLocalClosure(BST_StoreName* name, STOLEN(RewriterVar*) v) {
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitSetLocalClosure() start");
+    auto vreg = name->vreg;
+    assert(vreg >= 0);
+    call(false, (void*)ASTInterpreterJitInterface::setLocalClosureHelper, getInterp(), imm(vreg),
+         imm(name->closure_offset), v);
+    v->refConsumed();
+    if (LOG_BJIT_ASSEMBLY)
+        comment("BJIT: emitSetLocalClosure() end");
 }
 
 void JitFragmentWriter::emitSideExit(STOLEN(RewriterVar*) v, Box* cmp_value, CFGBlock* next_block) {
@@ -920,9 +942,11 @@ uint64_t JitFragmentWriter::asUInt(InternedString s) {
 }
 #endif
 
-std::pair<RewriterVar*, RewriterAction*>
-JitFragmentWriter::emitPPCall(void* func_addr, llvm::ArrayRef<RewriterVar*> args, unsigned short pp_size,
-                              bool should_record_type, BST* ast_node, llvm::ArrayRef<RewriterVar*> additional_uses) {
+std::pair<RewriterVar*, RewriterAction*> JitFragmentWriter::emitPPCall(void* func_addr,
+                                                                       llvm::ArrayRef<RewriterVar*> args,
+                                                                       unsigned short pp_size, bool should_record_type,
+                                                                       BST_stmt* ast_node,
+                                                                       llvm::ArrayRef<RewriterVar*> additional_uses) {
     if (LOG_BJIT_ASSEMBLY)
         comment("BJIT: emitPPCall() start");
 #if ENABLE_BASELINEJIT_ICS
@@ -1125,7 +1149,8 @@ void JitFragmentWriter::_emitOSRPoint() {
 }
 
 void JitFragmentWriter::_emitPPCall(RewriterVar* result, void* func_addr, llvm::ArrayRef<RewriterVar*> args,
-                                    unsigned short pp_size, BST* ast_node, llvm::ArrayRef<RewriterVar*> vars_to_bump) {
+                                    unsigned short pp_size, BST_stmt* ast_node,
+                                    llvm::ArrayRef<RewriterVar*> vars_to_bump) {
     assembler::Register r = allocReg(assembler::R11);
 
     if (args.size() > 6) { // only 6 args can get passed in registers.

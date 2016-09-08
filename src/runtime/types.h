@@ -1068,6 +1068,23 @@ public:
 };
 static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
 
+class ConstantVRegInfo {
+private:
+    std::vector<Box*> constants;
+
+public:
+    ConstantVRegInfo(){};
+
+    Box* getConstant(int vreg) const { return constants[-(vreg + 1)]; }
+
+    // returns the vreg num for the constant (which is a negative number)
+    int addConstant(Box* o) {
+        constants.push_back(o);
+        return -constants.size();
+    }
+};
+
+
 // BoxedCode corresponds to metadata about a function definition.  If the same 'def foo():' block gets
 // executed multiple times, there will only be a single BoxedCode, even though multiple function objects
 // will get created from it.
@@ -1076,7 +1093,8 @@ static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
 // BoxedCode objects also keep track of any machine code that we have available for this function.
 class BoxedCode : public Box {
 public:
-    std::unique_ptr<SourceInfo> source; // source can be NULL for functions defined in the C/C++ runtime
+    std::unique_ptr<SourceInfo> source;              // source can be NULL for functions defined in the C/C++ runtime
+    const ConstantVRegInfo BORROWED(constant_vregs); // keeps track of all constants inside the bytecode
 
     BoxedString* filename = nullptr;
     BoxedString* name = nullptr;
@@ -1103,6 +1121,7 @@ public:
     std::vector<std::unique_ptr<JitCodeBlock>> code_blocks;
     ICInvalidator dependent_interp_callsites;
 
+
     // Functions can provide an "internal" version, which will get called instead
     // of the normal dispatch through the functionlist.
     // This can be used to implement functions which know how to rewrite themselves,
@@ -1113,7 +1132,8 @@ public:
 
     // Constructor for Python code objects:
     BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, int firstlineno, std::unique_ptr<SourceInfo> source,
-              ParamNames param_names, BoxedString* filename, BoxedString* name, Box* doc);
+              ConstantVRegInfo constant_vregs, ParamNames param_names, BoxedString* filename, BoxedString* name,
+              Box* doc);
 
     // Constructor for code objects created by the runtime:
     BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const char* name, const char* doc = "",

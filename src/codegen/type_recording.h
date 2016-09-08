@@ -19,7 +19,7 @@
 
 namespace pyston {
 
-class BST;
+class BST_stmt;
 class Box;
 class BoxedClass;
 
@@ -44,7 +44,7 @@ public:
     friend Box* recordType(TypeRecorder*, Box*);
 };
 
-BoxedClass* predictClassFor(BST* node);
+BoxedClass* predictClassFor(BST_stmt* node);
 }
 
 #endif

@@ -36,15 +36,10 @@ ScopingResults::ScopingResults(ScopeInfo* scope_info, bool globals_from_module)
     deref_info = scope_info->getAllDerefVarsAndInfo();
 }
 
-DerefInfo ScopingResults::getDerefInfo(BST_Name* node) const {
+DerefInfo ScopingResults::getDerefInfo(BST_LoadName* node) const {
     assert(node->lookup_type == ScopeInfo::VarScopeType::DEREF);
     assert(node->deref_info.offset != INT_MAX);
     return node->deref_info;
-}
-size_t ScopingResults::getClosureOffset(BST_Name* node) const {
-    assert(node->lookup_type == ScopeInfo::VarScopeType::CLOSURE);
-    assert(node->closure_offset != -1);
-    return node->closure_offset;
 }
 
 class YieldVisitor : public NoopASTVisitor {

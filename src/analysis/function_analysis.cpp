@@ -55,7 +55,7 @@ private:
     VRegMap<Status> statuses;
     LivenessAnalysis* analysis;
 
-    void _doLoad(int vreg, BST_Name* node) {
+    void _doLoad(int vreg) {
         Status& status = statuses[vreg];
         status.addUsage(Status::USED);
     }
@@ -70,50 +70,28 @@ private:
 
 public:
     LivenessBBVisitor(LivenessAnalysis* analysis)
-        : statuses(analysis->cfg->getVRegInfo().getTotalNumOfVRegs()), analysis(analysis) {}
+        : NoopBSTVisitor(true /* skip child CFG nodes */),
+          statuses(analysis->cfg->getVRegInfo().getTotalNumOfVRegs()),
+          analysis(analysis) {}
 
     bool firstIsUse(int vreg) const { return getStatusFirst(vreg) == Status::USED; }
-
     bool firstIsDef(int vreg) const { return getStatusFirst(vreg) == Status::DEFINED; }
 
-    bool isKilledAt(BST_Name* node, bool is_live_at_end) { return node->is_kill; }
-
-    bool visit_classdef(BST_ClassDef* node) {
-        for (auto e : node->bases)
-            e->accept(this);
-        for (auto e : node->decorator_list)
-            e->accept(this);
-
-        return true;
-    }
-
-    bool visit_functiondef(BST_FunctionDef* node) {
-        for (auto* d : node->decorator_list)
-            d->accept(this);
-        for (auto* d : node->args->defaults)
-            d->accept(this);
-
-        return true;
-    }
-
-    bool visit_name(BST_Name* node) {
-        if (node->vreg == -1)
-            return true;
-
-        if (node->ctx_type == AST_TYPE::Load)
-            _doLoad(node->vreg, node);
-        else if (node->ctx_type == AST_TYPE::Del) {
-            // Hack: we don't have a bytecode for temporary-kills:
-            if (node->vreg >= analysis->cfg->getVRegInfo().getNumOfUserVisibleVRegs())
-                return true;
-            _doLoad(node->vreg, node);
-            _doStore(node->vreg);
-        } else if (node->ctx_type == AST_TYPE::Store || node->ctx_type == AST_TYPE::Param)
-            _doStore(node->vreg);
-        else {
-            ASSERT(0, "%d", node->ctx_type);
-            abort();
+    bool visit_vreg(int* vreg, bool is_dst) override {
+        if (*vreg >= 0) {
+            if (is_dst)
+                _doStore(*vreg);
+            else
+                _doLoad(*vreg);
         }
+        return true;
+    }
+
+    bool visit_deletename(BST_DeleteName* node) override {
+        if (node->vreg < 0 || node->vreg >= analysis->cfg->getVRegInfo().getNumOfUserVisibleVRegs())
+            return true;
+        _doLoad(node->vreg);
+        _doStore(node->vreg);
         return true;
     }
 };
@@ -134,13 +112,6 @@ LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg), result_cache(cfg->getVR
 }
 
 LivenessAnalysis::~LivenessAnalysis() {
-}
-
-bool LivenessAnalysis::isKill(BST_Name* node, CFGBlock* parent_block) {
-    if (node->id.s()[0] != '#')
-        return false;
-
-    return liveness_cache[parent_block]->isKilledAt(node, isLiveAtEnd(node->vreg, parent_block));
 }
 
 bool LivenessAnalysis::isLiveAtEnd(int vreg, CFGBlock* block) {
@@ -228,101 +199,54 @@ public:
     virtual void processBB(Map& starting, CFGBlock* block) const;
 };
 
-class DefinednessVisitor : public BSTVisitor {
+class DefinednessVisitor : public NoopBSTVisitor {
 private:
     typedef DefinednessBBAnalyzer::Map Map;
     Map& state;
 
     void _doSet(int vreg) {
+        if (vreg == VREG_UNDEFINED)
+            return;
         assert(vreg >= 0 && vreg < state.numVregs());
         state[vreg] = DefinednessAnalysis::Defined;
     }
 
-    void _doSet(BST* t) {
-        switch (t->type) {
-            case BST_TYPE::Attribute:
-                // doesn't affect definedness (yet?)
-                break;
-            case BST_TYPE::Name: {
-                auto name = bst_cast<BST_Name>(t);
-                if (name->lookup_type == ScopeInfo::VarScopeType::FAST
-                    || name->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
-                    assert(name->vreg != -1);
-                    _doSet(name->vreg);
-                } else if (name->lookup_type == ScopeInfo::VarScopeType::GLOBAL
-                           || name->lookup_type == ScopeInfo::VarScopeType::NAME) {
-                    assert(name->vreg == -1);
-                    // skip
-                } else {
-                    RELEASE_ASSERT(0, "%d", static_cast<int>(name->lookup_type));
-                }
-                break;
-            }
-            case BST_TYPE::Subscript:
-                break;
-            case BST_TYPE::Tuple: {
-                BST_Tuple* tt = bst_cast<BST_Tuple>(t);
-                for (int i = 0; i < tt->elts.size(); i++) {
-                    _doSet(tt->elts[i]);
-                }
-                break;
-            }
-            default:
-                ASSERT(0, "Unknown type for DefinednessVisitor: %d", t->type);
-        }
-    }
-
 public:
-    DefinednessVisitor(Map& state) : state(state) {}
+    DefinednessVisitor(Map& state) : NoopBSTVisitor(true /* skip child CFG nodes */), state(state) {}
+    bool visit_vreg(int* vreg, bool is_dest) override {
+        if (*vreg < 0)
+            return false;
 
-    virtual bool visit_assert(BST_Assert* node) { return true; }
-    virtual bool visit_branch(BST_Branch* node) { return true; }
-    virtual bool visit_expr(BST_Expr* node) { return true; }
-    virtual bool visit_invoke(BST_Invoke* node) { return false; }
-    virtual bool visit_jump(BST_Jump* node) { return true; }
-    virtual bool visit_print(BST_Print* node) { return true; }
-    virtual bool visit_raise(BST_Raise* node) { return true; }
-    virtual bool visit_return(BST_Return* node) { return true; }
+        if (is_dest)
+            state[*vreg] = DefinednessAnalysis::Defined;
+        else
+            state[*vreg] = DefinednessAnalysis::Undefined;
+        return false;
+    }
 
-    virtual bool visit_delete(BST_Delete* node) {
-        auto t = node->target;
-        if (t->type == BST_TYPE::Name) {
-            BST_Name* name = bst_cast<BST_Name>(t);
-            if (name->lookup_type != ScopeInfo::VarScopeType::GLOBAL
-                && name->lookup_type != ScopeInfo::VarScopeType::NAME) {
-                assert(name->vreg != -1);
-                state[name->vreg] = DefinednessAnalysis::Undefined;
-            } else
-                assert(name->vreg == -1);
-        } else {
-            // The CFG pass should reduce all deletes to the "basic" deletes on names/attributes/subscripts.
-            // If not, probably the best way to do this would be to just do a full BST traversal
-            // and look for BST_Name's with a ctx of Del
-            assert(t->type == BST_TYPE::Attribute || t->type == BST_TYPE::Subscript);
-        }
+    bool visit_deletename(BST_DeleteName* node) override {
+        if (node->lookup_type != ScopeInfo::VarScopeType::GLOBAL
+            && node->lookup_type != ScopeInfo::VarScopeType::NAME) {
+            assert(node->vreg >= 0);
+            state[node->vreg] = DefinednessAnalysis::Undefined;
+        } else
+            assert(node->vreg == VREG_UNDEFINED);
         return true;
     }
 
-    virtual bool visit_classdef(BST_ClassDef* node) {
-        assert(0 && "I think this isn't needed");
-        //_doSet(node->name);
+    bool visit_copyvreg(BST_CopyVReg* node) override {
+        // don't visit the vreg it will never get killed
+        // visit_vreg(&node->vreg_src, false);
+        _doSet(node->vreg_dst);
         return true;
     }
 
-    virtual bool visit_functiondef(BST_FunctionDef* node) {
-        assert(0 && "I think this isn't needed");
-        //_doSet(node->name);
+    bool visit_loadname(BST_LoadName* node) override {
+        // don't visit the vreg it will never get killed
+        // visit_vreg(&node->vreg, false);
+        _doSet(node->vreg_dst);
         return true;
     }
-
-    virtual bool visit_assign(BST_Assign* node) {
-        _doSet(node->target);
-        return true;
-    }
-
-    virtual bool visit_arguments(BST_arguments* node) { RELEASE_ASSERT(0, "this shouldn't get hit"); }
-
-    virtual bool visit_exec(BST_Exec* node) { return true; }
 
     friend class DefinednessBBAnalyzer;
 };
@@ -460,11 +384,13 @@ const VRegSet& PhiAnalysis::getAllRequiredFor(CFGBlock* block) {
 }
 
 bool PhiAnalysis::isRequired(int vreg, CFGBlock* block) {
+    assert(vreg >= 0);
     assert(required_phis.count(block));
     return required_phis.find(block)->second[vreg];
 }
 
 bool PhiAnalysis::isRequiredAfter(int vreg, CFGBlock* block) {
+    assert(vreg >= 0);
     // If there are multiple successors, then none of them are allowed
     // to require any phi nodes
     if (block->successors.size() != 1)
@@ -475,6 +401,7 @@ bool PhiAnalysis::isRequiredAfter(int vreg, CFGBlock* block) {
 }
 
 bool PhiAnalysis::isPotentiallyUndefinedAfter(int vreg, CFGBlock* block) {
+    assert(vreg >= 0);
     for (auto b : block->successors) {
         if (isPotentiallyUndefinedAt(vreg, b))
             return true;
@@ -483,6 +410,7 @@ bool PhiAnalysis::isPotentiallyUndefinedAfter(int vreg, CFGBlock* block) {
 }
 
 bool PhiAnalysis::isPotentiallyUndefinedAt(int vreg, CFGBlock* block) {
+    assert(vreg >= 0);
     assert(definedness.defined_at_beginning.count(block));
     return definedness.defined_at_beginning.find(block)->second[vreg] != DefinednessAnalysis::Defined;
 }
