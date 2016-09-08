@@ -425,7 +425,6 @@ ARGS ?=
 ifneq ($(BR),)
 	override GDB_CMDS := --ex "break $(BR)" $(GDB_CMDS)
 endif
-$(call add_unittest,gc)
 $(call add_unittest,analysis)
 
 
@@ -923,8 +922,9 @@ wdbg_%:
 
 .PHONY: head_%
 HEAD := 40
+HEAD_SKIP := 6
 head_%:
-	@ bash -c "set -o pipefail; script -e -q -c '$(MAKE) $(dir $@)$(patsubst head_%,%,$(notdir $@))' /dev/null | head -n$(HEAD)"
+	@ bash -c "set -o pipefail; script -e -q -c '$(MAKE) $(dir $@)$(patsubst head_%,%,$(notdir $@))' /dev/null | tail -n+$(HEAD_SKIP) | head -n$(HEAD)"
 head: head_pyston_dbg
 .PHONY: hwatch_%
 hwatch_%:

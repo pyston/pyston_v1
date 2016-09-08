@@ -29,15 +29,15 @@
 
 namespace pyston {
 
-class AST_expr;
-class AST_stmt;
+class BST_expr;
+class BST_stmt;
 class CFGBlock;
 class GCBuilder;
 class IREmitter;
 
 struct UnwindInfo {
 public:
-    AST_stmt* current_stmt;
+    BST_stmt* current_stmt;
 
     llvm::BasicBlock* exc_dest;
 
@@ -46,7 +46,7 @@ public:
 
     bool hasHandler() const { return exc_dest != NULL; }
 
-    UnwindInfo(AST_stmt* current_stmt, llvm::BasicBlock* exc_dest, bool is_after_deopt = false)
+    UnwindInfo(BST_stmt* current_stmt, llvm::BasicBlock* exc_dest, bool is_after_deopt = false)
         : current_stmt(current_stmt), exc_dest(exc_dest), is_after_deopt(is_after_deopt) {}
 
     ExceptionStyle preferredExceptionStyle() const;
@@ -119,7 +119,7 @@ public:
     // virtual void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val,
     // llvm::Value* exc_val, bool double_check = false) = 0;
 
-    virtual llvm::Value* createDeopt(AST_stmt* current_stmt, AST_expr* node, llvm::Value* node_value) = 0;
+    virtual llvm::Value* createDeopt(BST_stmt* current_stmt, BST_expr* node, llvm::Value* node_value) = 0;
 
     virtual BORROWED(Box*) getIntConstant(int64_t n) = 0;
     virtual BORROWED(Box*) getFloatConstant(double d) = 0;
@@ -138,7 +138,7 @@ extern const std::string PASSED_GENERATOR_NAME;
 InternedString getIsDefinedName(InternedString name, InternedStringPool& interned_strings);
 bool isIsDefinedName(llvm::StringRef name);
 
-std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, SourceInfo* source,
+std::pair<CompiledFunction*, llvm::Function*> doCompile(BoxedCode* code, SourceInfo* source,
                                                         const ParamNames* param_names,
                                                         const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
                                                         ExceptionStyle exception_style, FunctionSpecialization* spec,

@@ -17,12 +17,35 @@
 #include "llvm/ADT/DenseSet.h"
 
 #include "core/ast.h"
+#include "core/bst.h"
 #include "core/common.h"
 #include "core/types.h"
 #include "core/util.h"
 #include "runtime/types.h"
 
 namespace pyston {
+
+ScopingResults::ScopingResults(ScopeInfo* scope_info, bool globals_from_module)
+    : are_locals_from_module(scope_info->areLocalsFromModule()),
+      are_globals_from_module(globals_from_module),
+      creates_closure(scope_info->createsClosure()),
+      takes_closure(scope_info->takesClosure()),
+      passes_through_closure(scope_info->passesThroughClosure()),
+      uses_name_lookup(scope_info->usesNameLookup()),
+      closure_size(creates_closure ? scope_info->getClosureSize() : 0) {
+    deref_info = scope_info->getAllDerefVarsAndInfo();
+}
+
+DerefInfo ScopingResults::getDerefInfo(BST_Name* node) const {
+    assert(node->lookup_type == ScopeInfo::VarScopeType::DEREF);
+    assert(node->deref_info.offset != INT_MAX);
+    return node->deref_info;
+}
+size_t ScopingResults::getClosureOffset(BST_Name* node) const {
+    assert(node->lookup_type == ScopeInfo::VarScopeType::CLOSURE);
+    assert(node->closure_offset != -1);
+    return node->closure_offset;
+}
 
 class YieldVisitor : public NoopASTVisitor {
 public:
@@ -48,6 +71,13 @@ bool containsYield(AST* ast) {
     YieldVisitor visitor(ast);
     ast->accept(&visitor);
     return visitor.contains_yield;
+}
+
+bool containsYield(llvm::ArrayRef<AST_stmt*> body) {
+    for (auto e : body)
+        if (containsYield(e))
+            return true;
+    return false;
 }
 
 // TODO
@@ -576,8 +606,6 @@ public:
     bool visit_while(AST_While* node) override { return false; }
     bool visit_with(AST_With* node) override { return false; }
     bool visit_yield(AST_Yield* node) override { return false; }
-    bool visit_branch(AST_Branch* node) override { return false; }
-    bool visit_jump(AST_Jump* node) override { return false; }
     bool visit_delete(AST_Delete* node) override { return false; }
 
     bool visit_global(AST_Global* node) override {
@@ -903,13 +931,13 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
         ScopeNameUsage* usage = sorted_usages[i];
         AST* node = usage->node;
 
-        ScopeInfo* parent_info = this->scopes[(usage->parent == NULL) ? this->parent_module : usage->parent->node];
+        ScopeInfo* parent_info
+            = this->scopes[(usage->parent == NULL) ? this->parent_module : usage->parent->node].get();
 
         switch (node->type) {
             case AST_TYPE::ClassDef: {
-                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage, usage->node, true /* usesNameLookup */,
-                                                             globals_from_module);
-                this->scopes[node] = scopeInfo;
+                this->scopes[node] = llvm::make_unique<ScopeInfoBase>(parent_info, usage, usage->node,
+                                                                      true /* usesNameLookup */, globals_from_module);
                 break;
             }
             case AST_TYPE::FunctionDef:
@@ -917,10 +945,9 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             case AST_TYPE::GeneratorExp:
             case AST_TYPE::DictComp:
             case AST_TYPE::SetComp: {
-                ScopeInfoBase* scopeInfo
-                    = new ScopeInfoBase(parent_info, usage, usage->node,
-                                        usage->hasNameForcingSyntax() /* usesNameLookup */, globals_from_module);
-                this->scopes[node] = scopeInfo;
+                this->scopes[node] = llvm::make_unique<ScopeInfoBase>(
+                    parent_info, usage, usage->node, usage->hasNameForcingSyntax() /* usesNameLookup */,
+                    globals_from_module);
                 break;
             }
             default:
@@ -934,45 +961,22 @@ InternedStringPool& ScopingAnalysis::getInternedStrings() {
     return *interned_strings;
 }
 
-ScopeInfo* ScopingAnalysis::analyzeSubtree(AST* node) {
+void ScopingAnalysis::analyzeSubtree(AST* node) {
     NameUsageMap usages;
     usages[node] = new ScopeNameUsage(node, NULL, this);
     NameCollectorVisitor::collect(node, &usages, this);
 
     processNameUsages(&usages);
-
-    ScopeInfo* rtn = scopes[node];
-    assert(rtn);
-    return rtn;
-}
-
-void ScopingAnalysis::registerScopeReplacement(AST* original_node, AST* new_node) {
-    assert(scope_replacements.count(original_node) == 0);
-    assert(scope_replacements.count(new_node) == 0);
-    assert(scopes.count(new_node) == 0);
-
-#ifndef NDEBUG
-    // NULL this out just to make sure it doesn't get accessed:
-    scopes[new_node] = NULL;
-#endif
-
-    scope_replacements[new_node] = original_node;
 }
 
 ScopeInfo* ScopingAnalysis::getScopeInfoForNode(AST* node) {
     assert(node);
 
-    auto it = scope_replacements.find(node);
-    if (it != scope_replacements.end())
-        node = it->second;
+    if (!scopes.count(node))
+        analyzeSubtree(node);
 
-    auto rtn = scopes.find(node);
-    if (rtn != scopes.end()) {
-        assert(rtn->second);
-        return rtn->second;
-    }
-
-    return analyzeSubtree(node);
+    assert(scopes.count(node));
+    return scopes[node].get();
 }
 
 ScopingAnalysis::ScopingAnalysis(AST* ast, bool globals_from_module)
@@ -993,10 +997,10 @@ ScopingAnalysis::ScopingAnalysis(AST* ast, bool globals_from_module)
 
     if (globals_from_module) {
         assert(ast->type == AST_TYPE::Module);
-        scopes[ast] = new ModuleScopeInfo();
+        scopes[ast] = llvm::make_unique<ModuleScopeInfo>();
         parent_module = static_cast<AST_Module*>(ast);
     } else {
-        scopes[ast] = new EvalExprScopeInfo(ast, globals_from_module);
+        scopes[ast] = llvm::make_unique<EvalExprScopeInfo>(ast, globals_from_module);
     }
 }
 }

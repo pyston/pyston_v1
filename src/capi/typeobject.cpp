@@ -1972,12 +1972,12 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
                sanity checks.  I'll buy the first person to
                point out a bug in this reasoning a beer. */
         } else if (offset == offsetof(BoxedClass, tp_descr_get) && descr->cls == function_cls
-                   && !static_cast<BoxedFunction*>(descr)->md->always_use_version.empty()) {
-            auto md = static_cast<BoxedFunction*>(descr)->md;
-            if (md->always_use_version.get<CAPI>())
-                specific = md->always_use_version.get<CAPI>();
+                   && !static_cast<BoxedFunction*>(descr)->code->always_use_version.empty()) {
+            auto code = static_cast<BoxedFunction*>(descr)->code;
+            if (code->always_use_version.get<CAPI>())
+                specific = code->always_use_version.get<CAPI>();
             else {
-                type->tpp_descr_get = (descrgetfunc)md->always_use_version.get<CXX>()->code;
+                type->tpp_descr_get = (descrgetfunc)code->always_use_version.get<CXX>()->code;
                 specific = (void*)slot_tp_tpp_descr_get;
             }
         } else if (descr == Py_None && ptr == (void**)&type->tp_hash) {

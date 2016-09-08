@@ -51,7 +51,7 @@
 #include "codegen/osrentry.h"
 #include "codegen/patchpoints.h"
 #include "codegen/stackmaps.h"
-#include "core/ast.h"
+#include "core/bst.h"
 #include "core/cfg.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -408,7 +408,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         irstate->getRefcounts()->setType(osr_created_closure, RefType::BORROWED);
         if (source->is_generator)
             irstate->setPassedGenerator(osr_generator);
-        if (source->getScopeInfo()->createsClosure())
+        if (source->scoping.createsClosure())
             irstate->setCreatedClosure(osr_created_closure);
 
         int arg_num = -1;
@@ -551,8 +551,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         if (block == cfg->getStartingBlock()) {
             assert(entry_descriptor == NULL);
 
-            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast != NULL
-                && source->ast->type != AST_TYPE::Module) {
+            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast_type != BST_TYPE::Module) {
                 llvm::BasicBlock* preentry_bb = llvm::BasicBlock::Create(
                     g.context, "pre_entry", irstate->getLLVMFunction(), llvm_entry_blocks[cfg->getStartingBlock()]);
                 llvm::BasicBlock* reopt_bb = llvm::BasicBlock::Create(g.context, "reopt", irstate->getLLVMFunction());
@@ -696,7 +695,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // analysis frameworks can't (yet) support the idea of a block flowing differently to its different
                 // successors.
                 //
-                // There are four kinds of AST statements which can set a name:
+                // There are four kinds of BST statements which can set a name:
                 // - Assign
                 // - ClassDef
                 // - FunctionDef
@@ -716,27 +715,29 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
                 SymbolTable* sym_table = ending_symbol_tables[pred];
                 bool created_new_sym_table = false;
-                if (last_inst->type == AST_TYPE::Invoke && ast_cast<AST_Invoke>(last_inst)->exc_dest == block) {
-                    AST_stmt* stmt = ast_cast<AST_Invoke>(last_inst)->stmt;
+                if (last_inst->type == BST_TYPE::Invoke && bst_cast<BST_Invoke>(last_inst)->exc_dest == block) {
+                    BST_stmt* stmt = bst_cast<BST_Invoke>(last_inst)->stmt;
 
                     // The CFG pass translates away these statements, so we should never encounter them.
                     // If we did, we'd need to remove a name here.
-                    assert(stmt->type != AST_TYPE::ClassDef);
-                    assert(stmt->type != AST_TYPE::FunctionDef);
-                    assert(stmt->type != AST_TYPE::Import);
-                    assert(stmt->type != AST_TYPE::ImportFrom);
+                    assert(stmt->type != BST_TYPE::ClassDef);
+                    assert(stmt->type != BST_TYPE::FunctionDef);
+                    assert(stmt->type != BST_TYPE::Import);
+                    assert(stmt->type != BST_TYPE::ImportFrom);
 
-                    if (stmt->type == AST_TYPE::Assign) {
-                        auto asgn = ast_cast<AST_Assign>(stmt);
-                        assert(asgn->targets.size() == 1);
-                        if (asgn->targets[0]->type == AST_TYPE::Name) {
-                            InternedString name = ast_cast<AST_Name>(asgn->targets[0])->id;
-                            int vreg = ast_cast<AST_Name>(asgn->targets[0])->vreg;
+                    if (stmt->type == BST_TYPE::Assign) {
+                        auto asgn = bst_cast<BST_Assign>(stmt);
+                        if (asgn->target->type == BST_TYPE::Name) {
+                            auto asname = bst_cast<BST_Name>(asgn->target);
+                            assert(asname->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
+
+                            InternedString name = asname->id;
+                            int vreg = bst_cast<BST_Name>(asgn->target)->vreg;
                             assert(name.c_str()[0] == '#'); // it must be a temporary
                             // You might think I need to check whether `name' is being assigned globally or locally,
                             // since a global assign doesn't affect the symbol table. However, the CFG pass only
                             // generates invoke-assigns to temporary variables. Just to be sure, we assert:
-                            assert(source->getScopeInfo()->getScopeTypeOfName(name) != ScopeInfo::VarScopeType::GLOBAL);
+                            assert(asname->lookup_type != ScopeInfo::VarScopeType::GLOBAL);
 
                             // TODO: inefficient
                             sym_table = new SymbolTable(*sym_table);
@@ -821,9 +822,9 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         llvm_exit_blocks[block] = ending_st.ending_block;
 
         if (ending_st.exception_state.size()) {
-            AST_stmt* last_stmt = block->body.back();
-            assert(last_stmt->type == AST_TYPE::Invoke);
-            CFGBlock* exc_block = ast_cast<AST_Invoke>(last_stmt)->exc_dest;
+            BST_stmt* last_stmt = block->body.back();
+            assert(last_stmt->type == BST_TYPE::Invoke);
+            CFGBlock* exc_block = bst_cast<BST_Invoke>(last_stmt)->exc_dest;
             assert(!incoming_exception_state.count(exc_block));
 
             incoming_exception_state.insert(std::make_pair(exc_block, ending_st.exception_state));
@@ -985,14 +986,12 @@ static void computeBlockSetClosure(BlockSet& blocks) {
     }
 }
 // returns a pointer to the function-info mdnode
-static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::string origname) {
-    int lineno = 0;
-    if (source->ast)
-        lineno = source->ast->lineno;
+static llvm::MDNode* setupDebugInfo(BoxedCode* code, llvm::Function* f, std::string origname) {
+    int lineno = code->firstlineno;
 
     llvm::DIBuilder builder(*g.cur_module);
 
-    BoxedString* fn = source->getFn();
+    BoxedString* fn = code->filename;
     std::string dir = "";
     std::string producer = "pyston; git rev " STRINGIFY(GITREV);
 
@@ -1023,7 +1022,7 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel eff
     return os.str();
 }
 
-std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, SourceInfo* source,
+std::pair<CompiledFunction*, llvm::Function*> doCompile(BoxedCode* code, SourceInfo* source,
                                                         const ParamNames* param_names,
                                                         const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
                                                         ExceptionStyle exception_style, FunctionSpecialization* spec,
@@ -1063,13 +1062,13 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
         int nargs = param_names->totalParameters();
         ASSERT(nargs == spec->arg_types.size(), "%d %ld", nargs, spec->arg_types.size());
 
-        if (source->getScopeInfo()->takesClosure())
+        if (source->scoping.takesClosure())
             llvm_arg_types.push_back(g.llvm_closure_type_ptr);
 
         if (source->is_generator)
             llvm_arg_types.push_back(g.llvm_generator_type_ptr);
 
-        if (!source->scoping->areGlobalsFromModule())
+        if (!source->scoping.areGlobalsFromModule())
             llvm_arg_types.push_back(g.llvm_value_type_ptr);
 
         for (int i = 0; i < nargs; i++) {
@@ -1087,7 +1086,7 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
         llvm_arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
     }
 
-    CompiledFunction* cf = new CompiledFunction(md, spec, NULL, effort, exception_style, entry_descriptor);
+    CompiledFunction* cf = new CompiledFunction(code, spec, NULL, effort, exception_style, entry_descriptor);
 
     // Make sure that the instruction memory keeps the module object alive.
     // TODO: implement this for real
@@ -1099,7 +1098,7 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
 
     // g.func_registry.registerFunction(f, g.cur_module);
 
-    llvm::MDNode* dbg_funcinfo = setupDebugInfo(source, f, nameprefix);
+    llvm::MDNode* dbg_funcinfo = setupDebugInfo(code, f, nameprefix);
 
     irgen_us += _t2.split();
 
@@ -1109,10 +1108,9 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
         speculation_level = TypeAnalysis::SOME;
     TypeAnalysis* types;
     if (entry_descriptor)
-        types = doTypeAnalysis(entry_descriptor, effort, speculation_level, source->getScopeInfo());
+        types = doTypeAnalysis(entry_descriptor, effort, speculation_level);
     else
-        types = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort, speculation_level,
-                               source->getScopeInfo());
+        types = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort, speculation_level);
 
 
     _t2.split();
@@ -1131,13 +1129,13 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(FunctionMetadata* md, So
     std::unique_ptr<PhiAnalysis> phis;
 
     if (entry_descriptor)
-        phis = computeRequiredPhis(entry_descriptor, liveness, source->getScopeInfo());
+        phis = computeRequiredPhis(entry_descriptor, liveness);
     else
-        phis = computeRequiredPhis(*param_names, source->cfg, liveness, source->getScopeInfo());
+        phis = computeRequiredPhis(*param_names, source->cfg, liveness);
 
     RefcountTracker refcounter;
 
-    IRGenState irstate(md, cf, f, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo, &refcounter);
+    IRGenState irstate(code, cf, f, source, std::move(phis), param_names, getGCBuilder(), dbg_funcinfo, &refcounter);
 
     emitBBs(&irstate, types, entry_descriptor, blocks);
     assert(!llvm::verifyFunction(*f, &llvm::errs()));

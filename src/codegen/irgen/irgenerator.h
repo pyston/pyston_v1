@@ -35,7 +35,7 @@ class MDNode;
 
 namespace pyston {
 
-class AST_Invoke;
+class BST_Invoke;
 class CFGBlock;
 class GCBuilder;
 struct PatchpointInfo;
@@ -59,9 +59,9 @@ extern const std::string FRAME_INFO_PTR_NAME;
 // TODO this probably shouldn't be here
 class IRGenState {
 private:
-    // Note: due to some not-yet-fixed behavior, cf->md is NULL will only get set to point
-    // to md at the end of irgen.
-    FunctionMetadata* md;
+    // Note: due to some not-yet-fixed behavior, cf->code_obj is NULL will only get set to point
+    // to code_obj at the end of irgen.
+    BoxedCode* code;
     CompiledFunction* cf;
     llvm::Function* func;
     SourceInfo* source_info;
@@ -83,7 +83,7 @@ private:
     int scratch_size;
 
 public:
-    IRGenState(FunctionMetadata* md, CompiledFunction* cf, llvm::Function* func, SourceInfo* source_info,
+    IRGenState(BoxedCode* code, CompiledFunction* cf, llvm::Function* func, SourceInfo* source_info,
                std::unique_ptr<PhiAnalysis> phis, const ParamNames* param_names, GCBuilder* gc,
                llvm::MDNode* func_dbg_info, RefcountTracker* refcount_tracker);
     ~IRGenState();
@@ -91,7 +91,7 @@ public:
     CFG* getCFG() { return getSourceInfo()->cfg; }
 
     CompiledFunction* getCurFunction() { return cf; }
-    FunctionMetadata* getMD() { return md; }
+    BoxedCode* getCode() { return code; }
 
     ExceptionStyle getExceptionStyle() { return cf->exception_style; }
 
@@ -118,8 +118,7 @@ public:
     LivenessAnalysis* getLiveness() { return source_info->getLiveness(); }
     PhiAnalysis* getPhis() { return phis.get(); }
 
-    ScopeInfo* getScopeInfo();
-    ScopeInfo* getScopeInfoForNode(AST* node);
+    const ScopingResults& getScopeInfo();
 
     llvm::MDNode* getFuncDbgInfo() { return func_dbg_info; }
 
@@ -187,26 +186,25 @@ public:
     virtual void copySymbolsFrom(SymbolTable* st) = 0;
     virtual void run(const CFGBlock* block) = 0; // primary entry point
     virtual EndingState getEndingSymbolTable() = 0;
-    virtual void doSafePoint(AST_stmt* next_statement) = 0;
+    virtual void doSafePoint(BST_stmt* next_statement) = 0;
     virtual void addFrameStackmapArgs(PatchpointInfo* pp, std::vector<llvm::Value*>& stackmap_args) = 0;
     virtual void addOutgoingExceptionState(ExceptionState exception_state) = 0;
     virtual void setIncomingExceptionState(llvm::SmallVector<ExceptionState, 2> exc_state) = 0;
     virtual llvm::BasicBlock* getCXXExcDest(const UnwindInfo&) = 0;
     virtual llvm::BasicBlock* getCAPIExcDest(llvm::BasicBlock* from_block, llvm::BasicBlock* final_dest,
-                                             AST_stmt* current_stmt, bool is_after_deopt = false) = 0;
+                                             BST_stmt* current_stmt, bool is_after_deopt = false) = 0;
     virtual CFGBlock* getCFGBlock() = 0;
 };
 
 std::tuple<llvm::Value*, llvm::Value*, llvm::Value*> createLandingpad(llvm::BasicBlock*);
 
 class IREmitter;
-class AST_Call;
+class BST_Call;
 IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator = NULL);
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                                CFGBlock* myblock, TypeAnalysis* types);
 
-FunctionMetadata* wrapFunction(AST* node, AST_arguments* args, SourceInfo* source);
-std::vector<BoxedString*>* getKeywordNameStorage(AST_Call* node);
+std::vector<BoxedString*>* getKeywordNameStorage(BST_Call* node);
 }
 
 #endif

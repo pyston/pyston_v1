@@ -17,7 +17,6 @@
 
 #include "codegen/ast_interpreter.h"
 #include "codegen/irgen/hooks.h"
-#include "core/ast.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/complex.h"
@@ -55,7 +54,6 @@ void force() {
     FORCE(boxFloat);
     FORCE(unboxFloat);
     FORCE(createFunctionFromMetadata);
-    FORCE(getFunctionMetadata);
     FORCE(boxInstanceMethod);
     FORCE(boxBool);
     FORCE(boxBoolNegated);

@@ -95,12 +95,12 @@ void PatchpointInfo::parseLocationMap(StackMap::Record* r, LocationMap* map) {
                                                           .locations = std::move(locations) });
     };
 
-    auto&& source = parentFunction()->md->source;
+    auto&& source = parentFunction()->code_obj->source;
     if (source->is_generator)
         map->generator.locations.push_back(parse_type(GENERATOR));
-    if (source->getScopeInfo()->takesClosure())
+    if (source->scoping.takesClosure())
         map->passed_closure.locations.push_back(parse_type(CLOSURE));
-    if (source->getScopeInfo()->createsClosure())
+    if (source->scoping.createsClosure())
         map->created_closure.locations.push_back(parse_type(CLOSURE));
 
     for (FrameVarInfo& frame_var : frame_info_desc.vars) {

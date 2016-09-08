@@ -37,6 +37,7 @@
 #include "capi/types.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/unwinding.h"
+#include "core/ast.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/classobj.h"
@@ -847,8 +848,8 @@ extern "C" int PyRun_InteractiveOneFlags(FILE* fp, const char* filename, PyCompi
     bool failed = false;
     try {
         assert(mod->kind == Interactive_kind);
-        AST_Module* pyston_module = static_cast<AST_Module*>(cpythonToPystonAST(mod, filename));
-        compileAndRunModule(pyston_module, static_cast<BoxedModule*>(m));
+        auto res = cpythonToPystonAST(mod, filename);
+        compileAndRunModule((AST_Module*)res.first, static_cast<BoxedModule*>(m));
     } catch (ExcInfo e) {
         setCAPIException(e);
         failed = true;
@@ -1769,11 +1770,11 @@ extern "C" int PyNumber_CoerceEx(PyObject** pv, PyObject** pw) noexcept {
 }
 
 void setupCAPI() {
-    capifunc_cls->giveAttr(
-        "__repr__", new BoxedFunction(FunctionMetadata::create((void*)BoxedCApiFunction::__repr__<CXX>, UNKNOWN, 1)));
+    capifunc_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)BoxedCApiFunction::__repr__<CXX>,
+                                                                           UNKNOWN, 1, "capifunc.__repr__")));
 
-    auto capi_call
-        = new BoxedFunction(FunctionMetadata::create((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, true, true));
+    auto capi_call = new BoxedFunction(
+        BoxedCode::create((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, true, true, "capifunc.__call__"));
     capifunc_cls->giveAttr("__call__", capi_call);
     capifunc_cls->tpp_call.capi_val = BoxedCApiFunction::tppCall<CAPI>;
     capifunc_cls->tpp_call.cxx_val = BoxedCApiFunction::tppCall<CXX>;

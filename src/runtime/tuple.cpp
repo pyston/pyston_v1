@@ -17,7 +17,6 @@
 #include <algorithm>
 
 #include "capi/typeobject.h"
-#include "core/ast.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -773,8 +772,8 @@ void setupTuple() {
                                             (traverseproc)BoxedTupleIterator::traverse, NOCLEAR);
 
     tuple_cls->giveAttr("__new__",
-                        new BoxedFunction(FunctionMetadata::create((void*)tupleNew, UNKNOWN, 1, true, true)));
-    FunctionMetadata* getitem = new FunctionMetadata(2, 0, 0);
+                        new BoxedFunction(BoxedCode::create((void*)tupleNew, UNKNOWN, 1, true, true, "tuple.__new__")));
+    BoxedCode* getitem = new BoxedCode(2, 0, 0, "tuple.__getitem__");
     getitem->addVersion((void*)tupleGetitemInt, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, BOXED_INT });
     getitem->addVersion((void*)tupleGetitemSlice, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, SLICE });
     getitem->addVersion((void*)tupleGetitem<CXX>, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN }, CXX);
@@ -782,32 +781,36 @@ void setupTuple() {
                         CAPI);
     tuple_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
 
-    tuple_cls->giveAttr("__contains__",
-                        new BoxedFunction(FunctionMetadata::create((void*)tupleContains, BOXED_BOOL, 2)));
+    tuple_cls->giveAttr("__contains__", new BoxedFunction(BoxedCode::create((void*)tupleContains, BOXED_BOOL, 2,
+                                                                            "tuple.__contains__")));
     tuple_cls->giveAttr(
         "index",
-        new BoxedFunction(FunctionMetadata::create((void*)tupleIndex, BOXED_INT, 4, false, false),
+        new BoxedFunction(BoxedCode::create((void*)tupleIndex, BOXED_INT, 4, false, false, "tuple.index"),
                           { autoDecref(boxInt(0)), autoDecref(boxInt(std::numeric_limits<Py_ssize_t>::max())) }));
-    tuple_cls->giveAttr("count", new BoxedFunction(FunctionMetadata::create((void*)tupleCount, BOXED_INT, 2)));
+    tuple_cls->giveAttr("count", new BoxedFunction(BoxedCode::create((void*)tupleCount, BOXED_INT, 2, "tuple.count")));
 
-    tuple_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create((void*)tupleIter,
-                                                                               typeFromClass(tuple_iterator_cls), 1)));
+    tuple_cls->giveAttr("__iter__", new BoxedFunction(BoxedCode::create(
+                                        (void*)tupleIter, typeFromClass(tuple_iterator_cls), 1, "tuple.__iter__")));
 
 
     tuple_cls->tp_richcompare = tuplerichcompare;
 
-    tuple_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)tupleNonzero, BOXED_BOOL, 1)));
+    tuple_cls->giveAttr("__nonzero__",
+                        new BoxedFunction(BoxedCode::create((void*)tupleNonzero, BOXED_BOOL, 1, "tuple.__nonzero__")));
 
-    tuple_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)tupleLen, BOXED_INT, 1)));
-    tuple_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)tupleRepr, STR, 1)));
+    tuple_cls->giveAttr("__len__",
+                        new BoxedFunction(BoxedCode::create((void*)tupleLen, BOXED_INT, 1, "tuple.__len__")));
+    tuple_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)tupleRepr, STR, 1, "tuple.__repr__")));
 
     // Return type is UNKNOWN as it could be NotImplemented.
-    tuple_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)tupleAdd, UNKNOWN, 2)));
-    tuple_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)tupleMul, UNKNOWN, 2)));
-    tuple_cls->giveAttr("__rmul__", new BoxedFunction(FunctionMetadata::create((void*)tupleMul, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__add__", new BoxedFunction(BoxedCode::create((void*)tupleAdd, UNKNOWN, 2, "tuple.__add__")));
+    tuple_cls->giveAttr("__mul__", new BoxedFunction(BoxedCode::create((void*)tupleMul, UNKNOWN, 2, "tuple.__mul__")));
+    tuple_cls->giveAttr("__rmul__",
+                        new BoxedFunction(BoxedCode::create((void*)tupleMul, UNKNOWN, 2, "tuple.__rmul__")));
 
-    tuple_cls->giveAttr("__getnewargs__", new BoxedFunction(FunctionMetadata::create((void*)tuple_getnewargs, UNKNOWN,
-                                                                                     1, ParamNames::empty(), CAPI)));
+    tuple_cls->giveAttr("__getnewargs__",
+                        new BoxedFunction(BoxedCode::create((void*)tuple_getnewargs, UNKNOWN, 1, "tuple.__getnewargs__",
+                                                            "", ParamNames::empty(), CAPI)));
 
     tuple_cls->tp_hash = (hashfunc)tuple_hash;
     tuple_cls->tp_as_sequence->sq_slice = (ssizessizeargfunc)&tupleslice;
@@ -826,12 +829,14 @@ void setupTuple() {
     tuple_cls->tp_as_mapping->mp_length = (lenfunc)tuplelength;
     tuple_cls->tp_as_mapping->mp_subscript = (binaryfunc)tupleGetitem<CAPI>;
 
-    FunctionMetadata* hasnext = FunctionMetadata::create((void*)tupleiterHasnextUnboxed, BOOL, 1);
+    BoxedCode* hasnext = BoxedCode::create((void*)tupleiterHasnextUnboxed, BOOL, 1, "tuple.__hasnext__");
     hasnext->addVersion((void*)tupleiterHasnext, BOXED_BOOL);
     tuple_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
-    tuple_iterator_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create(
-                                                 (void*)tupleIterIter, typeFromClass(tuple_iterator_cls), 1)));
-    tuple_iterator_cls->giveAttr("next", new BoxedFunction(FunctionMetadata::create((void*)tupleiterNext, UNKNOWN, 1)));
+    tuple_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(BoxedCode::create((void*)tupleIterIter, typeFromClass(tuple_iterator_cls), 1,
+                                                        "tuple_iterator.__iter__")));
+    tuple_iterator_cls->giveAttr(
+        "next", new BoxedFunction(BoxedCode::create((void*)tupleiterNext, UNKNOWN, 1, "tuple_iterator.next")));
 
     tuple_iterator_cls->freeze();
     tuple_iterator_cls->tpp_hasnext = tupleiterHasnextUnboxed;

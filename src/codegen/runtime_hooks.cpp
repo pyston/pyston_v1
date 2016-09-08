@@ -122,9 +122,12 @@ static llvm::Value* addFunc(void* func, llvm::Type* rtn_type, llvm::Type* arg1, 
 void initGlobalFuncs(GlobalState& g) {
     g.llvm_opaque_type = llvm::StructType::create(g.context, "opaque");
 
-    g.llvm_functionmetadata_type_ptr = lookupFunction("createFunctionFromMetadata")->arg_begin()->getType();
     g.llvm_module_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedModule")->getPointerTo();
     assert(g.llvm_module_type_ptr);
+
+    g.llvm_code_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedCode")->getPointerTo();
+    assert(g.llvm_code_type_ptr);
+
     g.llvm_bool_type_ptr = lookupFunction("boxBool")->getReturnType();
 
     g.llvm_value_type_ptr = lookupFunction("getattr")->getReturnType();
@@ -144,13 +147,13 @@ void initGlobalFuncs(GlobalState& g) {
     assert(g.llvm_dict_type_ptr);
     g.llvm_dict_type_ptr = g.llvm_dict_type_ptr->getPointerTo();
 
-    g.llvm_aststmt_type_ptr = g.stdlib_module->getTypeByName("class.pyston::AST_stmt");
-    assert(g.llvm_aststmt_type_ptr);
-    g.llvm_aststmt_type_ptr = g.llvm_aststmt_type_ptr->getPointerTo();
+    g.llvm_bststmt_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BST_stmt");
+    assert(g.llvm_bststmt_type_ptr);
+    g.llvm_bststmt_type_ptr = g.llvm_bststmt_type_ptr->getPointerTo();
 
-    g.llvm_astexpr_type_ptr = g.stdlib_module->getTypeByName("class.pyston::AST_expr");
-    assert(g.llvm_astexpr_type_ptr);
-    g.llvm_astexpr_type_ptr = g.llvm_astexpr_type_ptr->getPointerTo();
+    g.llvm_bstexpr_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BST_expr");
+    assert(g.llvm_bstexpr_type_ptr);
+    g.llvm_bstexpr_type_ptr = g.llvm_bstexpr_type_ptr->getPointerTo();
 
     // The LLVM vector type for the arguments that we pass to runtimeCall and related functions.
     // It will be a pointer to a type named something like class.std::vector or
@@ -180,7 +183,6 @@ void initGlobalFuncs(GlobalState& g) {
     g.funcs.allowGLReadPreemption = getFunc((void*)threading::allowGLReadPreemption, "allowGLReadPreemption");
 
     GET(createFunctionFromMetadata);
-    GET(getFunctionMetadata);
     GET(createUserClass);
     GET(boxInt);
     GET(unboxInt);

@@ -23,13 +23,12 @@ namespace gc {
 class GCVisitor;
 }
 
-class AST_expr;
-class AST_stmt;
-class AST_Jump;
+class BST_expr;
+class BST_stmt;
+class BST_Jump;
 class Box;
 class BoxedClosure;
 class BoxedDict;
-struct FunctionMetadata;
 struct LineInfo;
 
 extern const void* interpreter_instr_addr;
@@ -47,11 +46,11 @@ struct ASTInterpreterJitInterface {
     static int getGlobalsOffset();
 
     static void delNameHelper(void* _interpreter, InternedString name);
-    static Box* derefHelper(void* interp, InternedString s);
+    static Box* derefHelper(void* interp, BST_Name* node);
     static Box* landingpadHelper(void* interp);
     static void pendingCallsCheckHelper();
     static void setExcInfoHelper(void* interp, STOLEN(Box*) type, STOLEN(Box*) value, STOLEN(Box*) traceback);
-    static void setLocalClosureHelper(void* interp, long vreg, InternedString id, Box* v);
+    static void setLocalClosureHelper(void* interp, BST_Name* name, Box* v);
     static void uncacheExcInfoHelper(void* interp);
     static void raise0Helper(void* interp) __attribute__((noreturn));
     static Box* yieldHelper(void* interp, STOLEN(Box*) value);
@@ -76,11 +75,11 @@ struct Value {
     Value(Box* o, RewriterVar* var) : o(o), var(var) {}
 };
 
-Box* astInterpretFunction(FunctionMetadata* f, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2,
-                          Box* arg3, Box** args);
-Box* astInterpretFunctionEval(FunctionMetadata* cf, Box* globals, Box* boxedLocals);
+Box* astInterpretFunction(BoxedCode* f, Box* closure, Box* generator, Box* globals, Box* arg1, Box* arg2, Box* arg3,
+                          Box** args);
+Box* astInterpretFunctionEval(BoxedCode* cf, Box* globals, Box* boxedLocals);
 // this function is implemented in the src/codegen/ast_interpreter_exec.S assembler file
-extern "C" Box* astInterpretDeopt(FunctionMetadata* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+extern "C" Box* astInterpretDeopt(BoxedCode* cf, BST_expr* after_expr, BST_stmt* enclosing_stmt, Box* expr_val,
                                   STOLEN(FrameStackState) frame_state);
 
 struct FrameInfo;

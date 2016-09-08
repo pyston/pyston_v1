@@ -11,6 +11,7 @@
 #include "codegen/osrentry.h"
 #include "codegen/parser.h"
 #include "core/ast.h"
+#include "core/bst.h"
 #include "core/cfg.h"
 #include "runtime/types.h"
 #include "unittests.h"
@@ -28,24 +29,31 @@ protected:
 #ifndef NDEBUG
 TEST_F(AnalysisTest, augassign) {
     const std::string fn("test/unittests/analysis_listcomp.py");
-    AST_Module* module = caching_parse_file(fn.c_str(), 0);
+    std::unique_ptr<ASTAllocator> ast_allocator;
+    AST_Module* module;
+    std::tie(module, ast_allocator) = caching_parse_file(fn.c_str(), 0);
     assert(module);
 
-    ScopingAnalysis *scoping = new ScopingAnalysis(module, true);
+    FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
+
+    auto scoping = std::make_shared<ScopingAnalysis>(module, true);
+    auto module_code = computeAllCFGs(module, true, future_flags, boxString(fn), NULL);
 
     assert(module->body[0]->type == AST_TYPE::FunctionDef);
     AST_FunctionDef* func = static_cast<AST_FunctionDef*>(module->body[0]);
 
     ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
-    ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("a")) == ScopeInfo::VarScopeType::GLOBAL);
+
+    ASSERT_NE(scope_info->getScopeTypeOfName(module->interned_strings->get("a")), ScopeInfo::VarScopeType::GLOBAL);
     ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("b")) == ScopeInfo::VarScopeType::GLOBAL);
 
-    FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
+    AST_arguments* args = new (*ast_allocator) AST_arguments();
+    ParamNames param_names(args, *module->interned_strings.get());
 
-    SourceInfo* si = new SourceInfo(createModule(boxString("augassign"), fn.c_str()), scoping, future_flags, func, boxString(fn));
+    // Hack to get at the cfg:
+    auto node = module_code->source->cfg->blocks[0]->body[0];
+    CFG* cfg = bst_cast<BST_MakeFunction>(bst_cast<BST_Assign>(node)->value)->function_def->code->source->cfg;
 
-    ParamNames param_names(si->ast, si->getInternedStrings());
-    CFG* cfg = computeCFG(si, param_names);
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
     auto&& vregs = cfg->getVRegInfo();
 
@@ -53,32 +61,36 @@ TEST_F(AnalysisTest, augassign) {
 
     for (CFGBlock* block : cfg->blocks) {
         //printf("%d\n", block->idx);
-        if (block->body.back()->type != AST_TYPE::Return)
+        if (block->body.back()->type != BST_TYPE::Return)
             ASSERT_TRUE(liveness->isLiveAtEnd(vregs.getVReg(module->interned_strings->get("a")), block));
     }
 
-    std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(ParamNames(func, si->getInternedStrings()), cfg, liveness.get(), scope_info);
+    std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(ParamNames(args, *module->interned_strings.get()), cfg, liveness.get());
 }
 
 void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     const std::string fn("test/unittests/analysis_osr.py");
-    AST_Module* module = caching_parse_file(fn.c_str(), 0);
+    std::unique_ptr<ASTAllocator> ast_allocator;
+    AST_Module* module;
+    std::tie(module, ast_allocator) = caching_parse_file(fn.c_str(), 0);
     assert(module);
 
-    ScopingAnalysis *scoping = new ScopingAnalysis(module, true);
+    ParamNames param_names(NULL, *module->interned_strings.get());
 
     assert(module->body[0]->type == AST_TYPE::FunctionDef);
     AST_FunctionDef* func = static_cast<AST_FunctionDef*>(module->body[0]);
 
+    auto scoping = std::make_shared<ScopingAnalysis>(module, true);
+    ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
+
     FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
 
-    ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
-    std::unique_ptr<SourceInfo> si(new SourceInfo(createModule(boxString("osr" + std::to_string((is_osr << 1) + i_maybe_undefined)),
-                    fn.c_str()), scoping, future_flags, func, boxString(fn)));
-    FunctionMetadata* clfunc = new FunctionMetadata(0, false, false, std::move(si));
+    auto module_code = computeAllCFGs(module, true, future_flags, boxString(fn), NULL);
 
-    CFG* cfg = computeCFG(clfunc->source.get(), clfunc->param_names);
-    clfunc->source->cfg = cfg;
+    // Hack to get at the cfg:
+    auto node = module_code->source->cfg->blocks[0]->body[0];
+    auto code = bst_cast<BST_MakeFunction>(bst_cast<BST_Assign>(node)->value)->function_def->code;
+    CFG* cfg = code->source->cfg;
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
 
     // cfg->print();
@@ -93,24 +105,24 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     ASSERT_EQ(6, loop_backedge->idx);
     ASSERT_EQ(1, loop_backedge->body.size());
 
-    ASSERT_EQ(AST_TYPE::Jump, loop_backedge->body[0]->type);
-    AST_Jump* backedge = ast_cast<AST_Jump>(loop_backedge->body[0]);
+    ASSERT_EQ(BST_TYPE::Jump, loop_backedge->body[0]->type);
+    BST_Jump* backedge = bst_cast<BST_Jump>(loop_backedge->body[0]);
     ASSERT_LE(backedge->target->idx, loop_backedge->idx);
 
     std::unique_ptr<PhiAnalysis> phis;
 
     if (is_osr) {
         int vreg = vregs.getVReg(i_str);
-        OSREntryDescriptor* entry_descriptor = OSREntryDescriptor::create(clfunc, backedge, CXX);
+        OSREntryDescriptor* entry_descriptor = OSREntryDescriptor::create(code, backedge, CXX);
         // need to set it to non-null
         ConcreteCompilerType* fake_type = (ConcreteCompilerType*)1;
         entry_descriptor->args[vreg] = fake_type;
         if (i_maybe_undefined)
             entry_descriptor->potentially_undefined.set(vreg);
         entry_descriptor->args[vregs.getVReg(iter_str)] = fake_type;
-        phis = computeRequiredPhis(entry_descriptor, liveness.get(), scope_info);
+        phis = computeRequiredPhis(entry_descriptor, liveness.get());
     } else {
-        phis = computeRequiredPhis(ParamNames(func, clfunc->source->getInternedStrings()), cfg, liveness.get(), scope_info);
+        phis = computeRequiredPhis(ParamNames(func->args, *module->interned_strings), cfg, liveness.get());
     }
 
     // First, verify that we require phi nodes for the block we enter into.

@@ -336,7 +336,7 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(const char* debug_name) {
 }
 
 static llvm::DenseMap<void*, ICInfo*> ics_by_return_addr;
-static llvm::DenseMap<AST*, ICInfo*> ics_by_ast_node;
+static llvm::DenseMap<BST*, ICInfo*> ics_by_ast_node;
 
 ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int size,
                llvm::CallingConv::ID calling_conv, LiveOutSet _live_outs, assembler::GenericRegister return_register,
@@ -480,13 +480,13 @@ bool ICInfo::isMegamorphic() {
     return times_rewritten >= IC_MEGAMORPHIC_THRESHOLD;
 }
 
-ICInfo* ICInfo::getICInfoForNode(AST* node) {
+ICInfo* ICInfo::getICInfoForNode(BST* node) {
     auto&& it = ics_by_ast_node.find(node);
     if (it != ics_by_ast_node.end())
         return it->second;
     return NULL;
 }
-void ICInfo::associateNodeWithICInfo(AST* node, std::unique_ptr<TypeRecorder> type_recorder) {
+void ICInfo::associateNodeWithICInfo(BST* node, std::unique_ptr<TypeRecorder> type_recorder) {
     assert(!this->node);
     this->node = node;
     this->type_recorder = std::move(type_recorder);

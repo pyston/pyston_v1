@@ -24,7 +24,6 @@
 #include <sys/mman.h>
 #include <ucontext.h>
 
-#include "core/ast.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -103,9 +102,9 @@ void generatorEntry(BoxedGenerator* g) noexcept {
             // KEEP_ALIVE(func);
 
             Box** args = g->args ? &g->args->elts[0] : nullptr;
-            auto r = callCLFunc<ExceptionStyle::CAPI, NOT_REWRITABLE>(func->md, nullptr, func->md->numReceivedArgs(),
-                                                                      func->closure, g, func->globals, g->arg1, g->arg2,
-                                                                      g->arg3, args);
+            auto r = callCLFunc<ExceptionStyle::CAPI, NOT_REWRITABLE>(func->code, nullptr,
+                                                                      func->code->numReceivedArgs(), func->closure, g,
+                                                                      func->globals, g->arg1, g->arg2, g->arg3, args);
             if (r)
                 Py_DECREF(r);
             else {
@@ -457,7 +456,7 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
 {
     Py_INCREF(function);
 
-    int numArgs = function->md->numReceivedArgs();
+    int numArgs = function->code->numReceivedArgs();
     if (numArgs > 0)
         Py_XINCREF(arg1);
     if (numArgs > 1)
@@ -531,7 +530,7 @@ Box* generator_name(Box* _self, void* context) noexcept {
     assert(isSubclass(_self->cls, generator_cls));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(_self);
 
-    return incref(self->function->md->source->getName());
+    return incref(self->function->code->name);
 }
 
 extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {
@@ -650,7 +649,7 @@ static void generator_dealloc(BoxedGenerator* self) noexcept {
 
     freeGeneratorStack(self);
 
-    int numArgs = self->function->md->numReceivedArgs();
+    int numArgs = self->function->code->numReceivedArgs();
     if (numArgs > 3) {
         for (int i = 0; i < numArgs - 3; i++) {
             Py_CLEAR(self->args->elts[i]);
@@ -687,7 +686,7 @@ static int generator_traverse(BoxedGenerator* self, visitproc visit, void* arg) 
         Py_VISIT(v);
     }
 
-    int numArgs = self->function->md->numReceivedArgs();
+    int numArgs = self->function->code->numReceivedArgs();
     if (numArgs > 3) {
         for (int i = 0; i < numArgs - 3; i++) {
             Py_VISIT(self->args->elts[i]);
@@ -715,26 +714,28 @@ void setupGenerator() {
     generator_cls = BoxedClass::create(type_cls, object_cls, 0, offsetof(BoxedGenerator, weakreflist),
                                        sizeof(BoxedGenerator), false, "generator", false, (destructor)generator_dealloc,
                                        NULL, true, (traverseproc)generator_traverse, NOCLEAR);
-    generator_cls->giveAttr(
-        "__iter__", new BoxedFunction(FunctionMetadata::create((void*)generatorIter, typeFromClass(generator_cls), 1)));
+    generator_cls->giveAttr("__iter__",
+                            new BoxedFunction(BoxedCode::create((void*)generatorIter, typeFromClass(generator_cls), 1,
+                                                                "generator.__iter__")));
 
-    auto generator_close = FunctionMetadata::create((void*)generatorClose<CXX>, UNKNOWN, 1);
+    auto generator_close = BoxedCode::create((void*)generatorClose<CXX>, UNKNOWN, 1, "generator.close");
     generator_close->addVersion((void*)generatorClose<CAPI>, UNKNOWN, CAPI);
     generator_cls->giveAttr("close", new BoxedFunction(generator_close));
 
-    auto generator_next = FunctionMetadata::create((void*)generatorNext<CXX>, UNKNOWN, 1, ParamNames::empty(), CXX);
+    auto generator_next
+        = BoxedCode::create((void*)generatorNext<CXX>, UNKNOWN, 1, "generatro.next", "", ParamNames::empty(), CXX);
     generator_next->addVersion((void*)generatorNext<CAPI>, UNKNOWN, CAPI);
     generator_cls->giveAttr("next", new BoxedFunction(generator_next));
 
-    FunctionMetadata* hasnext = FunctionMetadata::create((void*)generatorHasnextUnboxed, BOOL, 1);
+    BoxedCode* hasnext = BoxedCode::create((void*)generatorHasnextUnboxed, BOOL, 1, "generator.__hasnext__");
     hasnext->addVersion((void*)generatorHasnext, BOXED_BOOL);
     generator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
 
-    auto generator_send = FunctionMetadata::create((void*)generatorSend<CXX>, UNKNOWN, 2);
+    auto generator_send = BoxedCode::create((void*)generatorSend<CXX>, UNKNOWN, 2, "generator.send");
     generator_send->addVersion((void*)generatorSend<CAPI>, UNKNOWN, CAPI);
     generator_cls->giveAttr("send", new BoxedFunction(generator_send));
 
-    auto generator_throw = FunctionMetadata::create((void*)generatorThrow<CXX>, UNKNOWN, 4, false, false);
+    auto generator_throw = BoxedCode::create((void*)generatorThrow<CXX>, UNKNOWN, 4, false, false, "generator.throw");
     generator_throw->addVersion((void*)generatorThrow<CAPI>, UNKNOWN, CAPI);
     generator_cls->giveAttr("throw", new BoxedFunction(generator_throw, { NULL, NULL }));
 

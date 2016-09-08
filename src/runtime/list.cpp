@@ -19,7 +19,6 @@
 
 #include "capi/typeobject.h"
 #include "capi/types.h"
-#include "core/ast.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -1461,9 +1460,9 @@ void setupList() {
                                                    NULL, true, (traverseproc)BoxedListIterator::traverse, NOCLEAR);
     list_iterator_cls->instances_are_nonzero = list_reverse_iterator_cls->instances_are_nonzero = true;
 
-    list_cls->giveAttr("__len__", new BoxedFunction(FunctionMetadata::create((void*)listLen, BOXED_INT, 1)));
+    list_cls->giveAttr("__len__", new BoxedFunction(BoxedCode::create((void*)listLen, BOXED_INT, 1, "list.__len__")));
 
-    FunctionMetadata* getitem = new FunctionMetadata(2, false, false);
+    BoxedCode* getitem = new BoxedCode(2, false, false, "list.__getitem__");
     getitem->addVersion((void*)listGetitemInt, UNKNOWN, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT });
     getitem->addVersion((void*)listGetitemSlice<CXX>, LIST, std::vector<ConcreteCompilerType*>{ LIST, SLICE }, CXX);
     getitem->addVersion((void*)listGetitem<CXX>, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN }, CXX);
@@ -1472,65 +1471,72 @@ void setupList() {
                         CAPI);
     list_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
 
-    list_cls->giveAttr("__getslice__", new BoxedFunction(FunctionMetadata::create((void*)listGetslice, LIST, 3)));
+    list_cls->giveAttr("__getslice__",
+                       new BoxedFunction(BoxedCode::create((void*)listGetslice, LIST, 3, "list.__getslice__")));
 
-    FunctionMetadata* setitem = new FunctionMetadata(3, false, false);
+    BoxedCode* setitem = new BoxedCode(3, false, false, "list.__setitem__");
     setitem->addVersion((void*)listSetitemInt, NONE, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT, UNKNOWN });
     setitem->addVersion((void*)listSetitemSlice, NONE, std::vector<ConcreteCompilerType*>{ LIST, SLICE, UNKNOWN });
     setitem->addVersion((void*)listSetitem, NONE, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN, UNKNOWN });
     list_cls->giveAttr("__setitem__", new BoxedFunction(setitem));
 
-    list_cls->giveAttr("__setslice__", new BoxedFunction(FunctionMetadata::create((void*)listSetslice, NONE, 4)));
+    list_cls->giveAttr("__setslice__",
+                       new BoxedFunction(BoxedCode::create((void*)listSetslice, NONE, 4, "list.__setslice__")));
 
-    FunctionMetadata* delitem = new FunctionMetadata(2, false, false);
+    BoxedCode* delitem = new BoxedCode(2, false, false, "list.__delitem__");
     delitem->addVersion((void*)listDelitemInt, NONE, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT });
     delitem->addVersion((void*)listDelitemSlice, NONE, std::vector<ConcreteCompilerType*>{ LIST, SLICE });
     delitem->addVersion((void*)listDelitem, NONE, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN });
     list_cls->giveAttr("__delitem__", new BoxedFunction(delitem));
 
-    list_cls->giveAttr("__delslice__", new BoxedFunction(FunctionMetadata::create((void*)listDelslice, NONE, 3)));
+    list_cls->giveAttr("__delslice__",
+                       new BoxedFunction(BoxedCode::create((void*)listDelslice, NONE, 3, "list.__delslice__")));
+
+    list_cls->giveAttr("__iter__", new BoxedFunction(BoxedCode::create(
+                                       (void*)listIter, typeFromClass(list_iterator_cls), 1, "list.__iter__")));
+
+    list_cls->giveAttr("__reversed__",
+                       new BoxedFunction(BoxedCode::create(
+                           (void*)listReversed, typeFromClass(list_reverse_iterator_cls), 1, "list.__reversed__")));
+
+    list_cls->giveAttr("__eq__", new BoxedFunction(BoxedCode::create((void*)listEq, UNKNOWN, 2, "list.__eq__")));
+    list_cls->giveAttr("__ne__", new BoxedFunction(BoxedCode::create((void*)listNe, UNKNOWN, 2, "list.__ne__")));
+    list_cls->giveAttr("__lt__", new BoxedFunction(BoxedCode::create((void*)listLt, UNKNOWN, 2, "list.__lt__")));
+    list_cls->giveAttr("__le__", new BoxedFunction(BoxedCode::create((void*)listLe, UNKNOWN, 2, "list.__le__")));
+    list_cls->giveAttr("__gt__", new BoxedFunction(BoxedCode::create((void*)listGt, UNKNOWN, 2, "list.__gt__")));
+    list_cls->giveAttr("__ge__", new BoxedFunction(BoxedCode::create((void*)listGe, UNKNOWN, 2, "list.__ge__")));
+
+    list_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)listRepr, STR, 1, "list.__repr__")));
+    list_cls->giveAttr("__nonzero__",
+                       new BoxedFunction(BoxedCode::create((void*)listNonzero, BOXED_BOOL, 1, "list.__nonzero__")));
 
     list_cls->giveAttr(
-        "__iter__", new BoxedFunction(FunctionMetadata::create((void*)listIter, typeFromClass(list_iterator_cls), 1)));
+        "pop", new BoxedFunction(BoxedCode::create((void*)listPop, UNKNOWN, 2, false, false, "list.pop"), { Py_None }));
 
-    list_cls->giveAttr("__reversed__", new BoxedFunction(FunctionMetadata::create(
-                                           (void*)listReversed, typeFromClass(list_reverse_iterator_cls), 1)));
+    list_cls->giveAttr("append", new BoxedFunction(BoxedCode::create((void*)listAppend, NONE, 2, "list.append")));
+    list_cls->giveAttr("extend", new BoxedFunction(BoxedCode::create((void*)listExtend, NONE, 2, "list.extend")));
 
-    list_cls->giveAttr("__eq__", new BoxedFunction(FunctionMetadata::create((void*)listEq, UNKNOWN, 2)));
-    list_cls->giveAttr("__ne__", new BoxedFunction(FunctionMetadata::create((void*)listNe, UNKNOWN, 2)));
-    list_cls->giveAttr("__lt__", new BoxedFunction(FunctionMetadata::create((void*)listLt, UNKNOWN, 2)));
-    list_cls->giveAttr("__le__", new BoxedFunction(FunctionMetadata::create((void*)listLe, UNKNOWN, 2)));
-    list_cls->giveAttr("__gt__", new BoxedFunction(FunctionMetadata::create((void*)listGt, UNKNOWN, 2)));
-    list_cls->giveAttr("__ge__", new BoxedFunction(FunctionMetadata::create((void*)listGe, UNKNOWN, 2)));
+    list_cls->giveAttr("insert", new BoxedFunction(BoxedCode::create((void*)listInsert, NONE, 3, "list.insert")));
+    list_cls->giveAttr("__mul__", new BoxedFunction(BoxedCode::create((void*)listMul, UNKNOWN, 2, "list.__mul__")));
+    list_cls->giveAttr("__rmul__", new BoxedFunction(BoxedCode::create((void*)listMul, UNKNOWN, 2, "list.__rmul__")));
+    list_cls->giveAttr("__imul__", new BoxedFunction(BoxedCode::create((void*)listImul, UNKNOWN, 2, "list.__imul__")));
 
-    list_cls->giveAttr("__repr__", new BoxedFunction(FunctionMetadata::create((void*)listRepr, STR, 1)));
-    list_cls->giveAttr("__nonzero__", new BoxedFunction(FunctionMetadata::create((void*)listNonzero, BOXED_BOOL, 1)));
+    list_cls->giveAttr("__iadd__", new BoxedFunction(BoxedCode::create((void*)listIAdd, UNKNOWN, 2, "list.__iadd__")));
+    list_cls->giveAttr("__add__", new BoxedFunction(BoxedCode::create((void*)listAdd, UNKNOWN, 2, "list.__add__")));
 
-    list_cls->giveAttr(
-        "pop", new BoxedFunction(FunctionMetadata::create((void*)listPop, UNKNOWN, 2, false, false), { Py_None }));
-
-    list_cls->giveAttr("append", new BoxedFunction(FunctionMetadata::create((void*)listAppend, NONE, 2)));
-    list_cls->giveAttr("extend", new BoxedFunction(FunctionMetadata::create((void*)listExtend, NONE, 2)));
-
-    list_cls->giveAttr("insert", new BoxedFunction(FunctionMetadata::create((void*)listInsert, NONE, 3)));
-    list_cls->giveAttr("__mul__", new BoxedFunction(FunctionMetadata::create((void*)listMul, UNKNOWN, 2)));
-    list_cls->giveAttr("__rmul__", new BoxedFunction(FunctionMetadata::create((void*)listMul, UNKNOWN, 2)));
-    list_cls->giveAttr("__imul__", new BoxedFunction(FunctionMetadata::create((void*)listImul, UNKNOWN, 2)));
-
-    list_cls->giveAttr("__iadd__", new BoxedFunction(FunctionMetadata::create((void*)listIAdd, UNKNOWN, 2)));
-    list_cls->giveAttr("__add__", new BoxedFunction(FunctionMetadata::create((void*)listAdd, UNKNOWN, 2)));
-
-    list_cls->giveAttr("__contains__", new BoxedFunction(FunctionMetadata::create((void*)listContains, BOXED_BOOL, 2)));
+    list_cls->giveAttr("__contains__",
+                       new BoxedFunction(BoxedCode::create((void*)listContains, BOXED_BOOL, 2, "list.__contains__")));
 
     list_cls->giveAttr(
-        "__init__", new BoxedFunction(FunctionMetadata::create((void*)listInit, UNKNOWN, 2, false, false), { NULL }));
+        "__init__",
+        new BoxedFunction(BoxedCode::create((void*)listInit, UNKNOWN, 2, false, false, "list.__init__"), { NULL }));
 
-    list_cls->giveAttr("count", new BoxedFunction(FunctionMetadata::create((void*)listCount, BOXED_INT, 2)));
-    list_cls->giveAttr(
-        "index",
-        new BoxedFunction(FunctionMetadata::create((void*)listIndex, BOXED_INT, 4, false, false), { NULL, NULL }));
-    list_cls->giveAttr("remove", new BoxedFunction(FunctionMetadata::create((void*)listRemove, NONE, 2)));
-    list_cls->giveAttr("reverse", new BoxedFunction(FunctionMetadata::create((void*)listReverse, NONE, 1)));
+    list_cls->giveAttr("count", new BoxedFunction(BoxedCode::create((void*)listCount, BOXED_INT, 2, "list.count")));
+    list_cls->giveAttr("index",
+                       new BoxedFunction(BoxedCode::create((void*)listIndex, BOXED_INT, 4, false, false, "list.index"),
+                                         { NULL, NULL }));
+    list_cls->giveAttr("remove", new BoxedFunction(BoxedCode::create((void*)listRemove, NONE, 2, "list.remove")));
+    list_cls->giveAttr("reverse", new BoxedFunction(BoxedCode::create((void*)listReverse, NONE, 1, "list.reverse")));
 
     list_cls->giveAttrBorrowed("__hash__", Py_None);
     add_methods(list_cls, list_methods);
@@ -1549,13 +1555,14 @@ void setupList() {
     list_cls->tp_as_sequence->sq_contains = (objobjproc)list_contains;
     list_cls->tp_as_sequence->sq_repeat = (ssizeargfunc)list_repeat;
 
-    FunctionMetadata* hasnext = FunctionMetadata::create((void*)listiterHasnextUnboxed, BOOL, 1);
+    BoxedCode* hasnext = BoxedCode::create((void*)listiterHasnextUnboxed, BOOL, 1, "listiterator.__hasnext__");
     hasnext->addVersion((void*)listiterHasnext, BOXED_BOOL);
     list_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
-    list_iterator_cls->giveAttr("__iter__", new BoxedFunction(FunctionMetadata::create(
-                                                (void*)listIterIter, typeFromClass(list_iterator_cls), 1)));
+    list_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(BoxedCode::create((void*)listIterIter, typeFromClass(list_iterator_cls), 1,
+                                                        "listiterator.__iter__")));
 
-    FunctionMetadata* listiter_next_func = FunctionMetadata::create((void*)listiterNext<CXX>, UNKNOWN, 1);
+    BoxedCode* listiter_next_func = BoxedCode::create((void*)listiterNext<CXX>, UNKNOWN, 1, "listiterator.next");
     listiter_next_func->addVersion((void*)listiterNext<CAPI>, UNKNOWN, CAPI);
     list_iterator_cls->giveAttr("next", new BoxedFunction(listiter_next_func));
 
@@ -1570,14 +1577,14 @@ void setupList() {
 
     list_reverse_iterator_cls->giveAttr("__name__", boxString("listreverseiterator"));
 
-    hasnext = FunctionMetadata::create((void*)listreviterHasnextUnboxed, BOOL, 1);
+    hasnext = BoxedCode::create((void*)listreviterHasnextUnboxed, BOOL, 1, "listiterator.__hasnext__");
     hasnext->addVersion((void*)listreviterHasnext, BOXED_BOOL);
     list_reverse_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
     list_reverse_iterator_cls->giveAttr(
-        "__iter__",
-        new BoxedFunction(FunctionMetadata::create((void*)listIterIter, typeFromClass(list_reverse_iterator_cls), 1)));
+        "__iter__", new BoxedFunction(BoxedCode::create((void*)listIterIter, typeFromClass(list_reverse_iterator_cls),
+                                                        1, "listreverseiterator.__iter__")));
     list_reverse_iterator_cls->giveAttr(
-        "next", new BoxedFunction(FunctionMetadata::create((void*)listreviterNext, UNKNOWN, 1)));
+        "next", new BoxedFunction(BoxedCode::create((void*)listreviterNext, UNKNOWN, 1, "listreverseiterator.next")));
 
     list_reverse_iterator_cls->freeze();
     list_reverse_iterator_cls->tp_iternext = listreviter_next;

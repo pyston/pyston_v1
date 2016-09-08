@@ -118,3 +118,11 @@ try:
     f10()
 except UnboundLocalError, e:
     print e
+
+def f11():
+    class C(object):
+        def __init__(self):
+            self.__x = 1
+            self.__x += 2
+    print C()._C__x
+f11()

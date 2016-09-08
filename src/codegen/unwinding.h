@@ -86,7 +86,7 @@ extern "C" void caughtCapiException();
 extern "C" void reraiseCapiExcAsCxx() __attribute__((noreturn));
 
 
-FunctionMetadata* getTopPythonFunction();
+BoxedCode* getTopPythonFunction();
 
 // debugging/stat helper, returns python filename:linenumber, or "unknown:-1" if it fails
 std::string getCurrentPythonLine();
@@ -104,10 +104,10 @@ private:
 
 public:
     CompiledFunction* getCF();
-    FunctionMetadata* getMD();
+    BoxedCode* getCode();
     FrameInfo* getFrameInfo();
     bool exists() { return impl.get() != NULL; }
-    AST_stmt* getCurrentStatement();
+    BST_stmt* getCurrentStatement();
     BORROWED(Box*) getGlobalsDict();
 
     PythonFrameIterator(PythonFrameIterator&& rhs);
@@ -150,7 +150,7 @@ FrameStackState getFrameStackState();
 struct DeoptState {
     FrameStackState frame_state;
     CompiledFunction* cf;
-    AST_stmt* current_stmt;
+    BST_stmt* current_stmt;
 };
 DeoptState getDeoptState();
 }

@@ -332,11 +332,11 @@ public:
         return cf;
     }
 
-    FunctionMetadata* getMD() {
-        FunctionMetadata* md = getFrameInfo()->md;
-        assert(md);
-        assert(!cf || cf->md == md);
-        return md;
+    BoxedCode* getCode() {
+        BoxedCode* code = getFrameInfo()->code;
+        assert(code);
+        assert(!cf || cf->code_obj == code);
+        return code;
     }
 
     uint64_t readLocation(const StackMap::Record::Location& loc) {
@@ -365,7 +365,7 @@ public:
         }
     }
 
-    AST_stmt* getCurrentStatement() {
+    BST_stmt* getCurrentStatement() {
         assert(getFrameInfo()->stmt);
         return getFrameInfo()->stmt;
     }
@@ -417,7 +417,7 @@ static unw_word_t getFunctionEnd(unw_word_t ip) {
     return pip.end_ip;
 }
 
-static bool inASTInterpreterExecuteInner(unw_word_t ip) {
+static bool inBSTInterpreterExecuteInner(unw_word_t ip) {
     static unw_word_t interpreter_instr_end = getFunctionEnd((unw_word_t)interpreter_instr_addr);
     return ((unw_word_t)interpreter_instr_addr < ip && ip <= interpreter_instr_end);
 }
@@ -451,12 +451,12 @@ static inline unw_word_t get_cursor_sp(unw_cursor_t* cursor) {
 }
 
 // if the given ip/bp correspond to a jitted frame or
-// ASTInterpreter::execute_inner frame, return true and return the
+// BSTInterpreter::execute_inner frame, return true and return the
 // frame information through the PythonFrameIteratorImpl* info arg.
 bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, PythonFrameIteratorImpl* info) {
     CompiledFunction* cf = getCFForAddress(ip);
     bool jitted = cf != NULL;
-    bool interpreted = !jitted && inASTInterpreterExecuteInner(ip);
+    bool interpreted = !jitted && inBSTInterpreterExecuteInner(ip);
 
     if (!jitted && !interpreted)
         return false;
@@ -486,13 +486,11 @@ bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Pyth
 }
 
 static const LineInfo lineInfoForFrameInfo(FrameInfo* frame_info) {
-    AST_stmt* current_stmt = frame_info->stmt;
-    auto* md = frame_info->md;
-    assert(md);
+    BST_stmt* current_stmt = frame_info->stmt;
+    auto* code = frame_info->code;
+    assert(code);
 
-    auto source = md->source.get();
-
-    return LineInfo(current_stmt->lineno, current_stmt->col_offset, source->getFn(), source->getName());
+    return LineInfo(current_stmt->lineno, code->filename, code->name);
 }
 
 // A class that converts a C stack trace to a Python stack trace.
@@ -629,7 +627,7 @@ public:
         PythonFrameIteratorImpl frame_iter;
         bool found_frame = pystack_extractor.handleCFrame(cursor, &frame_iter);
         if (found_frame) {
-            frame_iter.getMD()->propagated_cxx_exceptions++;
+            frame_iter.getCode()->propagated_cxx_exceptions++;
             assert(!prev_frame_info);
             prev_frame_info = frame_iter.getFrameInfo();
 
@@ -738,7 +736,7 @@ template <typename Func> void unwindPythonStack(Func func) {
 // 2. Grab the next frame in the stack and check what function it is from. There are four options:
 //
 //    (a) A JIT-compiled Python function.
-//    (b) ASTInterpreter::execute() in codegen/ast_interpreter.cpp.
+//    (b) BSTInterpreter::execute() in codegen/ast_interpreter.cpp.
 //    (c) generatorEntry() in runtime/generator.cpp.
 //    (d) Something else.
 //
@@ -755,7 +753,7 @@ template <typename Func> void unwindPythonStack(Func func) {
 //
 // 3. We've found a frame for our traceback, along with a CompiledFunction* and some other information about it.
 //
-//    We grab the current statement it is in (as an AST_stmt*) and use it and the CompiledFunction*'s source info to
+//    We grab the current statement it is in (as an BST_stmt*) and use it and the CompiledFunction*'s source info to
 //    produce the line information for the traceback. For JIT-compiled functions, getting the statement involves the
 //    CF's location_map.
 //
@@ -809,11 +807,11 @@ void updateFrameExcInfoIfNeeded(ExcInfo* latest) {
     return;
 }
 
-FunctionMetadata* getTopPythonFunction() {
+BoxedCode* getTopPythonFunction() {
     FrameInfo* frame_info = getTopFrameInfo();
     if (!frame_info)
         return NULL;
-    return frame_info->md;
+    return frame_info->code;
 }
 
 BORROWED(Box*) getGlobals() {
@@ -831,10 +829,10 @@ BORROWED(Box*) getGlobalsDict() {
 }
 
 BORROWED(BoxedModule*) getCurrentModule() {
-    FunctionMetadata* md = getTopPythonFunction();
-    if (!md)
+    BoxedCode* code = getTopPythonFunction();
+    if (!code)
         return NULL;
-    return md->source->parent_module;
+    return code->source->parent_module;
 }
 
 FrameInfo* getPythonFrameInfo(int depth) {
@@ -848,7 +846,7 @@ FrameInfo* getPythonFrameInfo(int depth) {
     if (!frame_info)
         return NULL;
     assert(frame_info->globals);
-    assert(frame_info->md);
+    assert(frame_info->code);
     return frame_info;
 }
 
@@ -926,7 +924,7 @@ DeoptState getDeoptState() {
             // and assigning them to the new vregs array...
             // But deopts are so rare it's not really worth it.
             Box** vregs = frame_iter->getFrameInfo()->vregs;
-            int num_vregs_user_visible = cf->md->source->cfg->getVRegInfo().getNumOfUserVisibleVRegs();
+            int num_vregs_user_visible = cf->code_obj->source->cfg->getVRegInfo().getNumOfUserVisibleVRegs();
             for (int vreg = 0; vreg < num_vregs_user_visible; ++vreg) {
                 if (is_undefined.count(vreg))
                     assert(0);
@@ -984,23 +982,23 @@ BORROWED(Box*) FrameInfo::updateBoxedLocals() {
     STAT_TIMER(t0, "us_timer_updateBoxedLocals", 0);
 
     FrameInfo* frame_info = this;
-    FunctionMetadata* md = frame_info->md;
-    ScopeInfo* scope_info = md->source->getScopeInfo();
+    BoxedCode* code = frame_info->code;
+    const ScopingResults& scope_info = code->source->scoping;
 
-    if (scope_info->areLocalsFromModule()) {
+    if (scope_info.areLocalsFromModule()) {
         // TODO we should cache this in frame_info->locals or something so that locals()
         // (and globals() too) will always return the same dict
-        RELEASE_ASSERT(md->source->scoping->areGlobalsFromModule(), "");
-        return md->source->parent_module->getAttrWrapper();
+        RELEASE_ASSERT(code->source->scoping.areGlobalsFromModule(), "");
+        return code->source->parent_module->getAttrWrapper();
     }
 
-    BoxedDict* d = localsForFrame(frame_info->vregs, md->source->cfg);
+    BoxedDict* d = localsForFrame(frame_info->vregs, code->source->cfg);
     BoxedClosure* closure = frame_info->passed_closure;
 
     // Add the locals from the closure
     // TODO in a ClassDef scope, we aren't supposed to add these
     size_t depth = 0;
-    for (auto& p : scope_info->getAllDerefVarsAndInfo()) {
+    for (auto& p : scope_info.getAllDerefVarsAndInfo()) {
         InternedString name = p.first;
         DerefInfo derefInfo = p.second;
         while (depth < derefInfo.num_parents_from_passed_closure) {
@@ -1042,7 +1040,7 @@ BORROWED(Box*) FrameInfo::updateBoxedLocals() {
     return frame_info->boxedLocals;
 }
 
-AST_stmt* PythonFrameIterator::getCurrentStatement() {
+BST_stmt* PythonFrameIterator::getCurrentStatement() {
     return impl->getCurrentStatement();
 }
 
@@ -1050,8 +1048,8 @@ CompiledFunction* PythonFrameIterator::getCF() {
     return impl->getCF();
 }
 
-FunctionMetadata* PythonFrameIterator::getMD() {
-    return impl->getMD();
+BoxedCode* PythonFrameIterator::getCode() {
+    return impl->getCode();
 }
 
 BORROWED(Box*) PythonFrameIterator::getGlobalsDict() {
@@ -1068,12 +1066,12 @@ std::string getCurrentPythonLine() {
     if (frame_info) {
         std::ostringstream stream;
 
-        auto* md = frame_info->md;
-        auto source = md->source.get();
+        auto* code = frame_info->code;
+        auto source = code->source.get();
 
         auto current_stmt = frame_info->stmt;
 
-        stream << source->getFn()->c_str() << ":" << current_stmt->lineno;
+        stream << code->filename->c_str() << ":" << current_stmt->lineno;
         return stream.str();
     }
     return "unknown:-1";

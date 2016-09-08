@@ -26,12 +26,11 @@
 
 namespace pyston {
 
-class AST_arguments;
-class AST_Jump;
-class AST_Name;
+class BST_arguments;
+class BST_Jump;
+class BST_Name;
 class CFG;
 class CFGBlock;
-class ScopeInfo;
 class LivenessBBVisitor;
 
 class LivenessAnalysis {
@@ -49,7 +48,7 @@ public:
     ~LivenessAnalysis();
 
     // we don't keep track of node->parent_block relationships, so you have to pass both:
-    bool isKill(AST_Name* node, CFGBlock* parent_block);
+    bool isKill(BST_Name* node, CFGBlock* parent_block);
 
     bool isLiveAtEnd(int vreg, CFGBlock* block);
 };
@@ -72,7 +71,7 @@ private:
 public:
     DefinednessAnalysis() {}
 
-    void run(VRegMap<DefinitionLevel> initial_map, CFGBlock* initial_block, ScopeInfo* scope_info);
+    void run(VRegMap<DefinitionLevel> initial_map, CFGBlock* initial_block);
 
     DefinitionLevel isDefinedAtEnd(int vreg, CFGBlock* block);
     const VRegSet& getDefinedVregsAtEnd(CFGBlock* block);
@@ -94,7 +93,7 @@ public:
     // Initials_need_phis specifies that initial_map should count as an additional entry point
     // that may require phis.
     PhiAnalysis(VRegMap<DefinednessAnalysis::DefinitionLevel> initial_map, CFGBlock* initial_block,
-                bool initials_need_phis, LivenessAnalysis* liveness, ScopeInfo* scope_info);
+                bool initials_need_phis, LivenessAnalysis* liveness);
 
     bool isRequired(int vreg, CFGBlock* block);
     bool isRequiredAfter(int vreg, CFGBlock* block);
@@ -107,8 +106,8 @@ public:
 };
 
 std::unique_ptr<LivenessAnalysis> computeLivenessInfo(CFG*);
-std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames&, CFG*, LivenessAnalysis*, ScopeInfo* scope_info);
-std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor*, LivenessAnalysis*, ScopeInfo* scope_info);
+std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames&, CFG*, LivenessAnalysis*);
+std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor*, LivenessAnalysis*);
 }
 
 #endif

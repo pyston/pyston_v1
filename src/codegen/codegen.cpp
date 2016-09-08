@@ -29,50 +29,17 @@
 #include "analysis/scoping_analysis.h"
 #include "codegen/baseline_jit.h"
 #include "codegen/compvars.h"
-#include "core/ast.h"
+#include "core/bst.h"
 #include "core/cfg.h"
 #include "core/util.h"
-#include "runtime/code.h"
 #include "runtime/types.h"
 
 namespace pyston {
 
-FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs,
-                                   std::unique_ptr<SourceInfo> source)
-    : code_obj(NULL),
-      source(std::move(source)),
-      param_names(this->source->ast, this->source->getInternedStrings()),
-      takes_varargs(takes_varargs),
-      takes_kwargs(takes_kwargs),
-      num_args(num_args),
-      times_interpreted(0),
-      internal_callable(NULL, NULL) {
-}
-
-FunctionMetadata::FunctionMetadata(int num_args, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
-    : code_obj(NULL),
-      source(nullptr),
-      param_names(param_names),
-      takes_varargs(takes_varargs),
-      takes_kwargs(takes_kwargs),
-      num_args(num_args),
-      times_interpreted(0),
-      internal_callable(NULL, NULL) {
-}
-
-BORROWED(BoxedCode*) FunctionMetadata::getCode() {
-    if (!code_obj) {
-        code_obj = new BoxedCode(this);
-        // FunctionMetadatas don't currently participate in GC.  They actually never get freed currently.
-        constants.push_back(code_obj);
-    }
-    return code_obj;
-}
-
-void FunctionMetadata::addVersion(CompiledFunction* compiled) {
+void BoxedCode::addVersion(CompiledFunction* compiled) {
     assert(compiled);
     assert((compiled->spec != NULL) + (compiled->entry_descriptor != NULL) == 1);
-    assert(compiled->md);
+    assert(compiled->code_obj);
     assert(compiled->code);
 
     if (compiled->entry_descriptor == NULL) {
@@ -91,31 +58,14 @@ void FunctionMetadata::addVersion(CompiledFunction* compiled) {
     }
 }
 
-SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, FutureFlags future_flags, AST* ast, BoxedString* fn)
-    : parent_module(m), scoping(scoping), scope_info(NULL), ast(ast), cfg(NULL), future_flags(future_flags) {
-    assert(fn);
-
-    // TODO: this is a very bad way of handling this:
-    incref(fn);
-    late_constants.push_back(fn);
-
-    this->fn = fn;
-
-    switch (ast->type) {
-        case AST_TYPE::ClassDef:
-        case AST_TYPE::Module:
-        case AST_TYPE::Expression:
-        case AST_TYPE::Suite:
-            is_generator = false;
-            break;
-        case AST_TYPE::FunctionDef:
-        case AST_TYPE::Lambda:
-            is_generator = containsYield(ast);
-            break;
-        default:
-            RELEASE_ASSERT(0, "Unknown type: %d", ast->type);
-            break;
-    }
+SourceInfo::SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, int ast_type,
+                       bool is_generator)
+    : parent_module(m),
+      scoping(std::move(scoping)),
+      cfg(NULL),
+      future_flags(future_flags),
+      is_generator(is_generator),
+      ast_type(ast_type) {
 }
 
 SourceInfo::~SourceInfo() {

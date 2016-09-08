@@ -25,6 +25,7 @@ def verify_include_guard(_, dir, files):
         with open(fn) as f:
             while True:
                 l = f.readline()
+                assert l, "Did not find include guard in " + fn
                 if l.startswith('//') or not l.strip():
                     continue
                 break

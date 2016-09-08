@@ -45,7 +45,6 @@ static Box* setOption(Box* option, Box* value) {
     else CHECK(SPECULATION_THRESHOLD);
     else CHECK(ENABLE_ICS);
     else CHECK(ENABLE_ICGETATTRS);
-    else CHECK(LAZY_SCOPING_ANALYSIS);
     else raiseExcHelper(ValueError, "unknown option name '%s", option_string->data());
 
     Py_RETURN_NONE;
@@ -67,13 +66,13 @@ static Box* dumpStats(Box* includeZeros) {
 void setupPyston() {
     pyston_module = createModule(autoDecref(boxString("__pyston__")));
 
-    pyston_module->giveAttr("setOption", new BoxedBuiltinFunctionOrMethod(
-                                             FunctionMetadata::create((void*)setOption, UNKNOWN, 2), "setOption"));
-
-    pyston_module->giveAttr("clearStats", new BoxedBuiltinFunctionOrMethod(
-                                              FunctionMetadata::create((void*)clearStats, NONE, 0), "clearStats"));
     pyston_module->giveAttr(
-        "dumpStats", new BoxedBuiltinFunctionOrMethod(FunctionMetadata::create((void*)dumpStats, NONE, 1, false, false),
-                                                      "dumpStats", { Py_False }));
+        "setOption", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)setOption, UNKNOWN, 2, "setOption")));
+
+    pyston_module->giveAttr(
+        "clearStats", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)clearStats, NONE, 0, "clearStats")));
+    pyston_module->giveAttr("dumpStats",
+                            new BoxedBuiltinFunctionOrMethod(
+                                BoxedCode::create((void*)dumpStats, NONE, 1, false, false, "dumpStats"), { Py_False }));
 }
 }
