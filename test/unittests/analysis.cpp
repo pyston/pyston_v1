@@ -29,7 +29,9 @@ protected:
 #ifndef NDEBUG
 TEST_F(AnalysisTest, augassign) {
     const std::string fn("test/unittests/analysis_listcomp.py");
-    AST_Module* module = caching_parse_file(fn.c_str(), 0);
+    std::unique_ptr<ASTAllocator> ast_allocator;
+    AST_Module* module;
+    std::tie(module, ast_allocator) = caching_parse_file(fn.c_str(), 0);
     assert(module);
 
     FutureFlags future_flags = getFutureFlags(module->body, fn.c_str());
@@ -45,7 +47,7 @@ TEST_F(AnalysisTest, augassign) {
     ASSERT_NE(scope_info->getScopeTypeOfName(module->interned_strings->get("a")), ScopeInfo::VarScopeType::GLOBAL);
     ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("b")) == ScopeInfo::VarScopeType::GLOBAL);
 
-    AST_arguments* args = new AST_arguments();
+    AST_arguments* args = new (*ast_allocator) AST_arguments();
     ParamNames param_names(args, *module->interned_strings.get());
 
     // Hack to get at the cfg:
@@ -68,7 +70,9 @@ TEST_F(AnalysisTest, augassign) {
 
 void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     const std::string fn("test/unittests/analysis_osr.py");
-    AST_Module* module = caching_parse_file(fn.c_str(), 0);
+    std::unique_ptr<ASTAllocator> ast_allocator;
+    AST_Module* module;
+    std::tie(module, ast_allocator) = caching_parse_file(fn.c_str(), 0);
     assert(module);
 
     ParamNames param_names(NULL, *module->interned_strings.get());

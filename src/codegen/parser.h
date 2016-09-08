@@ -20,10 +20,11 @@
 namespace pyston {
 
 class AST_Module;
+class ASTAllocator;
 
-AST_Module* parse_string(const char* code, FutureFlags inherited_flags);
-AST_Module* parse_file(const char* fn, FutureFlags inherited_flags);
-AST_Module* caching_parse_file(const char* fn, FutureFlags inherited_flags);
+std::pair<AST_Module*, std::unique_ptr<ASTAllocator>> parse_string(const char* code, FutureFlags inherited_flags);
+std::pair<AST_Module*, std::unique_ptr<ASTAllocator>> parse_file(const char* fn, FutureFlags inherited_flags);
+std::pair<AST_Module*, std::unique_ptr<ASTAllocator>> caching_parse_file(const char* fn, FutureFlags inherited_flags);
 }
 
 #endif

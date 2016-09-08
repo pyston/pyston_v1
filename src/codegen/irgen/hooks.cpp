@@ -292,7 +292,9 @@ extern "C" PyCodeObject* PyAST_Compile(struct _mod* _mod, const char* filename, 
                                        PyArena* arena) noexcept {
     try {
         mod_ty mod = _mod;
-        AST* parsed = cpythonToPystonAST(mod, filename);
+        std::unique_ptr<ASTAllocator> ast_allocator;
+        AST* parsed;
+        std::tie(parsed, ast_allocator) = cpythonToPystonAST(mod, filename);
         BoxedCode* code = NULL;
         switch (mod->kind) {
             case Module_kind:

@@ -460,7 +460,9 @@ static int main(int argc, char** argv) noexcept {
         if (command != NULL) {
             try {
                 main_module = createModule(autoDecref(boxString("__main__")), "<string>");
-                AST_Module* m = parse_string(command, /* future_flags = */ 0);
+                AST_Module* m;
+                std::unique_ptr<ASTAllocator> ast_allocator;
+                std::tie(m, ast_allocator) = parse_string(command, /* future_flags = */ 0);
                 compileAndRunModule(m, main_module);
                 rtncode = 0;
             } catch (ExcInfo e) {
@@ -504,7 +506,10 @@ static int main(int argc, char** argv) noexcept {
                 free(real_path);
 
                 try {
-                    AST_Module* ast = parse_file(fn, /* future_flags = */ 0);
+                    std::unique_ptr<ASTAllocator> ast_allocator;
+                    AST_Module* ast;
+                    std::tie(ast, ast_allocator) = parse_file(fn, /* future_flags = */ 0);
+
                     compileAndRunModule(ast, main_module);
                     rtncode = 0;
                 } catch (ExcInfo e) {
