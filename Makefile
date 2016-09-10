@@ -759,12 +759,12 @@ define make_target
 $(eval \
 .PHONY: test$1 check$1
 check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -q -R pyston$1 -j$(TEST_THREADS) -a=-S -k $(TESTS_DIR) $(ARGS)
 	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing -t50 $(TEST_DIR)/cpython $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t600 $(TEST_DIR)/integration $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -t50 -k $(TESTS_DIR) $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-O -a=-S -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -q -R pyston$1 -j$(TEST_THREADS) -a=-S -k --exit-code-only --skip-failing -t50 $(TEST_DIR)/cpython $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -q -R pyston$1 -j$(TEST_THREADS) -k -a=-S --exit-code-only --skip-failing -t600 $(TEST_DIR)/integration $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -q -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -t50 -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -q -R pyston$1 -j$(TEST_THREADS) -a=-O -a=-S -k $(TESTS_DIR) $(ARGS)
 
 .PHONY: run$1 dbg$1
 run$1: pyston$1 $$(RUN_DEPS)
@@ -921,7 +921,7 @@ wdbg_%:
 	$(MAKE) $(patsubst wdbg_%,watch_dbg_%,$@) GDB_POST_CMDS="--ex quit"
 
 .PHONY: head_%
-HEAD := 40
+HEAD ?= 40
 HEAD_SKIP := 6
 head_%:
 	@ bash -c "set -o pipefail; script -e -q -c '$(MAKE) $(dir $@)$(patsubst head_%,%,$(notdir $@))' /dev/null | tail -n+$(HEAD_SKIP) | head -n$(HEAD)"
