@@ -1,21 +1,20 @@
-# skip-if: '-n' not in EXTRA_JIT_ARGS and '-O' not in EXTRA_JIT_ARGS
-# disable this test because the interpreter (with disabled bjit) currently uses too much stack
-
 # Make sure we can recurse at least 900 times on the three different types
 # of stacks that we have:
 
+import sys
+TEST_DEPTH = sys.getrecursionlimit() - 20
+
 def recurse(n):
-    print n
     if n > 0:
         return recurse(n - 1)
     return n
 
 print "Recursing on main thread..."
-recurse(900)
+recurse(TEST_DEPTH)
 
 print "Recursing in a generator..."
 def gen():
-    yield recurse(900)
+    yield recurse(TEST_DEPTH)
 print list(gen())
 
 print "Recursing in a thread..."
@@ -26,10 +25,17 @@ done = 0
 def thread_target():
     global done
 
-    recurse(900)
+    recurse(TEST_DEPTH)
 
     done = 1
 start_new_thread(thread_target, ())
 
 while not done:
     time.sleep(0.001)
+
+s = """
+if depth < TEST_DEPTH:
+    depth += 1
+    exec s
+"""
+exec s in {'depth': 0, 's': s, 'TEST_DEPTH': TEST_DEPTH}
