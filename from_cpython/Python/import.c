@@ -2949,14 +2949,12 @@ PyImport_Import(PyObject *module_name)
    importing modules.
 */
 
+// Pyston change: we don't support get_magic
+#if 0
 static PyObject *
 imp_get_magic(PyObject *self, PyObject *noargs)
 {
     char buf[4];
-
-    // Pyston change: we have different pyc
-    assert(0);
-    abort();
 
     buf[0] = (char) ((pyc_magic >>  0) & 0xff);
     buf[1] = (char) ((pyc_magic >>  8) & 0xff);
@@ -2965,6 +2963,7 @@ imp_get_magic(PyObject *self, PyObject *noargs)
 
     return PyString_FromStringAndSize(buf, 4);
 }
+#endif
 
 static PyObject *
 imp_get_suffixes(PyObject *self, PyObject *noargs)
@@ -3330,7 +3329,8 @@ On platforms without threads, this function does nothing.");
 static PyMethodDef imp_methods[] = {
     {"reload",           imp_reload,       METH_O,       doc_reload},
     {"find_module",      imp_find_module,  METH_VARARGS, doc_find_module},
-    {"get_magic",        imp_get_magic,    METH_NOARGS,  doc_get_magic},
+    // Pyston change: we don't support this function
+    // {"get_magic",        imp_get_magic,    METH_NOARGS,  doc_get_magic},
     {"get_suffixes", imp_get_suffixes, METH_NOARGS,  doc_get_suffixes},
     {"load_module",      imp_load_module,  METH_VARARGS, doc_load_module},
     {"new_module",       imp_new_module,   METH_VARARGS, doc_new_module},

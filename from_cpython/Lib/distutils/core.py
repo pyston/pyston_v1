@@ -100,6 +100,10 @@ def setup(**attrs):
     else:
         klass = Distribution
 
+    # Pyston change:
+    if "zip_safe" not in attrs:
+        attrs['zip_safe'] = False
+
     if 'script_name' not in attrs:
         attrs['script_name'] = os.path.basename(sys.argv[0])
     if 'script_args' not in attrs:

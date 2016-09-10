@@ -50,7 +50,7 @@ test_codeop             [unknown]
 test_code               [unknown]
 test_coding             works when run from inside the from_cpython dir
 test_coercion           1**1L, divmod(1, 1L); some unknown bug
-test_compileall         [unknown]
+test_compileall         Not sure if this test makes sense for us (wants to check the details of pyc files)
 test_compiler           [unknown]
 test_compile            [unknown]
 test_cprofile           [unknown]
@@ -129,7 +129,6 @@ test_pprint             [unknown]
 test_profile            [unknown]
 test_py3kwarn           [unknown]
 test_pyclbr             This test passes but takes a very long time in debug mode (60s vs 5s for release mode).
-test_py_compile         [unknown]
 test_pydoc              [unknown]
 test_random             long("invalid number")
 test_repr               complex.__hash__; some unknown issues
@@ -145,7 +144,6 @@ test_structmembers      [unknown]
 test_subprocess         exit code 141 [sigpipe?], no error message
 test_sunaudiodev        [unknown]
 test_sunau              [unknown]
-test_sundry             [unknown]
 test_support            [unknown]
 test_symtable           [unknown]
 test_syntax             [unknown]

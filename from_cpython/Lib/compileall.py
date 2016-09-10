@@ -82,6 +82,8 @@ def compile_file(fullname, ddir=None, force=0, rx=None, quiet=0):
     if os.path.isfile(fullname):
         head, tail = name[:-3], name[-3:]
         if tail == '.py':
+            # Pyston change: leave this to the parser
+            '''
             if not force:
                 try:
                     mtime = int(os.stat(fullname).st_mtime)
@@ -93,10 +95,11 @@ def compile_file(fullname, ddir=None, force=0, rx=None, quiet=0):
                         return success
                 except IOError:
                     pass
+            '''
             if not quiet:
                 print 'Compiling', fullname, '...'
             try:
-                ok = py_compile.compile(fullname, None, dfile, True)
+                ok = py_compile.compile(fullname, None, dfile, True, force=force)
             except py_compile.PyCompileError,err:
                 if quiet:
                     print 'Compiling', fullname, '...'
