@@ -4747,6 +4747,9 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 template <ExceptionStyle S>
 static Box* callChosenCF(CompiledFunction* chosen_cf, BoxedClosure* closure, BoxedGenerator* generator, Box* globals,
                          Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) noexcept(S == CAPI) {
+    // TODO: this should be done in the rewrite as well
+    RECURSIVE_BLOCK(S, " in function call");
+
     if (S != chosen_cf->exception_style) {
         if (S == CAPI) {
             try {

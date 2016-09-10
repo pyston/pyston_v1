@@ -172,7 +172,7 @@ test_unicode            argument passing issue?
 test_userdict           segfault: repr of recursive dict?
 test_userlist           slice(1L, 1L)
 test_userstring         float(1L); hangs in test_replace
-test_warnings           [unknown]
+test_warnings           Among other things, we don't support the -W flag
 test_weakref            weird function-picking bug (something around float.__add__), plase also fix the weakref issue in test_abc
 test_winreg             [unknown]
 test_winsound           [unknown]
