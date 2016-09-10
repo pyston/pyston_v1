@@ -1,4 +1,4 @@
-# skip-if: '-O' in EXTRA_JIT_ARGS or '-n'  in EXTRA_JIT_ARGS
+# skip-if: '-L' in EXTRA_JIT_ARGS or '-n'  in EXTRA_JIT_ARGS
 # statcheck: 4 <= noninit_count('num_deopt') < 50
 # statcheck: 1 <= stats["num_osr_exits"] <= 2
 

@@ -182,9 +182,11 @@ static void enableGdbSegfaultWatcher() {
 }
 
 int handleArg(char code) {
-    if (code == 'O')
+    if (code == 'O') {
+        Py_OptimizeFlag++;
+    } else if (code == 'L') {
         FORCE_OPTIMIZE = true;
-    else if (code == 'q')
+    } else if (code == 'q')
         GLOBAL_VERBOSITY = 0;
     else if (code == 'v') {
         if (GLOBAL_VERBOSITY)
@@ -219,6 +221,8 @@ int handleArg(char code) {
         USE_REGALLOC_BASIC = false;
     } else if (code == 'E') {
         Py_IgnoreEnvironmentFlag = 1;
+    } else if (code == 'B') {
+        Py_DontWriteBytecodeFlag++;
     } else if (code == 'P') {
         PAUSE_AT_ABORT = true;
     } else if (code == 'F') {
@@ -327,7 +331,7 @@ static int main(int argc, char** argv) noexcept {
 
         // Suppress getopt errors so we can throw them ourselves
         opterr = 0;
-        while ((code = getopt(argc, argv, "+:OqdIibpjtrTRSUvnxXEac:FuPTGm:")) != -1) {
+        while ((code = getopt(argc, argv, "+:OLqdIibpjtrTRSUvnxXEBac:FuPTGm:")) != -1) {
             if (code == 'c') {
                 assert(optarg);
                 command = optarg;

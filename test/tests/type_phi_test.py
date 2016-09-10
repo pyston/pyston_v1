@@ -1,4 +1,4 @@
-# fail-if: '-n' not in EXTRA_JIT_ARGS and '-O' not in EXTRA_JIT_ARGS
+# fail-if: '-n' not in EXTRA_JIT_ARGS and '-L' not in EXTRA_JIT_ARGS
 # - This test needs type profiling to be enabled to trigger the bug
 
 # This test throws an irgen assertion.

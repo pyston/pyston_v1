@@ -1,4 +1,4 @@
-# skip-if: '-O' in EXTRA_JIT_ARGS or '-n' in EXTRA_JIT_ARGS
+# skip-if: '-L' in EXTRA_JIT_ARGS or '-n' in EXTRA_JIT_ARGS
 # statcheck: noninit_count('num_deopt') == 2
 
 try:
