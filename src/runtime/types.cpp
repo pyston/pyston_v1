@@ -1631,7 +1631,9 @@ static Box* function_new(BoxedClass* cls, Box* _code, Box* globals, Box** _args)
 
     RELEASE_ASSERT(code->source, "");
     if (code->source->scoping.areGlobalsFromModule()) {
-        RELEASE_ASSERT(unwrapAttrWrapper(globals) == code->source->parent_module, "");
+        RELEASE_ASSERT(globals->cls == attrwrapper_cls && unwrapAttrWrapper(globals) == code->source->parent_module,
+                       "Pyston doesn't support creating functions with overridden globals on code objects that weren't "
+                       "compiled for it");
         globals = NULL;
     } else {
         RELEASE_ASSERT(PyDict_Check(globals) || globals->cls == attrwrapper_cls, "");

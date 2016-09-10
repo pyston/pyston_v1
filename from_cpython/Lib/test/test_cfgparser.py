@@ -1,4 +1,3 @@
-# expected: fail
 import ConfigParser
 import StringIO
 import os

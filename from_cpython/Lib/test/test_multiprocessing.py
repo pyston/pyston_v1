@@ -1,4 +1,3 @@
-# skip-if: True
 # - This test hangs and the tester fails to clean it up.
 #
 # Unit tests for the multiprocessing package

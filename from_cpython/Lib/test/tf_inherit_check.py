@@ -1,3 +1,6 @@
+# skip-if: True
+# - not a test file itself
+
 # Helper script for test_tempfile.py.  argv[2] is the number of a file
 # descriptor which should _not_ be open.  Check this by attempting to
 # write to it -- if we succeed, something is wrong.

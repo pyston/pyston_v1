@@ -1,4 +1,3 @@
-# expected: fail
 doctests = """
 Tests for the tokenize module.
 

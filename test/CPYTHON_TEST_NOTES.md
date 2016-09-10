@@ -29,7 +29,6 @@ test_bsddb              [unknown]
 test_builtin            execfile scoping issue
 test_capi               [unknown]
 test_cd                 [unknown]
-test_cfgparser          works when run from inside the from_cpython dir
 test_class              needs ellipsis
 test_cl                 [unknown]
 test_cmd_line_script    [unknown]
@@ -76,7 +75,6 @@ test_email              [unknown]
 test_enumerate          assert instead of exception in BoxedEnumerate
 test_exceptions         we are missing recursion-depth checking
 test_extcall            f(**kw) crashes if kw isn't a dict
-test_fork1              [unknown]
 test_frozen             [unknown]
 test_funcattrs          we don't allow changing numing of function defaults
 test_future5            [unknown]
@@ -114,7 +112,6 @@ test_modulefinder       [unknown]
 test_module             unicode docstrings
 test_msilib             [unknown]
 test_multibytecodec     [unknown]
-test_multiprocessing    [unknown]
 test_mutants            unknown failure
 test_new                [unknown]
 test_nis                [unknown]
@@ -147,15 +144,12 @@ test_symtable           [unknown]
 test_syntax             [unknown]
 test_sys_setprofile     [unknown]
 test_sys_settrace       [unknown]
-test_sys                [unknown]
-test_tarfile            [unknown]
+test_sys                we're missing some attributes in the sys module (call_tracing, __excepthook__, setrecursionlimit, etc)
 test_tcl                [unknown]
-test_tempfile           [unknown]
 test_threading_local    [unknown]
 test_threading          [unknown]
 test_thread             [unknown]
 test_tk                 [unknown]
-test_tokenize           [unknown]
 test_tools              [unknown]
 test_traceback          [unknown]
 test_trace              [unknown]
@@ -174,9 +168,7 @@ test_winsound           [unknown]
 test_xml_etree_c        [unknown]
 test_xml_etree          [unknown]
 test_xmlrpc             [unknown]
-test_xpickle            [unknown]
 test_zipfile64          [unknown]
-test_zipfile            [unknown]
 test_zipimport_support  [unknown]
 test_zipimport          [unknown]
 ```
