@@ -147,7 +147,6 @@ test_sys                we're missing some attributes in the sys module (call_tr
 test_tcl                [unknown]
 test_threading_local    [unknown]
 test_threading          [unknown]
-test_thread             [unknown]
 test_tk                 [unknown]
 test_tools              [unknown]
 test_traceback          [unknown]

@@ -198,8 +198,14 @@ Box* getIdent() {
     return boxInt(pthread_self());
 }
 
-Box* stackSize() {
-    Py_FatalError("unimplemented");
+Box* stackSize(Box* arg) {
+    if (arg) {
+        if (PyInt_Check(arg) && PyInt_AS_LONG(arg) == 0) {
+            Py_RETURN_NONE;
+        }
+        raiseExcHelper(ThreadError, "Changing initial stack size is not supported in Pyston");
+    }
+    return boxInt(0);
 }
 
 Box* threadCount() {
@@ -227,7 +233,7 @@ void setupThread() {
     thread_module->giveAttr(
         "get_ident", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)getIdent, BOXED_INT, 0, "get_ident")));
     thread_module->giveAttr("stack_size", new BoxedBuiltinFunctionOrMethod(
-                                              BoxedCode::create((void*)stackSize, BOXED_INT, 0, "stack_size")));
+                                              BoxedCode::create((void*)stackSize, UNKNOWN, 1, "stack_size"), { NULL }));
     thread_module->giveAttr(
         "_count", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)threadCount, BOXED_INT, 0, "_count")));
 
