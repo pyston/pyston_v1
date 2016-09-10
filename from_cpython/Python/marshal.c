@@ -436,7 +436,7 @@ w_object(PyObject *v, WFILE *p)
     }
     else if (PyCode_Check(v)) {
         // Pyston change: not implemented
-        assert(0 && "not implemented");
+        assert(0 && "Marshalling of code objects not implemented");
         abort();
         /*
         PyCodeObject *co = (PyCodeObject *)v;

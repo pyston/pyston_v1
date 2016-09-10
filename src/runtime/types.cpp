@@ -3477,10 +3477,23 @@ static int object_set_class(PyObject* self, PyObject* value, void* closure) noex
     }
 }
 
+static PyObject* object_sizeof(PyObject* self, PyObject* args) noexcept {
+    Py_ssize_t res, isize;
+
+    res = 0;
+    isize = self->cls->tp_itemsize;
+    if (isize > 0)
+        res = self->cls->ob_size * isize;
+    res += self->cls->tp_basicsize;
+
+    return PyInt_FromSsize_t(res);
+}
+
 static PyMethodDef object_methods[] = {
     { "__reduce_ex__", object_reduce_ex, METH_VARARGS, NULL }, //
     { "__reduce__", object_reduce, METH_VARARGS, NULL },       //
     { "__format__", object_format, METH_VARARGS, PyDoc_STR("default object formatter") },
+    { "__sizeof__", object_sizeof, METH_NOARGS, PyDoc_STR("__sizeof__() -> int\nsize of object in memory, in bytes") },
     { NULL, NULL, 0, NULL },
 };
 

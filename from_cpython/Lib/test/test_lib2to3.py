@@ -1,4 +1,3 @@
-# expected: fail
 # Skipping test_parser and test_all_fixers
 # because of running
 from lib2to3.tests import (test_fixers, test_pytree, test_util, test_refactor,

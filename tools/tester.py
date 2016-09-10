@@ -573,7 +573,7 @@ def main(orig_dir):
                 filtered_tests.append(t)
         tests = filtered_tests
     if not tests:
-        print >>sys.stderr, "No tests matched the given patterns. OK by me!"
+        # print >>sys.stderr, "No tests matched the given patterns. OK by me!"
         # this can happen legitimately in e.g. `make check_test_foo` if test_foo.py is a CPython regression test.
         sys.exit(0)
 

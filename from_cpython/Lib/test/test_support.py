@@ -1,4 +1,5 @@
-# expected: fail
+# skip-if: True
+# - this isn't an actual test file
 """Supporting definitions for the Python regression tests."""
 
 if __name__ != 'test.test_support':

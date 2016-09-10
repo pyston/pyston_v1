@@ -101,8 +101,7 @@ test_iterlen            [unknown]
 test_itertools          [unknown]
 test_json               'from test.script_helper import assert_python_ok' fails; sounds like it is trying to look at pycs
 test_kqueue             Not really a failure, but it tries to skip itself and we don't support that
-test_lib2to3            [unknown]
-test_linuxaudiodev      [unknown]
+test_linuxaudiodev      No module named audioop
 test_list               longs as slice indices
 test_long_future        [unknown]
 test_macos              Not really a failure, but it tries to skip itself and we don't support that
