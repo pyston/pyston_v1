@@ -100,7 +100,7 @@ bool RefcountTracker::isNullable(llvm::Value* v) {
 }
 
 void RefcountTracker::refConsumed(llvm::Value* v, llvm::Instruction* inst) {
-    if (llvm::isa<UndefValue>(v))
+    if (llvm::isa<UndefValue>(v) || llvm::isa<ConstantPointerNull>(v))
         return;
 
     assert(this->vars[v].reftype != RefType::UNKNOWN);
@@ -109,7 +109,7 @@ void RefcountTracker::refConsumed(llvm::Value* v, llvm::Instruction* inst) {
 }
 
 void RefcountTracker::refUsed(llvm::Value* v, llvm::Instruction* inst) {
-    if (llvm::isa<UndefValue>(v))
+    if (llvm::isa<UndefValue>(v) || llvm::isa<ConstantPointerNull>(v))
         return;
 
     assert(this->vars[v].reftype != RefType::UNKNOWN);

@@ -6109,6 +6109,8 @@ wait_helper(pid_t pid, int status, struct rusage *ru)
         Py_DECREF(m);
         if (struct_rusage == NULL)
             return NULL;
+        // Pyston addition:
+        PyGC_RegisterStaticConstant(struct_rusage);
     }
 
     /* XXX(nnorwitz): Copied (w/mods) from resource.c, there should be only one. */

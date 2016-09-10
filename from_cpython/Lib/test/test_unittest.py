@@ -1,4 +1,3 @@
-# expected: fail
 import unittest.test
 
 from test import test_support

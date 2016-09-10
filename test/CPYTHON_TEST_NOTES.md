@@ -27,7 +27,6 @@ test_bsddb185           [unknown]
 test_bsddb3             [unknown]
 test_bsddb              [unknown]
 test_builtin            execfile scoping issue
-test_bz2                leaks
 test_capi               [unknown]
 test_cd                 [unknown]
 test_cfgparser          works when run from inside the from_cpython dir
@@ -54,7 +53,6 @@ test_coercion           1**1L, divmod(1, 1L); some unknown bug
 test_compileall         [unknown]
 test_compiler           [unknown]
 test_compile            [unknown]
-test_copy               Please debug this test in VM.
 test_cprofile           [unknown]
 test_crypt              [unknown]
 test_ctypes             [unknown]
@@ -136,7 +134,6 @@ test_pydoc              [unknown]
 test_random             long("invalid number")
 test_repr               complex.__hash__; some unknown issues
 test_resource           fails on travis-ci: setrlimit RLIMIT_CPU not allowed to raise maximum limit
-test_richcmp            PyObject_Not
 test_runpy              [unknown]
 test_scope              eval of code object from existing function (not currently supported)
 test_scriptpackages     [unknown]
@@ -152,7 +149,6 @@ test_sundry             [unknown]
 test_support            [unknown]
 test_symtable           [unknown]
 test_syntax             [unknown]
-test_sysconfig          [unknown]
 test_sys_setprofile     [unknown]
 test_sys_settrace       [unknown]
 test_sys                [unknown]
@@ -173,13 +169,10 @@ test_ttk_textonly       [unknown]
 test_types              PyErr_WarnEx
 test_undocumented_details   function.func_closure
 test_unicode            argument passing issue?
-test_unittest           leaks
 test_userdict           segfault: repr of recursive dict?
 test_userlist           slice(1L, 1L)
 test_userstring         float(1L); hangs in test_replace
-test_wait3              [unknown]
-test_wait4              [unknown]
-test_warnings           [unknown]
+test_warnings           Among other things, we don't support the -W flag
 test_weakref            weird function-picking bug (something around float.__add__), plase also fix the weakref issue in test_abc
 test_winreg             [unknown]
 test_winsound           [unknown]

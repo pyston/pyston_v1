@@ -539,7 +539,7 @@ extern "C" int Py_FlushLine(void) noexcept {
     return PyFile_WriteString("\n", f);
 }
 
-void setCAPIException(STOLEN(const ExcInfo&) e) {
+void setCAPIException(STOLEN(const ExcInfo&) e) noexcept {
     PyErr_Restore(e.type, e.value, e.traceback);
 }
 

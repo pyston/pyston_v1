@@ -1116,6 +1116,22 @@ public:
     operator FILE*() const { return file; }
 };
 
+void throwCAPIException();
+// A C++-style RAII way of doing Py_EnterRecursiveCall + Py_LeaveRecursiveCall
+class _RecursiveBlockHelper {
+public:
+    ~_RecursiveBlockHelper() { Py_LeaveRecursiveCall(); }
+};
+#define RECURSIVE_BLOCK(S, reason)                                                                                     \
+    _RecursiveBlockHelper CAT(_recursive_helper, __LINE__);                                                            \
+    if (Py_EnterRecursiveCall(reason)) {                                                                               \
+        if (S == CAPI)                                                                                                 \
+            return NULL;                                                                                               \
+        else                                                                                                           \
+            throwCAPIException();                                                                                      \
+    }
+
+
 // similar to Java's Array.binarySearch:
 // return values are either:
 //   >= 0 : the index where a given item was found

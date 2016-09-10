@@ -1420,6 +1420,9 @@ BZ2File_init(BZ2FileObject *self, PyObject *args, PyObject *kwargs)
 
     mode = (mode_char == 'r') ? "rb" : "wb";
 
+    // Pyston change: this prevents leaking refs in the test_bz2.py test
+    Py_CLEAR(self->file);
+
     self->file = PyObject_CallFunction((PyObject*)&PyFile_Type, "(Osi)",
                                        name, mode, buffering);
     if (self->file == NULL)

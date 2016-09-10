@@ -220,6 +220,8 @@ void setupThread() {
         "start_new_thread",
         new BoxedBuiltinFunctionOrMethod(
             BoxedCode::create((void*)startNewThread, BOXED_INT, 3, false, false, "start_new_thread"), { NULL }));
+    thread_module->giveAttrBorrowed("start_new", thread_module->getattr(getStaticString("start_new_thread")));
+
     thread_module->giveAttr("allocate_lock", new BoxedBuiltinFunctionOrMethod(
                                                  BoxedCode::create((void*)allocateLock, UNKNOWN, 0, "allocate_lock")));
     thread_module->giveAttr(
