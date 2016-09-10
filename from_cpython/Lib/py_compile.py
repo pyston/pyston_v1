@@ -94,7 +94,7 @@ def compile(file, cfile=None, dfile=None, doraise=False, force=False):
 
     # Pyston restrictions for things that we don't yet support
     assert cfile is None or cfile == file + "c"
-    assert dfile is None
+    assert dfile is None or dfile == file
 
     try:
         __pyston__.py_compile(file, force)

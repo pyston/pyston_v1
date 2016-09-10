@@ -847,8 +847,7 @@ void setupSys() {
                          new BoxedBuiltinFunctionOrMethod(BoxedCode::create(
                              (void*)sysGetRecursionLimit, UNKNOWN, 0, "getrecursionlimit", getrecursionlimit_doc)));
 
-    // As we don't support compile() etc yet force 'dont_write_bytecode' to true.
-    sys_module->giveAttrBorrowed("dont_write_bytecode", Py_True);
+    sys_module->giveAttr("dont_write_bytecode", boxBool(Py_DontWriteBytecodeFlag));
 
     sys_module->giveAttr("prefix", boxString(Py_GetPrefix()));
     sys_module->giveAttr("exec_prefix", boxString(Py_GetExecPrefix()));

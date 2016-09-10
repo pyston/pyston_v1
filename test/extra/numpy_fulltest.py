@@ -42,6 +42,7 @@ if not os.path.exists(CYTHON_DIR):
         subprocess.check_call([PYTHON_EXE, "-c", "import Cython"], cwd=CYTHON_DIR)
     except:
         subprocess.check_call(["rm", "-rf", CYTHON_DIR])
+        raise
 else:
     print ">>> Cython already installed."
 
@@ -62,6 +63,9 @@ try:
     # but they end up naming f2py "f2py_release"/"f2py_dbg"
 
     print_progress_header("Setting up NumPy...")
+    os.environ["CC"] = "ccache gcc"
+
+    print "\ndoing 'build'\n"
     subprocess.check_call([PYTHON_EXE, "setup.py", "build"], cwd=NUMPY_DIR, env=env)
 
     print_progress_header("Installing NumPy...")
