@@ -44,7 +44,11 @@ int Py_DivisionWarningFlag = 0;
 int Py_HashRandomizationFlag = 0;
 int Py_DebugFlag = 0;
 int _Py_QnewFlag = 0;
-int Py_DontWriteBytecodeFlag = 0;
+// Pyston change: set this by default to True
+// We can support many cases of users wanting to write bytecode, but there are some
+// that are much harder to support (py.test wants to write its own pyc files), and
+// this flag is one of the few levers we have to avoid hitting those paths.
+int Py_DontWriteBytecodeFlag = 1;
 int Py_NoUserSiteDirectory = 0;
 }
 
