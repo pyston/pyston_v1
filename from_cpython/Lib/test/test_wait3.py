@@ -1,4 +1,3 @@
-# expected: fail
 """This test checks for correct wait3() behavior.
 """
 

@@ -172,8 +172,6 @@ test_unicode            argument passing issue?
 test_userdict           segfault: repr of recursive dict?
 test_userlist           slice(1L, 1L)
 test_userstring         float(1L); hangs in test_replace
-test_wait3              [unknown]
-test_wait4              [unknown]
 test_warnings           [unknown]
 test_weakref            weird function-picking bug (something around float.__add__), plase also fix the weakref issue in test_abc
 test_winreg             [unknown]
