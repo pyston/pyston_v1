@@ -141,9 +141,8 @@ test_syntax             [unknown]
 test_sys_setprofile     [unknown]
 test_sys_settrace       [unknown]
 test_sys                we're missing some attributes in the sys module (call_tracing, __excepthook__, setrecursionlimit, etc)
-test_tcl                [unknown]
-test_threading_local    [unknown]
-test_threading          [unknown]
+test_tcl                No module named _tkinter
+test_threading          Multiple issues, including not having sys.settrace
 test_tk                 [unknown]
 test_tools              [unknown]
 test_traceback          [unknown]

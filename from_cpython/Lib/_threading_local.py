@@ -15,8 +15,9 @@ a thread-local object and use its attributes:
   42
 
 You can also access the local-object's dictionary:
+(Pyston change: changed this to dict(mydata.__dict__) to make more portable)
 
-  >>> mydata.__dict__
+  >>> dict(mydata.__dict__)
   {'number': 42}
   >>> mydata.__dict__.setdefault('widgets', [])
   []
