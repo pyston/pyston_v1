@@ -129,8 +129,6 @@ test_repr               complex.__hash__; some unknown issues
 test_resource           fails on travis-ci: setrlimit RLIMIT_CPU not allowed to raise maximum limit
 test_runpy              [unknown]
 test_scope              eval of code object from existing function (not currently supported)
-test_scriptpackages     [unknown]
-test_site               [unknown]
 test_startfile          [unknown]
 test_str                memory leak?
 test_structmembers      [unknown]

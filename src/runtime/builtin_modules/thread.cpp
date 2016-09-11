@@ -22,6 +22,7 @@
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/objmodel.h"
+#include "capi/types.h"
 #include "runtime/types.h"
 
 using namespace pyston::threading;
@@ -79,7 +80,8 @@ static void* thread_start(STOLEN(Box*) target, STOLEN(Box*) varargs, STOLEN(Box*
     try {
         autoDecref(runtimeCall(target, ArgPassSpec(0, 0, true, kwargs != NULL), varargs, kwargs, NULL, NULL, NULL));
     } catch (ExcInfo e) {
-        e.printExcAndTraceback();
+        if (!e.matches(SystemExit))
+            e.printExcAndTraceback();
         e.clear();
     }
 
@@ -212,6 +214,22 @@ Box* threadCount() {
     return boxInt(nb_threads);
 }
 
+static PyObject* thread_PyThread_exit_thread(PyObject* self) noexcept {
+    PyErr_SetNone(PyExc_SystemExit);
+    return NULL;
+}
+
+PyDoc_STRVAR(exit_doc, "exit()\n\
+(exit_thread() is an obsolete synonym)\n\
+\n\
+This is synonymous to ``raise SystemExit''.  It will cause the current\n\
+thread to exit silently unless the exception is caught.");
+
+static PyMethodDef thread_methods[] = {
+    { "exit_thread", (PyCFunction)thread_PyThread_exit_thread, METH_NOARGS, exit_doc },
+    { "exit", (PyCFunction)thread_PyThread_exit_thread, METH_NOARGS, exit_doc },
+};
+
 void setupThread() {
     // Hacky: we want to use some of CPython's implementation of the thread module (the threading local stuff),
     // and some of ours (thread handling).  Start off by calling a cut-down version of initthread, and then
@@ -260,5 +278,10 @@ void setupThread() {
 
     ThreadError = (BoxedClass*)PyErr_NewException("thread.error", NULL, NULL);
     thread_module->giveAttrBorrowed("error", ThreadError);
+
+    auto thread_str = getStaticString("thread");
+    for (auto& md : thread_methods) {
+        thread_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, NULL, thread_str));
+    }
 }
 }
