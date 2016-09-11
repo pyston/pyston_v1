@@ -47,7 +47,6 @@ test_codecmaps_tw       [unknown]
 test_codecs             [unknown]
 test_codeop             [unknown]
 test_code               [unknown]
-test_coding             works when run from inside the from_cpython dir
 test_coercion           1**1L, divmod(1, 1L); some unknown bug
 test_compileall         Not sure if this test makes sense for us (wants to check the details of pyc files)
 test_compiler           [unknown]

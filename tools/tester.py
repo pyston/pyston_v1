@@ -188,6 +188,8 @@ def get_test_options(fn, check_stats, run_memcheck):
         l = l.strip()
         if not l:
             continue
+        if l.startswith("\xef\xbb\xbf"): # BOM
+            l = l[3:]
         if not l.startswith("#"):
             break
         if l.startswith("# statcheck:"):
