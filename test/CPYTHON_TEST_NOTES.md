@@ -62,6 +62,7 @@ test_descrtut           `exec in DefaultDict()`
 test_descr              wontfix: crashes at "self.__dict__ = self"
 test_dict               misc failures related to things like gc, abc, comparisons, detecting mutations during iterations
 test_dictviews          segfault calling repr on recursive dictview. remove test/tests/test_dictview.py when the orig test passes
+test_difflib            wrong diff output?
 test_distutils          Doesn't like our .pyston.so extension; we need to copy in wininst-6.0.exe and similar
 test_dis                dis not really supported in Pyston
 test_dl                 No module named dl
@@ -123,6 +124,7 @@ test_pydoc              Not sure, not generating the right docstrings
 test_random             long("invalid number")
 test_repr               complex.__hash__; some unknown issues
 test_resource           fails on travis-ci: setrlimit RLIMIT_CPU not allowed to raise maximum limit
+test_richcmp            Assertion `ovarargs->cls == tuple_cls' failed
 test_runpy              recursion-depth sisues on debug, 'imp has no attribute "get_magic"'
 test_scope              eval of code object from existing function (not currently supported)
 test_scriptpackages     No module named aetools

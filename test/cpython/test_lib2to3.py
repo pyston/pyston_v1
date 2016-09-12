@@ -1,1 +1,0 @@
-../../from_cpython/Lib/test/test_lib2to3.py

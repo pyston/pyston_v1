@@ -1,3 +1,4 @@
+# expected: fail
 import unittest
 from test import test_support
 from itertools import *
