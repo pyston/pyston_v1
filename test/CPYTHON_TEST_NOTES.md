@@ -120,7 +120,6 @@ test_new                [unknown]
 test_nis                [unknown]
 test_optparse           assertion instead of exceptions for long("invalid number")
 test_ossaudiodev        [unknown]
-test_os                 [unknown]
 test_pdb                [unknown]
 test_peepholer          [unknown]
 test_pep352             various unique bugs
@@ -137,7 +136,6 @@ test_runpy              [unknown]
 test_scope              eval of code object from existing function (not currently supported)
 test_scriptpackages     [unknown]
 test_site               [unknown]
-test_socket             [unknown]
 test_startfile          [unknown]
 test_str                memory leak?
 test_structmembers      [unknown]
@@ -164,7 +162,6 @@ test_trace              [unknown]
 test_transformer        [unknown]
 test_ttk_guionly        [unknown]
 test_ttk_textonly       [unknown]
-test_types              PyErr_WarnEx
 test_undocumented_details   function.func_closure
 test_unicode            argument passing issue?
 test_userdict           segfault: repr of recursive dict?
