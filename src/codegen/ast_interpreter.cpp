@@ -452,7 +452,15 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
 
 Box* ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, BST_stmt* start_at) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_interpreter");
-    RECURSIVE_BLOCK(CXX, " in function call");
+
+    // Hacky: this is the best place for EnterRecursiveCall since we want it to be before we set up the frame.
+    // But we already set (and increffed) the globals on the frame.
+    if (Py_EnterRecursiveCall("in function call")) {
+        Py_DECREF(interpreter.frame_info.globals);
+        throwCAPIException();
+    }
+
+    _RecursiveBlockHelper _helper;
 
     return executeInnerAndSetupFrame(interpreter, start_block, start_at);
 }
