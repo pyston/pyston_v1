@@ -1,8 +1,8 @@
-# skip-if: '-n' in EXTRA_JIT_ARGS or '-O' in EXTRA_JIT_ARGS
+# skip-if: '-n' in EXTRA_JIT_ARGS or '-L' in EXTRA_JIT_ARGS
 
 # Make sure that we can fork from a threaded environment
 #
-# Running this test with -n or -O has horrible performance, since
+# Running this test with -n or -L has horrible performance, since
 # we will freshly JIT all of the post-fork code after every fork.
 
 import subprocess

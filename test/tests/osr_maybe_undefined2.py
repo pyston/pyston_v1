@@ -1,4 +1,4 @@
-# statcheck: '-O' in EXTRA_JIT_ARGS or 1 <= stats['num_osr_exits'] <= 5
+# statcheck: '-L' in EXTRA_JIT_ARGS or 1 <= stats['num_osr_exits'] <= 5
 
 # Regression test to make sure we can do an OSR if one of the live variables
 # is potentially-undefined.

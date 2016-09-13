@@ -1,6 +1,4 @@
 # expected: fail
-# fails because capifunc's don't have __name__ attributes,
-# which causes from_cpython/Lib/fractions.py to error
 import unittest
 from test import test_support
 from itertools import *
@@ -140,11 +138,6 @@ class TestBasicOps(unittest.TestCase):
                 self.assertEqual(result, list(combinations2(values, r))) # matches second pure python version
                 self.assertEqual(result, list(combinations3(values, r))) # matches second pure python version
 
-    @test_support.bigaddrspacetest
-    def test_combinations_overflow(self):
-        with self.assertRaises((OverflowError, MemoryError)):
-            combinations("AA", 2**29)
-
     @test_support.impl_detail("tuple reuse is specific to CPython")
     def test_combinations_tuple_reuse(self):
         self.assertEqual(len(set(map(id, combinations('abcde', 3)))), 1)
@@ -216,11 +209,6 @@ class TestBasicOps(unittest.TestCase):
                 self.assertEqual(result, list(cwr1(values, r)))         # matches first pure python version
                 self.assertEqual(result, list(cwr2(values, r)))         # matches second pure python version
 
-    @test_support.bigaddrspacetest
-    def test_combinations_with_replacement_overflow(self):
-        with self.assertRaises((OverflowError, MemoryError)):
-            combinations_with_replacement("AA", 2**30)
-
     @test_support.impl_detail("tuple reuse is specific to CPython")
     def test_combinations_with_replacement_tuple_reuse(self):
         cwr = combinations_with_replacement
@@ -286,11 +274,6 @@ class TestBasicOps(unittest.TestCase):
                 if r == n:
                     self.assertEqual(result, list(permutations(values, None))) # test r as None
                     self.assertEqual(result, list(permutations(values)))       # test default r
-
-    @test_support.bigaddrspacetest
-    def test_permutations_overflow(self):
-        with self.assertRaises((OverflowError, MemoryError)):
-            permutations("A", 2**30)
 
     @test_support.impl_detail("tuple reuse is specific to CPython")
     def test_permutations_tuple_reuse(self):
@@ -376,8 +359,7 @@ class TestBasicOps(unittest.TestCase):
             c = count(value)
             self.assertEqual(next(copy.copy(c)), value)
             self.assertEqual(next(copy.deepcopy(c)), value)
-            for proto in range(pickle.HIGHEST_PROTOCOL + 1):
-                self.assertEqual(next(pickle.loads(pickle.dumps(c, proto))), value)
+            self.assertEqual(next(pickle.loads(pickle.dumps(c))), value)
 
     def test_count_with_stride(self):
         self.assertEqual(zip('abc',count(2,3)), [('a', 2), ('b', 5), ('c', 8)])
@@ -710,11 +692,6 @@ class TestBasicOps(unittest.TestCase):
             args = map(iter, args)
             self.assertEqual(len(list(product(*args))), expected_len)
 
-    @test_support.bigaddrspacetest
-    def test_product_overflow(self):
-        with self.assertRaises((OverflowError, MemoryError)):
-            product(*(['ab']*2**5), repeat=2**25)
-
     @test_support.impl_detail("tuple reuse is specific to CPython")
     def test_product_tuple_reuse(self):
         self.assertEqual(len(set(map(id, product('abc', 'def')))), 1)
@@ -722,9 +699,6 @@ class TestBasicOps(unittest.TestCase):
 
     def test_repeat(self):
         self.assertEqual(list(repeat(object='a', times=3)), ['a', 'a', 'a'])
-        self.assertEqual(list(repeat(object='a', times=0)), [])
-        self.assertEqual(list(repeat(object='a', times=-1)), [])
-        self.assertEqual(list(repeat(object='a', times=-2)), [])
         self.assertEqual(zip(xrange(3),repeat('a')),
                          [(0, 'a'), (1, 'a'), (2, 'a')])
         self.assertEqual(list(repeat('a', 3)), ['a', 'a', 'a'])
@@ -740,12 +714,6 @@ class TestBasicOps(unittest.TestCase):
         self.assertEqual(repr(r), 'repeat((1+0j), 5)')
         list(r)
         self.assertEqual(repr(r), 'repeat((1+0j), 0)')
-
-    def test_repeat_with_negative_times(self):
-        self.assertEqual(repr(repeat('a', -1)), "repeat('a', 0)")
-        self.assertEqual(repr(repeat('a', -2)), "repeat('a', 0)")
-        self.assertEqual(repr(repeat('a', times=-1)), "repeat('a', 0)")
-        self.assertEqual(repr(repeat('a', times=-2)), "repeat('a', 0)")
 
     def test_imap(self):
         self.assertEqual(list(imap(operator.pow, range(3), range(1,7))),
@@ -832,7 +800,6 @@ class TestBasicOps(unittest.TestCase):
         it = islice(it, 1)
         self.assertIsNotNone(wr())
         list(it) # exhaust the iterator
-        test_support.gc_collect()
         self.assertIsNone(wr())
 
     def test_takewhile(self):

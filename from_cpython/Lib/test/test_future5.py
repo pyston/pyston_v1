@@ -1,10 +1,10 @@
-# expected: fail
 # Check that multiple features can be enabled.
 from __future__ import unicode_literals, print_function
 
 import sys
 import unittest
-from . import test_support
+# Pyston change: changed to absolute import
+from test import test_support
 
 
 class TestMultipleFeatures(unittest.TestCase):

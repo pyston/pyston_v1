@@ -1,5 +1,3 @@
-# expected: fail
-
 import test.test_support, unittest
 import os
 

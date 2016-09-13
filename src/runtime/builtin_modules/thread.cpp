@@ -19,6 +19,7 @@
 #include "pythread.h"
 
 #include "capi/typeobject.h"
+#include "capi/types.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/objmodel.h"
@@ -79,7 +80,8 @@ static void* thread_start(STOLEN(Box*) target, STOLEN(Box*) varargs, STOLEN(Box*
     try {
         autoDecref(runtimeCall(target, ArgPassSpec(0, 0, true, kwargs != NULL), varargs, kwargs, NULL, NULL, NULL));
     } catch (ExcInfo e) {
-        e.printExcAndTraceback();
+        if (!e.matches(SystemExit))
+            e.printExcAndTraceback();
         e.clear();
     }
 
@@ -198,13 +200,35 @@ Box* getIdent() {
     return boxInt(pthread_self());
 }
 
-Box* stackSize() {
-    Py_FatalError("unimplemented");
+Box* stackSize(Box* arg) {
+    if (arg) {
+        if (PyInt_Check(arg) && PyInt_AS_LONG(arg) == 0) {
+            Py_RETURN_NONE;
+        }
+        raiseExcHelper(ThreadError, "Changing initial stack size is not supported in Pyston");
+    }
+    return boxInt(0);
 }
 
 Box* threadCount() {
     return boxInt(nb_threads);
 }
+
+static PyObject* thread_PyThread_exit_thread(PyObject* self) noexcept {
+    PyErr_SetNone(PyExc_SystemExit);
+    return NULL;
+}
+
+PyDoc_STRVAR(exit_doc, "exit()\n\
+(exit_thread() is an obsolete synonym)\n\
+\n\
+This is synonymous to ``raise SystemExit''.  It will cause the current\n\
+thread to exit silently unless the exception is caught.");
+
+static PyMethodDef thread_methods[] = {
+    { "exit_thread", (PyCFunction)thread_PyThread_exit_thread, METH_NOARGS, exit_doc },
+    { "exit", (PyCFunction)thread_PyThread_exit_thread, METH_NOARGS, exit_doc },
+};
 
 void setupThread() {
     // Hacky: we want to use some of CPython's implementation of the thread module (the threading local stuff),
@@ -227,7 +251,7 @@ void setupThread() {
     thread_module->giveAttr(
         "get_ident", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)getIdent, BOXED_INT, 0, "get_ident")));
     thread_module->giveAttr("stack_size", new BoxedBuiltinFunctionOrMethod(
-                                              BoxedCode::create((void*)stackSize, BOXED_INT, 0, "stack_size")));
+                                              BoxedCode::create((void*)stackSize, UNKNOWN, 1, "stack_size"), { NULL }));
     thread_module->giveAttr(
         "_count", new BoxedBuiltinFunctionOrMethod(BoxedCode::create((void*)threadCount, BOXED_INT, 0, "_count")));
 
@@ -254,5 +278,10 @@ void setupThread() {
 
     ThreadError = (BoxedClass*)PyErr_NewException("thread.error", NULL, NULL);
     thread_module->giveAttrBorrowed("error", ThreadError);
+
+    auto thread_str = getStaticString("thread");
+    for (auto& md : thread_methods) {
+        thread_module->giveAttr(md.ml_name, new BoxedCApiFunction(&md, NULL, thread_str));
+    }
 }
 }

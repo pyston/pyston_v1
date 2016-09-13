@@ -1,4 +1,3 @@
-# expected: fail
 from test import test_support as support
 # If we end up with a significant number of tests that don't require
 # threading, this test module should be split.  Right now we skip
@@ -11,7 +10,8 @@ import os.path
 import SocketServer
 import time
 
-from test_support import reap_threads, verbose, transient_internet
+# Pyston change: changed to absolute import
+from test.test_support import reap_threads, verbose, transient_internet
 import unittest
 
 try:

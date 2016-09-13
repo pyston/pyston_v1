@@ -1,5 +1,5 @@
 # run_args: -n
-# statcheck: ("-O" in EXTRA_JIT_ARGS) or (1 <= stats["num_osr_exits"] <= 2)
+# statcheck: ("-L" in EXTRA_JIT_ARGS) or (1 <= stats["num_osr_exits"] <= 2)
 # statcheck: noninit_count('slowpath_binop') <= 10
 
 x = 100000

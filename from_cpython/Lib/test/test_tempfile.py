@@ -1,4 +1,3 @@
-# expected: fail
 # tempfile.py unit tests.
 import tempfile
 import errno

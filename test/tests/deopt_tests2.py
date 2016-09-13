@@ -1,4 +1,4 @@
-# skip-if: '-O' in EXTRA_JIT_ARGS or '-n' in EXTRA_JIT_ARGS
+# skip-if: '-L' in EXTRA_JIT_ARGS or '-n' in EXTRA_JIT_ARGS
 # statcheck: 4 == noninit_count('num_deopt')
 # this used to hit an abort in our LLVM tier codegen
 try:

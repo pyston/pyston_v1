@@ -1,4 +1,4 @@
-# skip-if: '-n' not in EXTRA_JIT_ARGS and '-O' not in EXTRA_JIT_ARGS
+# skip-if: '-n' not in EXTRA_JIT_ARGS and '-L' not in EXTRA_JIT_ARGS
 # statcheck: noninit_count('slowpath_setattr') < 50
 
 class MyDescr(object):

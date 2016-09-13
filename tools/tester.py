@@ -188,6 +188,8 @@ def get_test_options(fn, check_stats, run_memcheck):
         l = l.strip()
         if not l:
             continue
+        if l.startswith("\xef\xbb\xbf"): # BOM
+            l = l[3:]
         if not l.startswith("#"):
             break
         if l.startswith("# statcheck:"):
@@ -512,6 +514,7 @@ def main(orig_dir):
     global EXTMODULE_DIR_PYSTON
     global EXTMODULE_DIR
     global DISPLAY_SUCCESSES
+    global IS_OPTIMIZED
 
     run_memcheck = False
 
@@ -534,6 +537,8 @@ def main(orig_dir):
     EXTMODULE_DIR_PYSTON = os.path.abspath(os.path.dirname(os.path.realpath(IMAGE)) + "/test/test_extension/")
     EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(IMAGE)) + "/test/test_extension/build/lib.linux-x86_64-2.7/")
     patterns = opts.pattern
+
+    IS_OPTIMIZED = int(subprocess.check_output([IMAGE, "-c", 'import sysconfig; print int("-O0" not in sysconfig.get_config_var(\"CFLAGS\"))']))
 
     if not patterns and not TESTS_TO_SKIP:
         TESTS_TO_SKIP = ["t", "t2", "t3"]
@@ -573,7 +578,7 @@ def main(orig_dir):
                 filtered_tests.append(t)
         tests = filtered_tests
     if not tests:
-        print >>sys.stderr, "No tests matched the given patterns. OK by me!"
+        # print >>sys.stderr, "No tests matched the given patterns. OK by me!"
         # this can happen legitimately in e.g. `make check_test_foo` if test_foo.py is a CPython regression test.
         sys.exit(0)
 

@@ -20,20 +20,19 @@ test_aepack             No module named aetypes
 test_aifc               Unsupported subclassing from file?
 test_al                 No module named al
 test_applesingle        Not really a failure, but it tries to skip itself and we don't support that
-test_audioop            [unknown]
-test_bigmem             [unknown]
-test_bisect             somehow sys.modules['_bisect'] is getting set to 0
-test_bsddb185           [unknown]
-test_bsddb3             [unknown]
-test_bsddb              [unknown]
-test_builtin            execfile scoping issue
-test_capi               [unknown]
-test_cd                 [unknown]
-test_cfgparser          works when run from inside the from_cpython dir
-test_class              needs ellipsis
-test_cl                 [unknown]
-test_cmd_line_script    [unknown]
-test_cmd_line           [unknown]
+test_audioop            No module named audioop
+test_bigmem             not sure
+test_bisect             `sys.modules['foo'] = 0; import foo; print foo' should print "0"
+test_bsddb185           No module named _bsddb185
+test_bsddb3             No module named _bsddb
+test_bsddb              No module named _bsddb
+test_builtin            Can't use unicode attribute names; leaked refs
+test_capi               No module named _testcapi
+test_cd                 No module named cd
+test_class              "exec foo in <old style class>.__dict__"
+test_cl                 No module named cl
+test_cmd_line_script    A number of issues
+test_cmd_line           Missing a number of command line flags
 test_codecencodings_cn  [unknown]
 test_codecencodings_hk  [unknown]
 test_codecencodings_iso2022  [unknown]
@@ -45,123 +44,111 @@ test_codecmaps_hk       [unknown]
 test_codecmaps_jp       [unknown]
 test_codecmaps_kr       [unknown]
 test_codecmaps_tw       [unknown]
-test_codecs             [unknown]
-test_codeop             [unknown]
-test_code               [unknown]
-test_coding             works when run from inside the from_cpython dir
+test_codecs             Missing _codecs_tw, maybe others
+test_codeop             code.__eq__?
+test_code               'code' object has no attribute 'co_names'
 test_coercion           1**1L, divmod(1, 1L); some unknown bug
 test_compileall         Not sure if this test makes sense for us (wants to check the details of pyc files)
-test_compiler           [unknown]
-test_compile            [unknown]
+test_compiler           "import compiler" fails
+test_compile            Missing some code-object fields
 test_cprofile           [unknown]
-test_crypt              [unknown]
-test_ctypes             [unknown]
-test_curses             [unknown]
-test_datetime           needs _PyObject_GetDictPtr
-test_dbm                [unknown]
-test_decorators         decorator bug -- we evaluate decorator obj and its args in wrong order
+test_crypt              No module named crypt
+test_ctypes             No module named _testcapi
+test_curses             No module named _curses_panel
+test_datetime           Wants _PyObject_GetDictPtr for hcattrs
+test_dbm                No module named dbm
+test_decorators         callattr issue: we evaluate the args first then do the callattr, but if the getattr has side-effects this is the wrong order
 test_descrtut           `exec in DefaultDict()`
 test_descr              wontfix: crashes at "self.__dict__ = self"
 test_dict               misc failures related to things like gc, abc, comparisons, detecting mutations during iterations
 test_dictviews          segfault calling repr on recursive dictview. remove test/tests/test_dictview.py when the orig test passes
-test_difflib            [unknown]
-test_distutils          [unknown]
-test_dis                [unknown]
-test_dl                 [unknown]
+test_difflib            wrong diff output?
+test_distutils          Doesn't like our .pyston.so extension; we need to copy in wininst-6.0.exe and similar
+test_dis                dis not really supported in Pyston
+test_dl                 No module named dl
 test_doctest            hard to know.  also missing some input files
-test_dumbdbm            [unknown]
-test_email_codecs       [unknown]
-test_email_renamed      [unknown]
-test_email              [unknown]
+test_email_codecs       Missing 'euc-jp' codec, maybe others
+test_email_renamed      crlf_separation failing
+test_email              crlf_separation failing, missing codecs
 test_enumerate          assert instead of exception in BoxedEnumerate
 test_exceptions         we are missing recursion-depth checking
 test_extcall            f(**kw) crashes if kw isn't a dict
-test_fork1              [unknown]
-test_frozen             [unknown]
+test_frozen             "No module named __hello__"
 test_funcattrs          we don't allow changing numing of function defaults
-test_future5            [unknown]
-test_future             [unknown]
-test_gc                 [unknown]
-test_gdbm               [unknown]
-test_gdb                [unknown]
+test_future             missing error messages
+test_gc                 Wrong number of gc collections, gc.is_tracked issue?
+test_gdbm               No module named gdbm
+test_gdb                sysconfig missing PY_CFLAGS var
 test_generators         crash when sending non-None to a just-started generator
 test_genexps            parser not raising a SyntaxError when assigning to a genexp
-test_getargs2           [unknown]
+test_getargs2           No module named _testcapi
 test_global             SyntaxWarnings for global statements after uses
-test_gl                 [unknown]
+test_gl                 No module named gl
 test_grammar            bug in our tokenizer
-test_hotshot            [unknown]
-test_idle               [unknown]
-test_imageop            [unknown]
-test_imaplib            [unknown]
-test_imgfile            [unknown]
-test_importhooks        [unknown]
-test_import             [unknown]
-test_inspect            [unknown]
+test_hotshot            No module named _hotshot
+test_idle               No module named Tkinter
+test_imageop            No module named imageop
+test_imgfile            no module named imgfile
+test_importhooks        "import compiler" doesnt work
+test_import             Marshaling code objects not supported
+test_inspect            missing sys.exc_traceback
 test_io                 memory/gc issue?
 test_iterlen            [unknown]
-test_itertools          [unknown]
-test_json               'from test.script_helper import assert_python_ok' fails; sounds like it is trying to look at pycs
+test_itertools          range(sys.maxint-5, sys.maxint+5)
+test_json               "throw called on generator last advanced with __hasnext__"
 test_kqueue             Not really a failure, but it tries to skip itself and we don't support that
-test_lib2to3            [unknown]
-test_linuxaudiodev      [unknown]
+test_linuxaudiodev      No module named audioop
 test_list               longs as slice indices
-test_long_future        [unknown]
+test_long_future        Rounding issues for long.__truediv__ (we convert to doubles then round; should do a full-precision division and then round)
 test_macos              Not really a failure, but it tries to skip itself and we don't support that
 test_macostools         Not really a failure, but it tries to skip itself and we don't support that
-test_marshal            [unknown]
-test_modulefinder       [unknown]
+test_marshal            Can't marshal code objects
+test_modulefinder       Wants to scan code objects
 test_module             unicode docstrings
-test_msilib             [unknown]
-test_multibytecodec     [unknown]
-test_multiprocessing    [unknown]
+test_msilib             No module named _msi
+test_multibytecodec     No module named _multibytecodec
 test_mutants            unknown failure
-test_new                [unknown]
-test_nis                [unknown]
+test_new                Tries `new.function(f.func_code, {}, "blah")` on a code that didn't expect custom globals
+test_nis                "no module named nis"
 test_optparse           assertion instead of exceptions for long("invalid number")
 test_ossaudiodev        [unknown]
 test_pdb                [unknown]
-test_peepholer          [unknown]
+test_peepholer          tries to disassemble code objects
 test_pep352             various unique bugs
-test_pkg                unknown bug
-test_pprint             [unknown]
-test_profile            [unknown]
+test_pkg                we don't import quite the right names for "import *"?
+test_pprint             Dict ordering, some other issues
+test_profile            sys has no attribute setprofile
 test_py3kwarn           [unknown]
 test_pyclbr             This test passes but takes a very long time in debug mode (60s vs 5s for release mode).
-test_pydoc              [unknown]
+test_pydoc              Not sure, not generating the right docstrings
 test_random             long("invalid number")
 test_repr               complex.__hash__; some unknown issues
 test_resource           fails on travis-ci: setrlimit RLIMIT_CPU not allowed to raise maximum limit
-test_runpy              [unknown]
+test_richcmp            Assertion `ovarargs->cls == tuple_cls' failed
+test_runpy              recursion-depth sisues on debug, 'imp has no attribute "get_magic"'
 test_scope              eval of code object from existing function (not currently supported)
-test_scriptpackages     [unknown]
-test_site               [unknown]
-test_startfile          [unknown]
-test_str                memory leak?
-test_structmembers      [unknown]
+test_scriptpackages     No module named aetools
+test_site               We're missing the '-s' command line flag
+test_startfile          Only works on windows
+test_str                A few misc errors
+test_structmembers      No module named _testcapi
 test_subprocess         exit code 141 [sigpipe?], no error message
-test_sunaudiodev        [unknown]
-test_sunau              [unknown]
-test_support            [unknown]
-test_symtable           [unknown]
-test_syntax             [unknown]
-test_sys_setprofile     [unknown]
-test_sys_settrace       [unknown]
-test_sys                [unknown]
-test_tarfile            [unknown]
-test_tcl                [unknown]
-test_tempfile           [unknown]
-test_threading_local    [unknown]
-test_threading          [unknown]
-test_thread             [unknown]
-test_tk                 [unknown]
-test_tokenize           [unknown]
-test_tools              [unknown]
-test_traceback          [unknown]
-test_trace              [unknown]
-test_transformer        [unknown]
-test_ttk_guionly        [unknown]
-test_ttk_textonly       [unknown]
+test_sunaudiodev        No module named sunaudiodev
+test_sunau              No module named audioop, some other issues
+test_symtable           No module named _symtable
+test_syntax             We're missing "too many statically nested blocks" check; a couple error messages don't look right to the tests
+test_sys_setprofile     Not supported yet in pyston
+test_sys_settrace       Not supported yet in pyston
+test_sys                we're missing some attributes in the sys module (call_tracing, __excepthook__, setrecursionlimit, etc)
+test_tcl                No module named _tkinter
+test_threading          Multiple issues, including not having sys.settrace
+test_tk                 No module named _tkinter
+test_tools              Skips itself because it's an "installed python"
+test_traceback          Missing sys.exc_traceback
+test_trace              sys.settrace not supported yet
+test_transformer        "import compiler" not supported yet
+test_ttk_guionly        No module named _tkinter
+test_ttk_textonly       No module named _tkinter
 test_undocumented_details   function.func_closure
 test_unicode            argument passing issue?
 test_userdict           segfault: repr of recursive dict?
@@ -169,16 +156,14 @@ test_userlist           slice(1L, 1L)
 test_userstring         float(1L); hangs in test_replace
 test_warnings           Among other things, we don't support the -W flag
 test_weakref            weird function-picking bug (something around float.__add__), plase also fix the weakref issue in test_abc
-test_winreg             [unknown]
-test_winsound           [unknown]
-test_xml_etree_c        [unknown]
-test_xml_etree          [unknown]
-test_xmlrpc             [unknown]
-test_xpickle            [unknown]
+test_winreg             No module named _winreg
+test_winsound           No module named winsound
+test_xml_etree_c        _elementtree.c does a bunch of CAPI calls without checking for exceptions, which ends up tripping some asserts
+test_xml_etree          Missing sys.exc_value, unknown encoding "gbk"
+test_xmlrpc             Cannot re-init internal module sys (`import sys; del sys.modules['sys']; import sys`)
 test_zipfile64          [unknown]
-test_zipfile            [unknown]
-test_zipimport_support  [unknown]
-test_zipimport          [unknown]
+test_zipimport_support  leaks; missing sys.settrace
+test_zipimport          Marshalling of code objects not supported
 ```
 
 ### Getting regrtest to work is hard

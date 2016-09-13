@@ -452,6 +452,8 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
 
 Box* ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, BST_stmt* start_at) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_interpreter");
+    RECURSIVE_BLOCK(CXX, " in function call");
+
     return executeInnerAndSetupFrame(interpreter, start_block, start_at);
 }
 

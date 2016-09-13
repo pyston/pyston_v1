@@ -1,6 +1,6 @@
 # run_args: -n
 #
-# statcheck: "-O" in EXTRA_JIT_ARGS or 'slowpath_getclsattr' in stats or 'slowpath_callattr' in stats
+# statcheck: "-L" in EXTRA_JIT_ARGS or 'slowpath_getclsattr' in stats or 'slowpath_callattr' in stats
 # statcheck: noninit_count('slowpath_getclsattr') <= 20
 # statcheck: noninit_count('slowpath_callattr') <= 22
 

@@ -628,7 +628,15 @@ extern "C" PyObject* PyExceptionInstance_Class(PyObject* o) noexcept {
     return PyInstance_Check(o) ? (Box*)static_cast<BoxedInstance*>(o)->inst_cls : o->cls;
 }
 
+// With optimizations turned off, we can handle much fewer Python stack frames
+// in the same amount of C-stack space.
+// Use NDEBUG as a proxy for whether optimizations are turned on.
+#ifndef NDEBUG
+#define Py_DEFAULT_RECURSION_LIMIT 300
+#else
 #define Py_DEFAULT_RECURSION_LIMIT 1000
+#endif
+
 static int recursion_limit = Py_DEFAULT_RECURSION_LIMIT;
 extern "C" {
 int _Py_CheckRecursionLimit = Py_DEFAULT_RECURSION_LIMIT;
