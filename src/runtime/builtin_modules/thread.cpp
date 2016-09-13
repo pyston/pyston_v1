@@ -19,10 +19,10 @@
 #include "pythread.h"
 
 #include "capi/typeobject.h"
+#include "capi/types.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/objmodel.h"
-#include "capi/types.h"
 #include "runtime/types.h"
 
 using namespace pyston::threading;
