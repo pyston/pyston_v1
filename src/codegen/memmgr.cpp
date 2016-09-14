@@ -97,9 +97,8 @@ uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t S
     uintptr_t RequiredSize = Alignment * ((Size + Alignment - 1) / Alignment + 1);
     uintptr_t Addr = 0;
 
-    // Note that all sections get allocated as read-write.  The permissions will
-    // be updated later based on memory group.
-    //
+    // Look in the list of free memory regions and use a block there if one
+    // is available.
     for (FreeMemBlock& FreeMB : MemGroup.FreeMem) {
         if (FreeMB.Free.size() >= RequiredSize) {
             Addr = (uintptr_t)FreeMB.Free.base();
@@ -147,6 +146,7 @@ uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t S
     // Save this address as the basis for our next request
     MemGroup.Near = MB;
 
+    // Remember that we allocated this memory
     MemGroup.AllocatedMem.push_back(MB);
     Addr = (uintptr_t)MB.base();
     uintptr_t EndOfBlock = Addr + MB.size();
@@ -154,6 +154,7 @@ uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t S
     // Align the address.
     Addr = (Addr + Alignment - 1) & ~(uintptr_t)(Alignment - 1);
 
+    // The part of the block we're giving out to the user is now pending
     MemGroup.PendingMem.push_back(sys::MemoryBlock((void*)Addr, Size));
 
     // The allocateMappedMemory may allocate much more memory than we need. In
@@ -165,15 +166,14 @@ uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t S
         FreeMB.PendingPrefixIndex = (unsigned)-1;
         MemGroup.FreeMem.push_back(FreeMB);
     }
+
+    // Return aligned address
     return (uint8_t*)Addr;
 }
 
 bool PystonMemoryManager::finalizeMemory(std::string* ErrMsg) {
     // FIXME: Should in-progress permissions be reverted if an error occurs?
     llvm_error_code ec;
-
-    // Don't allow free memory blocks to be used after setting protection flags.
-    CodeMem.FreeMem.clear();
 
     // Make code memory executable.
     // pyston: also make it writeable so we can patch it later
@@ -185,6 +185,7 @@ bool PystonMemoryManager::finalizeMemory(std::string* ErrMsg) {
         return true;
     }
 
+    // This code was removed in latest LLVM's repo.
     // Don't allow free memory blocks to be used after setting protection flags.
     RODataMem.FreeMem.clear();
 
@@ -225,6 +226,11 @@ static sys::MemoryBlock trimBlockToPageSize(sys::MemoryBlock M) {
     return Trimmed;
 }
 
+// Copy from LLVM 3.9 repo's /include/llvm/ADT/STLExtras.h
+template <typename R, class UnaryPredicate> auto remove_if(R&& Range, UnaryPredicate&& P) -> decltype(Range.begin()) {
+    return std::remove_if(Range.begin(), Range.end(), P);
+}
+
 llvm_error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup& MemGroup, unsigned Permissions) {
 
     for (sys::MemoryBlock& MB : MemGroup.PendingMem) {
@@ -245,9 +251,8 @@ llvm_error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup& Me
     }
 
     // Remove all blocks which are now empty
-    MemGroup.FreeMem.erase(std::remove_if(MemGroup.FreeMem.begin(), MemGroup.FreeMem.end(), [](FreeMemBlock& FreeMB) {
-        return FreeMB.Free.size() == 0;
-    }), MemGroup.FreeMem.end());
+    MemGroup.FreeMem.erase(remove_if(MemGroup.FreeMem, [](FreeMemBlock& FreeMB) { return FreeMB.Free.size() == 0; }),
+                           MemGroup.FreeMem.end());
 
 #if LLVMREV < 209952
     return llvm_error_code::success();
