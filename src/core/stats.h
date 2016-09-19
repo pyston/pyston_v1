@@ -88,7 +88,7 @@ public:
 //
 // The current convention for stat names is underscore_case, such as `num_cxa_throw`,
 // though at some point we'd like to move to a period-delimited convention.
-// (Run `./pyston -s` to see the list of current stats we log.)
+// (Run `./pyston -T` to see the list of current stats we log.)
 // For single stats, usually `num_foo` is a decent name.  If there are many stats in a
 // single category, you can drop the `num_`.
 // If a stat name is a prefix of another, the event it is counting should be a superset.
