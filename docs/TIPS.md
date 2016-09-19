@@ -54,7 +54,7 @@ Pyston's primary reason _raison d'être_ is to have better performance than CPyt
 
 ### Counters & timers
 
-We have a number of counters and timers that were manually written and inserted into the program. To display the results of a run, use the `-s` flag. The result of timer counters is displayed in microseconds.
+We have a number of counters and timers that were manually written and inserted into the program. To display the results of a run, use the `-T` flag. The result of timer counters is displayed in microseconds.
 
 There's two types of timers in the code. The first are `StatCounter`s. They are just counters where we log the time elapsed manually, measured using a `Timer`. The second are `STAT_TIMER`s, which pause the parent `STAT_TIMER` when they are nested.
 

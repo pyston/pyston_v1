@@ -121,7 +121,7 @@ Pyston-specific flags:
 <dt>-v</dt>
   <dd>Increase verbosity by 1</dd>
 
-<dt>-s</dt>
+<dt>-T</dt>
   <dd>Print out the internal stats at exit.</dd>
 
 <dt>-n</dt>
