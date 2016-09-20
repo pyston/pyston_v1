@@ -182,12 +182,8 @@ bool PystonMemoryManager::finalizeMemory(std::string* ErrMsg) {
         if (ErrMsg) {
             *ErrMsg = ec.message();
         }
-        return true;
+        RELEASE_ASSERT(0, "finalizeMemory failed");
     }
-
-    // This code was removed in latest LLVM's repo.
-    // Don't allow free memory blocks to be used after setting protection flags.
-    RODataMem.FreeMem.clear();
 
     // Make read-only data memory read-only.
     ec = applyMemoryGroupPermissions(RODataMem, sys::Memory::MF_READ | sys::Memory::MF_EXEC);
@@ -195,7 +191,7 @@ bool PystonMemoryManager::finalizeMemory(std::string* ErrMsg) {
         if (ErrMsg) {
             *ErrMsg = ec.message();
         }
-        return true;
+        RELEASE_ASSERT(0, "finalizeMemory failed");
     }
 
     // Read-write data memory already has the correct permissions
@@ -224,11 +220,6 @@ static sys::MemoryBlock trimBlockToPageSize(sys::MemoryBlock M) {
     assert(M.base() <= Trimmed.base() && Trimmed.size() <= M.size());
 
     return Trimmed;
-}
-
-// Copy from LLVM 3.9 repo's /include/llvm/ADT/STLExtras.h
-template <typename R, class UnaryPredicate> auto remove_if(R&& Range, UnaryPredicate&& P) -> decltype(Range.begin()) {
-    return std::remove_if(Range.begin(), Range.end(), P);
 }
 
 llvm_error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup& MemGroup, unsigned Permissions) {
