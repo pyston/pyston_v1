@@ -1924,6 +1924,18 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
                     descr = NULL;
             }
 
+            static BoxedString* instancecheck_str = getStaticString("__instancecheck__");
+            if (p->name_strobj == instancecheck_str) {
+                if (descr == type_cls->getattr(instancecheck_str))
+                    descr = NULL;
+            }
+
+            static BoxedString* subclasscheck_str = getStaticString("__subclasscheck__");
+            if (p->name_strobj == subclasscheck_str) {
+                if (descr == type_cls->getattr(subclasscheck_str))
+                    descr = NULL;
+            }
+
             static BoxedString* getattribute_str = getStaticString("__getattribute__");
             if (p->name_strobj == getattribute_str) {
                 if (type->tp_getattr == NULL && descr && descr->cls == &PyWrapperDescr_Type

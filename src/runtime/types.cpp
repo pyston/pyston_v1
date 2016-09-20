@@ -1400,6 +1400,28 @@ static int type_sub_set_dict(BORROWED(Box*) obj, BORROWED(Box*) val, void* conte
     return 0;
 }
 
+static PyObject* type___instancecheck__(PyObject* type, PyObject* inst) noexcept {
+    switch (_PyObject_RealIsInstance(inst, type)) {
+        case -1:
+            return NULL;
+        case 0:
+            Py_RETURN_FALSE;
+        default:
+            Py_RETURN_TRUE;
+    }
+}
+
+static PyObject* type___subclasscheck__(PyObject* type, PyObject* inst) noexcept {
+    switch (_PyObject_RealIsSubclass(inst, type)) {
+        case -1:
+            return NULL;
+        case 0:
+            Py_RETURN_FALSE;
+        default:
+            Py_RETURN_TRUE;
+    }
+}
+
 extern "C" void PyType_SetDict(PyTypeObject* type, STOLEN(PyObject*) dict) noexcept {
     type_sub_set_dict(type, dict, NULL);
     Box* old_dict = type->tp_dict;
@@ -4399,6 +4421,12 @@ void setupRuntime() {
     type_cls->giveAttrDescriptor("__abstractmethods__", (getter)type_abstractmethods, (setter)type_set_abstractmethods);
 
     type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
+    type_cls->giveAttr(
+        "__subclasscheck__",
+        new BoxedFunction(BoxedCode::create((void*)type___subclasscheck__, BOXED_BOOL, 2, "type.__subclasscheck__")));
+    type_cls->giveAttr(
+        "__instancecheck__",
+        new BoxedFunction(BoxedCode::create((void*)type___instancecheck__, BOXED_BOOL, 2, "type.__instancecheck__")));
 
     type_cls->giveAttr(
         "__new__", new BoxedFunction(BoxedCode::create((void*)typeNewGeneric, UNKNOWN, 4, false, false, "type.__new__"),
