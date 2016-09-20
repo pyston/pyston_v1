@@ -360,6 +360,8 @@ static Box* yieldInternal(BoxedGenerator* obj, STOLEN(Box*) value,
                           llvm::ArrayRef<Box*> live_values) noexcept(S == CAPI) {
     STAT_TIMER(t0, "us_timer_generator_switching", 0);
 
+    Py_LeaveRecursiveCall();
+
     assert(obj->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(obj);
     assert(!self->returnValue);
@@ -395,11 +397,28 @@ static Box* yieldInternal(BoxedGenerator* obj, STOLEN(Box*) value,
         ExcInfo e = self->exception;
         self->exception = ExcInfo(NULL, NULL, NULL);
         Py_CLEAR(self->returnValue);
+
+        if (Py_EnterRecursiveCall("resuming generator")) {
+            e.clear();
+            if (S == CAPI)
+                return NULL;
+            else
+                throwCAPIException();
+        }
+
         if (S == CAPI) {
             setCAPIException(e);
             return NULL;
         }
         throw e;
+    }
+
+    if (Py_EnterRecursiveCall("resuming generator")) {
+        Py_CLEAR(self->returnValue);
+        if (S == CAPI)
+            return NULL;
+        else
+            throwCAPIException();
     }
 
     Box* r = self->returnValue;
