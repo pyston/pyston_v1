@@ -66,9 +66,9 @@ def set_ulimits():
 
     # The RSS limit doesn't seem to always take effect:
     MAX_RSS_MB = 100
-    MAX_VA_MB = 800
+    # MAX_VA_MB = 800
     resource.setrlimit(resource.RLIMIT_RSS, (MAX_RSS_MB * 1024 * 1024, MAX_RSS_MB * 1024 * 1024))
-    resource.setrlimit(resource.RLIMIT_AS, (MAX_VA_MB * 1024 * 1024, MAX_VA_MB * 1024 * 1024))
+    # resource.setrlimit(resource.RLIMIT_AS, (MAX_VA_MB * 1024 * 1024, MAX_VA_MB * 1024 * 1024))
 
 EXTMODULE_DIR = None
 EXTMODULE_DIR_PYSTON = None
