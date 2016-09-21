@@ -1,3 +1,6 @@
+assert hasattr(object, "__subclasscheck__")
+assert hasattr(object, "__instancecheck__")
+
 class M(type):
     def __instancecheck__(self, rhs):
         print "M.instancecheck",

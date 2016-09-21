@@ -185,6 +185,10 @@ extern "C" int PyObject_IsInstance(PyObject* inst, PyObject* cls) noexcept {
     return recursive_isinstance(inst, cls);
 }
 
+extern "C" int _PyObject_RealIsInstance(PyObject* inst, PyObject* cls) noexcept {
+    return recursive_isinstance(inst, cls);
+}
+
 
 extern "C" int PyObject_IsSubclass(PyObject* derived, PyObject* cls) noexcept {
     static PyObject* name = NULL;
