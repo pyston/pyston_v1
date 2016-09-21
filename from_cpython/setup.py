@@ -743,6 +743,10 @@ class PyBuildExt(build_ext):
             missing.extend(['imageop'])
 
         # readline
+        # Pyston change: in some container system, the dependencies are provided by
+        # LIBRARY_PATH env variable
+        lib_dirs += os.getenv('LIBRARY_PATH', '').split(os.pathsep)
+
         do_readline = self.compiler.find_library_file(lib_dirs, 'readline')
         readline_termcap_library = ""
         curses_library = ""
@@ -1402,6 +1406,9 @@ class PyBuildExt(build_ext):
         # provided by the ncurses library.
         panel_library = 'panel'
         curses_incs = None
+        # Pyston change: in some container system. The headfile are provided
+        # by CPATH env variable
+        inc_dirs += os.getenv('CPATH', '').split(os.pathsep)
         if curses_library.startswith('ncurses'):
             if curses_library == 'ncursesw':
                 # Bug 1464056: If _curses.so links with ncursesw,
@@ -2075,8 +2082,8 @@ class PyBuildExt(build_ext):
 
             srcdir = sysconfig.get_config_var('srcdir')
             ffi_builddir = os.path.join(self.build_temp, 'libffi')
-            ffi_srcdir = os.path.abspath(os.path.join(srcdir, 'Modules',
-                                         '_ctypes', 'libffi'))
+            # Pyston change: adjust the source directory path
+            ffi_srcdir = os.path.abspath(relpath('Modules/_ctypes/libffi'))
             ffi_configfile = os.path.join(ffi_builddir, 'fficonfig.py')
 
             from distutils.dep_util import newer_group
@@ -2088,8 +2095,10 @@ class PyBuildExt(build_ext):
                                          ffi_configfile):
                 from distutils.dir_util import mkpath
                 mkpath(ffi_builddir)
-                config_args = [arg for arg in sysconfig.get_config_var("CONFIG_ARGS").split()
-                               if (('--host=' in arg) or ('--build=' in arg))]
+                # Pyston change: we don't support config var yet
+                # config_args = [arg for arg in sysconfig.get_config_var("CONFIG_ARGS").split()
+                #               if (('--host=' in arg) or ('--build=' in arg))]
+                config_args = []
                 if not self.verbose:
                     config_args.append("-q")
 
@@ -2176,12 +2185,9 @@ class PyBuildExt(build_ext):
             # in /usr/include/ffi
             inc_dirs.append('/usr/include/ffi')
 
-        # Pyston change: still hard code the ffi include dir
-        # because we don't support this variable configuration in get_config_var yet
-        ffi_inc = ['/usr/include/x86_64-linux-gnu']
-        # ffi_inc = [sysconfig.get_config_var("LIBFFI_INCLUDEDIR")]
-        if not ffi_inc or ffi_inc[0] == '':
-            ffi_inc = find_file('ffi.h', [], inc_dirs)
+        ffi_inc = [sysconfig.get_config_var("LIBFFI_INCLUDEDIR")]
+        if not ffi_inc[0] or ffi_inc[0] == '':
+            ffi_inc = find_file('ffi.h', inc_dirs, inc_dirs)
         if ffi_inc is not None:
             ffi_h = ffi_inc[0] + '/ffi.h'
             fp = open(ffi_h)
