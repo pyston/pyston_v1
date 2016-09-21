@@ -4421,12 +4421,12 @@ void setupRuntime() {
     type_cls->giveAttrDescriptor("__abstractmethods__", (getter)type_abstractmethods, (setter)type_set_abstractmethods);
 
     type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
-    type_cls->giveAttr(
-        "__subclasscheck__",
-        new BoxedFunction(BoxedCode::create((void*)type___subclasscheck__, BOXED_BOOL, 2, "type.__subclasscheck__")));
-    type_cls->giveAttr(
-        "__instancecheck__",
-        new BoxedFunction(BoxedCode::create((void*)type___instancecheck__, BOXED_BOOL, 2, "type.__instancecheck__")));
+    type_cls->giveAttr("__subclasscheck__",
+                       new BoxedFunction(BoxedCode::create((void*)type___subclasscheck__, BOXED_BOOL, 2,
+                                                           "type.__subclasscheck__", "", ParamNames::empty(), CAPI)));
+    type_cls->giveAttr("__instancecheck__",
+                       new BoxedFunction(BoxedCode::create((void*)type___instancecheck__, BOXED_BOOL, 2,
+                                                           "type.__instancecheck__", "", ParamNames::empty(), CAPI)));
 
     type_cls->giveAttr(
         "__new__", new BoxedFunction(BoxedCode::create((void*)typeNewGeneric, UNKNOWN, 4, false, false, "type.__new__"),
