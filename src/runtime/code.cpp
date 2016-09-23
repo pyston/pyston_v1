@@ -129,6 +129,9 @@ BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, int fi
       num_args(num_args),
       times_interpreted(0),
       internal_callable(NULL, NULL) {
+    // If any param names are specified, make sure all of them are (to avoid common mistakes):
+    ASSERT(this->param_names.numNormalArgs() == 0 || this->param_names.numNormalArgs() == num_args, "%d %d",
+           this->param_names.numNormalArgs(), num_args);
 }
 
 BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const char* name, const char* doc,
