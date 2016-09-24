@@ -90,6 +90,8 @@ public:
         : pthread_id(pthread_id), public_thread_state(tstate) {
         HEAD_LOCK();
 
+        tstate->thread_id = pthread_id;
+
         tstate->next = interpreter_state.tstate_head;
         interpreter_state.tstate_head = tstate;
         HEAD_UNLOCK();
@@ -484,6 +486,185 @@ extern "C" void PyThread_delete_key_value(int key) noexcept {
 }
 
 
+extern "C" {
+volatile int _stop_thread = 1;
+}
+
+// The number of threads with pending async excs
+static std::atomic<int> _async_excs;
+
+static PyThread_type_lock pending_lock = 0; /* for pending calls */
+
+/* The WITH_THREAD implementation is thread-safe.  It allows
+   scheduling to be made from any thread, and even from an executing
+   callback.
+ */
+
+#define NPENDINGCALLS 32
+static struct {
+    int (*func)(void*);
+    void* arg;
+} pendingcalls[NPENDINGCALLS];
+static int pendingfirst = 0;
+static int pendinglast = 0;
+// Not sure if this has to be atomic:
+static std::atomic<int> pendingcalls_to_do(1); /* trigger initialization of lock */
+static char pendingbusy = 0;
+
+// _stop_thread is the OR of a number of conditions that should stop threads.
+// When these conditions become true, we can unconditionally set _stop_thread=1,
+// but when a condition becomes false, we have to check all the conditions:
+static void _recalcStopThread() {
+    _stop_thread = (_async_excs > 0 || (pendingfirst != pendinglast));
+}
+
+extern "C" int Py_AddPendingCall(int (*func)(void*), void* arg) noexcept {
+    int i, j, result = 0;
+    PyThread_type_lock lock = pending_lock;
+
+    /* try a few times for the lock.  Since this mechanism is used
+     * for signal handling (on the main thread), there is a (slim)
+     * chance that a signal is delivered on the same thread while we
+     * hold the lock during the Py_MakePendingCalls() function.
+     * This avoids a deadlock in that case.
+     * Note that signals can be delivered on any thread.  In particular,
+     * on Windows, a SIGINT is delivered on a system-created worker
+     * thread.
+     * We also check for lock being NULL, in the unlikely case that
+     * this function is called before any bytecode evaluation takes place.
+     */
+    if (lock != NULL) {
+        for (i = 0; i < 100; i++) {
+            if (PyThread_acquire_lock(lock, NOWAIT_LOCK))
+                break;
+        }
+        if (i == 100)
+            return -1;
+    }
+
+    i = pendinglast;
+    j = (i + 1) % NPENDINGCALLS;
+    if (j == pendingfirst) {
+        result = -1; /* Queue full */
+    } else {
+        pendingcalls[i].func = func;
+        pendingcalls[i].arg = arg;
+        pendinglast = j;
+    }
+    /* signal main loop */
+    // Pyston change: we don't have a _Py_Ticker
+    // _Py_Ticker = 0;
+
+    _stop_thread = 1;
+    if (lock != NULL)
+        PyThread_release_lock(lock);
+    return result;
+}
+
+extern "C" int Py_MakePendingCalls(void) noexcept {
+    int i;
+    int r = 0;
+
+    if (!pending_lock) {
+        /* initial allocation of the lock */
+        pending_lock = PyThread_allocate_lock();
+        if (pending_lock == NULL)
+            return -1;
+    }
+
+    if (cur_thread_state.async_exc) {
+        auto x = cur_thread_state.async_exc;
+        cur_thread_state.async_exc = NULL;
+        PyErr_SetNone(x);
+        Py_DECREF(x);
+
+        _async_excs--;
+        _recalcStopThread();
+
+        return -1;
+    }
+
+    /* only service pending calls on main thread */
+    // Pyston change:
+    // if (main_thread && PyThread_get_thread_ident() != main_thread)
+    if (!threading::isMainThread())
+        return 0;
+    /* don't perform recursive pending calls */
+    if (pendingbusy)
+        return 0;
+    pendingbusy = 1;
+    /* perform a bounded number of calls, in case of recursion */
+    for (i = 0; i < NPENDINGCALLS; i++) {
+        int j;
+        int (*func)(void*);
+        void* arg = NULL;
+
+        /* pop one item off the queue while holding the lock */
+        PyThread_acquire_lock(pending_lock, WAIT_LOCK);
+        j = pendingfirst;
+        if (j == pendinglast) {
+            func = NULL; /* Queue empty */
+        } else {
+            func = pendingcalls[j].func;
+            arg = pendingcalls[j].arg;
+            pendingfirst = (j + 1) % NPENDINGCALLS;
+        }
+        _recalcStopThread();
+        PyThread_release_lock(pending_lock);
+        /* having released the lock, perform the callback */
+        if (func == NULL)
+            break;
+        r = func(arg);
+        if (r)
+            break;
+    }
+    pendingbusy = 0;
+    return r;
+}
+
+extern "C" void makePendingCalls() {
+    int ret = Py_MakePendingCalls();
+    if (ret != 0)
+        throwCAPIException();
+}
+
+extern "C" int PyThreadState_SetAsyncExc(long id, PyObject* exc) noexcept {
+    PyThreadState* tstate = PyThreadState_GET();
+    PyInterpreterState* interp = tstate->interp;
+    PyThreadState* p;
+
+    /* Although the GIL is held, a few C API functions can be called
+     * without the GIL held, and in particular some that create and
+     * destroy thread and interpreter states.  Those can mutate the
+     * list of thread states we're traversing, so to prevent that we lock
+     * head_mutex for the duration.
+     */
+    HEAD_LOCK();
+    for (p = interp->tstate_head; p != NULL; p = p->next) {
+        if (p->thread_id == id) {
+            /* Tricky:  we need to decref the current value
+             * (if any) in p->async_exc, but that can in turn
+             * allow arbitrary Python code to run, including
+             * perhaps calls to this function.  To prevent
+             * deadlock, we need to release head_mutex before
+             * the decref.
+             */
+            PyObject* old_exc = p->async_exc;
+            Py_XINCREF(exc);
+            p->async_exc = exc;
+
+            _async_excs++;
+            _stop_thread = 1;
+
+            HEAD_UNLOCK();
+            Py_XDECREF(old_exc);
+            return 1;
+        }
+    }
+    HEAD_UNLOCK();
+    return 0;
+}
+
 extern "C" PyObject* _PyThread_CurrentFrames(void) noexcept {
     try {
         LOCK_REGION(&threading_lock);
@@ -531,6 +712,8 @@ extern "C" void PyThreadState_Clear(PyThreadState* tstate) noexcept {
     Py_CLEAR(tstate->curexc_type);
     Py_CLEAR(tstate->curexc_value);
     Py_CLEAR(tstate->curexc_traceback);
+
+    Py_CLEAR(tstate->async_exc);
 }
 
 extern "C" PyThreadState* PyInterpreterState_ThreadHead(PyInterpreterState* interp) noexcept {
@@ -574,6 +757,6 @@ extern "C" void PyEval_RestoreThread(PyThreadState* tstate) noexcept {
 } // namespace threading
 
 __thread PyThreadState cur_thread_state
-    = { NULL, &threading::interpreter_state, NULL, 0, 1, NULL, NULL, NULL, NULL, 0, NULL };
+    = { NULL, &threading::interpreter_state, NULL, 0, 1, NULL, NULL, NULL, NULL, 0, NULL, NULL, 0 };
 
 } // namespace pyston

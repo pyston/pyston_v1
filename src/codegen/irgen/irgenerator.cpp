@@ -406,19 +406,19 @@ private:
 #if ENABLE_SIGNAL_CHECKING
         auto&& builder = *getBuilder();
 
-        llvm::GlobalVariable* pendingcalls_to_do_gv = g.cur_module->getGlobalVariable("_pendingcalls_to_do");
+        llvm::GlobalVariable* pendingcalls_to_do_gv = g.cur_module->getGlobalVariable("_stop_thread");
         if (!pendingcalls_to_do_gv) {
-            static_assert(sizeof(_pendingcalls_to_do) == 4, "");
-            pendingcalls_to_do_gv = new llvm::GlobalVariable(
-                *g.cur_module, g.i32, false, llvm::GlobalValue::ExternalLinkage, 0, "_pendingcalls_to_do");
+            static_assert(sizeof(_stop_thread) == 4, "");
+            pendingcalls_to_do_gv = new llvm::GlobalVariable(*g.cur_module, g.i32, false,
+                                                             llvm::GlobalValue::ExternalLinkage, 0, "_stop_thread");
             pendingcalls_to_do_gv->setAlignment(4);
         }
 
         llvm::BasicBlock* cur_block = builder.GetInsertBlock();
 
-        llvm::BasicBlock* pendingcalls_set = createBasicBlock("_pendingcalls_set");
+        llvm::BasicBlock* pendingcalls_set = createBasicBlock("_stop_thread_set");
         pendingcalls_set->moveAfter(cur_block);
-        llvm::BasicBlock* join_block = createBasicBlock("continue_after_pendingcalls_check");
+        llvm::BasicBlock* join_block = createBasicBlock("continue_after_stopthread_check");
         join_block->moveAfter(pendingcalls_set);
 
         llvm::Value* pendingcalls_to_do_val = builder.CreateLoad(pendingcalls_to_do_gv, true /* volatile */);

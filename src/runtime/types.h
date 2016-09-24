@@ -1477,7 +1477,10 @@ inline BORROWED(BoxedString*) getStaticString(llvm::StringRef s) {
     return r;
 }
 
-extern "C" volatile int _pendingcalls_to_do;
+// _stop_thread signals whether an executing thread should stop and check for one of a number of conditions.
+// Such as: asynchronous exceptions that have been set, pending calls to do (ie signals), etc.  These reasons
+// all get combined into a single "should stop for some reason" variable so that only one check has to be done.
+extern "C" volatile int _stop_thread;
 
 inline BORROWED(Box*) Box::getattrString(const char* attr) {
     BoxedString* s = internStringMortal(attr);

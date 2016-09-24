@@ -1877,7 +1877,7 @@ Box* ASTInterpreterJitInterface::landingpadHelper(void* _interpreter) {
 
 void ASTInterpreterJitInterface::pendingCallsCheckHelper() {
 #if ENABLE_SIGNAL_CHECKING
-    if (unlikely(_pendingcalls_to_do))
+    if (unlikely(_stop_thread))
         makePendingCalls();
 #endif
 }
