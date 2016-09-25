@@ -1097,7 +1097,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     }
 
     if (rewrite_args) {
-        if (cls->tp_new == object_cls->tp_new && cls->tp_init != object_cls->tp_init) {
+        if (cls->tp_new == object_cls->tp_new && cls->tp_init != object_cls->tp_init
+            && !(cls->tp_flags & Py_TPFLAGS_IS_ABSTRACT)) {
             // Fast case: if we are calling object_new, we normally doesn't look at the arguments at all.
             // (Except in the case when init_attr != object_init, in which case object_new looks at the number
             // of arguments and throws an exception.)
@@ -1143,7 +1144,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             }
         }
     } else {
-        if (cls->tp_new == object_cls->tp_new && cls->tp_init != object_cls->tp_init) {
+        if (cls->tp_new == object_cls->tp_new && cls->tp_init != object_cls->tp_init
+            && !(cls->tp_flags & Py_TPFLAGS_IS_ABSTRACT)) {
             made = objectNewNoArgs(cls);
             assert(made);
         } else
