@@ -32,4 +32,8 @@ def f3():
         print i
     else:
         print -1
+
+    for i in MyIterable():
+        break
+    print "a"
 f3()
