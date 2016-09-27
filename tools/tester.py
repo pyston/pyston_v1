@@ -64,8 +64,11 @@ def set_ulimits():
     signal.alarm(TIME_LIMIT)
     resource.setrlimit(resource.RLIMIT_CPU, (TIME_LIMIT + 1, TIME_LIMIT + 1))
 
-    MAX_MEM_MB = 100
-    resource.setrlimit(resource.RLIMIT_RSS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
+    # The RSS limit doesn't seem to always take effect:
+    MAX_RSS_MB = 100
+    # MAX_VA_MB = 800
+    resource.setrlimit(resource.RLIMIT_RSS, (MAX_RSS_MB * 1024 * 1024, MAX_RSS_MB * 1024 * 1024))
+    # resource.setrlimit(resource.RLIMIT_AS, (MAX_VA_MB * 1024 * 1024, MAX_VA_MB * 1024 * 1024))
 
 EXTMODULE_DIR = None
 EXTMODULE_DIR_PYSTON = None
@@ -113,7 +116,7 @@ def get_expected_output(fn):
     code = p.wait()
 
     r = code, out, err
-    assert code >= 0, "CPython exited with an unexpected exit code: %d" % (code,)
+    assert code >= 0, "CPython exited with an unexpected exit code: %d\nstdout:\n%s\n\nstderr:\n%s" % (code, out, err)
 
     cPickle.dump(r, open(cache_fn, 'w'))
     return r

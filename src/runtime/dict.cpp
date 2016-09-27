@@ -363,7 +363,15 @@ extern "C" BORROWED(PyObject*) PyDict_GetItem(PyObject* dict, PyObject* key) noe
         /* preserve the existing exception */
         PyObject* err_type, *err_value, *err_tb;
         PyErr_Fetch(&err_type, &err_value, &err_tb);
-        Box* b = d->getOrNull(key);
+
+        Box* b;
+        try {
+            b = d->getOrNull(key);
+        } catch (ExcInfo e) {
+            e.clear();
+            b = NULL;
+        }
+
         /* ignore errors */
         PyErr_Restore(err_type, err_value, err_tb);
         return b;

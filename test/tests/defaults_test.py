@@ -1,25 +1,9 @@
 # Test for various defaults arguments in builtin functions:
 
-class ExpectationFailedException(Exception):
-    pass
-
-class ExpectedException(object):
-    def __init__(self, excs):
-        if isinstance(excs, BaseException):
-            excs = (excs,)
-        self.excs = excs
-
-    def __enter__(self):
-        pass
-
-    def __exit__(self, type, val, tback):
-        if not val:
-            raise ExpectationFailedException("Didn't raise any exception")
-        if not isinstance(val, self.excs):
-            raise ExpectationFailedException("Raised %s instead of %s" % (val, self.excs))
-        print "Caught", type.__name__
-        return True
-expected_exception = ExpectedException
+import os
+import sys
+sys.path.append(os.path.dirname(__file__) + "/../lib")
+from test_helper import expected_exception
 
 d = {}
 print d.get(1)

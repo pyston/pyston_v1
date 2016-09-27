@@ -77,3 +77,24 @@ def run_test(cmd, cwd, expected, env = None):
         print >> sys.stderr, "expected:", expected
         assert result == expected
 
+class ExpectationFailedException(Exception):
+    pass
+
+class ExpectedException(object):
+    def __init__(self, excs):
+        if isinstance(excs, BaseException):
+            excs = (excs,)
+        self.excs = excs
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, type, val, tback):
+        if not val:
+            raise ExpectationFailedException("Didn't raise any exception")
+        if not isinstance(val, self.excs):
+            raise ExpectationFailedException("Raised %s instead of %s" % (val, self.excs))
+        print "Caught", type.__name__
+        return True
+expected_exception = ExpectedException
+
