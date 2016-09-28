@@ -636,6 +636,10 @@ void BoxedClass::freeze() {
     assert(!is_constant);
     assert(tp_name); // otherwise debugging will be very hard
 
+    auto doc_str = getStaticString("__doc__");
+    if (!hasattr(doc_str))
+        giveAttr(incref(doc_str), boxString(tp_name));
+
     fixup_slot_dispatchers(this);
 
     if (instancesHaveDictAttrs() || instancesHaveHCAttrs()) {
