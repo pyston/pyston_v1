@@ -145,7 +145,7 @@ ExceptionStyle UnwindInfo::preferredExceptionStyle() const {
     // tend to run this check after executing the statement a somewhat-fixed
     // number of times.
     // We might want to zero these out after we are done compiling, though.
-    if (current_stmt->cxx_exception_count >= 10)
+    if (code && code->cxx_exception_count[current_stmt] >= 10)
         return CAPI;
 
     return CXX;
@@ -715,7 +715,7 @@ public:
 
     llvm::Value* createDeopt(BST_stmt* current_stmt, llvm::Value* node_value) override {
         llvm::Instruction* v = createIC(createDeoptIC(), (void*)pyston::deopt, { node_value },
-                                        UnwindInfo(current_stmt, NULL, /* is_after_deopt*/ true));
+                                        UnwindInfo(irstate->getCode(), current_stmt, NULL, /* is_after_deopt*/ true));
         llvm::Value* rtn = createAfter<llvm::IntToPtrInst>(v, v, g.llvm_value_type_ptr, "");
         setType(rtn, RefType::OWNED);
         return rtn;
@@ -2448,7 +2448,7 @@ private:
                 assert(!unw_info.hasHandler());
                 BST_Invoke* invoke = bst_cast<BST_Invoke>(node);
 
-                doStmt(invoke->stmt, UnwindInfo(node, entry_blocks[invoke->exc_dest]));
+                doStmt(invoke->stmt, UnwindInfo(irstate->getCode(), node, entry_blocks[invoke->exc_dest]));
 
                 assert(state == RUNNING || state == DEAD);
                 if (state == RUNNING) {
@@ -2951,7 +2951,7 @@ public:
                 doSafePoint(block->body[i]);
 #endif
 
-            doStmt(block->body[i], UnwindInfo(block->body[i], NULL));
+            doStmt(block->body[i], UnwindInfo(irstate->getCode(), block->body[i], NULL));
         }
         if (VERBOSITY("irgenerator") >= 2) { // print ending symbol table
             printf("  %d fini:", block->idx);

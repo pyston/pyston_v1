@@ -1120,6 +1120,7 @@ public:
     long bjit_num_inside = 0;
     std::vector<std::unique_ptr<JitCodeBlock>> code_blocks;
     ICInvalidator dependent_interp_callsites;
+    llvm::DenseMap<BST_stmt*, int> cxx_exception_count;
 
 
     // Functions can provide an "internal" version, which will get called instead

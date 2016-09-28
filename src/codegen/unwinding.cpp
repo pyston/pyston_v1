@@ -636,7 +636,7 @@ public:
 
             if (!getIsReraiseFlag()) {
                 // TODO: shouldn't fetch this multiple times?
-                frame_iter.getCurrentStatement()->cxx_exception_count++;
+                ++frame_iter.getFrameInfo()->code->cxx_exception_count[frame_iter.getCurrentStatement()];
                 exceptionAtLine(&exc_info.traceback);
             } else
                 getIsReraiseFlag() = false;

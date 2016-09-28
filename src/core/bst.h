@@ -134,7 +134,6 @@ public:
 
     const BST_TYPE::BST_TYPE type;
     uint32_t lineno;
-    int cxx_exception_count = 0;
 
     virtual void accept(BSTVisitor* v) = 0;
     virtual void accept_stmt(StmtVisitor* v) = 0;

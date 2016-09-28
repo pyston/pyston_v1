@@ -366,7 +366,7 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
 
         assert(getPythonFrameInfo(0) == getFrameInfo());
 
-        stmt->cxx_exception_count++;
+        ++getCode()->cxx_exception_count[stmt];
         caughtCxxException(&e);
 
         next_block = ((BST_Invoke*)stmt)->exc_dest;
@@ -774,7 +774,7 @@ Value ASTInterpreter::visit_invoke(BST_Invoke* node) {
 
         assert(getPythonFrameInfo(0) == getFrameInfo());
 
-        node->cxx_exception_count++;
+        ++getCode()->cxx_exception_count[node];
         caughtCxxException(&e);
 
         next_block = node->exc_dest;
