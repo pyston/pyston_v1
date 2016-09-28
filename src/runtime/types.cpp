@@ -1604,7 +1604,11 @@ static Box* function_new(BoxedClass* cls, Box* _code, Box* globals, Box** _args)
     Box* defaults = _args[1];
     Box* closure = _args[2];
 
-    RELEASE_ASSERT(PyCode_Check(_code), "");
+    if (!PyCode_Check(_code)) {
+        PyErr_Format(TypeError, "function() argument 1 must be code, not %200s", _code->cls->tp_name);
+        return NULL;
+    }
+
     BoxedCode* code = static_cast<BoxedCode*>(_code);
 
     if (name != Py_None && !PyString_Check(name)) {
@@ -4230,6 +4234,7 @@ void setupRuntime() {
     none_cls->giveAttr("__base__", object_cls);
     Py_INCREF(Py_None);
     object_cls->giveAttr("__base__", Py_None);
+    object_cls->giveAttr("__doc__", boxString("The most base type"));
 
     // Not sure why CPython defines sizeof(PyTupleObject) to include one element,
     // but we copy that, which means we have to subtract that extra pointer to get the tp_basicsize:

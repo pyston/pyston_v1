@@ -41,9 +41,14 @@ int64_t ICInvalidator::version() {
 }
 
 ICInvalidator::~ICInvalidator() {
-    for (ICSlotInfo* slot : dependents) {
-        slot->invalidators.erase(std::find(slot->invalidators.begin(), slot->invalidators.end(), this));
-    }
+    // It's not clear what we should do if there are any dependencies still tracked
+    // when this object is deleted.  The most likely thing is that we should invalidate
+    // them, since whatever caused the destruction is most likely an invalidation event
+    // as well.
+    // For now, let's just assert on this to know if it happens.  In the unlikely
+    // case that we want to just ignore any existing dependents (old behavior), we
+    // can add a new API call to forget them (and remove from the dependents' `invalidators` list)
+    ASSERT(dependents.empty(), "dependents left when ICInvalidator destructed");
 }
 
 void ICInvalidator::addDependent(ICSlotInfo* entry_info) {

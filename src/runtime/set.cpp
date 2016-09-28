@@ -158,7 +158,7 @@ BoxedSet* makeNewSet(BoxedClass* cls, Box* container) {
 }
 
 Box* frozensetNew(Box* _cls, Box* container, BoxedDict* kwargs) {
-    RELEASE_ASSERT(_cls->cls == type_cls, "");
+    RELEASE_ASSERT(PyType_Check(_cls), "");
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
     RELEASE_ASSERT(isSubclass(cls, frozenset_cls), "");
     if (_cls == frozenset_cls && !_PyArg_NoKeywords("frozenset()", kwargs)) {
@@ -191,7 +191,7 @@ Box* frozensetNew(Box* _cls, Box* container, BoxedDict* kwargs) {
 }
 
 Box* setNew(Box* _cls, Box* container, BoxedDict* kwargs) {
-    RELEASE_ASSERT(_cls->cls == type_cls, "");
+    RELEASE_ASSERT(PyType_Check(_cls), "");
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
     RELEASE_ASSERT(isSubclass(cls, set_cls), "");
 
