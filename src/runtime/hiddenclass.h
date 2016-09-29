@@ -165,6 +165,7 @@ public:
     void appendAttrwrapper();
     void delAttribute(BoxedString* attr);
     void addDependence(Rewriter* rewriter);
+    void invalidateAll() { dependent_getattrs.invalidateAll(); }
 
     friend class HiddenClass;
 };

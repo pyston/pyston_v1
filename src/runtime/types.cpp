@@ -1604,7 +1604,11 @@ static Box* function_new(BoxedClass* cls, Box* _code, Box* globals, Box** _args)
     Box* defaults = _args[1];
     Box* closure = _args[2];
 
-    RELEASE_ASSERT(PyCode_Check(_code), "");
+    if (!PyCode_Check(_code)) {
+        PyErr_Format(TypeError, "function() argument 1 must be code, not %200s", _code->cls->tp_name);
+        return NULL;
+    }
+
     BoxedCode* code = static_cast<BoxedCode*>(_code);
 
     if (name != Py_None && !PyString_Check(name)) {
@@ -1785,6 +1789,17 @@ static int function_set_defaults(Box* b, Box* v, void*) noexcept {
 
 static Box* functionNonzero(BoxedFunction* self) {
     Py_RETURN_TRUE;
+}
+
+static Box* im_doc(Box* b, void*) noexcept {
+    RELEASE_ASSERT(b->cls == instancemethod_cls, "");
+    auto doc_str = getStaticString("__doc__");
+    try {
+        return getattr(static_cast<BoxedInstanceMethod*>(b)->func, doc_str);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 extern "C" {
@@ -4231,6 +4246,10 @@ void setupRuntime() {
     Py_INCREF(Py_None);
     object_cls->giveAttr("__base__", Py_None);
 
+    object_cls->giveAttr("__doc__", boxString("The most base type"));
+    type_cls->giveAttr("__doc__",
+                       boxString("type(object) -> the object's type\ntype(name, bases, dict) -> a new type"));
+
     // Not sure why CPython defines sizeof(PyTupleObject) to include one element,
     // but we copy that, which means we have to subtract that extra pointer to get the tp_basicsize:
     tuple_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedTuple) - sizeof(Box*), false, "tuple", true,
@@ -4569,9 +4588,13 @@ void setupRuntime() {
     instancemethod_cls->giveAttrBorrowed("__func__", instancemethod_cls->getattr(getStaticString("im_func")));
     instancemethod_cls->giveAttrMember("im_self", T_OBJECT, offsetof(BoxedInstanceMethod, obj));
     instancemethod_cls->giveAttrBorrowed("__self__", instancemethod_cls->getattr(getStaticString("im_self")));
-    instancemethod_cls->freeze();
 
     instancemethod_cls->giveAttrMember("im_class", T_OBJECT, offsetof(BoxedInstanceMethod, im_class), true);
+
+    // TODO: this should be handled via a getattro instead (which proxies to the function):
+    instancemethod_cls->giveAttrDescriptor("__doc__", im_doc, NULL);
+
+    instancemethod_cls->freeze();
 
     slice_cls->giveAttr("__new__",
                         new BoxedFunction(BoxedCode::create((void*)sliceNew, UNKNOWN, 4, false, false, "slice.__new__"),

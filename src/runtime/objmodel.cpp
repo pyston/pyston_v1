@@ -636,6 +636,10 @@ void BoxedClass::freeze() {
     assert(!is_constant);
     assert(tp_name); // otherwise debugging will be very hard
 
+    auto doc_str = getStaticString("__doc__");
+    if (!hasattr(doc_str))
+        giveAttr(incref(doc_str), boxString(tp_name));
+
     fixup_slot_dispatchers(this);
 
     if (instancesHaveDictAttrs() || instancesHaveHCAttrs()) {
@@ -1318,8 +1322,10 @@ void HCAttrs::_clearRaw() noexcept {
     auto old_attr_list_size = hcls->attributeArraySize();
 
     // singleton classes will not get reused so free it
-    if (hcls->type == HiddenClass::SINGLETON)
+    if (hcls->type == HiddenClass::SINGLETON) {
+        hcls->getAsSingleton()->invalidateAll();
         delete hcls;
+    }
     new ((void*)this) HCAttrs(NULL);
 
     if (old_attr_list) {
