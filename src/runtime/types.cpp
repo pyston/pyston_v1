@@ -4539,8 +4539,9 @@ void setupRuntime() {
     function_cls->giveAttrMember("__doc__", T_OBJECT, offsetof(BoxedFunction, doc), false);
     function_cls->giveAttrBorrowed("func_doc", function_cls->getattr(getStaticString("__doc__")));
     function_cls->giveAttrDescriptor("__globals__", function_globals, NULL);
-    function_cls->giveAttr("__get__",
-                           new BoxedFunction(BoxedCode::create((void*)functionGet, UNKNOWN, 3, "function.__get__")));
+    function_cls->giveAttr(
+        "__get__",
+        new BoxedFunction(BoxedCode::create((void*)functionGet, UNKNOWN, 3, "function.__get__"), { Py_None }));
     function_cls->giveAttr("__call__", new BoxedFunction(BoxedCode::create((void*)functionCall, UNKNOWN, 1, true, true,
                                                                            "function.__call__")));
     function_cls->giveAttr("__nonzero__", new BoxedFunction(BoxedCode::create((void*)functionNonzero, BOXED_BOOL, 1,
