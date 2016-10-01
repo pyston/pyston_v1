@@ -4386,7 +4386,8 @@ void setupRuntime() {
     // but unfortunately that will set tp_setattro to slot_tp_setattro on object_cls and all already-made subclasses!
     // Punting on that until needed; hopefully by then we will have better Pyston slots support.
 
-    auto typeCallObj = BoxedCode::create((void*)typeCall, UNKNOWN, 1, true, true, "type.__call__");
+    auto typeCallObj = BoxedCode::create((void*)typeCall, UNKNOWN, 1, true, true, "type.__call__", "",
+                                         ParamNames({ "self" }, "args", "kw"));
     typeCallObj->internal_callable.capi_val = &typeCallInternal<CAPI>;
     typeCallObj->internal_callable.cxx_val = &typeCallInternal<CXX>;
 
