@@ -1763,11 +1763,9 @@ Box* strIsLower(BoxedString* self) {
         Py_RETURN_FALSE;
 
     for (const auto& c : str) {
-        if (std::isspace(c) || std::isdigit(c)) {
-            continue;
-        } else if (!std::islower(c)) {
+        if (isupper(c)) {
             Py_RETURN_FALSE;
-        } else {
+        } else if (!lowered && islower(c)) {
             lowered = true;
         }
     }
@@ -1785,7 +1783,7 @@ Box* strIsUpper(BoxedString* self) {
 
     bool cased = false;
     for (const auto& c : str) {
-        if (std::islower(c))
+        if (islower(c))
             Py_RETURN_FALSE;
         else if (!cased && isupper(c))
             cased = true;
