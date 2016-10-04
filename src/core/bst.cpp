@@ -837,7 +837,7 @@ bool PrintVisitor::visit_callattr(BST_CallAttr* node) {
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_value);
     stream << ".";
-    stream << node->attr.s();
+    stream << code_constants.getInternedString(node->index_attr).s();
     stream << "(";
 
     bool prevarg = false;
@@ -867,7 +867,7 @@ bool PrintVisitor::visit_callclsattr(BST_CallClsAttr* node) {
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_value);
     stream << ":";
-    stream << node->attr.s();
+    stream << code_constants.getInternedString(node->index_attr).s();
     stream << "(";
 
     bool prevarg = false;
@@ -909,7 +909,7 @@ bool PrintVisitor::visit_classdef(BST_ClassDef* node) {
         stream << "\n";
         printIndent();
     }
-    stream << "class " << node->name.s() << "(";
+    stream << "class " << code_constants.getInternedString(node->index_name).s() << "(";
     visit_vreg(&node->vreg_bases_tuple);
     stream << ")";
 
@@ -954,7 +954,7 @@ bool PrintVisitor::visit_deleteattr(BST_DeleteAttr* node) {
     stream << "del ";
     visit_vreg(&node->vreg_value);
     stream << '.';
-    stream << node->attr.s();
+    stream << code_constants.getInternedString(node->index_attr).s();
     return true;
 }
 bool PrintVisitor::visit_deletename(BST_DeleteName* node) {
@@ -963,7 +963,7 @@ bool PrintVisitor::visit_deletename(BST_DeleteName* node) {
         visit_vreg(&node->vreg);
         stream << " ";
     }
-    stream << node->id.s();
+    stream << code_constants.getInternedString(node->index_id).s();
     return true;
 }
 
@@ -999,8 +999,8 @@ bool PrintVisitor::visit_functiondef(BST_FunctionDef* node) {
     }
 
     stream << "def ";
-    if (node->name != InternedString())
-        stream << node->name.s();
+    if (node->index_name != VREG_UNDEFINED)
+        stream << code_constants.getInternedString(node->index_name).s();
     else
         stream << "<lambda>";
     stream << "(";
@@ -1226,14 +1226,14 @@ bool PrintVisitor::visit_loadname(BST_LoadName* node) {
         visit_vreg(&node->vreg);
         stream << " ";
     }
-    stream << node->id.s();
+    stream << code_constants.getInternedString(node->index_id).s();
     return true;
 }
 
 bool PrintVisitor::visit_loadattr(BST_LoadAttr* node) {
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_value);
-    stream << (node->clsonly ? ':' : '.') << node->attr.s();
+    stream << (node->clsonly ? ':' : '.') << code_constants.getInternedString(node->index_attr).s();
     return true;
 }
 
@@ -1265,7 +1265,7 @@ bool PrintVisitor::visit_storename(BST_StoreName* node) {
         visit_vreg(&node->vreg);
         stream << " ";
     }
-    stream << node->id.s();
+    stream << code_constants.getInternedString(node->index_id).s();
     stream << " = ";
     visit_vreg(&node->vreg_value);
     return true;
@@ -1273,7 +1273,7 @@ bool PrintVisitor::visit_storename(BST_StoreName* node) {
 
 bool PrintVisitor::visit_storeattr(BST_StoreAttr* node) {
     visit_vreg(&node->vreg_target);
-    stream << "." << node->attr.s() << " = ";
+    stream << "." << code_constants.getInternedString(node->index_attr).s() << " = ";
     visit_vreg(&node->vreg_value);
     return true;
 }

@@ -258,7 +258,7 @@ class BST_StoreName : public BST_stmt {
 public:
     int vreg_value = VREG_UNDEFINED;
 
-    InternedString id;
+    int index_id = VREG_UNDEFINED;
     ScopeInfo::VarScopeType lookup_type;
     int vreg = VREG_UNDEFINED;
 
@@ -272,7 +272,7 @@ public:
 
 class BST_StoreAttr : public BST_stmt {
 public:
-    InternedString attr;
+    int index_attr = VREG_UNDEFINED;
     int vreg_target = VREG_UNDEFINED;
     int vreg_value = VREG_UNDEFINED;
 
@@ -299,7 +299,7 @@ public:
 
 class BST_LoadName : public BST_stmt_with_dest {
 public:
-    InternedString id;
+    int index_id = VREG_UNDEFINED;
     ScopeInfo::VarScopeType lookup_type;
     // LoadName does not kill this vreg
     int vreg = VREG_UNDEFINED;
@@ -314,7 +314,7 @@ public:
 
 class BST_LoadAttr : public BST_stmt_with_dest {
 public:
-    InternedString attr;
+    int index_attr = VREG_UNDEFINED;
     int vreg_value = VREG_UNDEFINED;
     bool clsonly = false;
 
@@ -376,7 +376,7 @@ public:
 class BST_CallAttr : public BST_Call {
 public:
     int vreg_value = VREG_UNDEFINED;
-    InternedString attr;
+    int index_attr = VREG_UNDEFINED;
     int elts[1];
 
     BSTVARVREGS2CALL(CallAttr, num_args, num_keywords, elts)
@@ -385,7 +385,7 @@ public:
 class BST_CallClsAttr : public BST_Call {
 public:
     int vreg_value = VREG_UNDEFINED;
-    InternedString attr;
+    int index_attr = VREG_UNDEFINED;
     int elts[1];
 
     BSTVARVREGS2CALL(CallClsAttr, num_args, num_keywords, elts)
@@ -403,8 +403,8 @@ public:
 
 class BST_ClassDef : public BST_stmt {
 public:
-    InternedString name;
-    int vreg_bases_tuple;
+    int index_name = VREG_UNDEFINED;
+    int vreg_bases_tuple = VREG_UNDEFINED;
     const int num_decorator;
     int decorator[1];
 
@@ -419,14 +419,14 @@ public:
 class BST_DeleteAttr : public BST_stmt {
 public:
     int vreg_value = VREG_UNDEFINED;
-    InternedString attr;
+    int index_attr = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(DeleteAttr, BST_stmt)
 };
 
 class BST_DeleteName : public BST_stmt {
 public:
-    InternedString id;
+    int index_id = VREG_UNDEFINED;
     ScopeInfo::VarScopeType lookup_type;
     int vreg = VREG_UNDEFINED;
 
@@ -466,7 +466,7 @@ public:
 
 class BST_FunctionDef : public BST_stmt {
 public:
-    InternedString name; // if the name is not set this is a lambda
+    int index_name = VREG_UNDEFINED; // if the name is not set this is a lambda
 
     const int num_decorator;
     const int num_defaults;

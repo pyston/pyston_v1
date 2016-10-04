@@ -86,6 +86,14 @@ public:
 
     bool isCompilerCreatedName() const;
 
+    static InternedString unsafe(BoxedString* str) {
+#ifndef NDEBUG
+        return InternedString(str, NULL);
+#else
+        return InternedString(str);
+#endif
+    }
+
     friend class InternedStringPool;
     friend struct std::hash<InternedString>;
     friend struct std::less<InternedString>;

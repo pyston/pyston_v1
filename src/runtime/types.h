@@ -1099,11 +1099,14 @@ public:
 
     BORROWED(Box*) getConstant(int vreg) const { return constants[-(vreg + 1)]; }
 
+    InternedString getInternedString(int vreg) const { return InternedString::unsafe((BoxedString*)getConstant(vreg)); }
+
     // returns the vreg num for the constant (which is a negative number)
     int createVRegEntryForConstant(Box* o) {
         constants.push_back(o);
         return -constants.size();
     }
+
 
     void addOwnedRef(Box* o) const { owned_refs.emplace_back(o); }
 
@@ -1113,6 +1116,9 @@ public:
     std::pair<BST_stmt*, BORROWED(BoxedCode*)> getFuncOrClass(int constant) const {
         return funcs_and_classes[constant];
     }
+
+    int addInternedString(InternedString s) { return createVRegEntryForConstant(s.getBox()); }
+
     int addFuncOrClass(BST_stmt* stmt, STOLEN(BoxedCode*) code) {
         funcs_and_classes.emplace_back(stmt, code);
         return funcs_and_classes.size() - 1;

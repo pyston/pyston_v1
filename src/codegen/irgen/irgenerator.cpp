@@ -1104,14 +1104,14 @@ private:
             auto* attr_ast = bst_cast<BST_CallAttr>(node);
             vreg_elts = bst_cast<BST_CallAttr>(node)->elts;
             func = evalVReg(attr_ast->vreg_value);
-            attr = attr_ast->attr;
+            attr = irstate->getCodeConstants().getInternedString(attr_ast->index_attr);
         } else if (node->type == BST_TYPE::CallClsAttr) {
             is_callattr = true;
             callattr_clsonly = true;
             auto* attr_ast = bst_cast<BST_CallClsAttr>(node);
             vreg_elts = bst_cast<BST_CallClsAttr>(node)->elts;
             func = evalVReg(attr_ast->vreg_value);
-            attr = attr_ast->attr;
+            attr = irstate->getCodeConstants().getInternedString(attr_ast->index_attr);
         } else {
             is_callattr = false;
             auto* attr_ast = bst_cast<BST_CallFunc>(node);
@@ -1199,7 +1199,8 @@ private:
     }
 
     ConcreteCompilerVariable* _getGlobal(BST_LoadName* node, const UnwindInfo& unw_info) {
-        if (node->id.s() == "None")
+        InternedString id = irstate->getCodeConstants().getInternedString(node->index_id);
+        if (id.s() == "None")
             return emitter.getNone();
 
         bool do_patchpoint = ENABLE_ICGETGLOBALS;
@@ -1208,8 +1209,8 @@ private:
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(irstate->getGlobals());
-            llvm_args.push_back(emitter.setType(embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr),
-                                                RefType::BORROWED));
+            llvm_args.push_back(
+                emitter.setType(embedRelocatablePtr(id.getBox(), g.llvm_boxedstring_type_ptr), RefType::BORROWED));
 
             llvm::Instruction* uncasted
                 = emitter.createIC(std::move(pp), (void*)pyston::getGlobal, llvm_args, unw_info);
@@ -1219,8 +1220,7 @@ private:
         } else {
             llvm::Value* r = emitter.createCall2(
                 unw_info, g.funcs.getGlobal, irstate->getGlobals(),
-                emitter.setType(embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr),
-                                RefType::BORROWED));
+                emitter.setType(embedRelocatablePtr(id.getBox(), g.llvm_boxedstring_type_ptr), RefType::BORROWED));
             emitter.setType(r, RefType::OWNED);
             return new ConcreteCompilerVariable(UNKNOWN, r);
         }
@@ -1264,6 +1264,7 @@ private:
 
 
     CompilerVariable* evalLoadName(BST_LoadName* node, const UnwindInfo& unw_info) {
+        InternedString id = irstate->getCodeConstants().getInternedString(node->index_id);
         // LoadName is never a kill
         auto&& scope_info = irstate->getScopeInfo();
 
@@ -1312,7 +1313,7 @@ private:
             emitter.getBuilder()->SetInsertPoint(curblock);
 
             llvm::CallSite call = emitter.createCall(unw_info, g.funcs.assertFailDerefNameDefined,
-                                                     embedRelocatablePtr(node->id.c_str(), g.i8_ptr));
+                                                     embedRelocatablePtr(id.c_str(), g.i8_ptr));
             call.setDoesNotReturn();
             emitter.getBuilder()->CreateUnreachable();
 
@@ -1323,7 +1324,7 @@ private:
             return new ConcreteCompilerVariable(UNKNOWN, lookupResult);
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
-            llvm::Value* attr = embedRelocatablePtr(node->id.getBox(), g.llvm_boxedstring_type_ptr);
+            llvm::Value* attr = embedRelocatablePtr(id.getBox(), g.llvm_boxedstring_type_ptr);
             emitter.setType(attr, RefType::BORROWED);
             llvm::Value* module = irstate->getGlobals();
             llvm::Value* r = emitter.createCall3(unw_info, g.funcs.boxedLocalsGet, boxedLocals, attr, module);
@@ -1337,7 +1338,7 @@ private:
                 // state = DEAD;
                 llvm::CallSite call = emitter.createCall(
                     unw_info, g.funcs.assertNameDefined,
-                    { getConstantInt(0, g.i1), embedRelocatablePtr(node->id.c_str(), g.i8_ptr),
+                    { getConstantInt(0, g.i1), embedRelocatablePtr(id.c_str(), g.i8_ptr),
                       emitter.setType(embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), RefType::BORROWED),
                       getConstantInt(true, g.i1) });
                 call.setDoesNotReturn();
@@ -1349,7 +1350,7 @@ private:
             if (is_defined_var) {
                 emitter.createCall(
                     unw_info, g.funcs.assertNameDefined,
-                    { i1FromLLVMBool(emitter, is_defined_var), embedRelocatablePtr(node->id.c_str(), g.i8_ptr),
+                    { i1FromLLVMBool(emitter, is_defined_var), embedRelocatablePtr(id.c_str(), g.i8_ptr),
                       emitter.setType(embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), RefType::BORROWED),
                       getConstantInt(true, g.i1) });
 
@@ -1412,8 +1413,8 @@ private:
 
     CompilerVariable* evalLoadAttr(BST_LoadAttr* node, const UnwindInfo& unw_info) {
         CompilerVariable* value = evalVReg(node->vreg_value);
-        CompilerVariable* rtn
-            = value->getattr(emitter, getOpInfoForNode(node, unw_info), node->attr.getBox(), node->clsonly);
+        InternedString attr = irstate->getCodeConstants().getInternedString(node->index_attr);
+        CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), attr.getBox(), node->clsonly);
         return rtn;
     }
 
@@ -1526,9 +1527,10 @@ private:
 
         ConcreteCompilerVariable* converted_attr_dict = attr_dict->makeConverted(emitter, attr_dict->getBoxType());
 
+        InternedString name = irstate->getCodeConstants().getInternedString(node->index_name);
         llvm::Value* classobj = emitter.createCall3(
             unw_info, g.funcs.createUserClass,
-            emitter.setType(embedRelocatablePtr(node->name.getBox(), g.llvm_boxedstring_type_ptr), RefType::BORROWED),
+            emitter.setType(embedRelocatablePtr(name.getBox(), g.llvm_boxedstring_type_ptr), RefType::BORROWED),
             bases_tuple->getValue(), converted_attr_dict->getValue());
         emitter.setType(classobj, RefType::OWNED);
 
@@ -1764,17 +1766,17 @@ private:
     }
 
     void doStoreName(BST_StoreName* node, const UnwindInfo& unw_info) {
+        InternedString name = irstate->getCodeConstants().getInternedString(node->index_id);
         CompilerVariable* val = evalVReg(node->vreg_value);
 
-        assert(node->id.s() != "None");
-        assert(node->id.s() != FRAME_INFO_PTR_NAME);
+        assert(name.s() != "None");
+        assert(name.s() != FRAME_INFO_PTR_NAME);
         assert(val->getType()->isUsable());
 
         auto vst = node->lookup_type;
         assert(vst != ScopeInfo::VarScopeType::UNKNOWN);
         assert(vst != ScopeInfo::VarScopeType::DEREF);
 
-        auto name = node->id;
         auto vreg = node->vreg;
 
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
@@ -1831,7 +1833,8 @@ private:
     void doStoreAttr(BST_StoreAttr* target, const UnwindInfo& unw_info) {
         CompilerVariable* val = evalVReg(target->vreg_value);
         CompilerVariable* t = evalVReg(target->vreg_target);
-        t->setattr(emitter, getEmptyOpInfo(unw_info), target->attr.getBox(), val);
+        InternedString attr = irstate->getCodeConstants().getInternedString(target->index_attr);
+        t->setattr(emitter, getEmptyOpInfo(unw_info), attr.getBox(), val);
     }
 
     void _assignSlice(llvm::Value* target, llvm::Value* value, const UnboxedSlice& slice_val,
@@ -1998,13 +2001,16 @@ private:
     }
 
     void _doDelAttr(BST_DeleteAttr* node, const UnwindInfo& unw_info) {
+        InternedString attr = irstate->getCodeConstants().getInternedString(node->index_attr);
         CompilerVariable* value = evalVReg(node->vreg_value);
-        value->delattr(emitter, getEmptyOpInfo(unw_info), node->attr.getBox());
+        value->delattr(emitter, getEmptyOpInfo(unw_info), attr.getBox());
     }
 
     void _doDelName(BST_DeleteName* target, const UnwindInfo& unw_info) {
+        InternedString id = irstate->getCodeConstants().getInternedString(target->index_id);
+
         // Hack: we don't have a bytecode for temporary-kills:
-        if (target->id.s()[0] == '#') {
+        if (id.s()[0] == '#') {
             // The refcounter will automatically delete this object.
             return;
         }
@@ -2013,15 +2019,15 @@ private:
         assert(vst != ScopeInfo::VarScopeType::UNKNOWN);
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             // Can't use delattr since the errors are different:
-            emitter.createCall2(unw_info, g.funcs.delGlobal, irstate->getGlobals(),
-                                emitter.setType(embedRelocatablePtr(target->id.getBox(), g.llvm_boxedstring_type_ptr),
-                                                RefType::BORROWED));
+            emitter.createCall2(
+                unw_info, g.funcs.delGlobal, irstate->getGlobals(),
+                emitter.setType(embedRelocatablePtr(id.getBox(), g.llvm_boxedstring_type_ptr), RefType::BORROWED));
             return;
         }
 
         if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
-            llvm::Value* attr = embedRelocatablePtr(target->id.getBox(), g.llvm_boxedstring_type_ptr);
+            llvm::Value* attr = embedRelocatablePtr(id.getBox(), g.llvm_boxedstring_type_ptr);
             emitter.setType(attr, RefType::BORROWED);
             emitter.createCall2(unw_info, g.funcs.boxedLocalsDel, boxedLocals, attr);
             return;
@@ -2041,7 +2047,7 @@ private:
         if (!symbol_table[target->vreg]) {
             llvm::CallSite call = emitter.createCall(
                 unw_info, g.funcs.assertNameDefined,
-                { getConstantInt(0, g.i1), embedConstantPtr(target->id.c_str(), g.i8_ptr),
+                { getConstantInt(0, g.i1), embedConstantPtr(id.c_str(), g.i8_ptr),
                   emitter.setType(embedRelocatablePtr(NameError, g.llvm_class_type_ptr), RefType::BORROWED),
                   getConstantInt(true /*local_error_msg*/, g.i1) });
             call.setDoesNotReturn();
@@ -2051,7 +2057,7 @@ private:
         if (is_defined_var) {
             emitter.createCall(
                 unw_info, g.funcs.assertNameDefined,
-                { i1FromLLVMBool(emitter, is_defined_var), embedConstantPtr(target->id.c_str(), g.i8_ptr),
+                { i1FromLLVMBool(emitter, is_defined_var), embedConstantPtr(id.c_str(), g.i8_ptr),
                   emitter.setType(embedRelocatablePtr(NameError, g.llvm_class_type_ptr), RefType::BORROWED),
                   getConstantInt(true /*local_error_msg*/, g.i1) });
             popDefinedVar(target->vreg);

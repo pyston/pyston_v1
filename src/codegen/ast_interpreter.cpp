@@ -1263,7 +1263,8 @@ Value ASTInterpreter::visit_makeClass(BST_MakeClass* mkclass) {
                                 ArgPassSpec(0), 0, 0, 0, 0, 0);
     AUTO_DECREF(attrDict);
 
-    Box* classobj = createUserClass(node->name.getBox(), bases_tuple, attrDict);
+    InternedString name = getCodeConstants().getInternedString(node->index_name);
+    Box* classobj = createUserClass(name.getBox(), bases_tuple, attrDict);
 
     for (int i = decorators.size() - 1; i >= 0; i--) {
         classobj = runtimeCall(autoDecref(decorators[i]), ArgPassSpec(1), autoDecref(classobj), 0, 0, 0, 0);
@@ -1311,7 +1312,7 @@ void ASTInterpreter::visit_assert(BST_Assert* node) {
 void ASTInterpreter::visit_deleteattr(BST_DeleteAttr* node) {
     Value target = getVReg(node->vreg_value);
     AUTO_DECREF(target.o);
-    BoxedString* str = node->attr.getBox();
+    BoxedString* str = getCodeConstants().getInternedString(node->index_attr).getBox();
     if (jit)
         jit->emitDelAttr(target, str);
     delattr(target.o, str);
@@ -1344,27 +1345,28 @@ void ASTInterpreter::visit_deletename(BST_DeleteName* target) {
     assert(target->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
 
     ScopeInfo::VarScopeType vst = target->lookup_type;
+    InternedString id = getCodeConstants().getInternedString(target->index_id);
     if (vst == ScopeInfo::VarScopeType::GLOBAL) {
         if (jit)
-            jit->emitDelGlobal(target->id.getBox());
-        delGlobal(frame_info.globals, target->id.getBox());
+            jit->emitDelGlobal(id.getBox());
+        delGlobal(frame_info.globals, id.getBox());
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
         if (jit)
-            jit->emitDelName(target->id);
-        ASTInterpreterJitInterface::delNameHelper(this, target->id);
+            jit->emitDelName(id);
+        ASTInterpreterJitInterface::delNameHelper(this, id);
     } else {
         assert(vst == ScopeInfo::VarScopeType::FAST);
 
-        assert(getVRegInfo().getVReg(target->id) == target->vreg);
+        assert(getVRegInfo().getVReg(id) == target->vreg);
 
-        if (target->id.s()[0] == '#') {
+        if (id.s()[0] == '#') {
             assert(vregs[target->vreg] != NULL);
             if (jit)
                 jit->emitKillTemporary(target->vreg);
         } else {
             abortJITing();
             if (vregs[target->vreg] == 0) {
-                assertNameDefined(0, target->id.c_str(), NameError, true /* local_var_msg */);
+                assertNameDefined(0, id.c_str(), NameError, true /* local_var_msg */);
                 return;
             }
         }
@@ -1428,14 +1430,14 @@ Value ASTInterpreter::visit_call(BST_Call* node) {
         callattr_clsonly = false;
         auto* attr_ast = bst_cast<BST_CallAttr>(node);
         func = getVReg(attr_ast->vreg_value);
-        attr = attr_ast->attr;
+        attr = getCodeConstants().getInternedString(attr_ast->index_attr);
         vreg_elts = bst_cast<BST_CallAttr>(node)->elts;
     } else if (node->type == BST_TYPE::CallClsAttr) {
         is_callattr = true;
         callattr_clsonly = true;
         auto* attr_ast = bst_cast<BST_CallClsAttr>(node);
         func = getVReg(attr_ast->vreg_value);
-        attr = attr_ast->attr;
+        attr = getCodeConstants().getInternedString(attr_ast->index_attr);
         vreg_elts = bst_cast<BST_CallClsAttr>(node)->elts;
     } else {
         auto* attr_ast = bst_cast<BST_CallFunc>(node);
@@ -1577,14 +1579,14 @@ Value ASTInterpreter::getVReg(int vreg, bool is_kill) {
 
 Value ASTInterpreter::visit_loadname(BST_LoadName* node) {
     assert(node->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
-
+    InternedString id = getCodeConstants().getInternedString(node->index_id);
     switch (node->lookup_type) {
         case ScopeInfo::VarScopeType::GLOBAL: {
             Value v;
             if (jit)
-                v.var = jit->emitGetGlobal(node->id.getBox());
+                v.var = jit->emitGetGlobal(id.getBox());
 
-            v.o = getGlobal(frame_info.globals, node->id.getBox());
+            v.o = getGlobal(frame_info.globals, id.getBox());
             return v;
         }
         case ScopeInfo::VarScopeType::DEREF: {
@@ -1601,13 +1603,13 @@ Value ASTInterpreter::visit_loadname(BST_LoadName* node) {
                 }
 
                 if (is_live)
-                    v.var = jit->emitGetLocal(node->id, node->vreg);
+                    v.var = jit->emitGetLocal(id, node->vreg);
                 else
-                    v.var = jit->emitGetBlockLocal(node->id, node->vreg);
+                    v.var = jit->emitGetBlockLocal(id, node->vreg);
             }
 
             assert(node->vreg >= 0);
-            assert(getVRegInfo().getVReg(node->id) == node->vreg);
+            assert(getVRegInfo().getVReg(id) == node->vreg);
             frame_info.num_vregs = std::max(frame_info.num_vregs, node->vreg + 1);
             Box* val = vregs[node->vreg];
 
@@ -1617,14 +1619,14 @@ Value ASTInterpreter::visit_loadname(BST_LoadName* node) {
                 return v;
             }
 
-            assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
+            assertNameDefined(0, id.c_str(), UnboundLocalError, true);
             RELEASE_ASSERT(0, "should be unreachable");
         }
         case ScopeInfo::VarScopeType::NAME: {
             Value v;
             if (jit)
-                v.var = jit->emitGetBoxedLocal(node->id.getBox());
-            v.o = boxedLocalsGet(frame_info.boxedLocals, node->id.getBox(), frame_info.globals);
+                v.var = jit->emitGetBoxedLocal(id.getBox());
+            v.o = boxedLocalsGet(frame_info.boxedLocals, id.getBox(), frame_info.globals);
             return v;
         }
         default:
@@ -1636,7 +1638,7 @@ Value ASTInterpreter::visit_loadattr(BST_LoadAttr* node) {
     Value v = getVReg(node->vreg_value);
     AUTO_DECREF(v.o);
 
-    BoxedString* attr = node->attr.getBox();
+    BoxedString* attr = getCodeConstants().getInternedString(node->index_attr).getBox();
     Value r;
     if (node->clsonly)
         r = Value(getclsattr(v.o, attr), jit ? jit->emitGetClsAttr(v, attr) : NULL);
@@ -1680,7 +1682,7 @@ void ASTInterpreter::visit_storename(BST_StoreName* node) {
 
     assert(node->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
 
-    InternedString name = node->id;
+    InternedString name = getCodeConstants().getInternedString(node->index_id);
     ScopeInfo::VarScopeType vst = node->lookup_type;
     if (vst == ScopeInfo::VarScopeType::GLOBAL) {
         if (jit)
@@ -1711,7 +1713,7 @@ void ASTInterpreter::visit_storename(BST_StoreName* node) {
         if (closure) {
             ASTInterpreterJitInterface::setLocalClosureHelper(this, node->vreg, node->closure_offset, value.o);
         } else {
-            assert(getVRegInfo().getVReg(node->id) == node->vreg);
+            assert(getVRegInfo().getVReg(name) == node->vreg);
             frame_info.num_vregs = std::max(frame_info.num_vregs, node->vreg + 1);
             Box* prev = vregs[node->vreg];
             vregs[node->vreg] = value.o;
@@ -1724,11 +1726,12 @@ void ASTInterpreter::visit_storename(BST_StoreName* node) {
 void ASTInterpreter::visit_storeattr(BST_StoreAttr* node) {
     Value value = getVReg(node->vreg_value);
     Value o = getVReg(node->vreg_target);
+    InternedString attr = getCodeConstants().getInternedString(node->index_attr);
     if (jit) {
-        jit->emitSetAttr(node, o, node->attr.getBox(), value);
+        jit->emitSetAttr(node, o, attr.getBox(), value);
     }
     AUTO_DECREF(o.o);
-    pyston::setattr(o.o, node->attr.getBox(), value.o);
+    pyston::setattr(o.o, attr.getBox(), value.o);
 }
 
 void ASTInterpreter::visit_storesub(BST_StoreSub* node) {
@@ -1860,8 +1863,8 @@ Box* ASTInterpreterJitInterface::derefHelper(void* _interpreter, BST_LoadName* n
     }
     Box* val = closure->elts[deref_info.offset];
     if (val == NULL) {
-        raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope",
-                       node->id.c_str());
+        InternedString id = interpreter->getCodeConstants().getInternedString(node->index_id);
+        raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", id.c_str());
     }
     Py_INCREF(val);
     return val;
