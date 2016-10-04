@@ -198,9 +198,17 @@ public:
     static Box* createFrame(Box* back, BoxedCode* code, Box* globals, Box* locals) {
         BoxedFrame* frame = new BoxedFrame(NULL);
         frame->_back = xincref(back);
-        frame->_code = (Box*)xincref(code);
-        frame->_globals = xincref(globals);
-        frame->_locals = xincref(locals);
+        frame->_code = (Box*)incref(code);
+        frame->_globals = incref(globals);
+
+        if (!locals) {
+            // TODO: in CPython this behavior depends on the co_flags.
+            frame->_locals = new BoxedDict();
+        } else {
+            frame->_locals = incref(locals);
+        }
+        assert(frame->_locals);
+
         frame->_linenumber = -1;
         return frame;
     }
@@ -351,7 +359,7 @@ extern "C" void PyFrame_SetLineNumber(PyFrameObject* _f, int linenumber) noexcep
 
 extern "C" PyFrameObject* PyFrame_New(PyThreadState* tstate, PyCodeObject* code, PyObject* globals,
                                       PyObject* locals) noexcept {
-    RELEASE_ASSERT(tstate == &cur_thread_state, "");
+    RELEASE_ASSERT(tstate == &cur_thread_state, "%p %p", tstate, &cur_thread_state);
 
     RELEASE_ASSERT(PyCode_Check((Box*)code), "");
     RELEASE_ASSERT(!globals || PyDict_Check(globals) || globals->cls == attrwrapper_cls, "%s", globals->cls->tp_name);
