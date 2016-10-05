@@ -337,6 +337,38 @@ llvm::Value* handlePotentiallyUndefined(ConcreteCompilerVariable* is_defined_var
     return phi;
 }
 
+// This is used to filter out any names set by an invoke statement at the end of the previous block, if we're in the
+// unwind path.
+class SymTableDstVRegDeleter : NoopBSTVisitor {
+private:
+    SymbolTable* sym_table;
+    bool created_new_sym_table;
+
+    SymTableDstVRegDeleter(SymbolTable* sym_table)
+        : NoopBSTVisitor(true /* skip child CFG nodes */), sym_table(sym_table), created_new_sym_table(false) {}
+
+protected:
+    bool visit_vreg(int* vreg, bool is_dst = false) override {
+        if (!is_dst || *vreg == VREG_UNDEFINED || !(*sym_table)[*vreg])
+            return false;
+
+        if (!created_new_sym_table) {
+            sym_table = new SymbolTable(*sym_table);
+            created_new_sym_table = true;
+        }
+        (*sym_table)[*vreg] = NULL;
+        return false;
+    }
+
+public:
+    static std::pair<SymbolTable*, bool /* created_new_sym_table */> removeDestVRegsFromSymTable(SymbolTable* sym_table,
+                                                                                                 BST_Invoke* stmt) {
+        SymTableDstVRegDeleter visitor(sym_table);
+        stmt->accept(&visitor);
+        return std::make_pair(visitor.sym_table, visitor.created_new_sym_table);
+    }
+};
+
 static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDescriptor* entry_descriptor,
                     const BlockSet& blocks) {
     SourceInfo* source = irstate->getSourceInfo();
@@ -551,7 +583,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         if (block == cfg->getStartingBlock()) {
             assert(entry_descriptor == NULL);
 
-            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast_type != BST_TYPE::Module) {
+            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast_type != AST_TYPE::Module) {
                 llvm::BasicBlock* preentry_bb = llvm::BasicBlock::Create(
                     g.context, "pre_entry", irstate->getLLVMFunction(), llvm_entry_blocks[cfg->getStartingBlock()]);
                 llvm::BasicBlock* reopt_bb = llvm::BasicBlock::Create(g.context, "reopt", irstate->getLLVMFunction());
@@ -695,16 +727,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // analysis frameworks can't (yet) support the idea of a block flowing differently to its different
                 // successors.
                 //
-                // There are four kinds of BST statements which can set a name:
-                // - Assign
-                // - ClassDef
-                // - FunctionDef
-                // - Import, ImportFrom
-                //
-                // However, all of these get translated away into Assigns, so we only need to worry about those. Also,
-                // as an invariant, all assigns that can fail assign to a temporary rather than a python name. This
-                // ensures that we interoperate properly with definedness analysis.
-                //
                 // We only need to do this in the case that we have exactly one predecessor, because:
                 // - a block ending in an invoke will have multiple successors
                 // - critical edges (block with multiple successors -> block with multiple predecessors)
@@ -715,38 +737,9 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
                 SymbolTable* sym_table = ending_symbol_tables[pred];
                 bool created_new_sym_table = false;
-                if (last_inst->type == BST_TYPE::Invoke && bst_cast<BST_Invoke>(last_inst)->exc_dest == block) {
-                    BST_stmt* stmt = bst_cast<BST_Invoke>(last_inst)->stmt;
-
-                    // The CFG pass translates away these statements, so we should never encounter them.
-                    // If we did, we'd need to remove a name here.
-                    assert(stmt->type != BST_TYPE::ClassDef);
-                    assert(stmt->type != BST_TYPE::FunctionDef);
-                    assert(stmt->type != BST_TYPE::Import);
-                    assert(stmt->type != BST_TYPE::ImportFrom);
-
-                    if (stmt->type == BST_TYPE::Assign) {
-                        auto asgn = bst_cast<BST_Assign>(stmt);
-                        if (asgn->target->type == BST_TYPE::Name) {
-                            auto asname = bst_cast<BST_Name>(asgn->target);
-                            assert(asname->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
-
-                            InternedString name = asname->id;
-                            int vreg = bst_cast<BST_Name>(asgn->target)->vreg;
-                            assert(name.c_str()[0] == '#'); // it must be a temporary
-                            // You might think I need to check whether `name' is being assigned globally or locally,
-                            // since a global assign doesn't affect the symbol table. However, the CFG pass only
-                            // generates invoke-assigns to temporary variables. Just to be sure, we assert:
-                            assert(asname->lookup_type != ScopeInfo::VarScopeType::GLOBAL);
-
-                            // TODO: inefficient
-                            sym_table = new SymbolTable(*sym_table);
-                            ASSERT((*sym_table)[vreg] != NULL, "%d %s\n", block->idx, name.c_str());
-                            (*sym_table)[vreg] = NULL;
-                            created_new_sym_table = true;
-                        }
-                    }
-                }
+                if (last_inst->type == BST_TYPE::Invoke && bst_cast<BST_Invoke>(last_inst)->exc_dest == block)
+                    std::tie(sym_table, created_new_sym_table) = SymTableDstVRegDeleter::removeDestVRegsFromSymTable(
+                        sym_table, bst_cast<BST_Invoke>(last_inst));
 
                 generator->copySymbolsFrom(sym_table);
                 for (auto&& p : *definedness_tables[pred]) {
@@ -1034,7 +1027,7 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(BoxedCode* code, SourceI
     assert((entry_descriptor != NULL) + (spec != NULL) == 1);
 
     if (VERBOSITY("irgen") >= 2)
-        source->cfg->print();
+        source->cfg->print(code->constant_vregs);
 
     assert(g.cur_module == NULL);
 
@@ -1108,9 +1101,10 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(BoxedCode* code, SourceI
         speculation_level = TypeAnalysis::SOME;
     TypeAnalysis* types;
     if (entry_descriptor)
-        types = doTypeAnalysis(entry_descriptor, effort, speculation_level);
+        types = doTypeAnalysis(entry_descriptor, effort, speculation_level, code->constant_vregs);
     else
-        types = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort, speculation_level);
+        types = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort, speculation_level,
+                               code->constant_vregs);
 
 
     _t2.split();

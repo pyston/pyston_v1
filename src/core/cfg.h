@@ -88,8 +88,7 @@ public:
     void unconnectFrom(CFGBlock* successor);
 
     void push_back(BST_stmt* node) { body.push_back(node); }
-    void print(llvm::raw_ostream& stream = llvm::outs());
-    void _print() { print(); }
+    void print(const ConstantVRegInfo& constant_vregs, llvm::raw_ostream& stream = llvm::outs());
 };
 
 // the vregs are split into three parts.
@@ -110,8 +109,8 @@ class VRegInfo {
 private:
 #ifndef NDEBUG
     // this maps use too much memory, we only use them in the debug build for asserts
-    llvm::DenseMap<InternedString, DefaultedInt<-1>> sym_vreg_map_user_visible;
-    llvm::DenseMap<InternedString, DefaultedInt<-1>> sym_vreg_map;
+    llvm::DenseMap<InternedString, DefaultedInt<VREG_UNDEFINED>> sym_vreg_map_user_visible;
+    llvm::DenseMap<InternedString, DefaultedInt<VREG_UNDEFINED>> sym_vreg_map;
 #endif
 
     // Reverse map, from vreg->symbol name.
@@ -126,8 +125,8 @@ public:
 #ifndef NDEBUG
     // map of all assigned names. if the name is block local the vreg number is not unique because this vregs get reused
     // between blocks.
-    const llvm::DenseMap<InternedString, DefaultedInt<-1>>& getSymVRegMap() const { return sym_vreg_map; }
-    const llvm::DenseMap<InternedString, DefaultedInt<-1>>& getUserVisibleSymVRegMap() const {
+    const llvm::DenseMap<InternedString, DefaultedInt<VREG_UNDEFINED>>& getSymVRegMap() const { return sym_vreg_map; }
+    const llvm::DenseMap<InternedString, DefaultedInt<VREG_UNDEFINED>>& getUserVisibleSymVRegMap() const {
         return sym_vreg_map_user_visible;
     }
 
@@ -169,7 +168,7 @@ public:
     int getNumOfCrossBlockVRegs() const { return num_vregs_cross_block; }
 
     bool hasVRegsAssigned() const { return num_vregs != -1; }
-    void assignVRegs(CFG* cfg, const ParamNames& param_names);
+    void assignVRegs(CFG* cfg, const ParamNames& param_names, llvm::DenseMap<int*, InternedString>& id_vreg);
 };
 
 // Control Flow Graph
@@ -211,7 +210,7 @@ public:
         blocks.push_back(block);
     }
 
-    void print(llvm::raw_ostream& stream = llvm::outs());
+    void print(const ConstantVRegInfo& constant_vregs, llvm::raw_ostream& stream = llvm::outs());
 };
 
 class VRegSet {
@@ -332,7 +331,7 @@ public:
 
 BoxedCode* computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn,
                           BoxedModule* bm);
-void printCFG(CFG* cfg);
+void printCFG(CFG* cfg, const ConstantVRegInfo& constant_vregs);
 }
 
 #endif

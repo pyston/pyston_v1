@@ -43,8 +43,7 @@ public:
     ConcreteCompilerType* getTypeAtBlockStart(int vreg, CFGBlock* block) override;
     ConcreteCompilerType* getTypeAtBlockEnd(int vreg, CFGBlock* block) override;
 
-    BoxedClass* speculatedExprClass(BST_expr*) override { return NULL; }
-    BoxedClass* speculatedExprClass(BST_slice*) override { return NULL; }
+    BoxedClass* speculatedExprClass(BST_stmt_with_dest*) override { return NULL; }
 };
 
 ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockStart(int vreg, CFGBlock* block) {
@@ -74,17 +73,14 @@ static BoxedClass* simpleCallSpeculation(BST_Call* node, CompilerType* rtn_type,
         return NULL;
     }
 
-    if (node->func->type == BST_TYPE::Name && bst_cast<BST_Name>(node->func)->id.s() == "xrange")
-        return xrange_cls;
-
     return predictClassFor(node);
 }
 
 typedef VRegMap<CompilerType*> TypeMap;
 typedef llvm::DenseMap<CFGBlock*, TypeMap> AllTypeMap;
-typedef llvm::DenseMap<BST*, CompilerType*> ExprTypeMap;
-typedef llvm::DenseMap<BST*, BoxedClass*> TypeSpeculations;
-class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor, public SliceVisitor {
+typedef llvm::DenseMap<BST_stmt*, CompilerType*> ExprTypeMap;
+typedef llvm::DenseMap<BST_stmt*, BoxedClass*> TypeSpeculations;
+class BasicBlockTypePropagator : public StmtVisitor {
 private:
     static const bool EXPAND_UNNEEDED = true;
 
@@ -93,14 +89,17 @@ private:
     ExprTypeMap& expr_types;
     TypeSpeculations& type_speculations;
     TypeAnalysis::SpeculationLevel speculation;
+    const ConstantVRegInfo& constant_vregs;
 
     BasicBlockTypePropagator(CFGBlock* block, TypeMap& initial, ExprTypeMap& expr_types,
-                             TypeSpeculations& type_speculations, TypeAnalysis::SpeculationLevel speculation)
+                             TypeSpeculations& type_speculations, TypeAnalysis::SpeculationLevel speculation,
+                             const ConstantVRegInfo& constant_vregs)
         : block(block),
           sym_table(initial),
           expr_types(expr_types),
           type_speculations(type_speculations),
-          speculation(speculation) {}
+          speculation(speculation),
+          constant_vregs(constant_vregs) {}
 
     void run() {
         for (int i = 0; i < block->body.size(); i++) {
@@ -108,7 +107,7 @@ private:
         }
     }
 
-    CompilerType* processSpeculation(BoxedClass* speculated_cls, BST_expr* node, CompilerType* old_type) {
+    CompilerType* processSpeculation(BoxedClass* speculated_cls, BST_stmt* node, CompilerType* old_type) {
         assert(old_type);
         assert(speculation != TypeAnalysis::NONE);
 
@@ -119,7 +118,7 @@ private:
                     printf("in propagator, speculating that %s would actually be %s, at ",
                            old_type->debugName().c_str(), speculated_type->debugName().c_str());
                     fflush(stdout);
-                    print_bst(node);
+                    print_bst(node, constant_vregs);
                     llvm::outs().flush();
                     printf("\n");
                 }
@@ -131,110 +130,48 @@ private:
         return old_type;
     }
 
-    CompilerType* getType(BST_slice* node) {
-        type_speculations.erase(node);
-
-        void* raw_rtn = node->accept_slice(this);
-        CompilerType* rtn = static_cast<CompilerType*>(raw_rtn);
-
-        if (VERBOSITY() >= 3) {
-            print_bst(node);
-            printf(" %s\n", rtn->debugName().c_str());
-        }
-
-        expr_types[node] = rtn;
-        assert(rtn->isUsable());
-        return rtn;
+    CompilerType* getConstantType(int vreg) {
+        Box* o = constant_vregs.getConstant(vreg);
+        if (o->cls == int_cls)
+            return INT;
+        else if (o->cls == float_cls)
+            return FLOAT;
+        else if (o->cls == complex_cls)
+            return BOXED_COMPLEX;
+        else if (o->cls == long_cls)
+            return LONG;
+        else if (o->cls == str_cls)
+            return STR;
+        else if (o->cls == unicode_cls)
+            return typeFromClass(unicode_cls);
+        else if (o->cls == none_cls)
+            return NONE;
+        else if (o->cls == ellipsis_cls)
+            return typeFromClass(ellipsis_cls);
+        else
+            RELEASE_ASSERT(0, "");
     }
 
-    CompilerType* getType(BST_expr* node) {
-        type_speculations.erase(node);
-
-        void* raw_rtn = node->accept_expr(this);
-        CompilerType* rtn = static_cast<CompilerType*>(raw_rtn);
-
-        if (VERBOSITY() >= 3) {
-            printf("Type of ");
-            fflush(stdout);
-            print_bst(node);
-            printf(" is %s\n", rtn->debugName().c_str());
+    CompilerType* getType(int vreg) {
+        if (vreg == VREG_UNDEFINED)
+            return UNDEF;
+        if (vreg < 0)
+            return getConstantType(vreg);
+        CompilerType*& t = sym_table[vreg];
+        if (t == NULL) {
+            // if (VERBOSITY() >= 2) {
+            // printf("%s is undefined!\n", node->id.c_str());
+            // raise(SIGTRAP);
+            //}
+            t = UNDEF;
         }
-
-        expr_types[node] = rtn;
-        assert(rtn->isUsable());
-        return rtn;
+        return t;
     }
 
     void _doSet(int vreg, CompilerType* t) {
         assert(t->isUsable());
-        if (t)
+        if (t && vreg != VREG_UNDEFINED)
             sym_table[vreg] = t;
-    }
-
-    void _doSet(BST_expr* target, CompilerType* t) {
-        switch (target->type) {
-            case BST_TYPE::Attribute:
-                // doesn't affect types (yet?)
-                break;
-            case BST_TYPE::Name: {
-                auto name = bst_cast<BST_Name>(target);
-                assert(name->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
-                if (name->lookup_type == ScopeInfo::VarScopeType::FAST
-                    || name->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
-                    _doSet(name->vreg, t);
-                } else
-                    assert(name->vreg == -1);
-                break;
-            }
-            case BST_TYPE::Subscript:
-                break;
-            case BST_TYPE::Tuple: {
-                BST_Tuple* tt = bst_cast<BST_Tuple>(target);
-                auto val_types = t->unpackTypes(tt->elts.size());
-                assert(val_types.size() == tt->elts.size());
-                for (int i = 0; i < tt->elts.size(); i++) {
-                    _doSet(tt->elts[i], val_types[i]);
-                }
-                break;
-            }
-            default:
-                ASSERT(0, "Unknown type for TypePropagator: %d", target->type);
-                abort();
-        }
-    }
-
-    void* visit_ellipsis(BST_Ellipsis* node) override { return typeFromClass(ellipsis_cls); }
-
-    void* visit_attribute(BST_Attribute* node) override {
-        CompilerType* t = getType(node->value);
-        CompilerType* rtn = t->getattrType(node->attr, false);
-
-        // if (speculation != TypeAnalysis::NONE && (node->attr == "x" || node->attr == "y" || node->attr == "z")) {
-        // rtn = processSpeculation(float_cls, node, rtn);
-        //}
-
-        if (speculation != TypeAnalysis::NONE) {
-            BoxedClass* speculated_class = predictClassFor(node);
-            rtn = processSpeculation(speculated_class, node, rtn);
-        }
-
-        if (VERBOSITY() >= 2 && rtn == UNDEF) {
-            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno);
-            print_bst(node);
-            printf("\n");
-        }
-        return rtn;
-    }
-
-    void* visit_clsattribute(BST_ClsAttribute* node) override {
-        CompilerType* t = getType(node->value);
-        CompilerType* rtn = t->getattrType(node->attr, true);
-        if (VERBOSITY() >= 2 && rtn == UNDEF) {
-            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno);
-            print_bst(node);
-            printf("\n");
-        }
-        return rtn;
     }
 
     bool hasFixedOps(CompilerType* type) {
@@ -242,9 +179,9 @@ private:
         return type == STR || type == INT || type == FLOAT || type == LIST || type == DICT;
     }
 
-    void* visit_augbinop(BST_AugBinOp* node) override {
-        CompilerType* left = getType(node->left);
-        CompilerType* right = getType(node->right);
+    CompilerType* visit_augbinopHelper(BST_AugBinOp* node) {
+        CompilerType* left = getType(node->vreg_left);
+        CompilerType* right = getType(node->vreg_right);
         if (!hasFixedOps(left) || !hasFixedOps(right))
             return UNKNOWN;
 
@@ -271,10 +208,14 @@ private:
 
         return rtn;
     }
+    void visit_augbinop(BST_AugBinOp* node) override {
+        CompilerType* t = visit_augbinopHelper(node);
+        _doSet(node->vreg_dst, t);
+    }
 
-    void* visit_binop(BST_BinOp* node) override {
-        CompilerType* left = getType(node->left);
-        CompilerType* right = getType(node->right);
+    CompilerType* visit_binopHelper(BST_BinOp* node) {
+        CompilerType* left = getType(node->vreg_left);
+        CompilerType* right = getType(node->vreg_right);
         if (!hasFixedOps(left) || !hasFixedOps(right))
             return UNKNOWN;
 
@@ -294,24 +235,25 @@ private:
 
         return rtn;
     }
+    void visit_binop(BST_BinOp* node) override {
+        CompilerType* t = visit_binopHelper(node);
+        _doSet(node->vreg_dst, t);
+    }
 
-    void* visit_call(BST_Call* node) override {
-        CompilerType* func = getType(node->func);
-
+    template <typename CallType> CompilerType* visit_callHelper(CompilerType* func, CallType* node) {
         std::vector<CompilerType*> arg_types;
-        for (int i = 0; i < node->args.size(); i++) {
-            arg_types.push_back(getType(node->args[i]));
+        for (int i = 0; i < node->num_args; i++) {
+            arg_types.push_back(getType(node->elts[i]));
         }
 
-        std::vector<std::pair<InternedString, CompilerType*>> kw_types;
-        for (BST_keyword* kw : node->keywords) {
-            kw_types.push_back(std::make_pair(kw->arg, getType(kw->value)));
+        for (int i = 0; i < node->num_keywords; i++) {
+            getType(node->elts[node->num_args + i]);
         }
 
-        CompilerType* starargs = node->starargs ? getType(node->starargs) : NULL;
-        CompilerType* kwargs = node->kwargs ? getType(node->kwargs) : NULL;
+        CompilerType* starargs = node->vreg_starargs != VREG_UNDEFINED ? getType(node->vreg_starargs) : NULL;
+        CompilerType* kwargs = node->vreg_kwargs != VREG_UNDEFINED ? getType(node->vreg_kwargs) : NULL;
 
-        if (starargs || kwargs || kw_types.size()) {
+        if (starargs || kwargs || node->num_keywords) {
             // Bail out for anything but simple calls, for now:
             return UNKNOWN;
         }
@@ -331,9 +273,40 @@ private:
         return rtn_type;
     }
 
-    void* visit_compare(BST_Compare* node) override {
-        CompilerType* left = getType(node->left);
-        CompilerType* right = getType(node->comparator);
+    void visit_callfunc(BST_CallFunc* node) override {
+        CompilerType* func = getType(node->vreg_func);
+        _doSet(node->vreg_dst, visit_callHelper(func, node));
+    }
+
+    void visit_callattr(BST_CallAttr* node) override {
+        CompilerType* t = getType(node->vreg_value);
+        CompilerType* func = t->getattrType(node->attr, false);
+
+        if (VERBOSITY() >= 2 && func == UNDEF) {
+            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno);
+            print_bst(node, constant_vregs);
+            printf("\n");
+        }
+
+        _doSet(node->vreg_dst, visit_callHelper(func, node));
+    }
+
+    void visit_callclsattr(BST_CallClsAttr* node) override {
+        CompilerType* t = getType(node->vreg_value);
+        CompilerType* func = t->getattrType(node->attr, true);
+
+        if (VERBOSITY() >= 2 && func == UNDEF) {
+            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno);
+            print_bst(node, constant_vregs);
+            printf("\n");
+        }
+
+        _doSet(node->vreg_dst, visit_callHelper(func, node));
+    }
+
+    CompilerType* visit_compareHelper(BST_Compare* node) {
+        CompilerType* left = getType(node->vreg_left);
+        CompilerType* right = getType(node->vreg_comparator);
 
         AST_TYPE::AST_TYPE op_type = node->op;
         if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot || op_type == AST_TYPE::In
@@ -351,149 +324,122 @@ private:
         arg_types.push_back(right);
         return attr_type->callType(ArgPassSpec(2), arg_types, NULL);
     }
+    void visit_compare(BST_Compare* node) override { _doSet(node->vreg_dst, visit_compareHelper(node)); }
 
-    void* visit_dict(BST_Dict* node) override {
+    void visit_dict(BST_Dict* node) override { _doSet(node->vreg_dst, DICT); }
+
+    void visit_landingpad(BST_Landingpad* node) override {
+        _doSet(node->vreg_dst, makeTupleType({ UNKNOWN, UNKNOWN, UNKNOWN }));
+    }
+    void visit_locals(BST_Locals* node) override { _doSet(node->vreg_dst, DICT); }
+    void visit_getiter(BST_GetIter* node) override {
+        _doSet(node->vreg_dst, getType(node->vreg_value)->getPystonIterType());
+    }
+    void visit_importfrom(BST_ImportFrom* node) override { _doSet(node->vreg_dst, UNKNOWN); }
+    void visit_importname(BST_ImportName* node) override { _doSet(node->vreg_dst, UNKNOWN); }
+    void visit_importstar(BST_ImportStar* node) override { _doSet(node->vreg_dst, UNKNOWN); }
+    void visit_nonzero(BST_Nonzero* node) override { return _doSet(node->vreg_dst, UNKNOWN); }
+    void visit_checkexcmatch(BST_CheckExcMatch* node) override { return _doSet(node->vreg_dst, UNKNOWN); }
+    void visit_setexcinfo(BST_SetExcInfo* node) override {}
+    void visit_uncacheexcinfo(BST_UncacheExcInfo* node) override {}
+    void visit_hasnext(BST_HasNext* node) override { return _doSet(node->vreg_dst, BOOL); }
+    void visit_printexpr(BST_PrintExpr* node) override {}
+
+    void visit_list(BST_List* node) override {
         // Get all the sub-types, even though they're not necessary to
         // determine the expression type, so that things like speculations
         // can be processed.
-        for (BST_expr* k : node->keys)
-            getType(k);
-        for (BST_expr* v : node->values)
-            getType(v);
-
-        return DICT;
-    }
-
-    void* visit_index(BST_Index* node) override { return getType(node->value); }
-
-    void* visit_langprimitive(BST_LangPrimitive* node) override {
-        switch (node->opcode) {
-            case BST_LangPrimitive::CHECK_EXC_MATCH:
-                return BOOL;
-            case BST_LangPrimitive::LOCALS:
-                return DICT;
-            case BST_LangPrimitive::GET_ITER:
-                return getType(node->args[0])->getPystonIterType();
-            case BST_LangPrimitive::LANDINGPAD:
-            case BST_LangPrimitive::IMPORT_FROM:
-            case BST_LangPrimitive::IMPORT_STAR:
-            case BST_LangPrimitive::IMPORT_NAME:
-                return UNKNOWN;
-            case BST_LangPrimitive::NONE:
-            case BST_LangPrimitive::SET_EXC_INFO:
-            case BST_LangPrimitive::UNCACHE_EXC_INFO:
-            case BST_LangPrimitive::PRINT_EXPR:
-                return NONE;
-            case BST_LangPrimitive::HASNEXT:
-            case BST_LangPrimitive::NONZERO:
-                return BOOL;
-            default:
-                RELEASE_ASSERT(0, "%d", node->opcode);
-        }
-    }
-
-    void* visit_list(BST_List* node) override {
-        // Get all the sub-types, even though they're not necessary to
-        // determine the expression type, so that things like speculations
-        // can be processed.
-        for (BST_expr* elt : node->elts) {
-            getType(elt);
+        for (int i = 0; i < node->num_elts; ++i) {
+            getType(node->elts[i]);
         }
 
-        return LIST;
+        _doSet(node->vreg_dst, LIST);
     }
 
-    void* visit_name(BST_Name* node) override {
+    void visit_repr(BST_Repr* node) override { _doSet(node->vreg_dst, STR); }
+
+    void visit_set(BST_Set* node) override { _doSet(node->vreg_dst, SET); }
+
+    void visit_makeslice(BST_MakeSlice* node) override { _doSet(node->vreg_dst, SLICE); }
+
+    void visit_storename(BST_StoreName* node) override {
+        assert(node->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
+        if (node->lookup_type == ScopeInfo::VarScopeType::FAST
+            || node->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
+            _doSet(node->vreg, getType(node->vreg_value));
+        } else
+            assert(node->vreg == VREG_UNDEFINED);
+    }
+    void visit_storeattr(BST_StoreAttr* node) override {}
+    void visit_storesub(BST_StoreSub* node) override {}
+    void visit_storesubslice(BST_StoreSubSlice* node) override {}
+
+    void visit_loadname(BST_LoadName* node) override {
+        CompilerType* t = UNKNOWN;
         assert(node->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
         auto name_scope = node->lookup_type;
 
         if (name_scope == ScopeInfo::VarScopeType::GLOBAL) {
             if (node->id.s() == "None")
-                return NONE;
-            return UNKNOWN;
-        }
+                t = NONE;
+        } else if (name_scope == ScopeInfo::VarScopeType::FAST || name_scope == ScopeInfo::VarScopeType::CLOSURE)
+            t = getType(node->vreg);
 
-        if (name_scope == ScopeInfo::VarScopeType::NAME) {
-            return UNKNOWN;
-        }
-
-        if (name_scope == ScopeInfo::VarScopeType::DEREF) {
-            return UNKNOWN;
-        }
-
-        if (name_scope == ScopeInfo::VarScopeType::FAST || name_scope == ScopeInfo::VarScopeType::CLOSURE) {
-            CompilerType*& t = sym_table[node->vreg];
-            if (t == NULL) {
-                // if (VERBOSITY() >= 2) {
-                // printf("%s is undefined!\n", node->id.c_str());
-                // raise(SIGTRAP);
-                //}
-                t = UNDEF;
-            }
-            return t;
-        }
-
-        RELEASE_ASSERT(0, "Unknown scope type: %d", (int)name_scope);
+        _doSet(node->vreg_dst, t);
     }
 
-    void* visit_num(BST_Num* node) override {
-        switch (node->num_type) {
-            case AST_Num::INT:
-                return INT;
-            case AST_Num::FLOAT:
-                return FLOAT;
-            case AST_Num::LONG:
-                return LONG;
-            case AST_Num::COMPLEX:
-                return BOXED_COMPLEX;
+    void visit_loadattr(BST_LoadAttr* node) override {
+        CompilerType* t = getType(node->vreg_value);
+        CompilerType* rtn = t->getattrType(node->attr, node->clsonly);
+
+        if (speculation != TypeAnalysis::NONE) {
+            BoxedClass* speculated_class = predictClassFor(node);
+            rtn = processSpeculation(speculated_class, node, rtn);
         }
-        abort();
-    }
 
-    void* visit_repr(BST_Repr* node) override { return STR; }
-
-    void* visit_set(BST_Set* node) override { return SET; }
-
-    void* visit_slice(BST_Slice* node) override { return SLICE; }
-
-    void* visit_extslice(BST_ExtSlice* node) override {
-        std::vector<CompilerType*> elt_types;
-        for (auto* e : node->dims) {
-            elt_types.push_back(getType(e));
+        if (VERBOSITY() >= 2 && rtn == UNDEF) {
+            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno);
+            print_bst(node, constant_vregs);
+            printf("\n");
         }
-        return makeTupleType(elt_types);
+        _doSet(node->vreg_dst, rtn);
     }
 
-    void* visit_str(BST_Str* node) override {
-        if (node->str_type == AST_Str::STR)
-            return STR;
-        else if (node->str_type == AST_Str::UNICODE)
-            return typeFromClass(unicode_cls);
-        RELEASE_ASSERT(0, "Unknown string type %d", (int)node->str_type);
-    }
-
-    void* visit_subscript(BST_Subscript* node) override {
-        CompilerType* val = getType(node->value);
-        CompilerType* slice = getType(node->slice);
+    void visit_loadsub(BST_LoadSub* node) override {
+        CompilerType* val = getType(node->vreg_value);
+        CompilerType* slice = getType(node->vreg_slice);
         static BoxedString* name = getStaticString("__getitem__");
         CompilerType* getitem_type = val->getattrType(name, true);
         std::vector<CompilerType*> args;
         args.push_back(slice);
-        return getitem_type->callType(ArgPassSpec(1), args, NULL);
+        _doSet(node->vreg_dst, getitem_type->callType(ArgPassSpec(1), args, NULL));
     }
 
-    void* visit_tuple(BST_Tuple* node) override {
+    void visit_loadsubslice(BST_LoadSubSlice* node) override {
+        // TODO this is not 100% correct, it should call into __getslice__ but I think for a all static types we
+        // shupport it does not make a difference
+        CompilerType* val = getType(node->vreg_value);
+        static BoxedString* name = getStaticString("__getitem__");
+        CompilerType* getitem_type = val->getattrType(name, true);
+        std::vector<CompilerType*> args;
+        args.push_back(SLICE);
+        _doSet(node->vreg_dst, getitem_type->callType(ArgPassSpec(1), args, NULL));
+    }
+
+    void visit_tuple(BST_Tuple* node) override {
         std::vector<CompilerType*> elt_types;
-        for (int i = 0; i < node->elts.size(); i++) {
+        for (int i = 0; i < node->num_elts; i++) {
             elt_types.push_back(getType(node->elts[i]));
         }
-        return makeTupleType(elt_types);
+        _doSet(node->vreg_dst, makeTupleType(elt_types));
     }
 
-    void* visit_unaryop(BST_UnaryOp* node) override {
-        CompilerType* operand = getType(node->operand);
-        if (!hasFixedOps(operand))
-            return UNKNOWN;
+    void visit_unaryop(BST_UnaryOp* node) override {
+        CompilerType* operand = getType(node->vreg_operand);
+        if (!hasFixedOps(operand)) {
+            _doSet(node->vreg_dst, UNKNOWN);
+            return;
+        }
 
         // TODO this isn't the exact behavior
         BoxedString* name = getOpName(node->op_type);
@@ -505,99 +451,76 @@ private:
         std::vector<CompilerType*> arg_types;
         CompilerType* rtn_type = attr_type->callType(ArgPassSpec(0), arg_types, NULL);
         rtn_type = unboxedType(rtn_type->getConcreteType());
-        return rtn_type;
+        _doSet(node->vreg_dst, rtn_type);
     }
 
-    void* visit_yield(BST_Yield*) override { return UNKNOWN; }
-
-
-    void visit_assert(BST_Assert* node) override {
-        getType(node->test);
-        if (node->msg)
-            getType(node->msg);
+    void visit_unpackintoarray(BST_UnpackIntoArray* node) override {
+        auto src_types = getType(node->vreg_src)->unpackTypes(node->num_elts);
+        assert(src_types.size() == node->num_elts);
+        for (int i = 0; i < node->num_elts; i++) {
+            _doSet(node->vreg_dst[i], src_types[i]);
+        }
     }
 
-    void visit_assign(BST_Assign* node) override {
-        CompilerType* t = getType(node->value);
-        _doSet(node->target, t);
+    void visit_yield(BST_Yield* node) override { _doSet(node->vreg_dst, UNKNOWN); }
+
+
+    void visit_assert(BST_Assert* node) override { getType(node->vreg_msg); }
+
+    void visit_copyvreg(BST_CopyVReg* node) override {
+        CompilerType* t = getType(node->vreg_src);
+        _doSet(node->vreg_dst, t);
     }
 
     void visit_branch(BST_Branch* node) override {
         if (EXPAND_UNNEEDED) {
-            getType(node->test);
+            getType(node->vreg_test);
         }
     }
 
-    void* visit_makeclass(BST_MakeClass* mkclass) override {
+    void visit_makeclass(BST_MakeClass* mkclass) override {
         BST_ClassDef* node = mkclass->class_def;
 
-        for (auto d : node->decorator_list) {
-            getType(d);
+        for (int i = 0; i < node->num_decorator; ++i) {
+            getType(node->decorator[i]);
         }
 
-        for (auto b : node->bases) {
-            getType(b);
-        }
+        getType(node->vreg_bases_tuple);
 
         // TODO should we speculate that classdefs will generally return a class?
         // return typeFromClass(type_cls);
-        return UNKNOWN;
+        _doSet(mkclass->vreg_dst, UNKNOWN);
     }
 
-    void visit_delete(BST_Delete* node) override {
-        BST_expr* target = node->target;
-        switch (target->type) {
-            case BST_TYPE::Subscript:
-                getType(bst_cast<BST_Subscript>(target)->value);
-                break;
-            case BST_TYPE::Attribute:
-                getType(bst_cast<BST_Attribute>(target)->value);
-                break;
-            case BST_TYPE::Name: {
-                auto name = bst_cast<BST_Name>(target);
-                assert(name->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
-                if (name->lookup_type == ScopeInfo::VarScopeType::FAST
-                    || name->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
-                    sym_table[name->vreg] = NULL;
-                } else
-                    assert(name->vreg == -1);
-                break;
-            }
-            default:
-                RELEASE_ASSERT(0, "%d", target->type);
-        }
+    void visit_deletesub(BST_DeleteSub* node) override { getType(node->vreg_value); }
+    void visit_deletesubslice(BST_DeleteSubSlice* node) override { getType(node->vreg_value); }
+    void visit_deleteattr(BST_DeleteAttr* node) override { getType(node->vreg_value); }
+    void visit_deletename(BST_DeleteName* node) override {
+        assert(node->lookup_type != ScopeInfo::VarScopeType::UNKNOWN);
+        if (node->lookup_type == ScopeInfo::VarScopeType::FAST
+            || node->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
+            sym_table[node->vreg] = NULL;
+        } else
+            assert(node->vreg == VREG_UNDEFINED);
     }
 
-    void visit_expr(BST_Expr* node) override {
-        if (EXPAND_UNNEEDED) {
-            if (node->value != NULL)
-                getType(node->value);
-        }
-    }
-
-    void* visit_makefunction(BST_MakeFunction* mkfn) override {
+    void visit_makefunction(BST_MakeFunction* mkfn) override {
         BST_FunctionDef* node = mkfn->function_def;
 
-        for (auto d : node->decorator_list) {
-            getType(d);
-        }
-
-        for (auto d : node->args->defaults) {
-            getType(d);
+        for (int i = 0; i < node->num_defaults + node->num_decorator; ++i) {
+            getType(node->elts[i]);
         }
 
         CompilerType* t = UNKNOWN;
-        if (node->decorator_list.empty())
+        if (node->num_decorator == 0)
             t = typeFromClass(function_cls);
-        return t;
+        _doSet(mkfn->vreg_dst, t);
     }
 
     void visit_exec(BST_Exec* node) override {
-        getType(node->body);
-        if (node->globals)
-            getType(node->globals);
-        if (node->locals)
-            getType(node->locals);
+        getType(node->vreg_body);
+        getType(node->vreg_globals);
+        getType(node->vreg_locals);
     }
 
     void visit_invoke(BST_Invoke* node) override { node->stmt->accept_stmt(this); }
@@ -605,36 +528,32 @@ private:
     void visit_jump(BST_Jump* node) override {}
 
     void visit_print(BST_Print* node) override {
-        if (node->dest)
-            getType(node->dest);
+        getType(node->vreg_dest);
 
-        if (EXPAND_UNNEEDED && node->value)
-            getType(node->value);
+        if (EXPAND_UNNEEDED)
+            getType(node->vreg_value);
     }
 
     void visit_raise(BST_Raise* node) override {
         if (EXPAND_UNNEEDED) {
-            if (node->arg0)
-                getType(node->arg0);
-            if (node->arg1)
-                getType(node->arg1);
-            if (node->arg2)
-                getType(node->arg2);
+            getType(node->vreg_arg0);
+            getType(node->vreg_arg1);
+            getType(node->vreg_arg2);
         }
     }
 
     void visit_return(BST_Return* node) override {
         if (EXPAND_UNNEEDED) {
-            if (node->value != NULL)
-                getType(node->value);
+            getType(node->vreg_value);
         }
     }
 
 public:
     static TypeMap propagate(CFGBlock* block, const TypeMap& starting, ExprTypeMap& expr_types,
-                             TypeSpeculations& type_speculations, TypeAnalysis::SpeculationLevel speculation) {
+                             TypeSpeculations& type_speculations, TypeAnalysis::SpeculationLevel speculation,
+                             const ConstantVRegInfo& constant_vregs) {
         TypeMap ending = starting;
-        BasicBlockTypePropagator(block, ending, expr_types, type_speculations, speculation).run();
+        BasicBlockTypePropagator(block, ending, expr_types, type_speculations, speculation, constant_vregs).run();
         return ending;
     }
 };
@@ -668,8 +587,7 @@ public:
         return rtn;
     }
 
-    BoxedClass* speculatedExprClass(BST_slice* call) override { return type_speculations[call]; }
-    BoxedClass* speculatedExprClass(BST_expr* call) override { return type_speculations[call]; }
+    BoxedClass* speculatedExprClass(BST_stmt_with_dest* call) override { return type_speculations[call]; }
 
     static bool merge(CompilerType* lhs, CompilerType*& rhs) {
         if (!lhs)
@@ -714,7 +632,7 @@ public:
     }
 
     static PropagatingTypeAnalysis* doAnalysis(SpeculationLevel speculation, TypeMap&& initial_types,
-                                               CFGBlock* initial_block) {
+                                               CFGBlock* initial_block, const ConstantVRegInfo& constant_vregs) {
         Timer _t("PropagatingTypeAnalysis::doAnalysis()");
 
         CFG* cfg = initial_block->cfg;
@@ -755,7 +673,7 @@ public:
             }
 
             TypeMap ending = BasicBlockTypePropagator::propagate(block, starting_types.find(block)->second, expr_types,
-                                                                 type_speculations, speculation);
+                                                                 type_speculations, speculation, constant_vregs);
 
             if (VERBOSITY("types") >= 3) {
                 printf("before (after):\n");
@@ -811,7 +729,8 @@ public:
 
 // public entry point:
 TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& arg_names, const std::vector<ConcreteCompilerType*>& arg_types,
-                             EffortLevel effort, TypeAnalysis::SpeculationLevel speculation) {
+                             EffortLevel effort, TypeAnalysis::SpeculationLevel speculation,
+                             const ConstantVRegInfo& constant_vregs) {
     // if (effort == EffortLevel::INTERPRETED) {
     // return new NullTypeAnalysis();
     //}
@@ -830,11 +749,12 @@ TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& arg_names, const std::v
 
     assert(i == arg_types.size());
 
-    return PropagatingTypeAnalysis::doAnalysis(speculation, std::move(initial_types), cfg->getStartingBlock());
+    return PropagatingTypeAnalysis::doAnalysis(speculation, std::move(initial_types), cfg->getStartingBlock(),
+                                               constant_vregs);
 }
 
 TypeAnalysis* doTypeAnalysis(const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
-                             TypeAnalysis::SpeculationLevel speculation) {
+                             TypeAnalysis::SpeculationLevel speculation, const ConstantVRegInfo& constant_vregs) {
     auto cfg = entry_descriptor->code->source->cfg;
     auto&& vreg_info = cfg->getVRegInfo();
     TypeMap initial_types(vreg_info.getTotalNumOfVRegs());
@@ -844,6 +764,6 @@ TypeAnalysis* doTypeAnalysis(const OSREntryDescriptor* entry_descriptor, EffortL
     }
 
     return PropagatingTypeAnalysis::doAnalysis(speculation, std::move(initial_types),
-                                               entry_descriptor->backedge->target);
+                                               entry_descriptor->backedge->target, constant_vregs);
 }
 }

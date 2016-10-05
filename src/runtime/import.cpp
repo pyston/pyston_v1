@@ -133,8 +133,10 @@ extern "C" PyObject* PyImport_ExecCodeModuleEx(const char* name, PyObject* co, c
     }
 }
 
-extern "C" Box* import(int level, Box* from_imports, llvm::StringRef module_name) {
-    Box* rtn = PyImport_ImportModuleLevel(module_name.str().c_str(), getGlobalsDict(), NULL, from_imports, level);
+extern "C" Box* import(int level, Box* from_imports, Box* _module_name) {
+    assert(_module_name->cls == str_cls);
+    BoxedString* module_name = (BoxedString*)_module_name;
+    Box* rtn = PyImport_ImportModuleLevel(module_name->c_str(), getGlobalsDict(), NULL, from_imports, level);
     if (!rtn)
         throwCAPIException();
     return rtn;

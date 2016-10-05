@@ -45,7 +45,7 @@ void _printStacktrace();
 // to see if they are getting called from jitted code.  If we inline them into a function that
 // got called from jitted code, they might incorrectly think that they are a rewritable entrypoint.
 
-extern "C" Box* deopt(BST_expr* expr, Box* value) __attribute__((noinline));
+extern "C" Box* deopt(Box* value) __attribute__((noinline));
 
 // helper function for raising from the runtime:
 void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__))
@@ -94,7 +94,7 @@ extern "C" void assignSlice(PyObject* u, PyObject* v, PyObject* w, PyObject* x);
 extern "C" Box* getclsattr(Box* obj, BoxedString* attr) __attribute__((noinline));
 extern "C" Box* getclsattrMaybeNonstring(Box* obj, Box* attr) __attribute__((noinline));
 extern "C" Box* unaryop(Box* operand, int op_type) __attribute__((noinline));
-extern "C" Box* importFrom(Box* obj, BoxedString* attr) __attribute__((noinline));
+extern "C" Box* importFrom(Box* obj, Box* attr) __attribute__((noinline));
 extern "C" Box* importStar(Box* from_module, Box* to_globals) __attribute__((noinline));
 extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size, Box** out_keep_alive);
 extern "C" void assertNameDefined(bool b, const char* name, BoxedClass* exc_cls, bool local_var_msg);
