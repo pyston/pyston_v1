@@ -147,6 +147,8 @@ PyAPI_FUNC(void) PyFloat_Fini(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyOS_FiniInterrupts(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyByteArray_Fini(void) PYSTON_NOEXCEPT;
 
+PyAPI_DATA(PyThreadState *) _Py_Finalizing;
+
 /* Stuff with no proper home (yet) */
 PyAPI_FUNC(char *) PyOS_Readline(FILE *, FILE *, const char *) PYSTON_NOEXCEPT;
 PyAPI_DATA(int) (*PyOS_InputHook)(void);

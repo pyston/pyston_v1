@@ -89,6 +89,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     shamodule.c
     signalmodule.c
     socketmodule.c
+    spwdmodule.c
     statement.c
     stringio.c
     stropmodule.c

@@ -372,6 +372,7 @@ class CCompiler:
         if before:
             cc_args[:0] = before
 
+        # Pyston change:
         if not any ('scipy' in s for s in pp_opts):
             import sysconfig
             if '-DNDEBUG' not in sysconfig.get_config_var('CFLAGS'):

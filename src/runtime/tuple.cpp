@@ -77,12 +77,20 @@ Box* tupleGetitemInt(BoxedTuple* self, BoxedInt* slice) {
 }
 
 extern "C" BORROWED(PyObject*) PyTuple_GetItem(PyObject* op, Py_ssize_t i) noexcept {
-    RELEASE_ASSERT(PyTuple_Check(op), "");
-    RELEASE_ASSERT(i >= 0, ""); // unlike tuple.__getitem__, PyTuple_GetItem doesn't do index wrapping
+    if (!PyTuple_Check(op)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    if (i < 0 || i >= Py_SIZE(op)) {
+        PyErr_SetString(PyExc_IndexError, "tuple index out of range");
+        return NULL;
+    }
+
     try {
         return tupleGetitemUnboxedBorrowed(static_cast<BoxedTuple*>(op), i);
     } catch (ExcInfo e) {
-        abort();
+        setCAPIException(e);
+        return NULL;
     }
 }
 

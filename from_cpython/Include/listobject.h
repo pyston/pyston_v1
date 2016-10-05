@@ -44,7 +44,7 @@ PyAPI_DATA(PyTypeObject*) list_cls;
 #define PyList_Type (*list_cls)
 
 #define PyList_Check(op) \
-		PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_LIST_SUBCLASS)
+    PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_LIST_SUBCLASS)
 #define PyList_CheckExact(op) (Py_TYPE(op) == &PyList_Type)
 
 PyAPI_FUNC(PyObject *) PyList_New(Py_ssize_t size) PYSTON_NOEXCEPT;

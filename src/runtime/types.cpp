@@ -84,6 +84,7 @@ extern "C" void init_sre();
 extern "C" void init_ssl();
 extern "C" void initstrop();
 extern "C" void init_struct();
+extern "C" void initspwd();
 extern "C" void inittime();
 extern "C" void initunicodedata();
 extern "C" void init_weakref();
@@ -4124,6 +4125,7 @@ struct _inittab _PyImport_Inittab[] = { { "array", initarray },
                                         { "_ssl", init_ssl },
                                         { "strop", initstrop },
                                         { "_struct", init_struct },
+                                        { "spwd", initspwd },
                                         { "time", inittime },
                                         { "unicodedata", initunicodedata },
                                         { "_warnings", _PyWarnings_Init },
