@@ -29,7 +29,6 @@
 
 namespace pyston {
 
-class BST_expr;
 class BST_stmt;
 class CFGBlock;
 class GCBuilder;
@@ -37,6 +36,7 @@ class IREmitter;
 
 struct UnwindInfo {
 public:
+    BoxedCode* code;
     BST_stmt* current_stmt;
 
     llvm::BasicBlock* exc_dest;
@@ -46,15 +46,15 @@ public:
 
     bool hasHandler() const { return exc_dest != NULL; }
 
-    UnwindInfo(BST_stmt* current_stmt, llvm::BasicBlock* exc_dest, bool is_after_deopt = false)
-        : current_stmt(current_stmt), exc_dest(exc_dest), is_after_deopt(is_after_deopt) {}
+    UnwindInfo(BoxedCode* code, BST_stmt* current_stmt, llvm::BasicBlock* exc_dest, bool is_after_deopt = false)
+        : code(code), current_stmt(current_stmt), exc_dest(exc_dest), is_after_deopt(is_after_deopt) {}
 
     ExceptionStyle preferredExceptionStyle() const;
 
     // Risky!  This means that we can't unwind from this location, and should be used in the
     // rare case that there are language-specific reasons that the statement should not unwind
     // (ex: loading function arguments into the appropriate scopes).
-    static UnwindInfo cantUnwind() { return UnwindInfo(NULL, NULL); }
+    static UnwindInfo cantUnwind() { return UnwindInfo(NULL, NULL, NULL); }
 };
 
 // TODO get rid of this
@@ -119,7 +119,7 @@ public:
     // virtual void checkAndPropagateCapiException(const UnwindInfo& unw_info, llvm::Value* returned_val,
     // llvm::Value* exc_val, bool double_check = false) = 0;
 
-    virtual llvm::Value* createDeopt(BST_stmt* current_stmt, BST_expr* node, llvm::Value* node_value) = 0;
+    virtual llvm::Value* createDeopt(BST_stmt* current_stmt, llvm::Value* node_value) = 0;
 
     virtual BORROWED(Box*) getIntConstant(int64_t n) = 0;
     virtual BORROWED(Box*) getFloatConstant(double d) = 0;

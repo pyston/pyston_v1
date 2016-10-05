@@ -203,8 +203,6 @@ class BST_Call;
 IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator = NULL);
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                                CFGBlock* myblock, TypeAnalysis* types);
-
-std::vector<BoxedString*>* getKeywordNameStorage(BST_Call* node);
 }
 
 #endif

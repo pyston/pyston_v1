@@ -151,10 +151,6 @@ void initGlobalFuncs(GlobalState& g) {
     assert(g.llvm_bststmt_type_ptr);
     g.llvm_bststmt_type_ptr = g.llvm_bststmt_type_ptr->getPointerTo();
 
-    g.llvm_bstexpr_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BST_expr");
-    assert(g.llvm_bstexpr_type_ptr);
-    g.llvm_bstexpr_type_ptr = g.llvm_bstexpr_type_ptr->getPointerTo();
-
     // The LLVM vector type for the arguments that we pass to runtimeCall and related functions.
     // It will be a pointer to a type named something like class.std::vector or
     // class.std::vector.##. We can figure out exactly what it is by looking at the last

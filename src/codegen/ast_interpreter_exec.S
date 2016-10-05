@@ -43,7 +43,7 @@ executeInnerAndSetupFrame:
 // Our unwinder must be able to detect deopt frames and by writting this wrapper in assembler we can be sure to correctly
 // detect the frame independent of compiler optimizations because this function will always appear in the call stack.
 //
-// Box* astInterpretDeopt(FunctionMetadata* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+// Box* astInterpretDeopt(FunctionMetadata* cf, AST_stmt* enclosing_stmt, Box* expr_val,
 //                        FrameStackState frame_state);
 .text
 .globl astInterpretDeopt
