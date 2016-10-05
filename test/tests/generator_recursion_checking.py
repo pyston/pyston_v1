@@ -7,5 +7,5 @@ def test(n):
         g.next()
         l.append(g)
 
-for i in xrange(1000):
+for i in xrange(3):
     test(3500)

@@ -1035,12 +1035,14 @@ public:
 
     DEFAULT_CLASS_SIMPLE(dict_cls, true);
 
-    BORROWED(Box*) getOrNull(Box* k) {
-        const auto& p = d.find(BoxAndHash(k));
+    BORROWED(Box*) getOrNull(BoxAndHash k) {
+        const auto& p = d.find(k);
         if (p != d.end())
             return p->second;
         return NULL;
     }
+
+    BORROWED(Box*) getOrNull(Box* k) { return getOrNull(BoxAndHash(k)); }
 
     class iterator {
     private:
