@@ -2483,7 +2483,7 @@ public:
         } else {
             cfg->placeBlock(break_block);
             curblock = break_block;
-            push_back(makeKill(itername));
+            push_back(makeKill(itername.is));
             pushJump(end_block);
         }
 
