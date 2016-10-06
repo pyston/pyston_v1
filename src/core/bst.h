@@ -978,11 +978,6 @@ public:
     virtual bool visit_unpackintoarray(BST_UnpackIntoArray* node);
     virtual bool visit_yield(BST_Yield* node);
 };
-
-// Given an BST node, return a vector of the node plus all its descendents.
-// This is useful for analyses that care more about the constituent nodes than the
-// exact tree structure; ex, finding all "global" directives.
-void flatten(llvm::ArrayRef<BST_stmt*> roots, std::vector<BST_stmt*>& output, bool expand_scopes);
-};
+}
 
 #endif

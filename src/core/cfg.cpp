@@ -3252,25 +3252,6 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
 
     assert(rtn->getStartingBlock()->idx == 0);
 
-    std::vector<BST_stmt*> flattened;
-    for (auto b : rtn->blocks)
-        flatten(b->body, flattened, true);
-
-    std::unordered_map<BST_stmt*, int> deduped;
-    bool no_dups = true;
-    for (auto e : flattened) {
-        deduped[e]++;
-        if (deduped[e] == 2) {
-            printf("Duplicated: ");
-            print_bst(e, visitor.code_constants);
-            printf("\n");
-            no_dups = false;
-        }
-    }
-    if (!no_dups)
-        rtn->print(visitor.code_constants);
-    assert(no_dups);
-
 // Uncomment this for some heavy checking to make sure that we don't forget
 // to set lineno.  It will catch a lot of things that don't necessarily
 // need to be fixed.
