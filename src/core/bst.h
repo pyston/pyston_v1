@@ -722,11 +722,14 @@ template <typename T> T* bst_cast(BST_stmt* node) {
     return static_cast<T*>(node);
 }
 
-
+class CodeConstants;
 class BSTVisitor {
 public:
-    BSTVisitor() {}
+    const CodeConstants& code_constants;
+    BSTVisitor(const CodeConstants& code_constants) : code_constants(code_constants) {}
     virtual ~BSTVisitor() {}
+
+    const CodeConstants& getCodeConstants() const { return code_constants; }
 
     // pseudo
     virtual bool visit_vreg(int* vreg, bool is_dst = false) { RELEASE_ASSERT(0, ""); }
@@ -788,7 +791,7 @@ public:
 class NoopBSTVisitor : public BSTVisitor {
 protected:
 public:
-    NoopBSTVisitor() {}
+    NoopBSTVisitor(const CodeConstants& code_constants) : BSTVisitor(code_constants) {}
     virtual ~NoopBSTVisitor() {}
 
     virtual bool visit_assert(BST_Assert* node) override { return false; }
@@ -848,7 +851,11 @@ public:
 class StmtVisitor {
 protected:
 public:
+    const CodeConstants& code_constants;
+    StmtVisitor(const CodeConstants& code_constants) : code_constants(code_constants) {}
     virtual ~StmtVisitor() {}
+
+    const CodeConstants& getCodeConstants() const { return code_constants; }
 
     virtual void visit_assert(BST_Assert* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_augbinop(BST_AugBinOp* node) { RELEASE_ASSERT(0, ""); }
@@ -904,20 +911,18 @@ public:
     virtual void visit_yield(BST_Yield* node) { RELEASE_ASSERT(0, ""); }
 };
 
-class CodeConstants;
 void print_bst(BST_stmt* bst, const CodeConstants& code_constants);
 
 class PrintVisitor : public BSTVisitor {
 private:
     llvm::raw_ostream& stream;
-    const CodeConstants& code_constants;
     int indent;
     void printIndent();
     void printOp(AST_TYPE::AST_TYPE op_type);
 
 public:
     PrintVisitor(const CodeConstants& code_constants, int indent, llvm::raw_ostream& stream)
-        : stream(stream), code_constants(code_constants), indent(indent) {}
+        : BSTVisitor(code_constants), stream(stream), indent(indent) {}
     virtual ~PrintVisitor() {}
     void flush() { stream.flush(); }
 

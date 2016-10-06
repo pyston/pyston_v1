@@ -61,7 +61,7 @@ TEST_F(AnalysisTest, augassign) {
     }
     assert(cfg);
 
-    std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
+    std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg, module_code->code_constants);
     auto&& vregs = cfg->getVRegInfo();
 
     //cfg->print();
@@ -105,7 +105,7 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     }
     assert(code);
     CFG* cfg = code->source->cfg;
-    std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg);
+    std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg, module_code->code_constants);
 
     // cfg->print();
 

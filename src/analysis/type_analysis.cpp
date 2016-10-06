@@ -89,17 +89,16 @@ private:
     ExprTypeMap& expr_types;
     TypeSpeculations& type_speculations;
     TypeAnalysis::SpeculationLevel speculation;
-    const CodeConstants& code_constants;
 
     BasicBlockTypePropagator(CFGBlock* block, TypeMap& initial, ExprTypeMap& expr_types,
                              TypeSpeculations& type_speculations, TypeAnalysis::SpeculationLevel speculation,
                              const CodeConstants& code_constants)
-        : block(block),
+        : StmtVisitor(code_constants),
+          block(block),
           sym_table(initial),
           expr_types(expr_types),
           type_speculations(type_speculations),
-          speculation(speculation),
-          code_constants(code_constants) {}
+          speculation(speculation) {}
 
     void run() {
         for (int i = 0; i < block->body.size(); i++) {

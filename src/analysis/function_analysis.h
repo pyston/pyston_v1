@@ -34,6 +34,7 @@ class LivenessBBVisitor;
 class LivenessAnalysis {
 private:
     CFG* cfg;
+    const CodeConstants& code_constants;
 
     friend class LivenessBBVisitor;
     typedef llvm::DenseMap<CFGBlock*, std::unique_ptr<LivenessBBVisitor>> LivenessCacheMap;
@@ -42,10 +43,11 @@ private:
     VRegMap<llvm::DenseMap<CFGBlock*, bool>> result_cache;
 
 public:
-    LivenessAnalysis(CFG* cfg);
+    LivenessAnalysis(CFG* cfg, const CodeConstants& code_constants);
     ~LivenessAnalysis();
 
     bool isLiveAtEnd(int vreg, CFGBlock* block);
+    const CodeConstants& getCodeConstants() const { return code_constants; }
 };
 
 class PhiAnalysis;
@@ -66,7 +68,7 @@ private:
 public:
     DefinednessAnalysis() {}
 
-    void run(VRegMap<DefinitionLevel> initial_map, CFGBlock* initial_block);
+    void run(const CodeConstants& code_constants, VRegMap<DefinitionLevel> initial_map, CFGBlock* initial_block);
 
     DefinitionLevel isDefinedAtEnd(int vreg, CFGBlock* block);
     const VRegSet& getDefinedVregsAtEnd(CFGBlock* block);
@@ -100,7 +102,7 @@ public:
     bool isPotentiallyUndefinedAt(int vreg, CFGBlock* block);
 };
 
-std::unique_ptr<LivenessAnalysis> computeLivenessInfo(CFG*);
+std::unique_ptr<LivenessAnalysis> computeLivenessInfo(CFG*, const CodeConstants&);
 std::unique_ptr<PhiAnalysis> computeRequiredPhis(const ParamNames&, CFG*, LivenessAnalysis*);
 std::unique_ptr<PhiAnalysis> computeRequiredPhis(const OSREntryDescriptor*, LivenessAnalysis*);
 }

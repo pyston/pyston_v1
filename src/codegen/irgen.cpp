@@ -344,7 +344,8 @@ private:
     SymbolTable* sym_table;
     bool created_new_sym_table;
 
-    SymTableDstVRegDeleter(SymbolTable* sym_table) : sym_table(sym_table), created_new_sym_table(false) {}
+    SymTableDstVRegDeleter(const CodeConstants& code_constants, SymbolTable* sym_table)
+        : NoopBSTVisitor(code_constants), sym_table(sym_table), created_new_sym_table(false) {}
 
 protected:
     bool visit_vreg(int* vreg, bool is_dst = false) override {
@@ -360,9 +361,9 @@ protected:
     }
 
 public:
-    static std::pair<SymbolTable*, bool /* created_new_sym_table */> removeDestVRegsFromSymTable(SymbolTable* sym_table,
-                                                                                                 BST_Invoke* stmt) {
-        SymTableDstVRegDeleter visitor(sym_table);
+    static std::pair<SymbolTable*, bool /* created_new_sym_table */>
+    removeDestVRegsFromSymTable(const CodeConstants& code_constants, SymbolTable* sym_table, BST_Invoke* stmt) {
+        SymTableDstVRegDeleter visitor(code_constants, sym_table);
         stmt->accept(&visitor);
         return std::make_pair(visitor.sym_table, visitor.created_new_sym_table);
     }
@@ -738,7 +739,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 bool created_new_sym_table = false;
                 if (last_inst->type == BST_TYPE::Invoke && bst_cast<BST_Invoke>(last_inst)->exc_dest == block)
                     std::tie(sym_table, created_new_sym_table) = SymTableDstVRegDeleter::removeDestVRegsFromSymTable(
-                        sym_table, bst_cast<BST_Invoke>(last_inst));
+                        irstate->getCodeConstants(), sym_table, bst_cast<BST_Invoke>(last_inst));
 
                 generator->copySymbolsFrom(sym_table);
                 for (auto&& p : *definedness_tables[pred]) {
@@ -1118,7 +1119,7 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(BoxedCode* code, SourceI
         computeBlockSetClosure(blocks);
     }
 
-    LivenessAnalysis* liveness = source->getLiveness();
+    LivenessAnalysis* liveness = source->getLiveness(code->code_constants);
     std::unique_ptr<PhiAnalysis> phis;
 
     if (entry_descriptor)

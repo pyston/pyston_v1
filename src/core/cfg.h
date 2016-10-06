@@ -168,7 +168,8 @@ public:
     int getNumOfCrossBlockVRegs() const { return num_vregs_cross_block; }
 
     bool hasVRegsAssigned() const { return num_vregs != -1; }
-    void assignVRegs(CFG* cfg, const ParamNames& param_names, llvm::DenseMap<int*, InternedString>& id_vreg);
+    void assignVRegs(const CodeConstants& code_constants, CFG* cfg, const ParamNames& param_names,
+                     llvm::DenseMap<int*, InternedString>& id_vreg);
 };
 
 // Control Flow Graph

@@ -182,6 +182,7 @@ public:
     Box** getVRegs() { return vregs; }
     const ScopingResults& getScopeInfo() { return scope_info; }
     const CodeConstants& getCodeConstants() { return getCode()->code_constants; }
+    LivenessAnalysis* getLiveness() { return source_info->getLiveness(getCodeConstants()); }
 
     void addSymbol(int vreg, Box* value, bool allow_duplicates);
     void setGenerator(Box* gen);
@@ -487,7 +488,7 @@ void ASTInterpreter::doStore(int vreg, STOLEN(Value) value) {
         return;
     }
     if (jit) {
-        bool is_live = source_info->getLiveness()->isLiveAtEnd(vreg, current_block);
+        bool is_live = getLiveness()->isLiveAtEnd(vreg, current_block);
         if (is_live)
             jit->emitSetLocal(vreg, value);
         else
@@ -658,7 +659,7 @@ Box* ASTInterpreter::doOSR(BST_Jump* node) {
     static StatCounter ast_osrs("num_ast_osrs");
     ast_osrs.log();
 
-    LivenessAnalysis* liveness = source_info->getLiveness();
+    LivenessAnalysis* liveness = getLiveness();
     std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(getCode()->param_names, source_info->cfg, liveness);
 
     llvm::SmallVector<int, 16> dead_vregs;
@@ -1538,7 +1539,7 @@ Value ASTInterpreter::getVReg(int vreg, bool is_kill) {
         if (is_kill) {
             is_live = false;
         } else {
-            is_live = source_info->getLiveness()->isLiveAtEnd(vreg, current_block);
+            is_live = getLiveness()->isLiveAtEnd(vreg, current_block);
         }
 
         if (is_live) {
@@ -1595,7 +1596,7 @@ Value ASTInterpreter::visit_loadname(BST_LoadName* node) {
                 bool is_live = true;
                 if (node->lookup_type == ScopeInfo::VarScopeType::FAST) {
                     assert(node->vreg >= 0);
-                    is_live = source_info->getLiveness()->isLiveAtEnd(node->vreg, current_block);
+                    is_live = getLiveness()->isLiveAtEnd(node->vreg, current_block);
                 }
 
                 if (is_live)
@@ -1696,7 +1697,7 @@ void ASTInterpreter::visit_storename(BST_StoreName* node) {
         if (jit) {
             bool is_live = true;
             if (!closure)
-                is_live = source_info->getLiveness()->isLiveAtEnd(node->vreg, current_block);
+                is_live = getLiveness()->isLiveAtEnd(node->vreg, current_block);
             if (is_live) {
                 if (closure) {
                     jit->emitSetLocalClosure(node, value);

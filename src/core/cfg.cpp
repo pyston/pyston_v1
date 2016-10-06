@@ -2916,8 +2916,8 @@ public:
 
     enum Step { TrackBlockUsage = 0, UserVisible, CrossBlock, SingleBlockUse } step;
 
-    AssignVRegsVisitor(llvm::DenseMap<int*, InternedString>& id_vreg)
-        : current_block(0), next_vreg(0), id_vreg(id_vreg) {}
+    AssignVRegsVisitor(const CodeConstants& code_constants, llvm::DenseMap<int*, InternedString>& id_vreg)
+        : NoopBSTVisitor(code_constants), current_block(0), next_vreg(0), id_vreg(id_vreg) {}
 
     bool visit_vreg(int* vreg, bool is_dst = false) override {
         if (is_dst) {
@@ -3035,11 +3035,12 @@ public:
     }
 };
 
-void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, llvm::DenseMap<int*, InternedString>& id_vreg) {
+void VRegInfo::assignVRegs(const CodeConstants& code_constants, CFG* cfg, const ParamNames& param_names,
+                           llvm::DenseMap<int*, InternedString>& id_vreg) {
     assert(!hasVRegsAssigned());
 
     // warning: don't rearrange the steps, they need to be run in this exact order!
-    AssignVRegsVisitor visitor(id_vreg);
+    AssignVRegsVisitor visitor(code_constants, id_vreg);
     for (auto step : { AssignVRegsVisitor::TrackBlockUsage, AssignVRegsVisitor::UserVisible,
                        AssignVRegsVisitor::CrossBlock, AssignVRegsVisitor::SingleBlockUse }) {
         visitor.step = step;
@@ -3347,7 +3348,7 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
         }
     }
 
-    rtn->getVRegInfo().assignVRegs(rtn, param_names, visitor.id_vreg);
+    rtn->getVRegInfo().assignVRegs(visitor.code_constants, rtn, param_names, visitor.id_vreg);
 
 
     if (VERBOSITY("cfg") >= 2) {
