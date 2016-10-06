@@ -69,6 +69,10 @@ IRGenState::IRGenState(BoxedCode* code, CompiledFunction* cf, llvm::Function* fu
 IRGenState::~IRGenState() {
 }
 
+const CodeConstants& IRGenState::getCodeConstants() {
+    return code->code_constants;
+}
+
 llvm::Value* IRGenState::getPassedClosure() {
     assert(getScopeInfo().takesClosure());
     assert(passed_closure);
@@ -721,9 +725,9 @@ public:
         return rtn;
     }
 
-    Box* getIntConstant(int64_t n) override { return irstate->getSourceInfo()->parent_module->getIntConstant(n); }
+    Box* getIntConstant(int64_t n) override { return irstate->getCodeConstants().getIntConstant(n); }
 
-    Box* getFloatConstant(double d) override { return irstate->getSourceInfo()->parent_module->getFloatConstant(d); }
+    Box* getFloatConstant(double d) override { return irstate->getCodeConstants().getFloatConstant(d); }
 
     void refConsumed(llvm::Value* v, llvm::Instruction* inst) override {
         irstate->getRefcounts()->refConsumed(v, inst);
