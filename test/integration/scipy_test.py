@@ -64,12 +64,7 @@ print_progress_header("Setting up Cython...")
 if not os.path.exists(CYTHON_DIR):
 
     url = "https://github.com/cython/cython"
-    subprocess.check_call(["git", "clone", "--depth", "1", "--branch", "0.24", url], cwd=SRC_DIR)
-
-    if USE_CUSTOM_PATCHES:
-        PATCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "Cython-0.24.patch"))
-        subprocess.check_call(["patch", "-p1", "--input=" + PATCH_FILE], cwd=CYTHON_DIR)
-        print ">>> Applied Cython patch"
+    subprocess.check_call(["git", "clone", "--depth", "1", "--branch", "0.25a0", url], cwd=SRC_DIR)
 
     try:
         subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=CYTHON_DIR)
