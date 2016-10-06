@@ -1542,83 +1542,83 @@ public:
         return false;
     }
 
-    virtual bool visit_landingpad(BST_Landingpad* node) override {
+    virtual bool visit_landingpad(BST_Landingpad* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_locals(BST_Locals* node) override {
+    virtual bool visit_locals(BST_Locals* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_getiter(BST_GetIter* node) override {
+    virtual bool visit_getiter(BST_GetIter* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_importfrom(BST_ImportFrom* node) override {
+    virtual bool visit_importfrom(BST_ImportFrom* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_importname(BST_ImportName* node) override {
+    virtual bool visit_importname(BST_ImportName* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_importstar(BST_ImportStar* node) override {
+    virtual bool visit_importstar(BST_ImportStar* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_nonzero(BST_Nonzero* node) override {
+    virtual bool visit_nonzero(BST_Nonzero* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_checkexcmatch(BST_CheckExcMatch* node) override {
+    virtual bool visit_checkexcmatch(BST_CheckExcMatch* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_setexcinfo(BST_SetExcInfo* node) override {
+    virtual bool visit_setexcinfo(BST_SetExcInfo* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_uncacheexcinfo(BST_UncacheExcInfo* node) override {
+    virtual bool visit_uncacheexcinfo(BST_UncacheExcInfo* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_hasnext(BST_HasNext* node) override {
+    virtual bool visit_hasnext(BST_HasNext* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_printexpr(BST_PrintExpr* node) override {
+    virtual bool visit_printexpr(BST_PrintExpr* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_loadname(BST_LoadName* node) override {
+    virtual bool visit_loadname(BST_LoadName* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_loadattr(BST_LoadAttr* node) override {
+    virtual bool visit_loadattr(BST_LoadAttr* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_loadsub(BST_LoadSub* node) override {
+    virtual bool visit_loadsub(BST_LoadSub* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_loadsubslice(BST_LoadSubSlice* node) override {
+    virtual bool visit_loadsubslice(BST_LoadSubSlice* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_storename(BST_StoreName* node) override {
+    virtual bool visit_storename(BST_StoreName* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_storesub(BST_StoreSub* node) override {
+    virtual bool visit_storesub(BST_StoreSub* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_storesubslice(BST_StoreSubSlice* node) override {
+    virtual bool visit_storesubslice(BST_StoreSubSlice* node) {
         output->push_back(node);
         return false;
     }
-    virtual bool visit_storeattr(BST_StoreAttr* node) override {
+    virtual bool visit_storeattr(BST_StoreAttr* node) {
         output->push_back(node);
         return false;
     }

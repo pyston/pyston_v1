@@ -113,3 +113,26 @@ def f():
     pass
 """ in globals()
 assert type(globals()['f'].__globals__) == type(globals())
+
+
+
+def f(self):
+    pass
+
+class C(object):
+    pass
+
+c = C()
+
+import re
+def s(o):
+    return re.sub('0x[0-9a-f]+', '', str(o))
+
+print s(f.__get__(c))
+print s(f.__get__(c, C))
+print s(f.__get__(c, c))
+
+print f.__get__(c)()
+print f.__get__(c, C)()
+print f.__get__(c, None)()
+print f.__get__(c, c)()

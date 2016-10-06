@@ -2419,6 +2419,7 @@ public:
         curblock->connectTo(test_false);
 
         CFGBlock* loop_block = cfg->addBlock();
+        CFGBlock* break_block = cfg->addDeferredBlock();
         CFGBlock* end_block = cfg->addDeferredBlock();
         CFGBlock* else_block = cfg->addDeferredBlock();
 
@@ -2429,8 +2430,7 @@ public:
         curblock = test_false;
         pushJump(else_block);
 
-        // TODO: need to del the iter_name when break'ing out of the loop
-        pushLoopContinuation(test_block, end_block);
+        pushLoopContinuation(test_block, break_block);
 
         curblock = loop_block;
         TmpValue next_name = makeCallAttr(_dup(itername), internString("next"), true);
@@ -2477,6 +2477,15 @@ public:
         }
         if (curblock)
             pushJump(end_block);
+
+        if (break_block->predecessors.size() == 0) {
+            delete break_block;
+        } else {
+            cfg->placeBlock(break_block);
+            curblock = break_block;
+            push_back(makeKill(itername.is));
+            pushJump(end_block);
+        }
 
         if (end_block->predecessors.size() == 0) {
             delete end_block;

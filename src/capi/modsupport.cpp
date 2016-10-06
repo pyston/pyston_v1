@@ -434,7 +434,13 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
         }
     }
 
-    BoxedModule* module = createModule(autoDecref(boxString(name)), NULL, doc);
+    BoxedModule* module;
+    try {
+        module = createModule(autoDecref(boxString(name)), NULL, doc);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 
     // Pass self as is, even if NULL we are not allowed to change it to None
     Box* passthrough = static_cast<Box*>(self);

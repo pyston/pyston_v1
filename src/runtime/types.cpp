@@ -1097,7 +1097,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
     }
 
     if (rewrite_args) {
-        if (cls->tp_new == object_cls->tp_new && cls->tp_init != object_cls->tp_init) {
+        if (cls->tp_new == object_cls->tp_new && cls->tp_init != object_cls->tp_init
+            && !(cls->tp_flags & Py_TPFLAGS_IS_ABSTRACT)) {
             // Fast case: if we are calling object_new, we normally doesn't look at the arguments at all.
             // (Except in the case when init_attr != object_init, in which case object_new looks at the number
             // of arguments and throws an exception.)
@@ -1143,7 +1144,8 @@ static Box* typeCallInner(CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Bo
             }
         }
     } else {
-        if (cls->tp_new == object_cls->tp_new && cls->tp_init != object_cls->tp_init) {
+        if (cls->tp_new == object_cls->tp_new && cls->tp_init != object_cls->tp_init
+            && !(cls->tp_flags & Py_TPFLAGS_IS_ABSTRACT)) {
             made = objectNewNoArgs(cls);
             assert(made);
         } else
@@ -4539,8 +4541,9 @@ void setupRuntime() {
     function_cls->giveAttrMember("__doc__", T_OBJECT, offsetof(BoxedFunction, doc), false);
     function_cls->giveAttrBorrowed("func_doc", function_cls->getattr(getStaticString("__doc__")));
     function_cls->giveAttrDescriptor("__globals__", function_globals, NULL);
-    function_cls->giveAttr("__get__",
-                           new BoxedFunction(BoxedCode::create((void*)functionGet, UNKNOWN, 3, "function.__get__")));
+    function_cls->giveAttr(
+        "__get__",
+        new BoxedFunction(BoxedCode::create((void*)functionGet, UNKNOWN, 3, "function.__get__"), { Py_None }));
     function_cls->giveAttr("__call__", new BoxedFunction(BoxedCode::create((void*)functionCall, UNKNOWN, 1, true, true,
                                                                            "function.__call__")));
     function_cls->giveAttr("__nonzero__", new BoxedFunction(BoxedCode::create((void*)functionNonzero, BOXED_BOOL, 1,
@@ -4722,7 +4725,7 @@ void setupRuntime() {
     TRACK_ALLOCATIONS = true;
 }
 
-BORROWED(BoxedModule*) createModule(BoxedString* name, const char* fn, const char* doc) noexcept {
+BORROWED(BoxedModule*) createModule(BoxedString* name, const char* fn, const char* doc) {
     assert((!fn || strlen(fn)) && "probably wanted to set the fn to <stdin>?");
 
     BoxedDict* d = getSysModulesDict();
@@ -4844,7 +4847,15 @@ extern "C" void Py_Finalize() noexcept {
             b->getHCAttrsPtr()->_clearRaw();
             Py_CLEAR(b->tp_mro);
         }
-        Py_DECREF(b);
+
+        // Try to support extensions that get away with having one-too-few refs to their class
+        // (such as google protobufs)
+        if (b->ob_refcnt == 0) {
+            RELEASE_ASSERT(!b->is_pyston_class, "%s", b->tp_name);
+            RELEASE_ASSERT((b->tp_flags & Py_TPFLAGS_HEAPTYPE) == 0, "%s", b->tp_name);
+        } else {
+            Py_DECREF(b);
+        }
     }
 
     clearAllICs();

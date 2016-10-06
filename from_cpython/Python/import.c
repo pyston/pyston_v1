@@ -2949,21 +2949,34 @@ PyImport_Import(PyObject *module_name)
    importing modules.
 */
 
-// Pyston change: we don't support get_magic
-#if 0
+// Pyston change: there is a surprising number of custom pyc-reading and -writing
+// code out there that wants to use imp.get_magic.  If we simply remove imp.get_magic,
+// that code will tend to fail in unrecoverable ways.  While hacky, the best-working option
+// found so far seems to be to have imp.get_magic exist but to return a changing value so
+// that the check will never succeed.
 static PyObject *
 imp_get_magic(PyObject *self, PyObject *noargs)
 {
-    char buf[4];
+    static int counter;
+    if (counter == 0) {
+        // something randomish
+        counter = 0x12345678 + (getpid() << 16);
+    }
+    // and that changes each time you call it
+    counter++;
 
+    char buf[4];
+    memcpy(buf, &counter, 4);
+
+#if 0
     buf[0] = (char) ((pyc_magic >>  0) & 0xff);
     buf[1] = (char) ((pyc_magic >>  8) & 0xff);
     buf[2] = (char) ((pyc_magic >> 16) & 0xff);
     buf[3] = (char) ((pyc_magic >> 24) & 0xff);
+#endif
 
     return PyString_FromStringAndSize(buf, 4);
 }
-#endif
 
 static PyObject *
 imp_get_suffixes(PyObject *self, PyObject *noargs)
@@ -3329,8 +3342,7 @@ On platforms without threads, this function does nothing.");
 static PyMethodDef imp_methods[] = {
     {"reload",           imp_reload,       METH_O,       doc_reload},
     {"find_module",      imp_find_module,  METH_VARARGS, doc_find_module},
-    // Pyston change: we don't support this function
-    // {"get_magic",        imp_get_magic,    METH_NOARGS,  doc_get_magic},
+    {"get_magic",        imp_get_magic,    METH_NOARGS,  doc_get_magic},
     {"get_suffixes", imp_get_suffixes, METH_NOARGS,  doc_get_suffixes},
     {"load_module",      imp_load_module,  METH_VARARGS, doc_load_module},
     {"new_module",       imp_new_module,   METH_VARARGS, doc_new_module},

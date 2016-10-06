@@ -360,10 +360,23 @@ extern "C" BORROWED(PyObject*) PyDict_GetItem(PyObject* dict, PyObject* key) noe
     if (PyDict_Check(dict)) {
         BoxedDict* d = static_cast<BoxedDict*>(dict);
 
+        BoxAndHash h;
+        try {
+            h = BoxAndHash(key);
+        } catch (ExcInfo e) {
+            e.clear();
+            return NULL;
+        }
+
         /* preserve the existing exception */
         PyObject* err_type, *err_value, *err_tb;
         PyErr_Fetch(&err_type, &err_value, &err_tb);
-        Box* b = d->getOrNull(key);
+        Box* b = NULL;
+        try {
+            b = d->getOrNull(h);
+        } catch (ExcInfo e) {
+            e.clear();
+        }
         /* ignore errors */
         PyErr_Restore(err_type, err_value, err_tb);
         return b;

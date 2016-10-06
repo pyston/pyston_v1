@@ -150,7 +150,7 @@ CompiledFunction* compileFunction(BoxedCode* code, FunctionSpecialization* spec,
 
         if (spec) {
             ss << "\033[" << colors[(int)effort] << ";1mJIT'ing " << code->filename->s() << ":" << name->s()
-               << " with signature (";
+               << " (starting at line " << code->firstlineno << ") with signature (";
             for (int i = 0; i < spec->arg_types.size(); i++) {
                 if (i > 0)
                     ss << ", ";

@@ -619,6 +619,8 @@ int _PyArg_ParseSingle_SizeT(PyObject* obj, int arg_idx, const char* fname, cons
     return r;
 }
 
+extern PyTypeObject* attrwrapper_cls;
+
 /* Convert a non-tuple argument.  Return NULL if conversion went OK,
    or a string with a message describing the failure.  The message is
    formatted as "must be <desired type>, not <actual type>".
@@ -1279,7 +1281,7 @@ convertsimple(PyObject *arg, const char **p_format, va_list *p_va, int flags,
             type = va_arg(*p_va, PyTypeObject*);
             p = va_arg(*p_va, PyObject **);
             format++;
-            if (PyType_IsSubtype(arg->ob_type, type))
+            if (PyType_IsSubtype(arg->ob_type, type) || /* Pyston hack */ (arg->ob_type == attrwrapper_cls && type == &PyDict_Type))
                 *p = arg;
             else
                 return converterr(type->tp_name, arg, msgbuf, bufsize);

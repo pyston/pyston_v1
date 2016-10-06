@@ -83,6 +83,9 @@ typedef struct _ts {
     int trash_delete_nesting;
     PyObject *trash_delete_later;
 
+    PyObject *async_exc; /* Asynchronous exception to raise */
+    long thread_id; /* Thread id where this tstate was created */
+
     // Pyston change:
     // Pyston note: additions in here need to be mirrored in PyThreadState_Clear
 #if 0
@@ -108,9 +111,6 @@ typedef struct _ts {
      * profilers (like psyco.jit()), although nothing in the core uses it.
      */
     int tick_counter;
-
-    PyObject *async_exc; /* Asynchronous exception to raise */
-    long thread_id; /* Thread id where this tstate was created */
 
     /* XXX signal handlers should also be here */
 #endif
