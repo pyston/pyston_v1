@@ -694,6 +694,9 @@ void BoxedCode::addVersion(void* f, ConcreteCompilerType* rtn_type, const std::v
 }
 
 bool BoxedCode::tryDeallocatingTheBJitCode() {
+    if (code_blocks.empty())
+        return true;
+
     // we can only delete the code object if we are not executing it currently
     assert(bjit_num_inside >= 0);
     if (bjit_num_inside != 0) {

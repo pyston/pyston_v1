@@ -92,6 +92,7 @@ public:
 
     CompiledFunction* getCurFunction() { return cf; }
     BoxedCode* getCode() { return code; }
+    const CodeConstants& getCodeConstants();
 
     ExceptionStyle getExceptionStyle() { return cf->exception_style; }
 

@@ -27,6 +27,8 @@
 #include "core/bst.h"
 #include "core/options.h"
 #include "core/types.h"
+#include "runtime/complex.h"
+#include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -185,7 +187,7 @@ void CFGBlock::unconnectFrom(CFGBlock* successor) {
                                   successor->predecessors.end());
 }
 
-void CFGBlock::print(const ConstantVRegInfo& constant_vregs, llvm::raw_ostream& stream) {
+void CFGBlock::print(const CodeConstants& code_constants, llvm::raw_ostream& stream) {
     stream << "Block " << idx;
     if (info)
         stream << " '" << info << "'";
@@ -200,7 +202,7 @@ void CFGBlock::print(const ConstantVRegInfo& constant_vregs, llvm::raw_ostream& 
     }
     stream << "\n";
 
-    PrintVisitor pv(constant_vregs, 4, stream);
+    PrintVisitor pv(code_constants, 4, stream);
     for (int j = 0; j < body.size(); j++) {
         stream << "    ";
         body[j]->accept(&pv);
@@ -246,10 +248,10 @@ public:
                               AST* orig_node);
 };
 
-static std::pair<CFG*, ConstantVRegInfo> computeCFG(llvm::ArrayRef<AST_stmt*> body, AST_TYPE::AST_TYPE ast_type,
-                                                    int lineno, AST_arguments* args, BoxedString* filename,
-                                                    SourceInfo* source, const ParamNames& param_names,
-                                                    ScopeInfo* scoping, ModuleCFGProcessor* cfgizer);
+static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body, AST_TYPE::AST_TYPE ast_type,
+                                                 int lineno, AST_arguments* args, BoxedString* filename,
+                                                 SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
+                                                 ModuleCFGProcessor* cfgizer);
 
 // This keeps track of the result of an instruction it's either a name, const or undefined.
 struct TmpValue {
@@ -362,15 +364,25 @@ private:
     CFGBlock* curblock;
     std::vector<ContInfo> continuations;
     std::vector<ExcBlockInfo> exc_handlers;
+
+    // maps constants to their vreg number
     llvm::DenseMap<Box*, int> consts;
-    ConstantVRegInfo constant_vregs;
+    CodeConstants code_constants;
+
+    llvm::StringMap<BoxedString*> str_constants;
+    llvm::StringMap<Box*> unicode_constants;
+    // I'm not sure how well it works to use doubles as hashtable keys; thankfully
+    // it's not a big deal if we get misses.
+    std::unordered_map<int64_t, Box*> imaginary_constants;
+    llvm::StringMap<Box*> long_constants;
+    llvm::DenseMap<InternedString, int> interned_string_constants;
 
     unsigned int next_var_index = 0;
 
-    friend std::pair<CFG*, ConstantVRegInfo> computeCFG(llvm::ArrayRef<AST_stmt*> body, AST_TYPE::AST_TYPE ast_type,
-                                                        int lineno, AST_arguments* args, BoxedString* filename,
-                                                        SourceInfo* source, const ParamNames& param_names,
-                                                        ScopeInfo* scoping, ModuleCFGProcessor* cfgizer);
+    friend std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body, AST_TYPE::AST_TYPE ast_type,
+                                                     int lineno, AST_arguments* args, BoxedString* filename,
+                                                     SourceInfo* source, const ParamNames& param_names,
+                                                     ScopeInfo* scoping, ModuleCFGProcessor* cfgizer);
 
 public:
     CFGVisitor(BoxedString* filename, SourceInfo* source, InternedStringPool& stringpool, ScopeInfo* scoping,
@@ -513,21 +525,44 @@ private:
         auto it = consts.find(o);
         if (it != consts.end())
             return it->second;
-        int vreg = constant_vregs.addConstant(o);
+        int vreg = code_constants.createVRegEntryForConstant(o);
         consts[o] = vreg;
         return vreg;
+    }
+
+    static int64_t getDoubleBits(double d) {
+        int64_t rtn;
+        static_assert(sizeof(rtn) == sizeof(d), "");
+        memcpy(&rtn, &d, sizeof(d));
+        return rtn;
+    }
+
+    TmpValue makeNum(int64_t n, int lineno) {
+        Box* o = code_constants.getIntConstant(n);
+        int vreg_const = addConst(o);
+        return TmpValue(vreg_const, lineno);
     }
 
     TmpValue remapNum(AST_Num* num) {
         Box* o = NULL;
         if (num->num_type == AST_Num::INT) {
-            o = source->parent_module->getIntConstant(num->n_int);
+            o = code_constants.getIntConstant(num->n_int);
         } else if (num->num_type == AST_Num::FLOAT) {
-            o = source->parent_module->getFloatConstant(num->n_float);
+            o = code_constants.getFloatConstant(num->n_float);
         } else if (num->num_type == AST_Num::LONG) {
-            o = source->parent_module->getLongConstant(num->n_long);
+            Box*& r = long_constants[num->n_long];
+            if (!r) {
+                r = createLong(num->n_long);
+                code_constants.addOwnedRef(r);
+            }
+            o = r;
         } else if (num->num_type == AST_Num::COMPLEX) {
-            o = source->parent_module->getPureImaginaryConstant(num->n_float);
+            Box*& r = imaginary_constants[getDoubleBits(num->n_float)];
+            if (!r) {
+                r = createPureImaginary(num->n_float);
+                code_constants.addOwnedRef(r);
+            }
+            o = r;
         } else
             RELEASE_ASSERT(0, "not implemented");
 
@@ -535,35 +570,40 @@ private:
         return TmpValue(vreg_const, num->lineno);
     }
 
+    TmpValue makeStr(llvm::StringRef str, int lineno = 0) {
+        BoxedString*& o = str_constants[str];
+        // we always intern the string
+        if (!o) {
+            o = internStringMortal(str);
+            code_constants.addOwnedRef(o);
+        }
+        int vreg_const = addConst(o);
+        return TmpValue(vreg_const, lineno);
+    }
+
     TmpValue remapStr(AST_Str* str) {
         // TODO make this serializable
-        Box* o = NULL;
         if (str->str_type == AST_Str::STR) {
-            o = source->parent_module->getStringConstant(str->str_data, true);
+            return makeStr(str->str_data, str->lineno);
         } else if (str->str_type == AST_Str::UNICODE) {
-            o = source->parent_module->getUnicodeConstant(str->str_data);
-        } else {
-            RELEASE_ASSERT(0, "%d", str->str_type);
+            Box*& r = unicode_constants[str->str_data];
+            if (!r) {
+                r = decodeUTF8StringPtr(str->str_data);
+                code_constants.addOwnedRef(r);
+            }
+            return TmpValue(addConst(r), str->lineno);
         }
-
-        int vreg_const = addConst(o);
-        return TmpValue(vreg_const, str->lineno);
+        RELEASE_ASSERT(0, "%d", str->str_type);
     }
 
     TmpValue makeNum(int n, int lineno) {
-        Box* o = source->parent_module->getIntConstant(n);
+        Box* o = code_constants.getIntConstant(n);
         int vreg_const = addConst(o);
         return TmpValue(vreg_const, lineno);
     }
 
     TmpValue makeNone(int lineno) {
         int vreg_const = addConst(Py_None);
-        return TmpValue(vreg_const, lineno);
-    }
-
-    TmpValue makeStr(llvm::StringRef str, int lineno = 0) {
-        Box* o = source->parent_module->getStringConstant(str, true);
-        int vreg_const = addConst(o);
         return TmpValue(vreg_const, lineno);
     }
 
@@ -2855,11 +2895,11 @@ public:
     }
 };
 
-void CFG::print(const ConstantVRegInfo& constant_vregs, llvm::raw_ostream& stream) {
+void CFG::print(const CodeConstants& code_constants, llvm::raw_ostream& stream) {
     stream << "CFG:\n";
     stream << blocks.size() << " blocks\n";
     for (int i = 0; i < blocks.size(); i++)
-        blocks[i]->print(constant_vregs, stream);
+        blocks[i]->print(code_constants, stream);
     stream.flush();
 }
 
@@ -3047,10 +3087,10 @@ void VRegInfo::assignVRegs(CFG* cfg, const ParamNames& param_names, llvm::DenseM
 }
 
 
-static std::pair<CFG*, ConstantVRegInfo> computeCFG(llvm::ArrayRef<AST_stmt*> body, AST_TYPE::AST_TYPE ast_type,
-                                                    int lineno, AST_arguments* args, BoxedString* filename,
-                                                    SourceInfo* source, const ParamNames& param_names,
-                                                    ScopeInfo* scoping, ModuleCFGProcessor* cfgizer) {
+static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body, AST_TYPE::AST_TYPE ast_type,
+                                                 int lineno, AST_arguments* args, BoxedString* filename,
+                                                 SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
+                                                 ModuleCFGProcessor* cfgizer) {
     STAT_TIMER(t0, "us_timer_computecfg", 0);
 
     CFG* rtn = new CFG();
@@ -3139,7 +3179,7 @@ static std::pair<CFG*, ConstantVRegInfo> computeCFG(llvm::ArrayRef<AST_stmt*> bo
 
     if (VERBOSITY("cfg") >= 3) {
         printf("Before cfg checking and transformations:\n");
-        rtn->print(visitor.constant_vregs);
+        rtn->print(visitor.code_constants);
     }
 
 #ifndef NDEBUG
@@ -3167,7 +3207,7 @@ static std::pair<CFG*, ConstantVRegInfo> computeCFG(llvm::ArrayRef<AST_stmt*> bo
 
         if (b->predecessors.size() == 0) {
             if (b != rtn->getStartingBlock()) {
-                rtn->print(visitor.constant_vregs);
+                rtn->print(visitor.code_constants);
             }
             ASSERT(b == rtn->getStartingBlock(), "%d", b->idx);
         }
@@ -3222,13 +3262,13 @@ static std::pair<CFG*, ConstantVRegInfo> computeCFG(llvm::ArrayRef<AST_stmt*> bo
         deduped[e]++;
         if (deduped[e] == 2) {
             printf("Duplicated: ");
-            print_bst(e, visitor.constant_vregs);
+            print_bst(e, visitor.code_constants);
             printf("\n");
             no_dups = false;
         }
     }
     if (!no_dups)
-        rtn->print(visitor.constant_vregs);
+        rtn->print(visitor.code_constants);
     assert(no_dups);
 
 // Uncomment this for some heavy checking to make sure that we don't forget
@@ -3331,10 +3371,10 @@ static std::pair<CFG*, ConstantVRegInfo> computeCFG(llvm::ArrayRef<AST_stmt*> bo
 
     if (VERBOSITY("cfg") >= 2) {
         printf("Final cfg:\n");
-        rtn->print(visitor.constant_vregs, llvm::outs());
+        rtn->print(visitor.code_constants, llvm::outs());
     }
 
-    return std::make_pair(rtn, visitor.constant_vregs);
+    return std::make_pair(rtn, std::move(visitor.code_constants));
 }
 
 
@@ -3381,17 +3421,17 @@ BoxedCode* ModuleCFGProcessor::runRecursively(llvm::ArrayRef<AST_stmt*> body, Bo
     for (auto e : param_names.allArgsAsName())
         fillScopingInfo(e, scope_info);
 
-    ConstantVRegInfo constant_vregs;
-    std::tie(si->cfg, constant_vregs)
+    CodeConstants code_constants;
+    std::tie(si->cfg, code_constants)
         = computeCFG(body, ast_type, lineno, args, fn, si.get(), param_names, scope_info, this);
 
     BoxedCode* code;
     if (args)
         code = new BoxedCode(args->args.size(), args->vararg, args->kwarg, lineno, std::move(si),
-                             std::move(constant_vregs), std::move(param_names), fn, name,
+                             std::move(code_constants), std::move(param_names), fn, name,
                              autoDecref(getDocString(body)));
     else
-        code = new BoxedCode(0, false, false, lineno, std::move(si), std::move(constant_vregs), std::move(param_names),
+        code = new BoxedCode(0, false, false, lineno, std::move(si), std::move(code_constants), std::move(param_names),
                              fn, name, autoDecref(getDocString(body)));
 
     return code;
@@ -3403,7 +3443,7 @@ BoxedCode* computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future
         .runRecursively(ast->getBody(), ast->getName(), ast->lineno, nullptr, ast);
 }
 
-void printCFG(CFG* cfg, const ConstantVRegInfo& constant_vregs) {
-    cfg->print(constant_vregs);
+void printCFG(CFG* cfg, const CodeConstants& code_constants) {
+    cfg->print(code_constants);
 }
 }

@@ -1027,7 +1027,7 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(BoxedCode* code, SourceI
     assert((entry_descriptor != NULL) + (spec != NULL) == 1);
 
     if (VERBOSITY("irgen") >= 2)
-        source->cfg->print(code->constant_vregs);
+        source->cfg->print(code->code_constants);
 
     assert(g.cur_module == NULL);
 
@@ -1101,10 +1101,10 @@ std::pair<CompiledFunction*, llvm::Function*> doCompile(BoxedCode* code, SourceI
         speculation_level = TypeAnalysis::SOME;
     TypeAnalysis* types;
     if (entry_descriptor)
-        types = doTypeAnalysis(entry_descriptor, effort, speculation_level, code->constant_vregs);
+        types = doTypeAnalysis(entry_descriptor, effort, speculation_level, code->code_constants);
     else
         types = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort, speculation_level,
-                               code->constant_vregs);
+                               code->code_constants);
 
 
     _t2.split();

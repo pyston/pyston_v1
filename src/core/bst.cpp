@@ -754,8 +754,8 @@ void BST_MakeSlice::accept_stmt(StmtVisitor* v) {
     return v->visit_makeslice(this);
 }
 
-void print_bst(BST_stmt* bst, const ConstantVRegInfo& constant_vregs) {
-    PrintVisitor v(constant_vregs, 0, llvm::outs());
+void print_bst(BST_stmt* bst, const CodeConstants& code_constants) {
+    PrintVisitor v(code_constants, 0, llvm::outs());
     bst->accept(&v);
     v.flush();
 }
@@ -771,7 +771,7 @@ bool PrintVisitor::visit_vreg(int* vreg, bool is_dst) {
     if (*vreg != VREG_UNDEFINED) {
         stream << "%" << *vreg;
         if (*vreg < 0)
-            stream << "|" << autoDecref(repr(constant_vregs.getConstant(*vreg)))->s() << "|";
+            stream << "|" << autoDecref(repr(code_constants.getConstant(*vreg)))->s() << "|";
     } else
         stream << "%undef";
 

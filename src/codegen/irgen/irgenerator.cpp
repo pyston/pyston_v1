@@ -69,6 +69,10 @@ IRGenState::IRGenState(BoxedCode* code, CompiledFunction* cf, llvm::Function* fu
 IRGenState::~IRGenState() {
 }
 
+const CodeConstants& IRGenState::getCodeConstants() {
+    return code->code_constants;
+}
+
 llvm::Value* IRGenState::getPassedClosure() {
     assert(getScopeInfo().takesClosure());
     assert(passed_closure);
@@ -721,9 +725,9 @@ public:
         return rtn;
     }
 
-    Box* getIntConstant(int64_t n) override { return irstate->getSourceInfo()->parent_module->getIntConstant(n); }
+    Box* getIntConstant(int64_t n) override { return irstate->getCodeConstants().getIntConstant(n); }
 
-    Box* getFloatConstant(double d) override { return irstate->getSourceInfo()->parent_module->getFloatConstant(d); }
+    Box* getFloatConstant(double d) override { return irstate->getCodeConstants().getFloatConstant(d); }
 
     void refConsumed(llvm::Value* v, llvm::Instruction* inst) override {
         irstate->getRefcounts()->refConsumed(v, inst);
@@ -1225,7 +1229,7 @@ private:
     CompilerVariable* evalVReg(int vreg, bool is_kill = true) {
         assert(vreg != VREG_UNDEFINED);
         if (vreg < 0) {
-            Box* o = irstate->getCode()->constant_vregs.getConstant(vreg);
+            Box* o = irstate->getCode()->code_constants.getConstant(vreg);
             if (o->cls == int_cls) {
                 return makeInt(((BoxedInt*)o)->n);
             } else if (o->cls == float_cls) {
@@ -1612,7 +1616,7 @@ private:
                 printf("Speculating that %s is actually %s, at ", rtn->getType()->debugName().c_str(),
                        speculated_type->debugName().c_str());
                 fflush(stdout);
-                print_bst(node, irstate->getCode()->constant_vregs);
+                print_bst(node, irstate->getCode()->code_constants);
                 llvm::outs().flush();
                 printf("\n");
             }
@@ -1624,7 +1628,7 @@ private:
                 auto source = irstate->getSourceInfo();
                 printf("On %s:%d, function %s:\n", irstate->getCode()->filename->c_str(),
                        irstate->getCode()->firstlineno, irstate->getCode()->name->c_str());
-                irstate->getSourceInfo()->cfg->print(irstate->getCode()->constant_vregs);
+                irstate->getSourceInfo()->cfg->print(irstate->getCode()->code_constants);
             }
             RELEASE_ASSERT(!rtn->canConvertTo(speculated_type), "%s %s", rtn->getType()->debugName().c_str(),
                            speculated_type->debugName().c_str());

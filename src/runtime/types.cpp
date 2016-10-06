@@ -480,68 +480,6 @@ std::string BoxedModule::name() {
     }
 }
 
-BORROWED(BoxedString*) BoxedModule::getStringConstant(llvm::StringRef ast_str, bool intern) {
-    BoxedString*& r = str_constants[ast_str];
-    if (intern) {
-        // If we had previously created a box for this string, we have to create a new
-        // string (or at least, be prepared to return a different value that we had already
-        // interned).  This is fine, except we have to be careful because we promised
-        // that we would keep the previously-created string alive.
-        // So, make sure to put it onto the keep_alive list.
-        if (r && !PyString_CHECK_INTERNED(r)) {
-            RELEASE_ASSERT(0, "this codepath has been dead for a little while, make sure it still works");
-            keep_alive.push_back(r);
-            r = NULL;
-        }
-        if (!r)
-            r = internStringMortal(ast_str);
-    } else if (!r)
-        r = boxString(ast_str);
-    return r;
-}
-
-BORROWED(Box*) BoxedModule::getUnicodeConstant(llvm::StringRef ast_str) {
-    Box*& r = unicode_constants[ast_str];
-    if (!r)
-        r = decodeUTF8StringPtr(ast_str);
-    return r;
-}
-
-BORROWED(BoxedInt*) BoxedModule::getIntConstant(int64_t n) {
-    BoxedInt*& r = int_constants[n];
-    if (!r)
-        r = (BoxedInt*)boxInt(n);
-    return r;
-}
-
-static int64_t getDoubleBits(double d) {
-    int64_t rtn;
-    static_assert(sizeof(rtn) == sizeof(d), "");
-    memcpy(&rtn, &d, sizeof(d));
-    return rtn;
-}
-
-BORROWED(BoxedFloat*) BoxedModule::getFloatConstant(double d) {
-    BoxedFloat*& r = float_constants[getDoubleBits(d)];
-    if (!r)
-        r = static_cast<BoxedFloat*>(boxFloat(d));
-    return r;
-}
-
-BORROWED(Box*) BoxedModule::getPureImaginaryConstant(double d) {
-    Box*& r = imaginary_constants[getDoubleBits(d)];
-    if (!r)
-        r = createPureImaginary(d);
-    return r;
-}
-
-BORROWED(Box*) BoxedModule::getLongConstant(llvm::StringRef ast_str) {
-    Box*& r = long_constants[ast_str];
-    if (!r)
-        r = createLong(ast_str);
-    return r;
-}
-
 // This mustn't throw; our IR generator generates calls to it without "invoke" even when there are exception handlers /
 // finally-blocks in scope.
 extern "C" Box* createFunctionFromMetadata(BoxedCode* code, BoxedClosure* closure, Box* globals,
@@ -3817,21 +3755,12 @@ void BoxedModule::dealloc(Box* b) noexcept {
 
     BoxedModule::clear(self);
 
-    self->str_constants.~ContiguousMap();
-    self->unicode_constants.~ContiguousMap();
-    self->int_constants.~ContiguousMap();
-    self->float_constants.~ContiguousMap();
-    self->imaginary_constants.~ContiguousMap();
-    self->long_constants.~ContiguousMap();
-    assert(!self->keep_alive.size());
-
     b->cls->tp_free(self);
 }
 
 int BoxedModule::traverse(Box* _m, visitproc visit, void* arg) noexcept {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     Py_TRAVERSE(m->attrs);
-    assert(!m->keep_alive.size());
     return 0;
 }
 
@@ -3849,15 +3778,6 @@ extern "C" void _PyModule_Clear(PyObject* b) noexcept {
 
     HCAttrs* attrs = self->getHCAttrsPtr();
     attrs->moduleClear();
-
-    clearContiguousMap(self->str_constants);
-    clearContiguousMap(self->unicode_constants);
-    clearContiguousMap(self->int_constants);
-    clearContiguousMap(self->float_constants);
-    clearContiguousMap(self->imaginary_constants);
-    clearContiguousMap(self->long_constants);
-
-    assert(!self->keep_alive.size());
 }
 
 int BoxedModule::clear(Box* b) noexcept {
@@ -4100,6 +4020,33 @@ int BoxedClosure::clear(Box* _o) noexcept {
     Py_CLEAR(o->parent);
 
     return 0;
+}
+
+BORROWED(BoxedInt*) CodeConstants::getIntConstant(int64_t n) const {
+    BoxedInt*& r = int_constants[n];
+    if (!r) {
+        r = (BoxedInt*)boxInt(n);
+        addOwnedRef(r);
+    }
+    return r;
+}
+
+BORROWED(BoxedFloat*) CodeConstants::getFloatConstant(double d) const {
+    int64_t double_as_int64;
+    static_assert(sizeof(double_as_int64) == sizeof(d), "");
+    memcpy(&double_as_int64, &d, sizeof(d));
+
+    BoxedFloat*& r = float_constants[double_as_int64];
+    if (!r) {
+        r = (BoxedFloat*)boxFloat(d);
+        addOwnedRef(r);
+    }
+    return r;
+}
+
+void CodeConstants::dealloc() const {
+    decrefArray(owned_refs.data(), owned_refs.size());
+    owned_refs.clear();
 }
 
 #ifndef Py_REF_DEBUG

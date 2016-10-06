@@ -1070,20 +1070,42 @@ public:
 };
 static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
 
-class ConstantVRegInfo {
+class CodeConstants {
 private:
+    // stores all constants accessible by vregs in the corrext order
+    // constants[-(vreg + 1)] will allow one to retrieve the constant for a vreg
     std::vector<Box*> constants;
 
-public:
-    ConstantVRegInfo(){};
+    // all objects we need to decref when the code object dies
+    mutable std::vector<Box*> owned_refs;
 
-    Box* getConstant(int vreg) const { return constants[-(vreg + 1)]; }
+    // Note: DenseMap doesn't work here since we don't prevent the tombstone/empty
+    // keys from reaching it.
+    mutable std::unordered_map<int64_t, BoxedInt*> int_constants;
+    // I'm not sure how well it works to use doubles as hashtable keys; thankfully
+    // it's not a big deal if we get misses.
+    mutable std::unordered_map<int64_t, BoxedFloat*> float_constants;
+
+public:
+    CodeConstants() {}
+    CodeConstants(CodeConstants&&) = default;
+    CodeConstants& operator=(CodeConstants&&) = default;
+    ~CodeConstants() { dealloc(); }
+
+    BORROWED(Box*) getConstant(int vreg) const { return constants[-(vreg + 1)]; }
 
     // returns the vreg num for the constant (which is a negative number)
-    int addConstant(Box* o) {
+    int createVRegEntryForConstant(Box* o) {
         constants.push_back(o);
         return -constants.size();
     }
+
+    void addOwnedRef(Box* o) const { owned_refs.emplace_back(o); }
+
+    BORROWED(BoxedInt*) getIntConstant(int64_t n) const;
+    BORROWED(BoxedFloat*) getFloatConstant(double d) const;
+
+    void dealloc() const;
 };
 
 
@@ -1095,8 +1117,8 @@ public:
 // BoxedCode objects also keep track of any machine code that we have available for this function.
 class BoxedCode : public Box {
 public:
-    std::unique_ptr<SourceInfo> source;              // source can be NULL for functions defined in the C/C++ runtime
-    const ConstantVRegInfo BORROWED(constant_vregs); // keeps track of all constants inside the bytecode
+    std::unique_ptr<SourceInfo> source;           // source can be NULL for functions defined in the C/C++ runtime
+    const CodeConstants BORROWED(code_constants); // keeps track of all constants inside the bytecode
 
     BoxedString* filename = nullptr;
     BoxedString* name = nullptr;
@@ -1135,8 +1157,7 @@ public:
 
     // Constructor for Python code objects:
     BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, int firstlineno, std::unique_ptr<SourceInfo> source,
-              ConstantVRegInfo constant_vregs, ParamNames param_names, BoxedString* filename, BoxedString* name,
-              Box* doc);
+              CodeConstants code_constants, ParamNames param_names, BoxedString* filename, BoxedString* name, Box* doc);
 
     // Constructor for code objects created by the runtime:
     BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const char* name, const char* doc = "",

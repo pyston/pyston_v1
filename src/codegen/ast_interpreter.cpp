@@ -181,7 +181,7 @@ public:
     BoxedClosure* getPassedClosure() { return frame_info.passed_closure; }
     Box** getVRegs() { return vregs; }
     const ScopingResults& getScopeInfo() { return scope_info; }
-    const ConstantVRegInfo& getConstantVRegInfo() { return getCode()->constant_vregs; }
+    const CodeConstants& getCodeConstants() { return getCode()->code_constants; }
 
     void addSymbol(int vreg, Box* value, bool allow_duplicates);
     void setGenerator(Box* gen);
@@ -900,7 +900,7 @@ Value ASTInterpreter::visit_stmt(BST_stmt* node) {
 
     if (0) {
         printf("%20s % 2d ", getCode()->name->c_str(), current_block->idx);
-        print_bst(node, getConstantVRegInfo());
+        print_bst(node, getCodeConstants());
         printf("\n");
     }
 
@@ -1528,7 +1528,7 @@ Value ASTInterpreter::visit_set(BST_Set* node) {
 Value ASTInterpreter::getVReg(int vreg, bool is_kill) {
     assert(vreg != VREG_UNDEFINED);
     if (vreg < 0) {
-        Box* o = getConstantVRegInfo().getConstant(vreg);
+        Box* o = getCodeConstants().getConstant(vreg);
         return Value(incref(o), jit ? jit->imm(o)->setType(RefType::BORROWED) : NULL);
     }
 
@@ -1564,10 +1564,10 @@ Value ASTInterpreter::getVReg(int vreg, bool is_kill) {
     }
 
 
-    current_block->print(getConstantVRegInfo());
+    current_block->print(getCodeConstants());
     printf("vreg: %d num cross: %d\n", vreg, getVRegInfo().getNumOfCrossBlockVRegs());
     printf("\n\n");
-    current_block->cfg->print(getConstantVRegInfo());
+    current_block->cfg->print(getCodeConstants());
 
     assert(0);
     return Value();

@@ -165,8 +165,18 @@ public:
     bool has_dest_vreg() const override { return true; }
 };
 
+#define BSTNODE(opcode)                                                                                                \
+    virtual void accept(BSTVisitor* v);                                                                                \
+    virtual void accept_stmt(StmtVisitor* v);                                                                          \
+    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::opcode;
+
+#define BSTFIXEDVREGS(opcode, base_class)                                                                              \
+    BSTNODE(opcode)                                                                                                    \
+    BST_##opcode() : base_class(BST_TYPE::opcode) {}
+
 #define BSTVARVREGS(opcode, base_class, num_elts, vreg_dst)                                                            \
 public:                                                                                                                \
+    BSTNODE(opcode)                                                                                                    \
     static BST_##opcode* create(int num_elts) { return new (num_elts) BST_##opcode(num_elts); }                        \
     static void operator delete(void* ptr) { ::operator delete[](ptr); }                                               \
                                                                                                                        \
@@ -182,6 +192,7 @@ private:                                                                        
 
 #define BSTVARVREGS2(opcode, base_class, num_elts, num_elts2, vreg_dst)                                                \
 public:                                                                                                                \
+    BSTNODE(opcode)                                                                                                    \
     static BST_##opcode* create(int num_elts, int num_elts2) {                                                         \
         return new (num_elts + num_elts2) BST_##opcode(num_elts, num_elts2);                                           \
     }                                                                                                                  \
@@ -200,6 +211,7 @@ private:                                                                        
 
 #define BSTVARVREGS2CALL(opcode, num_elts, num_elts2, vreg_dst)                                                        \
 public:                                                                                                                \
+    BSTNODE(opcode)                                                                                                    \
     static BST_##opcode* create(int num_elts, int num_elts2) {                                                         \
         return new (num_elts + num_elts2) BST_##opcode(num_elts, num_elts2);                                           \
     }                                                                                                                  \
@@ -219,12 +231,7 @@ class BST_Assert : public BST_stmt {
 public:
     int vreg_msg = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Assert() : BST_stmt(BST_TYPE::Assert) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Assert;
+    BSTFIXEDVREGS(Assert, BST_stmt)
 };
 
 class BST_UnpackIntoArray : public BST_stmt {
@@ -232,11 +239,6 @@ public:
     int vreg_src = VREG_UNDEFINED;
     const int num_elts;
     int vreg_dst[1];
-
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::UnpackIntoArray;
 
     BSTVARVREGS(UnpackIntoArray, BST_stmt, num_elts, vreg_dst)
 };
@@ -248,12 +250,7 @@ class BST_CopyVReg : public BST_stmt_with_dest {
 public:
     int vreg_src = VREG_UNDEFINED; // this vreg will not get killed!
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_CopyVReg() : BST_stmt_with_dest(BST_TYPE::CopyVReg) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::CopyVReg;
+    BSTFIXEDVREGS(CopyVReg, BST_stmt_with_dest)
 };
 
 
@@ -270,13 +267,7 @@ public:
     // Only valid for lookup_type == CLOSURE:
     int closure_offset = -1;
 
-
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_StoreName() : BST_stmt(BST_TYPE::StoreName) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::StoreName;
+    BSTFIXEDVREGS(StoreName, BST_stmt)
 };
 
 class BST_StoreAttr : public BST_stmt {
@@ -285,12 +276,7 @@ public:
     int vreg_target = VREG_UNDEFINED;
     int vreg_value = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_StoreAttr() : BST_stmt(BST_TYPE::StoreAttr) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::StoreAttr;
+    BSTFIXEDVREGS(StoreAttr, BST_stmt)
 };
 
 class BST_StoreSub : public BST_stmt {
@@ -299,12 +285,7 @@ public:
     int vreg_slice = VREG_UNDEFINED;
     int vreg_value = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_StoreSub() : BST_stmt(BST_TYPE::StoreSub) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::StoreSub;
+    BSTFIXEDVREGS(StoreSub, BST_stmt)
 };
 
 class BST_StoreSubSlice : public BST_stmt {
@@ -313,12 +294,7 @@ public:
     int vreg_lower = VREG_UNDEFINED, vreg_upper = VREG_UNDEFINED;
     int vreg_value = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_StoreSubSlice() : BST_stmt(BST_TYPE::StoreSubSlice) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::StoreSubSlice;
+    BSTFIXEDVREGS(StoreSubSlice, BST_stmt)
 };
 
 class BST_LoadName : public BST_stmt_with_dest {
@@ -333,12 +309,7 @@ public:
     // Only valid for lookup_type == CLOSURE:
     int closure_offset = -1;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_LoadName() : BST_stmt_with_dest(BST_TYPE::LoadName) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::LoadName;
+    BSTFIXEDVREGS(LoadName, BST_stmt_with_dest)
 };
 
 class BST_LoadAttr : public BST_stmt_with_dest {
@@ -347,12 +318,7 @@ public:
     int vreg_value = VREG_UNDEFINED;
     bool clsonly = false;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_LoadAttr() : BST_stmt_with_dest(BST_TYPE::LoadAttr) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::LoadAttr;
+    BSTFIXEDVREGS(LoadAttr, BST_stmt_with_dest)
 };
 
 class BST_LoadSub : public BST_stmt_with_dest {
@@ -360,12 +326,7 @@ public:
     int vreg_value = VREG_UNDEFINED;
     int vreg_slice = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_LoadSub() : BST_stmt_with_dest(BST_TYPE::LoadSub) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::LoadSub;
+    BSTFIXEDVREGS(LoadSub, BST_stmt_with_dest)
 };
 
 class BST_LoadSubSlice : public BST_stmt_with_dest {
@@ -373,12 +334,7 @@ public:
     int vreg_value = VREG_UNDEFINED;
     int vreg_lower = VREG_UNDEFINED, vreg_upper = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_LoadSubSlice() : BST_stmt_with_dest(BST_TYPE::LoadSubSlice) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::LoadSubSlice;
+    BSTFIXEDVREGS(LoadSubSlice, BST_stmt_with_dest)
 };
 
 class BST_AugBinOp : public BST_stmt_with_dest {
@@ -386,12 +342,7 @@ public:
     AST_TYPE::AST_TYPE op_type;
     int vreg_left = VREG_UNDEFINED, vreg_right = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_AugBinOp() : BST_stmt_with_dest(BST_TYPE::AugBinOp) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::AugBinOp;
+    BSTFIXEDVREGS(AugBinOp, BST_stmt_with_dest)
 };
 
 class BST_BinOp : public BST_stmt_with_dest {
@@ -399,12 +350,7 @@ public:
     AST_TYPE::AST_TYPE op_type;
     int vreg_left = VREG_UNDEFINED, vreg_right = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_BinOp() : BST_stmt_with_dest(BST_TYPE::BinOp) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::BinOp;
+    BSTFIXEDVREGS(BinOp, BST_stmt_with_dest)
 };
 
 class BST_Call : public BST_stmt_with_dest {
@@ -425,11 +371,6 @@ public:
     int vreg_func = VREG_UNDEFINED;
     int elts[1];
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::CallFunc;
-
     BSTVARVREGS2CALL(CallFunc, num_args, num_keywords, elts)
 };
 
@@ -439,11 +380,6 @@ public:
     InternedString attr;
     int elts[1];
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::CallAttr;
-
     BSTVARVREGS2CALL(CallAttr, num_args, num_keywords, elts)
 };
 
@@ -452,11 +388,6 @@ public:
     int vreg_value = VREG_UNDEFINED;
     InternedString attr;
     int elts[1];
-
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::CallClsAttr;
 
     BSTVARVREGS2CALL(CallClsAttr, num_args, num_keywords, elts)
 };
@@ -468,19 +399,11 @@ public:
     int vreg_comparator = VREG_UNDEFINED;
     int vreg_left = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Compare() : BST_stmt_with_dest(BST_TYPE::Compare) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Compare;
+    BSTFIXEDVREGS(Compare, BST_stmt_with_dest)
 };
 
 class BST_ClassDef : public BST_stmt {
 public:
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
     BoxedCode* code;
 
     InternedString name;
@@ -488,19 +411,12 @@ public:
     const int num_decorator;
     int decorator[1];
 
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::ClassDef;
-
     BSTVARVREGS(ClassDef, BST_stmt, num_decorator, decorator)
 };
 
 class BST_Dict : public BST_stmt_with_dest {
 public:
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Dict() : BST_stmt_with_dest(BST_TYPE::Dict) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Dict;
+    BSTFIXEDVREGS(Dict, BST_stmt_with_dest)
 };
 
 class BST_DeleteAttr : public BST_stmt {
@@ -508,12 +424,7 @@ public:
     int vreg_value = VREG_UNDEFINED;
     InternedString attr;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_DeleteAttr() : BST_stmt(BST_TYPE::DeleteAttr) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::DeleteAttr;
+    BSTFIXEDVREGS(DeleteAttr, BST_stmt)
 };
 
 class BST_DeleteName : public BST_stmt {
@@ -527,13 +438,7 @@ public:
     // Only valid for lookup_type == CLOSURE:
     int closure_offset = -1;
 
-
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_DeleteName() : BST_stmt(BST_TYPE::DeleteName) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::DeleteName;
+    BSTFIXEDVREGS(DeleteName, BST_stmt)
 };
 
 class BST_DeleteSub : public BST_stmt {
@@ -541,12 +446,7 @@ public:
     int vreg_value = VREG_UNDEFINED;
     int vreg_slice = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_DeleteSub() : BST_stmt(BST_TYPE::DeleteSub) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::DeleteSub;
+    BSTFIXEDVREGS(DeleteSub, BST_stmt)
 };
 
 class BST_DeleteSubSlice : public BST_stmt {
@@ -555,12 +455,7 @@ public:
     int vreg_lower = VREG_UNDEFINED;
     int vreg_upper = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_DeleteSubSlice() : BST_stmt(BST_TYPE::DeleteSubSlice) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::DeleteSubSlice;
+    BSTFIXEDVREGS(DeleteSubSlice, BST_stmt)
 };
 
 class BST_Exec : public BST_stmt {
@@ -569,12 +464,7 @@ public:
     int vreg_globals = VREG_UNDEFINED;
     int vreg_locals = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Exec() : BST_stmt(BST_TYPE::Exec) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Exec;
+    BSTFIXEDVREGS(Exec, BST_stmt)
 };
 
 class BST_FunctionDef : public BST_stmt {
@@ -588,12 +478,6 @@ public:
 
     int elts[1]; // decorators followed by defaults
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::FunctionDef;
-
     BSTVARVREGS2(FunctionDef, BST_stmt, num_decorator, num_defaults, elts)
 };
 
@@ -602,11 +486,6 @@ public:
     const int num_elts;
     int elts[1];
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::List;
-
     BSTVARVREGS(List, BST_stmt_with_dest, num_elts, elts)
 };
 
@@ -614,12 +493,7 @@ class BST_Repr : public BST_stmt_with_dest {
 public:
     int vreg_value = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Repr() : BST_stmt_with_dest(BST_TYPE::Repr) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Repr;
+    BSTFIXEDVREGS(Repr, BST_stmt_with_dest)
 };
 
 class BST_Print : public BST_stmt {
@@ -628,12 +502,7 @@ public:
     bool nl;
     int vreg_value = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Print() : BST_stmt(BST_TYPE::Print) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Print;
+    BSTFIXEDVREGS(Print, BST_stmt)
 };
 
 class BST_Raise : public BST_stmt {
@@ -644,35 +513,20 @@ public:
     // Ie "raise Exception()" will have type==Exception(), inst==None, tback==None
     int vreg_arg0 = VREG_UNDEFINED, vreg_arg1 = VREG_UNDEFINED, vreg_arg2 = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Raise() : BST_stmt(BST_TYPE::Raise) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Raise;
+    BSTFIXEDVREGS(Raise, BST_stmt)
 };
 
 class BST_Return : public BST_stmt {
 public:
     int vreg_value = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Return() : BST_stmt(BST_TYPE::Return) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Return;
+    BSTFIXEDVREGS(Return, BST_stmt)
 };
 
 class BST_Set : public BST_stmt_with_dest {
 public:
     const int num_elts;
     int elts[1];
-
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Set;
 
     BSTVARVREGS(Set, BST_stmt_with_dest, num_elts, elts)
 };
@@ -681,23 +535,13 @@ class BST_MakeSlice : public BST_stmt_with_dest {
 public:
     int vreg_lower = VREG_UNDEFINED, vreg_upper = VREG_UNDEFINED, vreg_step = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_MakeSlice() : BST_stmt_with_dest(BST_TYPE::MakeSlice) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::MakeSlice;
+    BSTFIXEDVREGS(MakeSlice, BST_stmt_with_dest)
 };
 
 class BST_Tuple : public BST_stmt_with_dest {
 public:
     const int num_elts;
     int elts[1];
-
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Tuple;
 
     BSTVARVREGS(Tuple, BST_stmt_with_dest, num_elts, elts)
 };
@@ -707,53 +551,33 @@ public:
     int vreg_operand = VREG_UNDEFINED;
     AST_TYPE::AST_TYPE op_type;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_UnaryOp() : BST_stmt_with_dest(BST_TYPE::UnaryOp) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::UnaryOp;
+    BSTFIXEDVREGS(UnaryOp, BST_stmt_with_dest)
 };
 
 class BST_Yield : public BST_stmt_with_dest {
 public:
     int vreg_value = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Yield() : BST_stmt_with_dest(BST_TYPE::Yield) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Yield;
+    BSTFIXEDVREGS(Yield, BST_stmt_with_dest)
 };
 
 class BST_MakeFunction : public BST_stmt_with_dest {
 public:
     BST_FunctionDef* function_def;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
     BST_MakeFunction(BST_FunctionDef* fd) : BST_stmt_with_dest(BST_TYPE::MakeFunction, fd->lineno), function_def(fd) {}
 
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::MakeFunction;
+    BSTNODE(MakeFunction)
 };
 
 class BST_MakeClass : public BST_stmt_with_dest {
 public:
     BST_ClassDef* class_def;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
     BST_MakeClass(BST_ClassDef* cd) : BST_stmt_with_dest(BST_TYPE::MakeClass, cd->lineno), class_def(cd) {}
 
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::MakeClass;
+    BSTNODE(MakeClass)
 };
-
-
-// BST pseudo-nodes that will get added during CFG-construction.  These don't exist in the input BST, but adding them in
-// lets us avoid creating a completely new IR for this phase
 
 class CFGBlock;
 
@@ -762,24 +586,14 @@ public:
     int vreg_test = VREG_UNDEFINED;
     CFGBlock* iftrue, *iffalse;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Branch() : BST_stmt(BST_TYPE::Branch) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Branch;
+    BSTFIXEDVREGS(Branch, BST_stmt)
 };
 
 class BST_Jump : public BST_stmt {
 public:
     CFGBlock* target;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Jump() : BST_stmt(BST_TYPE::Jump) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Jump;
+    BSTFIXEDVREGS(Jump, BST_stmt)
 };
 
 class BST_Invoke : public BST_stmt {
@@ -788,46 +602,28 @@ public:
 
     CFGBlock* normal_dest, *exc_dest;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
     BST_Invoke(BST_stmt* stmt) : BST_stmt(BST_TYPE::Invoke), stmt(stmt) {}
 
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Invoke;
+    BSTNODE(Invoke)
 };
 
 
 // grabs the info about the last raised exception
 class BST_Landingpad : public BST_stmt_with_dest {
 public:
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Landingpad() : BST_stmt_with_dest(BST_TYPE::Landingpad) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Landingpad;
+    BSTFIXEDVREGS(Landingpad, BST_stmt_with_dest)
 };
 
 class BST_Locals : public BST_stmt_with_dest {
 public:
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Locals() : BST_stmt_with_dest(BST_TYPE::Locals) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Locals;
+    BSTFIXEDVREGS(Locals, BST_stmt_with_dest)
 };
 
 class BST_GetIter : public BST_stmt_with_dest {
 public:
     int vreg_value = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_GetIter() : BST_stmt_with_dest(BST_TYPE::GetIter) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::GetIter;
+    BSTFIXEDVREGS(GetIter, BST_stmt_with_dest)
 };
 
 class BST_ImportFrom : public BST_stmt_with_dest {
@@ -835,12 +631,7 @@ public:
     int vreg_module = VREG_UNDEFINED;
     int vreg_name = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_ImportFrom() : BST_stmt_with_dest(BST_TYPE::ImportFrom) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::ImportFrom;
+    BSTFIXEDVREGS(ImportFrom, BST_stmt_with_dest)
 };
 
 class BST_ImportName : public BST_stmt_with_dest {
@@ -849,25 +640,14 @@ public:
     int level = VREG_UNDEFINED;
     int vreg_name = VREG_UNDEFINED;
 
-
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_ImportName() : BST_stmt_with_dest(BST_TYPE::ImportName) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::ImportName;
+    BSTFIXEDVREGS(ImportName, BST_stmt_with_dest)
 };
 
 class BST_ImportStar : public BST_stmt_with_dest {
 public:
     int vreg_name = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_ImportStar() : BST_stmt_with_dest(BST_TYPE::ImportStar) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::ImportStar;
+    BSTFIXEDVREGS(ImportStar, BST_stmt_with_dest)
 };
 
 // determines whether something is "true" for purposes of `if' and so forth
@@ -875,12 +655,7 @@ class BST_Nonzero : public BST_stmt_with_dest {
 public:
     int vreg_value = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_Nonzero() : BST_stmt_with_dest(BST_TYPE::Nonzero) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::Nonzero;
+    BSTFIXEDVREGS(Nonzero, BST_stmt_with_dest)
 };
 
 class BST_CheckExcMatch : public BST_stmt_with_dest {
@@ -888,12 +663,7 @@ public:
     int vreg_value = VREG_UNDEFINED;
     int vreg_cls = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_CheckExcMatch() : BST_stmt_with_dest(BST_TYPE::CheckExcMatch) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::CheckExcMatch;
+    BSTFIXEDVREGS(CheckExcMatch, BST_stmt_with_dest)
 };
 
 class BST_SetExcInfo : public BST_stmt {
@@ -902,46 +672,26 @@ public:
     int vreg_value = VREG_UNDEFINED;
     int vreg_traceback = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_SetExcInfo() : BST_stmt(BST_TYPE::SetExcInfo) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::SetExcInfo;
+    BSTFIXEDVREGS(SetExcInfo, BST_stmt)
 };
 
 class BST_UncacheExcInfo : public BST_stmt {
 public:
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_UncacheExcInfo() : BST_stmt(BST_TYPE::UncacheExcInfo) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::UncacheExcInfo;
+    BSTFIXEDVREGS(UncacheExcInfo, BST_stmt)
 };
 
 class BST_HasNext : public BST_stmt_with_dest {
 public:
     int vreg_value = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_HasNext() : BST_stmt_with_dest(BST_TYPE::HasNext) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::HasNext;
+    BSTFIXEDVREGS(HasNext, BST_stmt_with_dest)
 };
 
 class BST_PrintExpr : public BST_stmt {
 public:
     int vreg_value = VREG_UNDEFINED;
 
-    virtual void accept(BSTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    BST_PrintExpr() : BST_stmt(BST_TYPE::PrintExpr) {}
-
-    static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::PrintExpr;
+    BSTFIXEDVREGS(PrintExpr, BST_stmt)
 };
 
 
@@ -1156,20 +906,20 @@ public:
     virtual void visit_yield(BST_Yield* node) { RELEASE_ASSERT(0, ""); }
 };
 
-class ConstantVRegInfo;
-void print_bst(BST_stmt* bst, const ConstantVRegInfo& constant_vregs);
+class CodeConstants;
+void print_bst(BST_stmt* bst, const CodeConstants& code_constants);
 
 class PrintVisitor : public BSTVisitor {
 private:
     llvm::raw_ostream& stream;
-    const ConstantVRegInfo& constant_vregs;
+    const CodeConstants& code_constants;
     int indent;
     void printIndent();
     void printOp(AST_TYPE::AST_TYPE op_type);
 
 public:
-    PrintVisitor(const ConstantVRegInfo& constant_vregs, int indent, llvm::raw_ostream& stream)
-        : BSTVisitor(false /* visit child CFG */), stream(stream), constant_vregs(constant_vregs), indent(indent) {}
+    PrintVisitor(const CodeConstants& code_constants, int indent, llvm::raw_ostream& stream)
+        : BSTVisitor(false /* visit child CFG */), stream(stream), code_constants(code_constants), indent(indent) {}
     virtual ~PrintVisitor() {}
     void flush() { stream.flush(); }
 
