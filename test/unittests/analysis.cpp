@@ -25,6 +25,18 @@ protected:
     }
 };
 
+static BoxedCode* getCodeObjectOfFirstMakeFunction(BoxedCode* module_code) {
+    BoxedCode* code = NULL;
+    for (BST_stmt* stmt : module_code->source->cfg->blocks[0]->body) {
+        if (stmt->type !=  BST_TYPE::MakeFunction)
+            continue;
+        code = module_code->code_constants.getFuncOrClass(bst_cast<BST_MakeFunction>(stmt)->index_func_def).second;
+        break;
+    }
+    assert(code);
+    return code;
+}
+
 // this test use functions (VRegInfo::getVReg) which are only available in a debug build
 #ifndef NDEBUG
 TEST_F(AnalysisTest, augassign) {
@@ -52,16 +64,10 @@ TEST_F(AnalysisTest, augassign) {
     ParamNames param_names(args, *module->interned_strings.get());
 
     // Hack to get at the cfg:
-    CFG* cfg = NULL;
-    for (BST_stmt* stmt : module_code->source->cfg->blocks[0]->body) {
-        if (stmt->type !=  BST_TYPE::MakeFunction)
-            continue;
-        cfg = bst_cast<BST_MakeFunction>(stmt)->function_def->code->source->cfg;
-        break;
-    }
-    assert(cfg);
+    BoxedCode* code = getCodeObjectOfFirstMakeFunction(module_code);
+    CFG* cfg = code->source->cfg;
 
-    std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg, module_code->code_constants);
+    std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg, code->code_constants);
     auto&& vregs = cfg->getVRegInfo();
 
     //cfg->print();
@@ -96,14 +102,7 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
     auto module_code = computeAllCFGs(module, true, future_flags, boxString(fn), main_module);
 
     // Hack to get at the cfg:
-    BoxedCode* code = NULL;
-    for (BST_stmt* stmt : module_code->source->cfg->blocks[0]->body) {
-        if (stmt->type !=  BST_TYPE::MakeFunction)
-            continue;
-        code = bst_cast<BST_MakeFunction>(stmt)->function_def->code;
-        break;
-    }
-    assert(code);
+    BoxedCode* code = getCodeObjectOfFirstMakeFunction(module_code);
     CFG* cfg = code->source->cfg;
     std::unique_ptr<LivenessAnalysis> liveness = computeLivenessInfo(cfg, module_code->code_constants);
 

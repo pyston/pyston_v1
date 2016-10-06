@@ -1079,6 +1079,8 @@ private:
     // all objects we need to decref when the code object dies
     mutable std::vector<Box*> owned_refs;
 
+    mutable std::vector<std::pair<BST_stmt*, BoxedCode*>> funcs_and_classes;
+
     // Note: DenseMap doesn't work here since we don't prevent the tombstone/empty
     // keys from reaching it.
     mutable std::unordered_map<int64_t, BoxedInt*> int_constants;
@@ -1104,6 +1106,14 @@ public:
 
     BORROWED(BoxedInt*) getIntConstant(int64_t n) const;
     BORROWED(BoxedFloat*) getFloatConstant(double d) const;
+
+    std::pair<BST_stmt*, BORROWED(BoxedCode*)> getFuncOrClass(int constant) const {
+        return funcs_and_classes[constant];
+    }
+    int addFuncOrClass(BST_stmt* stmt, STOLEN(BoxedCode*) code) {
+        funcs_and_classes.emplace_back(stmt, code);
+        return funcs_and_classes.size() - 1;
+    }
 
     void dealloc() const;
 };

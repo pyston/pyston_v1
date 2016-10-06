@@ -1488,8 +1488,8 @@ private:
     }
 
     CompilerVariable* evalMakeClass(BST_MakeClass* mkclass, const UnwindInfo& unw_info) {
-        assert(mkclass->type == BST_TYPE::MakeClass && mkclass->class_def->type == BST_TYPE::ClassDef);
-        BST_ClassDef* node = mkclass->class_def;
+        auto class_entry = irstate->getCodeConstants().getFuncOrClass(mkclass->index_class_def);
+        BST_ClassDef* node = bst_cast<BST_ClassDef>(class_entry.first);
 
         CompilerVariable* _bases_tuple = evalVReg(node->vreg_bases_tuple);
         ConcreteCompilerVariable* bases_tuple = _bases_tuple->makeConverted(emitter, _bases_tuple->getBoxType());
@@ -1499,7 +1499,7 @@ private:
             decorators.push_back(evalVReg(node->decorator[i]));
         }
 
-        BoxedCode* code = node->code;
+        BoxedCode* code = class_entry.second;
         assert(code);
         const ScopingResults& scope_info = code->source->scoping;
 
@@ -1542,8 +1542,7 @@ private:
         return cls;
     }
 
-    CompilerVariable* _createFunction(BST_FunctionDef* node, const UnwindInfo& unw_info) {
-        BoxedCode* code = node->code;
+    CompilerVariable* _createFunction(BST_FunctionDef* node, BoxedCode* code, const UnwindInfo& unw_info) {
         assert(code);
 
         std::vector<ConcreteCompilerVariable*> defaults;
@@ -1572,13 +1571,15 @@ private:
     }
 
     CompilerVariable* evalMakeFunction(BST_MakeFunction* mkfn, const UnwindInfo& unw_info) {
-        BST_FunctionDef* node = mkfn->function_def;
+        auto func_entry = irstate->getCodeConstants().getFuncOrClass(mkfn->index_func_def);
+        BST_FunctionDef* node = bst_cast<BST_FunctionDef>(func_entry.first);
+
         std::vector<CompilerVariable*> decorators;
         for (int i = 0; i < node->num_decorator; ++i) {
             decorators.push_back(evalVReg(node->elts[i]));
         }
 
-        CompilerVariable* func = _createFunction(node, unw_info);
+        CompilerVariable* func = _createFunction(node, func_entry.second, unw_info);
 
         for (int i = decorators.size() - 1; i >= 0; i--) {
             func = decorators[i]->call(emitter, getOpInfoForNode(node, unw_info), ArgPassSpec(1), { func }, NULL);

@@ -710,7 +710,7 @@ void BST_MakeFunction::accept(BSTVisitor* v) {
     if (skip)
         return;
 
-    function_def->accept(v);
+    bst_cast<BST_FunctionDef>(v->getCodeConstants().getFuncOrClass(index_func_def).first)->accept(v);
     v->visit_vreg(&vreg_dst, true);
 }
 
@@ -723,7 +723,7 @@ void BST_MakeClass::accept(BSTVisitor* v) {
     if (skip)
         return;
 
-    class_def->accept(v);
+    bst_cast<BST_ClassDef>(v->getCodeConstants().getFuncOrClass(index_class_def).first)->accept(v);
     v->visit_vreg(&vreg_dst, true);
 }
 

@@ -404,8 +404,6 @@ public:
 
 class BST_ClassDef : public BST_stmt {
 public:
-    BoxedCode* code;
-
     InternedString name;
     int vreg_bases_tuple;
     const int num_decorator;
@@ -470,8 +468,6 @@ public:
 class BST_FunctionDef : public BST_stmt {
 public:
     InternedString name; // if the name is not set this is a lambda
-
-    BoxedCode* code;
 
     const int num_decorator;
     const int num_defaults;
@@ -563,18 +559,20 @@ public:
 
 class BST_MakeFunction : public BST_stmt_with_dest {
 public:
-    BST_FunctionDef* function_def;
+    const int index_func_def;
 
-    BST_MakeFunction(BST_FunctionDef* fd) : BST_stmt_with_dest(BST_TYPE::MakeFunction, fd->lineno), function_def(fd) {}
+    BST_MakeFunction(BST_FunctionDef* fd, int index_func_def)
+        : BST_stmt_with_dest(BST_TYPE::MakeFunction, fd->lineno), index_func_def(index_func_def) {}
 
     BSTNODE(MakeFunction)
 };
 
 class BST_MakeClass : public BST_stmt_with_dest {
 public:
-    BST_ClassDef* class_def;
+    const int index_class_def;
 
-    BST_MakeClass(BST_ClassDef* cd) : BST_stmt_with_dest(BST_TYPE::MakeClass, cd->lineno), class_def(cd) {}
+    BST_MakeClass(BST_ClassDef* cd, int index_class_def)
+        : BST_stmt_with_dest(BST_TYPE::MakeClass, cd->lineno), index_class_def(index_class_def) {}
 
     BSTNODE(MakeClass)
 };

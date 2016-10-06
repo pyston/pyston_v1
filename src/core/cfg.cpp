@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2016 Dropbox, Inc.
+﻿// Copyright (c) 2014-2016 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1294,13 +1294,8 @@ private:
         static BoxedString* gen_name = getStaticString("<generator>");
 
         BoxedCode* code = cfgizer->runRecursively(new_body, gen_name, node->lineno, genexp_args, node);
-        // XXX bad!  this should be tracked ex through co_consts
-        // cur_code->co_consts.push_back(def->code)
-        constants.push_back(code);
-
         BST_FunctionDef* func = BST_FunctionDef::create(0, 0);
-        func->code = code;
-        BST_MakeFunction* mkfunc = new BST_MakeFunction(func);
+        BST_MakeFunction* mkfunc = new BST_MakeFunction(func, code_constants.addFuncOrClass(func, code));
         TmpValue func_var_name = pushBackCreateDst(mkfunc);
 
         return makeCall(func_var_name, { first });
@@ -1357,13 +1352,8 @@ private:
         static BoxedString* comp_name = getStaticString("<comperehension>");
 
         BoxedCode* code = cfgizer->runRecursively(new_body, comp_name, node->lineno, args, node);
-        // XXX bad!  this should be tracked ex through co_consts
-        // cur_code->co_consts.push_back(def->code)
-        constants.push_back(code);
-
         BST_FunctionDef* func = BST_FunctionDef::create(0, 0);
-        func->code = code;
-        BST_MakeFunction* mkfunc = new BST_MakeFunction(func);
+        BST_MakeFunction* mkfunc = new BST_MakeFunction(func, code_constants.addFuncOrClass(func, code));
         TmpValue func_var_name = pushBackCreateDst(mkfunc);
 
         return makeCall(func_var_name, { first });
@@ -1415,12 +1405,9 @@ private:
         }
 
         auto name = getStaticString("<lambda>");
-        bdef->code = cfgizer->runRecursively({ stmt }, name, node->lineno, node->args, node);
-        // XXX bad!  this should be tracked ex through co_consts
-        // cur_code->co_consts.push_back(def->code)
-        constants.push_back(bdef->code);
+        auto* code = cfgizer->runRecursively({ stmt }, name, node->lineno, node->args, node);
+        auto mkfn = new BST_MakeFunction(bdef, code_constants.addFuncOrClass(bdef, code));
 
-        auto mkfn = new BST_MakeFunction(bdef);
         return pushBackCreateDst(mkfn);
     }
 
@@ -1813,12 +1800,8 @@ public:
         TmpValue bases_name = pushBackCreateDst(bases);
         unmapExpr(bases_name, &def->vreg_bases_tuple);
 
-        def->code = cfgizer->runRecursively(node->body, node->name.getBox(), node->lineno, NULL, node);
-        // XXX bad!  this should be tracked ex through co_consts
-        // cur_code->co_consts.push_back(def->code)
-        constants.push_back(def->code);
-
-        auto mkclass = new BST_MakeClass(def);
+        auto* code = cfgizer->runRecursively(node->body, node->name.getBox(), node->lineno, NULL, node);
+        auto mkclass = new BST_MakeClass(def, code_constants.addFuncOrClass(def, code));
         auto tmp = pushBackCreateDst(mkclass);
         pushAssign(TmpValue(scoping->mangleName(def->name), node->lineno), tmp);
 
@@ -1839,12 +1822,8 @@ public:
             unmapExpr(remapExpr(node->args->defaults[i]), &def->elts[node->decorator_list.size() + i]);
         }
 
-        def->code = cfgizer->runRecursively(node->body, node->name.getBox(), node->lineno, node->args, node);
-        // XXX bad!  this should be tracked ex through co_consts
-        // cur_code->co_consts.push_back(def->code)
-        constants.push_back(def->code);
-
-        auto mkfunc = new BST_MakeFunction(def);
+        auto* code = cfgizer->runRecursively(node->body, node->name.getBox(), node->lineno, node->args, node);
+        auto mkfunc = new BST_MakeFunction(def, code_constants.addFuncOrClass(def, code));
         auto tmp = pushBackCreateDst(mkfunc);
         pushAssign(TmpValue(scoping->mangleName(def->name), node->lineno), tmp);
 
