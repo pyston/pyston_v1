@@ -906,20 +906,20 @@ public:
     virtual void visit_yield(BST_Yield* node) { RELEASE_ASSERT(0, ""); }
 };
 
-class ConstantVRegInfo;
-void print_bst(BST_stmt* bst, const ConstantVRegInfo& constant_vregs);
+class CodeConstants;
+void print_bst(BST_stmt* bst, const CodeConstants& code_constants);
 
 class PrintVisitor : public BSTVisitor {
 private:
     llvm::raw_ostream& stream;
-    const ConstantVRegInfo& constant_vregs;
+    const CodeConstants& code_constants;
     int indent;
     void printIndent();
     void printOp(AST_TYPE::AST_TYPE op_type);
 
 public:
-    PrintVisitor(const ConstantVRegInfo& constant_vregs, int indent, llvm::raw_ostream& stream)
-        : BSTVisitor(false /* visit child CFG */), stream(stream), constant_vregs(constant_vregs), indent(indent) {}
+    PrintVisitor(const CodeConstants& code_constants, int indent, llvm::raw_ostream& stream)
+        : BSTVisitor(false /* visit child CFG */), stream(stream), code_constants(code_constants), indent(indent) {}
     virtual ~PrintVisitor() {}
     void flush() { stream.flush(); }
 

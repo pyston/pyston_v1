@@ -88,7 +88,7 @@ public:
     void unconnectFrom(CFGBlock* successor);
 
     void push_back(BST_stmt* node) { body.push_back(node); }
-    void print(const ConstantVRegInfo& constant_vregs, llvm::raw_ostream& stream = llvm::outs());
+    void print(const CodeConstants& code_constants, llvm::raw_ostream& stream = llvm::outs());
 };
 
 // the vregs are split into three parts.
@@ -210,7 +210,7 @@ public:
         blocks.push_back(block);
     }
 
-    void print(const ConstantVRegInfo& constant_vregs, llvm::raw_ostream& stream = llvm::outs());
+    void print(const CodeConstants& code_constants, llvm::raw_ostream& stream = llvm::outs());
 };
 
 class VRegSet {
@@ -331,7 +331,7 @@ public:
 
 BoxedCode* computeAllCFGs(AST* ast, bool globals_from_module, FutureFlags future_flags, BoxedString* fn,
                           BoxedModule* bm);
-void printCFG(CFG* cfg, const ConstantVRegInfo& constant_vregs);
+void printCFG(CFG* cfg, const CodeConstants& code_constants);
 }
 
 #endif

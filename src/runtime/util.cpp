@@ -254,7 +254,7 @@ extern "C" void dumpEx(void* p, int levels) {
                 printf("Defined at %s:%d\n", code->filename->c_str(), code->firstlineno);
 
                 if (code->source->cfg && levels > 0) {
-                    code->source->cfg->print(code->constant_vregs);
+                    code->source->cfg->print(code->code_constants);
                 }
             } else {
                 printf("A builtin function\n");

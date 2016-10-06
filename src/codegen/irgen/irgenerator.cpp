@@ -1225,7 +1225,7 @@ private:
     CompilerVariable* evalVReg(int vreg, bool is_kill = true) {
         assert(vreg != VREG_UNDEFINED);
         if (vreg < 0) {
-            Box* o = irstate->getCode()->constant_vregs.getConstant(vreg);
+            Box* o = irstate->getCode()->code_constants.getConstant(vreg);
             if (o->cls == int_cls) {
                 return makeInt(((BoxedInt*)o)->n);
             } else if (o->cls == float_cls) {
@@ -1612,7 +1612,7 @@ private:
                 printf("Speculating that %s is actually %s, at ", rtn->getType()->debugName().c_str(),
                        speculated_type->debugName().c_str());
                 fflush(stdout);
-                print_bst(node, irstate->getCode()->constant_vregs);
+                print_bst(node, irstate->getCode()->code_constants);
                 llvm::outs().flush();
                 printf("\n");
             }
@@ -1624,7 +1624,7 @@ private:
                 auto source = irstate->getSourceInfo();
                 printf("On %s:%d, function %s:\n", irstate->getCode()->filename->c_str(),
                        irstate->getCode()->firstlineno, irstate->getCode()->name->c_str());
-                irstate->getSourceInfo()->cfg->print(irstate->getCode()->constant_vregs);
+                irstate->getSourceInfo()->cfg->print(irstate->getCode()->code_constants);
             }
             RELEASE_ASSERT(!rtn->canConvertTo(speculated_type), "%s %s", rtn->getType()->debugName().c_str(),
                            speculated_type->debugName().c_str());

@@ -1070,17 +1070,17 @@ public:
 };
 static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
 
-class ConstantVRegInfo {
+class CodeConstants {
 private:
     std::vector<Box*> constants;
 
 public:
-    ConstantVRegInfo(){};
+    CodeConstants() {}
 
     Box* getConstant(int vreg) const { return constants[-(vreg + 1)]; }
 
     // returns the vreg num for the constant (which is a negative number)
-    int addConstant(Box* o) {
+    int createVRegEntryForConstant(Box* o) {
         constants.push_back(o);
         return -constants.size();
     }
@@ -1095,8 +1095,8 @@ public:
 // BoxedCode objects also keep track of any machine code that we have available for this function.
 class BoxedCode : public Box {
 public:
-    std::unique_ptr<SourceInfo> source;              // source can be NULL for functions defined in the C/C++ runtime
-    const ConstantVRegInfo BORROWED(constant_vregs); // keeps track of all constants inside the bytecode
+    std::unique_ptr<SourceInfo> source;           // source can be NULL for functions defined in the C/C++ runtime
+    const CodeConstants BORROWED(code_constants); // keeps track of all constants inside the bytecode
 
     BoxedString* filename = nullptr;
     BoxedString* name = nullptr;
@@ -1135,8 +1135,7 @@ public:
 
     // Constructor for Python code objects:
     BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, int firstlineno, std::unique_ptr<SourceInfo> source,
-              ConstantVRegInfo constant_vregs, ParamNames param_names, BoxedString* filename, BoxedString* name,
-              Box* doc);
+              CodeConstants code_constants, ParamNames param_names, BoxedString* filename, BoxedString* name, Box* doc);
 
     // Constructor for code objects created by the runtime:
     BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const char* name, const char* doc = "",

@@ -24,7 +24,7 @@
 namespace pyston {
 
 class CFGBlock;
-class ConstantVRegInfo;
+class CodeConstants;
 class BoxedClass;
 class BST_stmt_with_dest;
 class OSREntryDescriptor;
@@ -45,9 +45,9 @@ public:
 
 TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& param_names,
                              const std::vector<ConcreteCompilerType*>& arg_types, EffortLevel effort,
-                             TypeAnalysis::SpeculationLevel speculation, const ConstantVRegInfo& constant_vregs);
+                             TypeAnalysis::SpeculationLevel speculation, const CodeConstants& code_constants);
 TypeAnalysis* doTypeAnalysis(const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
-                             TypeAnalysis::SpeculationLevel speculation, const ConstantVRegInfo& constant_vregs);
+                             TypeAnalysis::SpeculationLevel speculation, const CodeConstants& code_constants);
 }
 
 #endif
