@@ -42,6 +42,7 @@ class BST_stmt;
 class Box;
 
 class CFG;
+class CFGConstruction;
 class ParamNames;
 class ScopeInfo;
 
@@ -75,20 +76,52 @@ public:
     // contains the address of the entry function
     std::pair<CFGBlock*, Box*>(*entry_code)(void* interpeter, CFGBlock* block, Box** vregs);
 
-    llvm::SmallVector<BST_stmt*, 4> body;
+    BST_stmt* body;
     llvm::SmallVector<CFGBlock*, 2> predecessors, successors;
     int idx; // index in the CFG
     const char* info;
 
-    typedef llvm::SmallVector<BST_stmt*, 4>::iterator iterator;
+    CFGBlock(CFG* cfg, int idx, const char* info) : cfg(cfg), code(NULL), entry_code(NULL), idx(idx), info(info) {}
 
-    CFGBlock(CFG* cfg, int idx) : cfg(cfg), code(NULL), entry_code(NULL), idx(idx), info(NULL) {}
+    BST_stmt* getLastStmt() const {
+        // TODO: this is inefficient
+        for (BST_stmt* stmt : *this) {
+            if (stmt->is_terminator())
+                return stmt;
+        }
+        RELEASE_ASSERT(0, "");
+    }
 
-    void connectTo(CFGBlock* successor, bool allow_backedge = false);
-    void unconnectFrom(CFGBlock* successor);
-
-    void push_back(BST_stmt* node) { body.push_back(node); }
     void print(const CodeConstants& code_constants, llvm::raw_ostream& stream = llvm::outs());
+
+
+    class iterator {
+    private:
+        BST_stmt* stmt;
+
+    public:
+        iterator(BST_stmt* stmt) : stmt(stmt) {}
+
+        bool operator!=(const iterator& rhs) const { return stmt != rhs.stmt; }
+        bool operator==(const iterator& rhs) const { return stmt == rhs.stmt; }
+        iterator& operator++() {
+            if (stmt) {
+                if (stmt->is_terminator())
+                    *this = CFGBlock::end();
+                else {
+                    int next = stmt->size_in_bytes();
+                    if (stmt->type == BST_TYPE::Invoke)
+                        next += bst_cast<BST_Invoke>(stmt)->stmt->size_in_bytes();
+                    stmt = (BST_stmt*)&((unsigned char*)stmt)[next];
+                }
+            }
+            return *this;
+        }
+        BST_stmt* operator*() const { return stmt; }
+    };
+
+    iterator begin() const { return iterator(body); }
+    static iterator end() { return iterator(NULL); }
 };
 
 // the vregs are split into three parts.
@@ -168,48 +201,29 @@ public:
     int getNumOfCrossBlockVRegs() const { return num_vregs_cross_block; }
 
     bool hasVRegsAssigned() const { return num_vregs != -1; }
-    void assignVRegs(const CodeConstants& code_constants, CFG* cfg, const ParamNames& param_names,
+    void assignVRegs(const CodeConstants& code_constants, CFGConstruction* cfg, const ParamNames& param_names,
                      llvm::DenseMap<int*, InternedString>& id_vreg);
 };
 
 // Control Flow Graph
 class CFG {
 private:
-    int next_idx;
     VRegInfo vreg_info;
 
 public:
     std::vector<CFGBlock*> blocks;
+    std::unique_ptr<unsigned char[]> bytecode;
 
 public:
-    CFG() : next_idx(0) {}
+    CFG(VRegInfo& vreg_info) : vreg_info(vreg_info) {}
+    ~CFG() {
+        for (auto&& block : blocks) {
+            delete block;
+        }
+    }
 
     CFGBlock* getStartingBlock() { return blocks[0]; }
     VRegInfo& getVRegInfo() { return vreg_info; }
-
-    CFGBlock* addBlock() {
-        int idx = next_idx;
-        next_idx++;
-        CFGBlock* block = new CFGBlock(this, idx);
-        blocks.push_back(block);
-
-        return block;
-    }
-
-    // Creates a block which must be placed later, using placeBlock().
-    // Must be placed on same CFG it was created on.
-    // You can also safely delete it without placing it.
-    CFGBlock* addDeferredBlock() {
-        CFGBlock* block = new CFGBlock(this, -1);
-        return block;
-    }
-
-    void placeBlock(CFGBlock* block) {
-        assert(block->idx == -1);
-        block->idx = next_idx;
-        next_idx++;
-        blocks.push_back(block);
-    }
 
     void print(const CodeConstants& code_constants, llvm::raw_ostream& stream = llvm::outs());
 };

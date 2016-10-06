@@ -384,7 +384,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
     assert((start_block == NULL) == (start_at == NULL));
     if (start_block == NULL) {
         start_block = interpreter.source_info->cfg->getStartingBlock();
-        start_at = start_block->body[0];
+        start_at = start_block->body;
     }
 
     // Important that this happens after RegisterHelper:
@@ -395,7 +395,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
     if (!from_start) {
         interpreter.current_block = start_block;
         bool started = false;
-        for (auto s : start_block->body) {
+        for (auto s : *start_block) {
             if (!started) {
                 if (s != start_at)
                     continue;
@@ -449,7 +449,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             interpreter.startJITing(interpreter.current_block);
         }
 
-        for (BST_stmt* s : interpreter.current_block->body) {
+        for (BST_stmt* s : *interpreter.current_block) {
             interpreter.setCurrentStatement(s);
             if (interpreter.jit)
                 interpreter.jit->emitSetCurrentInst(s);
@@ -2112,7 +2112,7 @@ extern "C" Box* astInterpretDeoptFromASM(BoxedCode* code, BST_stmt* enclosing_st
         if (enclosing_stmt->type == BST_TYPE::Invoke) {
             auto invoke = bst_cast<BST_Invoke>(enclosing_stmt);
             start_block = invoke->normal_dest;
-            starting_statement = start_block->body[0];
+            starting_statement = start_block->body;
             enclosing_stmt = invoke->stmt;
         } else if (enclosing_stmt->has_dest_vreg()) {
             int vreg_dst = ((BST_stmt_with_dest*)enclosing_stmt)->vreg_dst;
@@ -2127,12 +2127,11 @@ extern "C" Box* astInterpretDeoptFromASM(BoxedCode* code, BST_stmt* enclosing_st
     if (start_block == NULL) {
         // TODO innefficient
         for (auto block : code->source->cfg->blocks) {
-            int n = block->body.size();
-            for (int i = 0; i < n; i++) {
-                if (block->body[i] == enclosing_stmt) {
-                    ASSERT(i + 1 < n, "how could we deopt from a non-invoke terminator?");
+            for (auto it = block->begin(), it_end = block->end(); it != it_end; ++it) {
+                if (*it == enclosing_stmt) {
+                    ASSERT(!(*it)->is_terminator(), "how could we deopt from a non-invoke terminator?");
                     start_block = block;
-                    starting_statement = block->body[i + 1];
+                    starting_statement = *(++it);
                     break;
                 }
             }

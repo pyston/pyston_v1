@@ -43,6 +43,25 @@ template <class T> static void visitVector(const std::vector<T*>& vec, BSTVisito
     }
 }
 
+void BST_stmt::accept(BSTVisitor* v) {
+    switch (type) {
+#define DISPATCH_ACCEPT(x, y)                                                                                          \
+    case BST_TYPE::x:                                                                                                  \
+        return bst_cast<BST_##x>(this)->accept(v);
+        FOREACH_TYPE(DISPATCH_ACCEPT)
+    };
+}
+
+void BST_stmt::accept_stmt(StmtVisitor* v) {
+    switch (type) {
+#define DISPATCH_ACCEPT_STMT(x, y)                                                                                     \
+    case BST_TYPE::x:                                                                                                  \
+        return bst_cast<BST_##x>(this)->accept_stmt(v);
+        FOREACH_TYPE(DISPATCH_ACCEPT_STMT)
+    };
+}
+
+
 void BST_Assert::accept(BSTVisitor* v) {
     bool skip = v->visit_assert(this);
     if (skip)
