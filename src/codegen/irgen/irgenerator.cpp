@@ -1098,14 +1098,14 @@ private:
         InternedString attr;
         CompilerVariable* func;
         int* vreg_elts = NULL;
-        if (node->type == BST_TYPE::CallAttr) {
+        if (node->type() == BST_TYPE::CallAttr) {
             is_callattr = true;
             callattr_clsonly = false;
             auto* attr_ast = bst_cast<BST_CallAttr>(node);
             vreg_elts = bst_cast<BST_CallAttr>(node)->elts;
             func = evalVReg(attr_ast->vreg_value);
             attr = irstate->getCodeConstants().getInternedString(attr_ast->index_attr);
-        } else if (node->type == BST_TYPE::CallClsAttr) {
+        } else if (node->type() == BST_TYPE::CallClsAttr) {
             is_callattr = true;
             callattr_clsonly = true;
             auto* attr_ast = bst_cast<BST_CallClsAttr>(node);
@@ -2406,7 +2406,7 @@ private:
                 llvm::DebugLoc::get(node->lineno, 0, irstate->getFuncDbgInfo()));
         }
 
-        switch (node->type) {
+        switch (node->type()) {
             case BST_TYPE::Assert:
                 doAssert(bst_cast<BST_Assert>(node), unw_info);
                 break;
@@ -2455,20 +2455,6 @@ private:
                 assert(!unw_info.hasHandler());
                 doJump(bst_cast<BST_Jump>(node), unw_info);
                 break;
-            case BST_TYPE::Invoke: {
-                assert(!unw_info.hasHandler());
-                BST_Invoke* invoke = bst_cast<BST_Invoke>(node);
-
-                doStmt(invoke->stmt, UnwindInfo(irstate->getCode(), node, entry_blocks[invoke->exc_dest]));
-
-                assert(state == RUNNING || state == DEAD);
-                if (state == RUNNING) {
-                    emitter.getBuilder()->CreateBr(entry_blocks[invoke->normal_dest]);
-                    endBlock(FINISHED);
-                }
-
-                break;
-            }
             case BST_TYPE::Raise:
                 doRaise(bst_cast<BST_Raise>(node), unw_info);
                 break;
@@ -2485,7 +2471,7 @@ private:
             // Handle all cases which are derived from BST_stmt_with_dest
             default: {
                 CompilerVariable* rtn = NULL;
-                switch (node->type) {
+                switch (node->type()) {
                     case BST_TYPE::CopyVReg:
                         rtn = evalAssign(bst_cast<BST_CopyVReg>(node), unw_info);
                         break;
@@ -2573,7 +2559,7 @@ private:
                         rtn = evalMakeSlice(bst_cast<BST_MakeSlice>(node), unw_info);
                         break;
                     default:
-                        printf("Unhandled stmt type at " __FILE__ ":" STRINGIFY(__LINE__) ": %d\n", node->type);
+                        printf("Unhandled stmt type at " __FILE__ ":" STRINGIFY(__LINE__) ": %d\n", node->type());
                         exit(1);
                 }
                 rtn = evalSliceExprPost((BST_stmt_with_dest*)node, unw_info, rtn);
@@ -2951,18 +2937,25 @@ public:
             }
             printf("\n");
         }
-        for (int i = 0; i < block->body.size(); i++) {
+        for (BST_stmt* stmt : *block) {
             if (state == DEAD)
                 break;
             assert(state != FINISHED);
 
 #if ENABLE_SAMPLING_PROFILER
-            auto stmt = block->body[i];
             if (stmt->type != BST_TYPE::Landigpad && stmt->lineno > 0)
-                doSafePoint(block->body[i]);
+                doSafePoint(stmt);
 #endif
+            if (stmt->is_invoke()) {
+                doStmt(stmt, UnwindInfo(irstate->getCode(), stmt, entry_blocks[stmt->get_exc_block()]));
 
-            doStmt(block->body[i], UnwindInfo(irstate->getCode(), block->body[i], NULL));
+                assert(state == RUNNING || state == DEAD);
+                if (state == RUNNING) {
+                    emitter.getBuilder()->CreateBr(entry_blocks[stmt->get_normal_block()]);
+                    endBlock(FINISHED);
+                }
+            } else
+                doStmt(stmt, UnwindInfo(irstate->getCode(), stmt, NULL));
         }
         if (VERBOSITY("irgenerator") >= 2) { // print ending symbol table
             printf("  %d fini:", block->idx);

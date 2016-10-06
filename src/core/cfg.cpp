@@ -36,7 +36,68 @@
 //#define VERBOSITY(x) 2
 
 namespace pyston {
+class TrackingVRegPtr {
+private:
+    union {
+        long offset;
+        int* ptr;
+    };
+    bool is_fixed_ptr;
 
+public:
+    static TrackingVRegPtr createTracking(int* vreg, BSTAllocator& alloc) {
+        TrackingVRegPtr tmp;
+        tmp.offset = alloc.getOffset(vreg);
+        tmp.is_fixed_ptr = false;
+        return tmp;
+    }
+    static TrackingVRegPtr createFixed(int* vreg) {
+        TrackingVRegPtr tmp;
+        tmp.ptr = vreg;
+        tmp.is_fixed_ptr = true;
+        return tmp;
+    }
+    static TrackingVRegPtr create(int* vreg, BSTAllocator& alloc) {
+        if (alloc.isInside(vreg))
+            return createTracking(vreg, alloc);
+        return createFixed(vreg);
+    }
+    std::size_t getHash() const {
+        if (is_fixed_ptr)
+            return std::hash<int*>()(ptr);
+        return std::hash<long>()(offset);
+    }
+    bool operator==(const TrackingVRegPtr& right) const {
+        if (is_fixed_ptr != right.is_fixed_ptr)
+            return false;
+        if (is_fixed_ptr)
+            return ptr == right.ptr;
+        return offset == right.offset;
+    }
+    static TrackingVRegPtr getEmptyKey() {
+        TrackingVRegPtr tmp;
+        tmp.ptr = (int*)-1;
+        tmp.is_fixed_ptr = true;
+        return tmp;
+    }
+    static TrackingVRegPtr getTombstoneKey() {
+        TrackingVRegPtr tmp;
+        tmp.ptr = (int*)-2;
+        tmp.is_fixed_ptr = true;
+        return tmp;
+    }
+};
+}
+namespace llvm {
+template <> struct DenseMapInfo<pyston::TrackingVRegPtr> {
+    static inline pyston::TrackingVRegPtr getEmptyKey() { return pyston::TrackingVRegPtr::getEmptyKey(); }
+    static inline pyston::TrackingVRegPtr getTombstoneKey() { return pyston::TrackingVRegPtr::getTombstoneKey(); }
+    static unsigned getHashValue(const pyston::TrackingVRegPtr& val) { return val.getHash(); }
+    static bool isEqual(const pyston::TrackingVRegPtr& lhs, const pyston::TrackingVRegPtr& rhs) { return lhs == rhs; }
+};
+}
+
+namespace pyston {
 
 template <typename Node> void fillScopingInfo(Node* node, InternedString id, ScopeInfo* scope_info) {
     node->lookup_type = scope_info->getScopeTypeOfName(id);
@@ -203,9 +264,9 @@ void CFGBlock::print(const CodeConstants& code_constants, llvm::raw_ostream& str
     stream << "\n";
 
     PrintVisitor pv(code_constants, 4, stream);
-    for (int j = 0; j < body.size(); j++) {
+    for (BST_stmt* stmt : *this) {
         stream << "    ";
-        body[j]->accept(&pv);
+        stmt->accept(&pv);
         stream << "\n";
     }
 }
@@ -395,7 +456,7 @@ public:
           future_flags(future_flags),
           cfg(cfg),
           cfgizer(cfgizer) {
-        curblock = cfg->addBlock();
+        setInsertPoint(cfg->addDeferredBlock());
         curblock->info = "entry";
     }
 
@@ -408,6 +469,92 @@ public:
 
     // ---------- private methods ----------
 private:
+    void setInsertPoint(CFGBlock* block) {
+        curblock = block;
+        if (block)
+            cfg->placeBlock(block);
+    }
+
+    // Adds the specified instruction to the current block (invalidating pointers to previous returned
+    // instuctions!) and returns a pointer to the newly created node. It automatically creates invokes if neccessary.
+    // Because of the invalidation issue it is extremely important that all fields of a node get set/retrieved before a
+    // new instruction get's added! The reason for this behaviour is that we directly alloc into an array which can
+    // change address when we have to resize it.
+    template <typename T, bool cant_throw = false, typename... Args> T* allocAndPush(Args&&... args) {
+        assert(curblock->isPlaced());
+        assert(curblock->allowed_to_add_stuff);
+        if (exc_handlers.size() == 0 || cant_throw)
+            return T::create(cfg->bytecode, std::forward<Args>(args)...);
+
+        BST_TYPE::BST_TYPE type = T::TYPE;
+        switch (type) {
+            case BST_TYPE::Branch:
+            case BST_TYPE::CopyVReg:
+            case BST_TYPE::Dict:
+            case BST_TYPE::Jump:
+            case BST_TYPE::Landingpad:
+            case BST_TYPE::Return:
+            case BST_TYPE::SetExcInfo:
+            case BST_TYPE::Tuple:
+            case BST_TYPE::UncacheExcInfo:
+                return T::create(cfg->bytecode, std::forward<Args>(args)...);
+            default:
+                break;
+        };
+
+        // We remapped asserts to just be assertion failures at this point.
+        bool is_raise = (type == BST_TYPE::Raise || type == BST_TYPE::Assert);
+
+        // If we invoke a raise statement, generate an invoke where both destinations
+        // are the exception handler, since we know the non-exceptional path won't be taken.
+        // TODO: would be much better (both more efficient and require less special casing)
+        // if we just didn't generate this control flow as exceptions.
+
+        CFGBlock* normal_dest = cfg->addDeferredBlock();
+        // Add an extra exc_dest trampoline to prevent critical edges:
+        CFGBlock* exc_dest;
+        if (is_raise)
+            exc_dest = normal_dest;
+        else
+            exc_dest = cfg->addDeferredBlock();
+
+        auto rtn = T::create(cfg->bytecode, std::forward<Args>(args)...);
+        auto rtn_offset = cfg->bytecode.getOffset(rtn);
+        rtn->type_and_flags |= BST_stmt::invoke_flag;
+        rtn = NULL; // we can not use rtn from here on because the next allocations invalidate the address.
+
+        *cfg->bytecode.allocate<CFGBlock*>() = normal_dest;
+        *cfg->bytecode.allocate<CFGBlock*>() = exc_dest;
+
+        curblock->connectTo(normal_dest);
+        if (!is_raise)
+            curblock->connectTo(exc_dest);
+
+        ExcBlockInfo& exc_info = exc_handlers.back();
+        exc_info.maybe_taken = true;
+
+        setInsertPoint(exc_dest);
+        // TODO: need to clear some temporaries here
+        auto* landingpad = new (cfg->bytecode) BST_Landingpad;
+        TmpValue landingpad_name = createDstName(landingpad);
+
+        auto* exc_unpack = BST_UnpackIntoArray::create(cfg->bytecode, 3);
+        unmapExpr(landingpad_name, &exc_unpack->vreg_src);
+        int* array = exc_unpack->vreg_dst;
+        unmapExpr(TmpValue(exc_info.exc_type_name, 0), &array[0]);
+        unmapExpr(TmpValue(exc_info.exc_value_name, 0), &array[1]);
+        unmapExpr(TmpValue(exc_info.exc_traceback_name, 0), &array[2]);
+
+        pushJump(exc_info.exc_dest);
+
+        if (is_raise)
+            curblock = NULL;
+        else
+            setInsertPoint(normal_dest);
+
+        return (T*)&cfg->bytecode.getData()[rtn_offset];
+    }
+
     template <typename T> InternedString internString(T&& s) { return stringpool.get(std::forward<T>(s)); }
 
     InternedString createUniqueName(llvm::Twine prefix) {
@@ -449,10 +596,9 @@ private:
             }
         }
 
-        BST_Return* node = new BST_Return();
+        BST_Return* node = allocAndPush<BST_Return>();
         unmapExpr(value, &node->vreg_value);
         node->lineno = value.lineno;
-        push_back(node);
         curblock = NULL;
     }
 
@@ -491,16 +637,15 @@ private:
     }
 
     TmpValue callNonzero(TmpValue e) {
-        BST_Nonzero* call = new BST_Nonzero;
+        BST_Nonzero* call = allocAndPush<BST_Nonzero>();
         call->lineno = e.lineno;
         unmapExpr(e, &call->vreg_value);
-        return pushBackCreateDst(call);
+        return createDstName(call);
     }
 
-    TmpValue pushBackCreateDst(BST_stmt_with_dest* rtn) {
+    TmpValue createDstName(BST_stmt_with_dest* rtn) {
         TmpValue name(nodeName(), rtn->lineno);
         unmapExpr(name, &rtn->vreg_dst);
-        push_back(rtn);
         return name;
     }
 
@@ -521,12 +666,12 @@ private:
         if (name->id == "None")
             return makeNone(name->lineno);
 
-        auto rtn = new BST_LoadName;
+        auto rtn = allocAndPush<BST_LoadName>();
         rtn->lineno = name->lineno;
         rtn->index_id = remapInternedString(name->id);
         rtn->lookup_type = name->lookup_type;
         fillScopingInfo(rtn, name->id, scoping);
-        return pushBackCreateDst(rtn);
+        return createDstName(rtn);
     }
 
     int addConst(Box* o) {
@@ -623,13 +768,14 @@ private:
 
     TmpValue _dup(TmpValue val) {
         if (val.isName()) {
-            BST_CopyVReg* assign = new BST_CopyVReg;
+            BST_CopyVReg* assign = allocAndPush<BST_CopyVReg>();
             assign->lineno = val.lineno;
 
-            assert(!id_vreg.count(&assign->vreg_src));
-            id_vreg[&assign->vreg_src] = val.is;
+            auto id = TrackingVRegPtr::createTracking(&assign->vreg_src, cfg->bytecode);
+            assert(!id_vreg.count(id));
+            id_vreg[id] = val.is;
 
-            return pushBackCreateDst(assign);
+            return createDstName(assign);
         }
         return val;
     }
@@ -637,134 +783,120 @@ private:
     template <typename CompType> TmpValue remapComprehension(CompType* node) {
         assert(curblock);
 
-        auto* list = BST_List::create(0);
+        auto* list = allocAndPush<BST_List>(0);
         list->lineno = node->lineno;
-        TmpValue rtn_name = pushBackCreateDst(list);
-        std::vector<CFGBlock*> exit_blocks;
-
-        // Where the current level should jump to after finishing its iteration.
-        // For the outermost comprehension, this is NULL, and it doesn't jump anywhere;
-        // for the inner comprehensions, they should jump to the next-outer comprehension
-        // when they are done iterating.
-        CFGBlock* finished_block = NULL;
+        TmpValue rtn_name = createDstName(list);
+        struct BlockInfo {
+            CFGBlock* exit_block;
+            CFGBlock* test_block;
+            InternedString is;
+        };
+        llvm::SmallVector<BlockInfo, 4> blocks;
 
         for (int i = 0, n = node->generators.size(); i < n; i++) {
             AST_comprehension* c = node->generators[i];
             bool is_innermost = (i == n - 1);
 
             TmpValue remapped_iter = remapExpr(c->iter);
-            BST_GetIter* iter_call = new BST_GetIter;
+            BST_GetIter* iter_call = allocAndPush<BST_GetIter>();
             unmapExpr(remapped_iter, &iter_call->vreg_value);
             iter_call->lineno = c->target->lineno; // Not sure if this should be c->target or c->iter
             TmpValue iter_name(nodeName("lc_iter", i), node->lineno);
             unmapExpr(iter_name, &iter_call->vreg_dst);
-            push_back(iter_call);
 
-            CFGBlock* test_block = cfg->addBlock();
+            CFGBlock* test_block = cfg->addDeferredBlock();
             test_block->info = "comprehension_test";
             // printf("Test block for comp %d is %d\n", i, test_block->idx);
             pushJump(test_block);
 
-            curblock = test_block;
-            BST_HasNext* test_call = new BST_HasNext;
-            unmapExpr(_dup(iter_name), &test_call->vreg_value);
+            setInsertPoint(test_block);
+            auto dup_iter_name = _dup(iter_name);
+            BST_HasNext* test_call = allocAndPush<BST_HasNext>();
+            unmapExpr(dup_iter_name, &test_call->vreg_value);
             test_call->lineno = c->target->lineno;
-            TmpValue tmp_test_name = pushBackCreateDst(test_call);
+            TmpValue tmp_test_name = createDstName(test_call);
 
-            CFGBlock* body_block = cfg->addBlock();
+            CFGBlock* body_block = cfg->addDeferredBlock();
             body_block->info = "comprehension_body";
             CFGBlock* exit_block = cfg->addDeferredBlock();
             exit_block->info = "comprehension_exit";
-            exit_blocks.push_back(exit_block);
+            blocks.emplace_back(BlockInfo{ exit_block, test_block, iter_name.is });
             // printf("Body block for comp %d is %d\n", i, body_block->idx);
 
-            BST_Branch* br = new BST_Branch();
+            BST_Branch* br = allocAndPush<BST_Branch>();
             br->lineno = node->lineno;
-            unmapExpr(_dup(tmp_test_name), &br->vreg_test);
-            br->iftrue = body_block;
-            br->iffalse = exit_block;
+            unmapExpr(tmp_test_name, &br->vreg_test);
+            br->iftrue = (CFGBlock*)body_block;
+            br->iffalse = (CFGBlock*)exit_block;
             curblock->connectTo(body_block);
             curblock->connectTo(exit_block);
-            push_back(br);
 
-            curblock = body_block;
+            setInsertPoint(body_block);
             TmpValue next_name(nodeName(), node->lineno);
             pushAssign(next_name, makeCallAttr(_dup(iter_name), internString("next"), true));
             pushAssign(c->target, next_name);
 
             for (AST_expr* if_condition : c->ifs) {
                 TmpValue remapped = callNonzero(remapExpr(if_condition));
-                BST_Branch* br = new BST_Branch();
+                BST_Branch* br = allocAndPush<BST_Branch>();
                 unmapExpr(remapped, &br->vreg_test);
-                push_back(br);
 
                 // Put this below the entire body?
-                CFGBlock* body_tramp = cfg->addBlock();
+                CFGBlock* body_tramp = cfg->addDeferredBlock();
                 body_tramp->info = "comprehension_if_trampoline";
                 // printf("body_tramp for %d is %d\n", i, body_tramp->idx);
-                CFGBlock* body_continue = cfg->addBlock();
+                CFGBlock* body_continue = cfg->addDeferredBlock();
                 body_continue->info = "comprehension_if_continue";
                 // printf("body_continue for %d is %d\n", i, body_continue->idx);
 
-                br->iffalse = body_tramp;
+                br->iffalse = (CFGBlock*)body_tramp;
                 curblock->connectTo(body_tramp);
-                br->iftrue = body_continue;
+                br->iftrue = (CFGBlock*)body_continue;
                 curblock->connectTo(body_continue);
 
-                curblock = body_tramp;
+                setInsertPoint(body_tramp);
                 pushJump(test_block, true);
 
-                curblock = body_continue;
+                setInsertPoint(body_continue);
             }
 
-            CFGBlock* body_end = curblock;
-
-            assert((finished_block != NULL) == (i != 0));
-            if (finished_block) {
-                curblock = exit_block;
-                push_back(makeKill(iter_name.is));
-                pushJump(finished_block, true);
-            }
-            finished_block = test_block;
-
-            curblock = body_end;
             if (is_innermost) {
                 applyComprehensionCall(node, _dup(rtn_name));
 
                 pushJump(test_block, true);
-
-                assert(exit_blocks.size());
-                curblock = exit_blocks[0];
             } else {
                 // continue onto the next comprehension and add to this body
             }
         }
 
-        // Wait until the end to place the end blocks, so that
-        // we get a nice nesting structure, that looks similar to what
-        // you'd get with a nested for loop:
-        for (int i = exit_blocks.size() - 1; i >= 0; i--) {
-            cfg->placeBlock(exit_blocks[i]);
-            // printf("Exit block for comp %d is %d\n", i, exit_blocks[i]->idx);
+        assert(blocks.size());
+        for (int i = blocks.size() - 1; i >= 0; --i) {
+            // every exit block except the first one jumps to the previous test block (because we add them in reverse)
+            // the first one is the block where we continue execution
+            setInsertPoint(blocks[i].exit_block);
+            if (i > 0) {
+                makeKill(blocks[i].is);
+                pushJump(blocks[i - 1].test_block, true);
+            }
         }
 
         return rtn_name;
     }
 
     void pushJump(CFGBlock* target, bool allow_backedge = false, int lineno = 0) {
-        BST_Jump* rtn = new BST_Jump();
-        rtn->target = target;
+        BST_Jump* rtn = allocAndPush<BST_Jump>();
+        rtn->target = (CFGBlock*)target;
         rtn->lineno = lineno;
 
-        push_back(rtn);
         curblock->connectTo(target, allow_backedge);
         curblock = nullptr;
     }
 
     // NB. can generate blocks, because callNonzero can
     BST_Branch* makeBranch(TmpValue test) {
-        BST_Branch* rtn = new BST_Branch();
-        unmapExpr(callNonzero(test), &rtn->vreg_test);
+        auto expr = callNonzero(test);
+        BST_Branch* rtn = allocAndPush<BST_Branch>();
+        unmapExpr(expr, &rtn->vreg_test);
         rtn->lineno = test.lineno;
         return rtn;
     }
@@ -775,22 +907,20 @@ private:
     void pushBranch(TmpValue test, CFGBlock* iftrue, CFGBlock* iffalse) {
         assert(iftrue->idx == -1 && iffalse->idx == -1);
         BST_Branch* branch = makeBranch(test);
-        branch->iftrue = iftrue;
-        branch->iffalse = iffalse;
+        branch->iftrue = (CFGBlock*)iftrue;
+        branch->iffalse = (CFGBlock*)iffalse;
         curblock->connectTo(iftrue);
         curblock->connectTo(iffalse);
-        push_back(branch);
         curblock = nullptr;
     }
 
     void pushReraise(int lineno, InternedString exc_type_name, InternedString exc_value_name,
                      InternedString exc_traceback_name) {
-        auto raise = new BST_Raise();
+        auto raise = allocAndPush<BST_Raise>();
         raise->lineno = lineno;
         unmapExpr(TmpValue(exc_type_name, lineno), &raise->vreg_arg0);
         unmapExpr(TmpValue(exc_value_name, lineno), &raise->vreg_arg1);
         unmapExpr(TmpValue(exc_traceback_name, lineno), &raise->vreg_arg2);
-        push_back(raise);
         curblock = nullptr;
     }
 
@@ -814,12 +944,12 @@ private:
     }
 
     TmpValue makeLoadAttribute(TmpValue base, InternedString attr, bool clsonly) {
-        BST_LoadAttr* rtn = new BST_LoadAttr();
+        BST_LoadAttr* rtn = allocAndPush<BST_LoadAttr>();
         rtn->clsonly = clsonly;
         unmapExpr(base, &rtn->vreg_value);
         rtn->index_attr = remapInternedString(attr);
         rtn->lineno = base.lineno;
-        return pushBackCreateDst(rtn);
+        return createDstName(rtn);
     }
 
     AST_Call* makeASTCall(ASTAllocator& allocator, AST_expr* func) {
@@ -846,19 +976,19 @@ private:
     }
 
     TmpValue makeCall(TmpValue func, llvm::ArrayRef<TmpValue> args = {}) {
-        BST_CallFunc* rtn = BST_CallFunc::create(args.size(), 0 /* num keywords */);
+        BST_CallFunc* rtn = allocAndPush<BST_CallFunc>(args.size(), 0 /* num keywords */);
         unmapExpr(func, &rtn->vreg_func);
         for (int i = 0; i < args.size(); ++i) {
             unmapExpr(args[i], &rtn->elts[i]);
         }
         rtn->lineno = func.lineno;
-        return pushBackCreateDst(rtn);
+        return createDstName(rtn);
     }
 
     TmpValue makeCallAttr(TmpValue target, InternedString attr, bool is_cls, llvm::ArrayRef<TmpValue> args = {}) {
         BST_Call* rtn = NULL;
         if (!is_cls) {
-            BST_CallAttr* call = BST_CallAttr::create(args.size(), 0 /* num keywords */);
+            BST_CallAttr* call = allocAndPush<BST_CallAttr>(args.size(), 0 /* num keywords */);
             call->index_attr = remapInternedString(attr);
             unmapExpr(target, &call->vreg_value);
             for (int i = 0; i < args.size(); ++i) {
@@ -866,7 +996,7 @@ private:
             }
             rtn = call;
         } else {
-            BST_CallClsAttr* call = BST_CallClsAttr::create(args.size(), 0 /* num keywords */);
+            BST_CallClsAttr* call = allocAndPush<BST_CallClsAttr>(args.size(), 0 /* num keywords */);
             call->index_attr = remapInternedString(attr);
             unmapExpr(target, &call->vreg_value);
             for (int i = 0; i < args.size(); ++i) {
@@ -875,55 +1005,56 @@ private:
             rtn = call;
         }
         rtn->lineno = target.lineno;
-        return pushBackCreateDst(rtn);
+        return createDstName(rtn);
     }
 
     TmpValue makeCompare(AST_TYPE::AST_TYPE oper, TmpValue left, TmpValue right) {
-        auto compare = new BST_Compare();
+        auto compare = allocAndPush<BST_Compare>();
         compare->op = oper;
         unmapExpr(left, &compare->vreg_left);
         unmapExpr(right, &compare->vreg_comparator);
-        return pushBackCreateDst(compare);
+        return createDstName(compare);
     }
 
     void pushAssign(AST_expr* target, TmpValue val) {
         if (target->type == AST_TYPE::Name) {
-            BST_StoreName* assign = new BST_StoreName();
-            unmapExpr(val, &assign->vreg_value);
-            assign->lineno = val.lineno;
-            assign->index_id = remapInternedString(ast_cast<AST_Name>(target)->id);
-            fillScopingInfo(assign, ast_cast<AST_Name>(target)->id, scoping);
-            push_back(assign);
+            pushStoreName(ast_cast<AST_Name>(target)->id, val);
         } else if (target->type == AST_TYPE::Subscript) {
             AST_Subscript* s = ast_cast<AST_Subscript>(target);
             assert(s->ctx_type == AST_TYPE::Store);
 
+            auto remaped_value = remapExpr(s->value);
             if (isSlice(s->slice)) {
                 auto* slice = ast_cast<AST_Slice>((AST_Slice*)s->slice);
-                auto* s_target = new BST_StoreSubSlice();
+
+                auto remaped_lower = remapExpr(slice->lower);
+                auto remaped_upper = remapExpr(slice->upper);
+
+                auto* s_target = allocAndPush<BST_StoreSubSlice>();
                 s_target->lineno = val.lineno;
-                unmapExpr(remapExpr(s->value), &s_target->vreg_target);
-                unmapExpr(remapExpr(slice->lower), &s_target->vreg_lower);
-                unmapExpr(remapExpr(slice->upper), &s_target->vreg_upper);
+                unmapExpr(remaped_value, &s_target->vreg_target);
+                unmapExpr(remaped_lower, &s_target->vreg_lower);
+                unmapExpr(remaped_upper, &s_target->vreg_upper);
                 unmapExpr(val, &s_target->vreg_value);
-                push_back(s_target);
             } else {
-                auto* s_target = new BST_StoreSub();
+                auto remaped_slice = remapSlice(s->slice);
+
+                auto* s_target = allocAndPush<BST_StoreSub>();
                 s_target->lineno = val.lineno;
-                unmapExpr(remapExpr(s->value), &s_target->vreg_target);
-                unmapExpr(remapSlice(s->slice), &s_target->vreg_slice);
+                unmapExpr(remaped_value, &s_target->vreg_target);
+                unmapExpr(remaped_slice, &s_target->vreg_slice);
                 unmapExpr(val, &s_target->vreg_value);
-                push_back(s_target);
             }
 
         } else if (target->type == AST_TYPE::Attribute) {
             AST_Attribute* a = ast_cast<AST_Attribute>(target);
-            BST_StoreAttr* a_target = new BST_StoreAttr();
+            auto remapped_value = remapExpr(a->value);
+
+            BST_StoreAttr* a_target = allocAndPush<BST_StoreAttr>();
             unmapExpr(val, &a_target->vreg_value);
-            unmapExpr(remapExpr(a->value), &a_target->vreg_target);
+            unmapExpr(remapped_value, &a_target->vreg_target);
             a_target->index_attr = remapInternedString(scoping->mangleName(a->attr));
             a_target->lineno = a->lineno;
-            push_back(a_target);
         } else if (target->type == AST_TYPE::Tuple || target->type == AST_TYPE::List) {
             std::vector<AST_expr*>* elts;
             if (target->type == AST_TYPE::Tuple) {
@@ -936,20 +1067,20 @@ private:
                 elts = &_t->elts;
             }
 
-            BST_UnpackIntoArray* unpack = BST_UnpackIntoArray::create(elts->size());
+            BST_UnpackIntoArray* unpack = allocAndPush<BST_UnpackIntoArray>(elts->size());
             unmapExpr(val, &unpack->vreg_src);
             unpack->lineno = val.lineno;
 
-            // A little hackery: push the assign, even though we're not done constructing it yet,
-            // so that we can iteratively push more stuff after it
-            push_back(unpack);
-
+            llvm::SmallVector<TmpValue, 8> tmp_names;
             for (int i = 0; i < elts->size(); i++) {
                 TmpValue tmp_name(nodeName("", i), (*elts)[i]->lineno);
-                pushAssign((*elts)[i], tmp_name);
                 unmapExpr(tmp_name, &unpack->vreg_dst[i]);
+                tmp_names.emplace_back(tmp_name);
             }
 
+            for (int i = 0; i < elts->size(); i++) {
+                pushAssign((*elts)[i], tmp_names[i]);
+            }
         } else {
             RELEASE_ASSERT(0, "%d", target->type);
         }
@@ -960,21 +1091,15 @@ private:
         InternedString id = dst.is;
         if (id.isCompilerCreatedName()) {
             if (val.isConst()) {
-                BST_CopyVReg* assign = new BST_CopyVReg;
+                BST_CopyVReg* assign = allocAndPush<BST_CopyVReg>();
                 assign->lineno = val.lineno;
                 unmapExpr(val, &assign->vreg_src);
                 unmapExpr(dst, &assign->vreg_dst);
-                push_back(assign);
                 return;
             }
         }
 
-        auto* assign = new BST_StoreName();
-        unmapExpr(val, &assign->vreg_value);
-        assign->lineno = val.lineno;
-        assign->index_id = remapInternedString(id);
-        fillScopingInfo(assign, id, scoping);
-        push_back(assign);
+        pushStoreName(id, val);
     }
 
     void pushAssign(InternedString id, TmpValue val) { pushAssign(TmpValue(id, val.lineno), val); }
@@ -996,24 +1121,26 @@ private:
     }
 
     TmpValue remapAttribute(AST_Attribute* node) {
-        BST_LoadAttr* rtn = new BST_LoadAttr();
+        auto remapped_value = remapExpr(node->value);
+        BST_LoadAttr* rtn = allocAndPush<BST_LoadAttr>();
         rtn->lineno = node->lineno;
         rtn->index_attr = remapInternedString(scoping->mangleName(node->attr));
-        unmapExpr(remapExpr(node->value), &rtn->vreg_value);
-        return pushBackCreateDst(rtn);
+        unmapExpr(remapped_value, &rtn->vreg_value);
+        return createDstName(rtn);
     }
 
     // This functions makes sure that AssignVRegsVisitor will fill in the correct vreg number in the supplied pointer to
     // a integer.
     // We needs this because the vregs get only assigned after the CFG is completely constructed.
-    llvm::DenseMap<int*, InternedString> id_vreg;
+    llvm::DenseMap<TrackingVRegPtr, InternedString> id_vreg;
     void unmapExpr(TmpValue val, int* vreg) {
         if (val.isConst()) {
             *vreg = val.vreg_const;
             return;
         } else if (val.isName()) {
-            assert(!id_vreg.count(vreg));
-            id_vreg[vreg] = val.is;
+            auto id = TrackingVRegPtr::create(vreg, cfg->bytecode);
+            assert(!id_vreg.count(id));
+            id_vreg[id] = val.is;
             return;
         } else if (val.isUndefined()) {
             *vreg = VREG_UNDEFINED;
@@ -1024,12 +1151,15 @@ private:
     }
 
     TmpValue remapBinOp(AST_BinOp* node) {
-        BST_BinOp* rtn = new BST_BinOp();
+        auto remapped_left = remapExpr(node->left);
+        auto remapped_right = remapExpr(node->right);
+
+        BST_BinOp* rtn = allocAndPush<BST_BinOp>();
         rtn->lineno = node->lineno;
         rtn->op_type = remapBinOpType(node->op_type);
-        unmapExpr(remapExpr(node->left), &rtn->vreg_left);
-        unmapExpr(remapExpr(node->right), &rtn->vreg_right);
-        return pushBackCreateDst(rtn);
+        unmapExpr(remapped_left, &rtn->vreg_left);
+        unmapExpr(remapped_right, &rtn->vreg_right);
+        return createDstName(rtn);
     }
 
     TmpValue remapBoolOp(AST_BoolOp* node) {
@@ -1044,78 +1174,95 @@ private:
             TmpValue val = remapExpr(node->values[i]);
             pushAssign(name, _dup(val));
 
-            BST_Branch* br = new BST_Branch();
-            unmapExpr(callNonzero(val), &br->vreg_test);
+            auto remapped_br_test = callNonzero(val);
+            BST_Branch* br = allocAndPush<BST_Branch>();
+            unmapExpr(remapped_br_test, &br->vreg_test);
             br->lineno = val.lineno;
-            push_back(br);
 
             CFGBlock* was_block = curblock;
-            CFGBlock* next_block = cfg->addBlock();
-            CFGBlock* crit_break_block = cfg->addBlock();
+            CFGBlock* next_block = cfg->addDeferredBlock();
+            CFGBlock* crit_break_block = cfg->addDeferredBlock();
             was_block->connectTo(next_block);
             was_block->connectTo(crit_break_block);
 
             if (node->op_type == AST_TYPE::Or) {
-                br->iftrue = crit_break_block;
-                br->iffalse = next_block;
+                br->iftrue = (CFGBlock*)crit_break_block;
+                br->iffalse = (CFGBlock*)next_block;
             } else if (node->op_type == AST_TYPE::And) {
-                br->iffalse = crit_break_block;
-                br->iftrue = next_block;
+                br->iffalse = (CFGBlock*)crit_break_block;
+                br->iftrue = (CFGBlock*)next_block;
             } else {
                 RELEASE_ASSERT(0, "");
             }
 
-            curblock = crit_break_block;
+            setInsertPoint(crit_break_block);
+
             pushJump(exit_block);
 
-            curblock = next_block;
+            setInsertPoint(next_block);
         }
 
         TmpValue final_val = remapExpr(node->values[node->values.size() - 1]);
         pushAssign(name, final_val);
         pushJump(exit_block);
 
-        cfg->placeBlock(exit_block);
-        curblock = exit_block;
+        setInsertPoint(exit_block);
 
         return TmpValue(name, node->lineno);
     }
 
+    template <typename T>
+    void remapCallHelper(T* dst_node, AST_Call* node, llvm::ArrayRef<TmpValue> remapped_args,
+                         llvm::ArrayRef<TmpValue> remapped_keywords) {
+        for (int i = 0; i < node->args.size(); ++i) {
+            unmapExpr(remapped_args[i], &dst_node->elts[i]);
+        }
+        for (int i = 0; i < node->keywords.size(); ++i) {
+            unmapExpr(remapped_keywords[i], &dst_node->elts[node->args.size() + i]);
+        }
+    }
+
     TmpValue remapCall(AST_Call* node) {
         BST_Call* rtn_shared = NULL;
+
+        TmpValue remapped_func;
+        if (node->func->type != AST_TYPE::Attribute && node->func->type != AST_TYPE::ClsAttribute)
+            remapped_func = remapExpr(node->func);
+
+        llvm::SmallVector<TmpValue, 8> remapped_args;
+        for (int i = 0; i < node->args.size(); ++i) {
+            remapped_args.emplace_back(remapExpr(node->args[i]));
+        }
+        llvm::SmallVector<TmpValue, 8> remapped_keywords;
+        for (int i = 0; i < node->keywords.size(); ++i) {
+            remapped_keywords.emplace_back(remapExpr(node->keywords[i]->value));
+        }
+
+        auto remapped_starargs = remapExpr(node->starargs);
+        auto remapped_kwargs = remapExpr(node->kwargs);
+
         if (node->func->type == AST_TYPE::Attribute) {
-            BST_CallAttr* rtn = BST_CallAttr::create(node->args.size(), node->keywords.size());
             auto* attr = ast_cast<AST_Attribute>(node->func);
+            auto remapped_value = remapExpr(attr->value);
+
+            BST_CallAttr* rtn = allocAndPush<BST_CallAttr>(node->args.size(), node->keywords.size());
             rtn->index_attr = remapInternedString(scoping->mangleName(attr->attr));
-            unmapExpr(remapExpr(attr->value), &rtn->vreg_value);
-            for (int i = 0; i < node->args.size(); ++i) {
-                unmapExpr(remapExpr(node->args[i]), &rtn->elts[i]);
-            }
-            for (int i = 0; i < node->keywords.size(); ++i) {
-                unmapExpr(remapExpr(node->keywords[i]->value), &rtn->elts[node->args.size() + i]);
-            }
+            unmapExpr(remapped_value, &rtn->vreg_value);
+            remapCallHelper(rtn, node, remapped_args, remapped_keywords);
             rtn_shared = rtn;
         } else if (node->func->type == AST_TYPE::ClsAttribute) {
-            BST_CallClsAttr* rtn = BST_CallClsAttr::create(node->args.size(), node->keywords.size());
             auto* attr = ast_cast<AST_ClsAttribute>(node->func);
+            auto remapped_value = remapExpr(attr->value);
+
+            BST_CallClsAttr* rtn = allocAndPush<BST_CallClsAttr>(node->args.size(), node->keywords.size());
             rtn->index_attr = remapInternedString(scoping->mangleName(attr->attr));
-            unmapExpr(remapExpr(attr->value), &rtn->vreg_value);
-            for (int i = 0; i < node->args.size(); ++i) {
-                unmapExpr(remapExpr(node->args[i]), &rtn->elts[i]);
-            }
-            for (int i = 0; i < node->keywords.size(); ++i) {
-                unmapExpr(remapExpr(node->keywords[i]->value), &rtn->elts[node->args.size() + i]);
-            }
+            unmapExpr(remapped_value, &rtn->vreg_value);
+            remapCallHelper(rtn, node, remapped_args, remapped_keywords);
             rtn_shared = rtn;
         } else {
-            BST_CallFunc* rtn = BST_CallFunc::create(node->args.size(), node->keywords.size());
-            unmapExpr(remapExpr(node->func), &rtn->vreg_func);
-            for (int i = 0; i < node->args.size(); ++i) {
-                unmapExpr(remapExpr(node->args[i]), &rtn->elts[i]);
-            }
-            for (int i = 0; i < node->keywords.size(); ++i) {
-                unmapExpr(remapExpr(node->keywords[i]->value), &rtn->elts[node->args.size() + i]);
-            }
+            BST_CallFunc* rtn = allocAndPush<BST_CallFunc>(node->args.size(), node->keywords.size());
+            unmapExpr(remapped_func, &rtn->vreg_func);
+            remapCallHelper(rtn, node, remapped_args, remapped_keywords);
             rtn_shared = rtn;
         }
 
@@ -1129,18 +1276,19 @@ private:
             rtn_shared->index_keyword_names = code_constants.addKeywordNames(keywords_names);
         }
 
-        unmapExpr(remapExpr(node->starargs), &rtn_shared->vreg_starargs);
-        unmapExpr(remapExpr(node->kwargs), &rtn_shared->vreg_kwargs);
-        return pushBackCreateDst(rtn_shared);
+        unmapExpr(remapped_starargs, &rtn_shared->vreg_starargs);
+        unmapExpr(remapped_kwargs, &rtn_shared->vreg_kwargs);
+        return createDstName(rtn_shared);
     }
 
     TmpValue remapClsAttribute(AST_ClsAttribute* node) {
-        BST_LoadAttr* rtn = new BST_LoadAttr();
+        auto remapped_value = remapExpr(node->value);
+        BST_LoadAttr* rtn = allocAndPush<BST_LoadAttr>();
         rtn->clsonly = true;
         rtn->lineno = node->lineno;
         rtn->index_attr = remapInternedString(scoping->mangleName(node->attr));
-        unmapExpr(remapExpr(node->value), &rtn->vreg_value);
-        return pushBackCreateDst(rtn);
+        unmapExpr(remapped_value, &rtn->vreg_value);
+        return createDstName(rtn);
     }
 
     TmpValue remapCompare(AST_Compare* node) {
@@ -1148,15 +1296,16 @@ private:
 
         // special case unchained comparisons to avoid generating a unnecessary complex cfg.
         if (node->ops.size() == 1) {
-            BST_Compare* rtn = new BST_Compare();
-            rtn->lineno = node->lineno;
-
-            rtn->op = node->ops[0];
-
-            unmapExpr(remapExpr(node->left), &rtn->vreg_left);
+            auto remapped_left = remapExpr(node->left);
             assert(node->comparators.size() == 1);
-            unmapExpr(remapExpr(node->comparators[0]), &rtn->vreg_comparator);
-            return pushBackCreateDst(rtn);
+            auto remapped_comp = remapExpr(node->comparators[0]);
+
+            BST_Compare* rtn = allocAndPush<BST_Compare>();
+            rtn->lineno = node->lineno;
+            rtn->op = node->ops[0];
+            unmapExpr(remapped_left, &rtn->vreg_left);
+            unmapExpr(remapped_comp, &rtn->vreg_comparator);
+            return createDstName(rtn);
         } else {
             TmpValue name(nodeName(), node->lineno);
 
@@ -1165,68 +1314,68 @@ private:
 
             for (int i = 0; i < node->ops.size(); i++) {
                 if (i > 0)
-                    push_back(makeKill(name.is));
+                    makeKill(name.is);
 
                 TmpValue right = remapExpr(node->comparators[i]);
+                auto remapped_comp = right;
+                if (i < node->ops.size() - 1)
+                    remapped_comp = _dup(right);
 
-                BST_Compare* val = new BST_Compare;
+                BST_Compare* val = allocAndPush<BST_Compare>();
                 val->lineno = node->lineno;
                 unmapExpr(left, &val->vreg_left);
-
-                if (i < node->ops.size() - 1)
-                    unmapExpr(_dup(right), &val->vreg_comparator);
-                else
-                    unmapExpr(right, &val->vreg_comparator);
+                unmapExpr(remapped_comp, &val->vreg_comparator);
                 val->op = node->ops[i];
                 unmapExpr(name, &val->vreg_dst);
-                push_back(val);
 
                 if (i == node->ops.size() - 1) {
                     continue;
                 }
 
-                BST_Branch* br = new BST_Branch();
-                unmapExpr(callNonzero(_dup(name)), &br->vreg_test);
-                push_back(br);
+                auto remapped_br_test = callNonzero(_dup(name));
+                BST_Branch* br = allocAndPush<BST_Branch>();
+                unmapExpr(remapped_br_test, &br->vreg_test);
 
                 CFGBlock* was_block = curblock;
-                CFGBlock* next_block = cfg->addBlock();
-                CFGBlock* crit_break_block = cfg->addBlock();
+                CFGBlock* next_block = cfg->addDeferredBlock();
+                CFGBlock* crit_break_block = cfg->addDeferredBlock();
                 was_block->connectTo(next_block);
                 was_block->connectTo(crit_break_block);
 
-                br->iffalse = crit_break_block;
-                br->iftrue = next_block;
+                br->iffalse = (CFGBlock*)crit_break_block;
+                br->iftrue = (CFGBlock*)next_block;
 
-                curblock = crit_break_block;
+                setInsertPoint(crit_break_block);
                 pushJump(exit_block);
 
-                curblock = next_block;
+                setInsertPoint(next_block);
 
                 left = right;
             }
 
             pushJump(exit_block);
-            cfg->placeBlock(exit_block);
-            curblock = exit_block;
+            setInsertPoint(exit_block);
 
             return name;
         }
     }
 
     TmpValue remapDict(AST_Dict* node) {
-        BST_Dict* rtn = new BST_Dict();
+        BST_Dict* rtn = allocAndPush<BST_Dict>();
         rtn->lineno = node->lineno;
 
-        TmpValue dict_name = pushBackCreateDst(rtn);
+        TmpValue dict_name = createDstName(rtn);
 
         for (int i = 0; i < node->keys.size(); i++) {
-            BST_StoreSub* store = new BST_StoreSub;
+            auto remapped_value = remapExpr(node->values[i]);
+            auto remapped_target = _dup(dict_name);
+            auto remapped_slice = remapExpr(node->keys[i]);
+
+            BST_StoreSub* store = allocAndPush<BST_StoreSub>();
             store->lineno = node->values[i]->lineno;
-            unmapExpr(remapExpr(node->values[i]), &store->vreg_value);
-            unmapExpr(_dup(dict_name), &store->vreg_target);
-            unmapExpr(remapExpr(node->keys[i]), &store->vreg_slice);
-            push_back(store);
+            unmapExpr(remapped_value, &store->vreg_value);
+            unmapExpr(remapped_target, &store->vreg_target);
+            unmapExpr(remapped_slice, &store->vreg_slice);
         }
 
         return dict_name;
@@ -1238,12 +1387,17 @@ private:
     }
 
     TmpValue remapExtSlice(AST_ExtSlice* node) {
-        auto* rtn = BST_Tuple::create(node->dims.size());
+        llvm::SmallVector<TmpValue, 8> remmaped_elts;
+        for (int i = 0; i < node->dims.size(); ++i) {
+            remmaped_elts.emplace_back(remapSlice(node->dims[i]));
+        }
+
+        auto* rtn = allocAndPush<BST_Tuple>(node->dims.size());
         rtn->lineno = node->lineno;
         for (int i = 0; i < node->dims.size(); ++i) {
-            unmapExpr(remapSlice(node->dims[i]), &rtn->elts[i]);
+            unmapExpr(remmaped_elts[i], &rtn->elts[i]);
         }
-        return pushBackCreateDst(rtn);
+        return createDstName(rtn);
     }
 
     // This is a helper function used for generator expressions and comprehensions.
@@ -1305,8 +1459,8 @@ private:
 
         BoxedCode* code = cfgizer->runRecursively(new_body, gen_name, node->lineno, genexp_args, node);
         BST_FunctionDef* func = BST_FunctionDef::create(0, 0);
-        BST_MakeFunction* mkfunc = new BST_MakeFunction(func, code_constants.addFuncOrClass(func, code));
-        TmpValue func_var_name = pushBackCreateDst(mkfunc);
+        BST_MakeFunction* mkfunc = allocAndPush<BST_MakeFunction>(func, code_constants.addFuncOrClass(func, code));
+        TmpValue func_var_name = createDstName(mkfunc);
 
         return makeCall(func_var_name, { first });
     }
@@ -1363,8 +1517,8 @@ private:
 
         BoxedCode* code = cfgizer->runRecursively(new_body, comp_name, node->lineno, args, node);
         BST_FunctionDef* func = BST_FunctionDef::create(0, 0);
-        BST_MakeFunction* mkfunc = new BST_MakeFunction(func, code_constants.addFuncOrClass(func, code));
-        TmpValue func_var_name = pushBackCreateDst(mkfunc);
+        BST_MakeFunction* mkfunc = allocAndPush<BST_MakeFunction>(func, code_constants.addFuncOrClass(func, code));
+        TmpValue func_var_name = createDstName(mkfunc);
 
         return makeCall(func_var_name, { first });
     }
@@ -1380,22 +1534,19 @@ private:
         pushBranch(remapExpr(node->test), iftrue, iffalse);
 
         // if true block
-        cfg->placeBlock(iftrue);
-        curblock = iftrue;
+        setInsertPoint(iftrue);
         iftrue->info = "iftrue";
         pushAssign(rtn_name, remapExpr(node->body));
         pushJump(exit_block);
 
         // if false block
-        cfg->placeBlock(iffalse);
-        curblock = iffalse;
+        setInsertPoint(iffalse);
         iffalse->info = "iffalse";
         pushAssign(rtn_name, remapExpr(node->orelse));
         pushJump(exit_block);
 
         // exit block
-        cfg->placeBlock(exit_block);
-        curblock = exit_block;
+        setInsertPoint(exit_block);
 
         return TmpValue(rtn_name, node->lineno);
     }
@@ -1416,60 +1567,71 @@ private:
 
         auto name = getStaticString("<lambda>");
         auto* code = cfgizer->runRecursively({ stmt }, name, node->lineno, node->args, node);
-        auto mkfn = new BST_MakeFunction(bdef, code_constants.addFuncOrClass(bdef, code));
+        auto mkfn = allocAndPush<BST_MakeFunction>(bdef, code_constants.addFuncOrClass(bdef, code));
 
-        return pushBackCreateDst(mkfn);
+        return createDstName(mkfn);
     }
 
     TmpValue remapLangPrimitive(AST_LangPrimitive* node) {
         // AST_LangPrimitive can be PRINT_EXPR
         assert(node->opcode == AST_LangPrimitive::PRINT_EXPR);
-        BST_PrintExpr* rtn = new BST_PrintExpr;
-        rtn->lineno = node->lineno;
-
         assert(node->args.size() == 1);
-        unmapExpr(remapExpr(node->args[0]), &rtn->vreg_value);
-        push_back(rtn);
+        auto remapped_value = remapExpr(node->args[0]);
+        BST_PrintExpr* rtn = allocAndPush<BST_PrintExpr>();
+        rtn->lineno = node->lineno;
+        unmapExpr(remapped_value, &rtn->vreg_value);
         return TmpValue();
     }
 
     TmpValue remapList(AST_List* node) {
         assert(node->ctx_type == AST_TYPE::Load);
-        BST_List* rtn = BST_List::create(node->elts.size());
+        llvm::SmallVector<TmpValue, 8> remapped_elts;
+        for (int i = 0; i < node->elts.size(); ++i) {
+            remapped_elts.emplace_back(remapExpr(node->elts[i]));
+        }
+        BST_List* rtn = allocAndPush<BST_List>(node->elts.size());
         rtn->lineno = node->lineno;
         for (int i = 0; i < node->elts.size(); ++i) {
-            unmapExpr(remapExpr(node->elts[i]), &rtn->elts[i]);
+            unmapExpr(remapped_elts[i], &rtn->elts[i]);
         }
-        return pushBackCreateDst(rtn);
+        return createDstName(rtn);
     }
 
     TmpValue remapRepr(AST_Repr* node) {
-        BST_Repr* rtn = new BST_Repr();
+        auto remapped_value = remapExpr(node->value);
+        BST_Repr* rtn = allocAndPush<BST_Repr>();
         rtn->lineno = node->lineno;
-        unmapExpr(remapExpr(node->value), &rtn->vreg_value);
-        return pushBackCreateDst(rtn);
+        unmapExpr(remapped_value, &rtn->vreg_value);
+        return createDstName(rtn);
     }
 
     TmpValue remapSet(AST_Set* node) {
-        BST_Set* rtn = BST_Set::create(node->elts.size());
-        rtn->lineno = node->lineno;
-
+        llvm::SmallVector<TmpValue, 8> remapped_elts;
         for (int i = 0; i < node->elts.size(); ++i) {
-            unmapExpr(remapExpr(node->elts[i]), &rtn->elts[i]);
+            remapped_elts.emplace_back(remapExpr(node->elts[i]));
         }
-        return pushBackCreateDst(rtn);
+
+        BST_Set* rtn = allocAndPush<BST_Set>(node->elts.size());
+        rtn->lineno = node->lineno;
+        for (int i = 0; i < node->elts.size(); ++i) {
+            unmapExpr(remapped_elts[i], &rtn->elts[i]);
+        }
+        return createDstName(rtn);
     }
 
     bool isSlice(AST_slice* node) { return node->type == AST_TYPE::Slice && ast_cast<AST_Slice>(node)->step == NULL; }
 
     TmpValue remapSlice(AST_Slice* node) {
-        BST_MakeSlice* rtn = new BST_MakeSlice();
-        rtn->lineno = node->lineno;
+        auto remapped_lower = remapExpr(node->lower);
+        auto remapped_upper = remapExpr(node->upper);
+        auto remapped_step = remapExpr(node->step);
 
-        unmapExpr(remapExpr(node->lower), &rtn->vreg_lower);
-        unmapExpr(remapExpr(node->upper), &rtn->vreg_upper);
-        unmapExpr(remapExpr(node->step), &rtn->vreg_step);
-        return pushBackCreateDst(rtn);
+        BST_MakeSlice* rtn = allocAndPush<BST_MakeSlice>();
+        rtn->lineno = node->lineno;
+        unmapExpr(remapped_lower, &rtn->vreg_lower);
+        unmapExpr(remapped_upper, &rtn->vreg_upper);
+        unmapExpr(remapped_step, &rtn->vreg_step);
+        return createDstName(rtn);
     }
 
     TmpValue remapSlice(AST_slice* node) {
@@ -1496,52 +1658,62 @@ private:
 
     TmpValue remapTuple(AST_Tuple* node) {
         assert(node->ctx_type == AST_TYPE::Load);
-
-        BST_Tuple* rtn = BST_Tuple::create(node->elts.size());
-        rtn->lineno = node->lineno;
-
+        llvm::SmallVector<TmpValue, 8> remapped_elts;
         for (int i = 0; i < node->elts.size(); ++i) {
-            unmapExpr(remapExpr(node->elts[i]), &rtn->elts[i]);
+            remapped_elts.emplace_back(remapExpr(node->elts[i]));
         }
-        return pushBackCreateDst(rtn);
+
+        BST_Tuple* rtn = allocAndPush<BST_Tuple>(node->elts.size());
+        rtn->lineno = node->lineno;
+        for (int i = 0; i < node->elts.size(); ++i) {
+            unmapExpr(remapped_elts[i], &rtn->elts[i]);
+        }
+        return createDstName(rtn);
     }
 
 
     TmpValue remapSubscript(AST_Subscript* node) {
         assert(node->ctx_type == AST_TYPE::AST_TYPE::Load);
+        auto remapped_value = remapExpr(node->value);
         if (!isSlice(node->slice)) {
-            BST_LoadSub* rtn = new BST_LoadSub;
+            auto remapped_slice = remapSlice(node->slice);
+            BST_LoadSub* rtn = allocAndPush<BST_LoadSub>();
             rtn->lineno = node->lineno;
-            unmapExpr(remapExpr(node->value), &rtn->vreg_value);
-            unmapExpr(remapSlice(node->slice), &rtn->vreg_slice);
-            return pushBackCreateDst(rtn);
+            unmapExpr(remapped_value, &rtn->vreg_value);
+            unmapExpr(remapped_slice, &rtn->vreg_slice);
+            return createDstName(rtn);
         } else {
-            BST_LoadSubSlice* rtn = new BST_LoadSubSlice;
+            auto remapped_lower = remapExpr(ast_cast<AST_Slice>(node->slice)->lower);
+            auto remapped_upper = remapExpr(ast_cast<AST_Slice>(node->slice)->upper);
+
+            BST_LoadSubSlice* rtn = allocAndPush<BST_LoadSubSlice>();
             rtn->lineno = node->lineno;
             assert(node->ctx_type == AST_TYPE::AST_TYPE::Load);
-            unmapExpr(remapExpr(node->value), &rtn->vreg_value);
-            unmapExpr(remapExpr(ast_cast<AST_Slice>(node->slice)->lower), &rtn->vreg_lower);
-            unmapExpr(remapExpr(ast_cast<AST_Slice>(node->slice)->upper), &rtn->vreg_upper);
-            return pushBackCreateDst(rtn);
+            unmapExpr(remapped_value, &rtn->vreg_value);
+            unmapExpr(remapped_lower, &rtn->vreg_lower);
+            unmapExpr(remapped_upper, &rtn->vreg_upper);
+            return createDstName(rtn);
         }
     }
 
     TmpValue remapUnaryOp(AST_UnaryOp* node) {
-        BST_UnaryOp* rtn = new BST_UnaryOp();
+        auto remapped_operand = remapExpr(node->operand);
+        BST_UnaryOp* rtn = allocAndPush<BST_UnaryOp>();
         rtn->lineno = node->lineno;
         rtn->op_type = node->op_type;
-        unmapExpr(remapExpr(node->operand), &rtn->vreg_operand);
-        return pushBackCreateDst(rtn);
+        unmapExpr(remapped_operand, &rtn->vreg_operand);
+        return createDstName(rtn);
     }
 
     TmpValue remapYield(AST_Yield* node) {
-        BST_Yield* rtn = new BST_Yield();
+        auto remapped_value = remapExpr(node->value);
+        BST_Yield* rtn = allocAndPush<BST_Yield>();
         rtn->lineno = node->lineno;
-        unmapExpr(remapExpr(node->value), &rtn->vreg_value);
+        unmapExpr(remapped_value, &rtn->vreg_value);
 
-        TmpValue val = pushBackCreateDst(rtn);
+        TmpValue val = createDstName(rtn);
 
-        push_back(new BST_UncacheExcInfo);
+        allocAndPush<BST_UncacheExcInfo>();
 
         if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda)
             raiseExcHelper(SyntaxError, "'yield' outside function");
@@ -1644,7 +1816,6 @@ private:
         CFGBlock* otherwise = cfg->addDeferredBlock();
         otherwise->info = "finally_otherwise";
         pushBranch(makeCompare(AST_TYPE::Eq, whyexpr, makeNum(reason, whyexpr.lineno)), then_block, otherwise);
-        cfg->placeBlock(otherwise);
         return otherwise;
     }
 
@@ -1680,145 +1851,75 @@ private:
         do_exit->info = "with_exit_if";
         CFGBlock* otherwise = makeFinallyCont(why, is_kill ? whyname : _dup(whyname), do_exit);
 
-        cfg->placeBlock(do_exit);
-        curblock = do_exit;
+        setInsertPoint(do_exit);
         exitFinally(node, why);
 
-        curblock = otherwise;
+        setInsertPoint(otherwise);
     }
 
     // ---------- public methods ----------
 public:
-    void push_back(BST_stmt* node) {
-        assert(node->type != BST_TYPE::Invoke);
-
-        if (!curblock)
-            return;
-
-        if (exc_handlers.size() == 0) {
-            curblock->push_back(node);
-            return;
-        }
-
-        BST_TYPE::BST_TYPE type = node->type;
-        switch (type) {
-            case BST_TYPE::Branch:
-            case BST_TYPE::CopyVReg:
-            case BST_TYPE::Dict:
-            case BST_TYPE::Jump:
-            case BST_TYPE::Landingpad:
-            case BST_TYPE::Return:
-            case BST_TYPE::SetExcInfo:
-            case BST_TYPE::Tuple:
-            case BST_TYPE::UncacheExcInfo:
-                curblock->push_back(node);
-                return;
-            default:
-                break;
-        };
-
-        if (type == BST_TYPE::StoreName) {
-            if (code_constants.getInternedString(bst_cast<BST_StoreName>(node)->index_id).s()[0] != '#') {
-                curblock->push_back(node);
-                return;
-            }
-        }
-
-        // Deleting temporary names is safe, since we only use it to represent kills.
-        if (node->type == BST_TYPE::DeleteName) {
-            BST_DeleteName* del = bst_cast<BST_DeleteName>(node);
-            if (code_constants.getInternedString(del->index_id).s()[0] == '#') {
-                curblock->push_back(node);
-                return;
-            }
-        }
-
-        // We remapped asserts to just be assertion failures at this point.
-        bool is_raise = (node->type == BST_TYPE::Raise || node->type == BST_TYPE::Assert);
-
-        // If we invoke a raise statement, generate an invoke where both destinations
-        // are the exception handler, since we know the non-exceptional path won't be taken.
-        // TODO: would be much better (both more efficient and require less special casing)
-        // if we just didn't generate this control flow as exceptions.
-
-        CFGBlock* normal_dest = cfg->addBlock();
-        // Add an extra exc_dest trampoline to prevent critical edges:
-        CFGBlock* exc_dest;
-        if (is_raise)
-            exc_dest = normal_dest;
-        else
-            exc_dest = cfg->addBlock();
-
-        BST_Invoke* invoke = new BST_Invoke(node);
-        invoke->normal_dest = normal_dest;
-        invoke->exc_dest = exc_dest;
-        invoke->lineno = node->lineno;
-
-        curblock->push_back(invoke);
-        curblock->connectTo(normal_dest);
-        if (!is_raise)
-            curblock->connectTo(exc_dest);
-
-        ExcBlockInfo& exc_info = exc_handlers.back();
-        exc_info.maybe_taken = true;
-
-        curblock = exc_dest;
-        // TODO: need to clear some temporaries here
-        auto* landingpad = new BST_Landingpad;
-        TmpValue landingpad_name = pushBackCreateDst(landingpad);
-
-        auto* exc_unpack = BST_UnpackIntoArray::create(3);
-        unmapExpr(landingpad_name, &exc_unpack->vreg_src);
-        int* array = exc_unpack->vreg_dst;
-        unmapExpr(TmpValue(exc_info.exc_type_name, 0), &array[0]);
-        unmapExpr(TmpValue(exc_info.exc_value_name, 0), &array[1]);
-        unmapExpr(TmpValue(exc_info.exc_traceback_name, 0), &array[2]);
-
-        curblock->push_back(exc_unpack);
-
-        pushJump(exc_info.exc_dest);
-
-        if (is_raise)
-            curblock = NULL;
-        else
-            curblock = normal_dest;
-    }
-
     void pushStoreName(InternedString name, TmpValue value) {
-        BST_StoreName* store = new BST_StoreName();
+        BST_StoreName* store;
+        // we assume currently that stores to non temp names can't throw
+        if (name.s()[0] != '#') // this can't throw
+            store = allocAndPush<BST_StoreName, true /* can't throw */>();
+        else
+            store = allocAndPush<BST_StoreName>();
         store->index_id = remapInternedString(name);
         unmapExpr(value, &store->vreg_value);
         store->lineno = value.lineno;
         fillScopingInfo(store, name, scoping);
-        push_back(store);
     }
 
     bool visit_classdef(AST_ClassDef* node) override {
+        // Decorators are evaluated before bases:
+        llvm::SmallVector<TmpValue, 8> remapped_deco;
+        for (int i = 0; i < node->decorator_list.size(); ++i) {
+            remapped_deco.emplace_back(remapExpr(node->decorator_list[i]));
+        }
+
+        llvm::SmallVector<TmpValue, 8> remapped_bases;
+        for (int i = 0; i < node->bases.size(); ++i) {
+            remapped_bases.emplace_back(remapExpr(node->bases[i]));
+        }
+
+        auto* bases = allocAndPush<BST_Tuple>(node->bases.size());
+        for (int i = 0; i < node->bases.size(); ++i) {
+            unmapExpr(remapped_bases[i], &bases->elts[i]);
+        }
+        TmpValue bases_name = createDstName(bases);
+
         auto def = BST_ClassDef::create(node->decorator_list.size());
         def->lineno = node->lineno;
         def->index_name = remapInternedString(node->name);
 
-        // Decorators are evaluated before bases:
         for (int i = 0; i < node->decorator_list.size(); ++i) {
-            unmapExpr(remapExpr(node->decorator_list[i]), &def->decorator[i]);
+            unmapExpr(remapped_deco[i], &def->decorator[i]);
         }
 
-        auto* bases = BST_Tuple::create(node->bases.size());
-        for (int i = 0; i < node->bases.size(); ++i) {
-            unmapExpr(remapExpr(node->bases[i]), &bases->elts[i]);
-        }
-        TmpValue bases_name = pushBackCreateDst(bases);
         unmapExpr(bases_name, &def->vreg_bases_tuple);
 
         auto* code = cfgizer->runRecursively(node->body, node->name.getBox(), node->lineno, NULL, node);
-        auto mkclass = new BST_MakeClass(def, code_constants.addFuncOrClass(def, code));
-        auto tmp = pushBackCreateDst(mkclass);
+        auto mkclass = allocAndPush<BST_MakeClass>(def, code_constants.addFuncOrClass(def, code));
+        auto tmp = createDstName(mkclass);
         pushAssign(TmpValue(scoping->mangleName(node->name), node->lineno), tmp);
 
         return true;
     }
 
     bool visit_functiondef(AST_FunctionDef* node) override {
+        // Decorators are evaluated before the defaults, so this *must* go before remapArguments().
+        // TODO(rntz): do we have a test for this
+        llvm::SmallVector<TmpValue, 8> remapped_deco;
+        for (int i = 0; i < node->decorator_list.size(); ++i) {
+            remapped_deco.emplace_back(remapExpr(node->decorator_list[i]));
+        }
+        llvm::SmallVector<TmpValue, 8> remapped_defaults;
+        for (int i = 0; i < node->args->defaults.size(); ++i) {
+            remapped_defaults.emplace_back(remapExpr(node->args->defaults[i]));
+        }
+
         auto def = BST_FunctionDef::create(node->decorator_list.size(), node->args->defaults.size());
         def->lineno = node->lineno;
         def->index_name = remapInternedString(node->name);
@@ -1826,15 +1927,15 @@ public:
         // Decorators are evaluated before the defaults, so this *must* go before remapArguments().
         // TODO(rntz): do we have a test for this
         for (int i = 0; i < node->decorator_list.size(); ++i) {
-            unmapExpr(remapExpr(node->decorator_list[i]), &def->elts[i]);
+            unmapExpr(remapped_deco[i], &def->elts[i]);
         }
         for (int i = 0; i < node->args->defaults.size(); ++i) {
-            unmapExpr(remapExpr(node->args->defaults[i]), &def->elts[node->decorator_list.size() + i]);
+            unmapExpr(remapped_defaults[i], &def->elts[node->decorator_list.size() + i]);
         }
 
         auto* code = cfgizer->runRecursively(node->body, node->name.getBox(), node->lineno, node->args, node);
-        auto mkfunc = new BST_MakeFunction(def, code_constants.addFuncOrClass(def, code));
-        auto tmp = pushBackCreateDst(mkfunc);
+        auto mkfunc = allocAndPush<BST_MakeFunction>(def, code_constants.addFuncOrClass(def, code));
+        auto tmp = createDstName(mkfunc);
         pushAssign(TmpValue(scoping->mangleName(node->name), node->lineno), tmp);
 
         return true;
@@ -1856,7 +1957,7 @@ public:
 
     bool visit_import(AST_Import* node) override {
         for (AST_alias* a : node->names) {
-            BST_ImportName* import = new BST_ImportName;
+            BST_ImportName* import = allocAndPush<BST_ImportName>();
             import->lineno = node->lineno;
 
             // level == 0 means only check sys path for imports, nothing package-relative,
@@ -1872,7 +1973,7 @@ public:
             unmapExpr(makeNone(node->lineno), &import->vreg_from);
             unmapExpr(makeStr(a->name.s(), node->lineno), &import->vreg_name);
 
-            TmpValue tmpname = pushBackCreateDst(import);
+            TmpValue tmpname = createDstName(import);
 
             if (a->asname.s().size() == 0) {
                 // No asname, so load the top-level module into the name
@@ -1892,13 +1993,12 @@ public:
                         continue;
                     }
 
-                    auto* store = new BST_LoadAttr;
+                    auto* store = allocAndPush<BST_LoadAttr>();
                     store->lineno = import->lineno;
                     store->index_attr
                         = remapInternedString(scoping->mangleName(internString(a->name.s().substr(l, r - l))));
                     unmapExpr(tmpname, &store->vreg_value);
                     unmapExpr(tmpname, &store->vreg_dst);
-                    push_back(store);
 
                     l = r + 1;
                 } while (l < a->name.s().size());
@@ -1910,7 +2010,13 @@ public:
     }
 
     bool visit_importfrom(AST_ImportFrom* node) override {
-        BST_ImportName* import = new BST_ImportName;
+        auto tuple = allocAndPush<BST_Tuple>(node->names.size());
+        for (int i = 0; i < node->names.size(); i++) {
+            unmapExpr(makeStr(node->names[i]->name.s()), &tuple->elts[i]);
+        }
+        TmpValue tuple_name = createDstName(tuple);
+
+        BST_ImportName* import = allocAndPush<BST_ImportName>();
         import->lineno = node->lineno;
 
         // level == 0 means only check sys path for imports, nothing package-relative,
@@ -1923,34 +2029,29 @@ public:
             level = node->level;
         import->level = level;
 
-        auto tuple = BST_Tuple::create(node->names.size());
-        for (int i = 0; i < node->names.size(); i++) {
-            unmapExpr(makeStr(node->names[i]->name.s()), &tuple->elts[i]);
-        }
-        TmpValue tuple_name = pushBackCreateDst(tuple);
         unmapExpr(tuple_name, &import->vreg_from);
         unmapExpr(makeStr(node->module.s()), &import->vreg_name);
 
-        TmpValue tmp_module_name = pushBackCreateDst(import);
+        TmpValue tmp_module_name = createDstName(import);
 
         int i = 0;
         for (AST_alias* a : node->names) {
             i++;
             bool is_kill = (i == node->names.size());
+            TmpValue remapped_tmp_module_name = is_kill ? tmp_module_name : _dup(tmp_module_name);
             if (a->name.s() == "*") {
-
-                BST_ImportStar* import_star = new BST_ImportStar;
+                BST_ImportStar* import_star = allocAndPush<BST_ImportStar>();
                 import_star->lineno = node->lineno;
-                unmapExpr(is_kill ? tmp_module_name : _dup(tmp_module_name), &import_star->vreg_name);
+                unmapExpr(remapped_tmp_module_name, &import_star->vreg_name);
 
-                pushBackCreateDst(import_star);
+                createDstName(import_star);
             } else {
-                BST_ImportFrom* import_from = new BST_ImportFrom;
+                BST_ImportFrom* import_from = allocAndPush<BST_ImportFrom>();
                 import_from->lineno = node->lineno;
-                unmapExpr(is_kill ? tmp_module_name : _dup(tmp_module_name), &import_from->vreg_module);
+                unmapExpr(remapped_tmp_module_name, &import_from->vreg_module);
                 unmapExpr(makeStr(a->name.s()), &import_from->vreg_name);
 
-                TmpValue tmp_import_name = pushBackCreateDst(import_from);
+                TmpValue tmp_import_name = createDstName(import_from);
                 pushAssign(a->asname.s().size() ? a->asname : a->name, tmp_import_name);
             }
         }
@@ -1963,30 +2064,33 @@ public:
     bool visit_assert(AST_Assert* node) override {
         assert(curblock);
 
-        BST_Branch* br = new BST_Branch();
-        unmapExpr(callNonzero(remapExpr(node->test)), &br->vreg_test);
-        push_back(br);
+        auto remapped_br_test = callNonzero(remapExpr(node->test));
+        BST_Branch* br = allocAndPush<BST_Branch>();
+        unmapExpr(remapped_br_test, &br->vreg_test);
 
-        CFGBlock* iffalse = cfg->addBlock();
+        CFGBlock* iffalse = cfg->addDeferredBlock();
         iffalse->info = "assert_fail";
         curblock->connectTo(iffalse);
-        CFGBlock* iftrue = cfg->addBlock();
+        CFGBlock* iftrue = cfg->addDeferredBlock();
         iftrue->info = "assert_pass";
         curblock->connectTo(iftrue);
         br->iftrue = iftrue;
         br->iffalse = iffalse;
 
-        curblock = iffalse;
+        setInsertPoint(iffalse);
 
-        BST_Assert* remapped = new BST_Assert();
+        TmpValue remapped_msg;
         if (node->msg)
-            unmapExpr(remapExpr(node->msg), &remapped->vreg_msg);
+            remapped_msg = remapExpr(node->msg);
+
+        BST_Assert* remapped = allocAndPush<BST_Assert>();
+        if (node->msg)
+            unmapExpr(remapped_msg, &remapped->vreg_msg);
         else
             remapped->vreg_msg = VREG_UNDEFINED;
         remapped->lineno = node->lineno;
-        push_back(remapped);
 
-        curblock = iftrue;
+        setInsertPoint(iftrue);
 
         return true;
     }
@@ -2031,12 +2135,15 @@ public:
                 AST_Name* n = ast_cast<AST_Name>(node->target);
                 assert(n->ctx_type == AST_TYPE::Store);
 
-                BST_AugBinOp* binop = new BST_AugBinOp();
+                auto remapped_name = remapName(n);
+                auto remapped_value = remapExpr(node->value);
+
+                BST_AugBinOp* binop = allocAndPush<BST_AugBinOp>();
                 binop->op_type = remapBinOpType(node->op_type);
-                unmapExpr(remapName(n), &binop->vreg_left);
-                unmapExpr(remapExpr(node->value), &binop->vreg_right);
+                unmapExpr(remapped_name, &binop->vreg_left);
+                unmapExpr(remapped_value, &binop->vreg_right);
                 binop->lineno = node->lineno;
-                TmpValue result_name = pushBackCreateDst(binop);
+                TmpValue result_name = createDstName(binop);
                 pushStoreName(n->id, result_name);
 
                 return true;
@@ -2046,54 +2153,62 @@ public:
                 assert(s->ctx_type == AST_TYPE::Store);
 
                 TmpValue value_remapped = remapExpr(s->value);
+                auto value_remapped_dup = _dup(value_remapped);
 
                 if (isSlice(s->slice)) {
                     auto* slice = ast_cast<AST_Slice>(s->slice);
-                    BST_LoadSubSlice* s_lhs = new BST_LoadSubSlice();
+
                     auto lower_remapped = remapExpr(slice->lower);
                     auto upper_remapped = remapExpr(slice->upper);
 
-                    unmapExpr(_dup(value_remapped), &s_lhs->vreg_value);
-                    unmapExpr(_dup(lower_remapped), &s_lhs->vreg_lower);
-                    unmapExpr(_dup(upper_remapped), &s_lhs->vreg_upper);
-                    s_lhs->lineno = s->lineno;
-                    TmpValue name_lhs = pushBackCreateDst(s_lhs);
+                    auto lower_remapped_dup = _dup(lower_remapped);
+                    auto upper_remapped_dup = _dup(upper_remapped);
 
-                    BST_AugBinOp* binop = new BST_AugBinOp();
+                    BST_LoadSubSlice* s_lhs = allocAndPush<BST_LoadSubSlice>();
+                    unmapExpr(value_remapped_dup, &s_lhs->vreg_value);
+                    unmapExpr(lower_remapped_dup, &s_lhs->vreg_lower);
+                    unmapExpr(upper_remapped_dup, &s_lhs->vreg_upper);
+                    s_lhs->lineno = s->lineno;
+                    TmpValue name_lhs = createDstName(s_lhs);
+
+                    auto remapped_value = remapExpr(node->value);
+                    BST_AugBinOp* binop = allocAndPush<BST_AugBinOp>();
                     binop->op_type = remapBinOpType(node->op_type);
                     unmapExpr(name_lhs, &binop->vreg_left);
-                    unmapExpr(remapExpr(node->value), &binop->vreg_right);
+                    unmapExpr(remapped_value, &binop->vreg_right);
                     binop->lineno = node->lineno;
-                    TmpValue node_name = pushBackCreateDst(binop);
+                    TmpValue node_name = createDstName(binop);
 
-                    BST_StoreSubSlice* s_target = new BST_StoreSubSlice();
+                    BST_StoreSubSlice* s_target = allocAndPush<BST_StoreSubSlice>();
                     s_target->lineno = s->lineno;
                     unmapExpr(node_name, &s_target->vreg_value);
                     unmapExpr(value_remapped, &s_target->vreg_target);
                     unmapExpr(lower_remapped, &s_target->vreg_lower);
                     unmapExpr(upper_remapped, &s_target->vreg_upper);
-                    push_back(s_target);
                 } else {
-                    BST_LoadSub* s_lhs = new BST_LoadSub();
-                    auto slice_remapped = remapSlice(s->slice);
-                    unmapExpr(_dup(value_remapped) /* we have to duplicate*/, &s_lhs->vreg_value);
-                    unmapExpr(_dup(slice_remapped) /* we have to duplicate*/, &s_lhs->vreg_slice);
-                    s_lhs->lineno = s->lineno;
-                    TmpValue name_lhs = pushBackCreateDst(s_lhs);
 
-                    BST_AugBinOp* binop = new BST_AugBinOp();
+                    auto slice_remapped = remapSlice(s->slice);
+                    auto slice_remapped_dup = _dup(slice_remapped);
+
+                    BST_LoadSub* s_lhs = allocAndPush<BST_LoadSub>();
+                    unmapExpr(value_remapped_dup, &s_lhs->vreg_value);
+                    unmapExpr(slice_remapped_dup, &s_lhs->vreg_slice);
+                    s_lhs->lineno = s->lineno;
+                    TmpValue name_lhs = createDstName(s_lhs);
+
+                    auto remapped_value = remapExpr(node->value);
+                    BST_AugBinOp* binop = allocAndPush<BST_AugBinOp>();
                     binop->op_type = remapBinOpType(node->op_type);
                     unmapExpr(name_lhs, &binop->vreg_left);
-                    unmapExpr(remapExpr(node->value), &binop->vreg_right);
+                    unmapExpr(remapped_value, &binop->vreg_right);
                     binop->lineno = node->lineno;
-                    TmpValue node_name = pushBackCreateDst(binop);
+                    TmpValue node_name = createDstName(binop);
 
-                    BST_StoreSub* s_target = new BST_StoreSub();
+                    BST_StoreSub* s_target = allocAndPush<BST_StoreSub>();
                     s_target->lineno = s->lineno;
                     unmapExpr(node_name, &s_target->vreg_value);
                     unmapExpr(value_remapped, &s_target->vreg_target);
                     unmapExpr(slice_remapped, &s_target->vreg_slice);
-                    push_back(s_target);
                 }
 
                 return true;
@@ -2102,26 +2217,28 @@ public:
                 AST_Attribute* a = ast_cast<AST_Attribute>(node->target);
                 assert(a->ctx_type == AST_TYPE::Store);
                 auto value_remapped = remapExpr(a->value);
+                auto value_remapped_dup = _dup(value_remapped);
 
-                BST_LoadAttr* a_lhs = new BST_LoadAttr();
-                unmapExpr(_dup(value_remapped), &a_lhs->vreg_value);
-                a_lhs->index_attr = remapInternedString(scoping->mangleName(a->attr));
+                BST_LoadAttr* a_lhs = allocAndPush<BST_LoadAttr>();
+                unmapExpr(value_remapped_dup, &a_lhs->vreg_value);
+                auto index_attr = remapInternedString(scoping->mangleName(a->attr));
+                a_lhs->index_attr = index_attr;
                 a_lhs->lineno = a->lineno;
-                TmpValue name_lhs = pushBackCreateDst(a_lhs);
+                TmpValue name_lhs = createDstName(a_lhs);
 
-                BST_AugBinOp* binop = new BST_AugBinOp();
+                auto remapped_value = remapExpr(node->value);
+                BST_AugBinOp* binop = allocAndPush<BST_AugBinOp>();
                 binop->op_type = remapBinOpType(node->op_type);
                 unmapExpr(name_lhs, &binop->vreg_left);
-                unmapExpr(remapExpr(node->value), &binop->vreg_right);
+                unmapExpr(remapped_value, &binop->vreg_right);
                 binop->lineno = node->lineno;
-                TmpValue node_name = pushBackCreateDst(binop);
+                TmpValue node_name = createDstName(binop);
 
-                BST_StoreAttr* a_target = new BST_StoreAttr();
+                BST_StoreAttr* a_target = allocAndPush<BST_StoreAttr>();
                 unmapExpr(node_name, &a_target->vreg_value);
                 unmapExpr(value_remapped, &a_target->vreg_target);
-                a_target->index_attr = a_lhs->index_attr;
+                a_target->index_attr = index_attr;
                 a_target->lineno = a->lineno;
-                push_back(a_target);
 
                 return true;
             }
@@ -2144,39 +2261,40 @@ public:
             switch (t->type) {
                 case AST_TYPE::Subscript: {
                     AST_Subscript* s = static_cast<AST_Subscript*>(t);
+                    auto remapped_value = remapExpr(s->value);
                     if (isSlice(s->slice)) {
-                        auto* del = new BST_DeleteSubSlice;
-                        del->lineno = node->lineno;
                         auto* slice = ast_cast<AST_Slice>(s->slice);
-                        unmapExpr(remapExpr(s->value), &del->vreg_value);
-                        unmapExpr(remapExpr(slice->lower), &del->vreg_lower);
-                        unmapExpr(remapExpr(slice->upper), &del->vreg_upper);
-                        push_back(del);
-                    } else {
-                        auto* del = new BST_DeleteSub;
+                        auto remapped_lower = remapExpr(slice->lower);
+                        auto remapped_upper = remapExpr(slice->upper);
+                        auto* del = allocAndPush<BST_DeleteSubSlice>();
                         del->lineno = node->lineno;
-                        unmapExpr(remapExpr(s->value), &del->vreg_value);
-                        unmapExpr(remapSlice(s->slice), &del->vreg_slice);
-                        push_back(del);
+                        unmapExpr(remapped_value, &del->vreg_value);
+                        unmapExpr(remapped_lower, &del->vreg_lower);
+                        unmapExpr(remapped_upper, &del->vreg_upper);
+                    } else {
+                        auto remapped_slice = remapSlice(s->slice);
+                        auto* del = allocAndPush<BST_DeleteSub>();
+                        del->lineno = node->lineno;
+                        unmapExpr(remapped_value, &del->vreg_value);
+                        unmapExpr(remapped_slice, &del->vreg_slice);
                     }
                     break;
                 }
                 case AST_TYPE::Attribute: {
                     AST_Attribute* astattr = static_cast<AST_Attribute*>(t);
-                    auto* del = new BST_DeleteAttr;
+                    auto remaped_value = remapExpr(astattr->value);
+                    auto* del = allocAndPush<BST_DeleteAttr>();
                     del->lineno = node->lineno;
-                    unmapExpr(remapExpr(astattr->value), &del->vreg_value);
+                    unmapExpr(remaped_value, &del->vreg_value);
                     del->index_attr = remapInternedString(scoping->mangleName(astattr->attr));
-                    push_back(del);
                     break;
                 }
                 case AST_TYPE::Name: {
                     AST_Name* s = static_cast<AST_Name*>(t);
-                    auto* del = new BST_DeleteName;
+                    auto* del = allocAndPush<BST_DeleteName>();
                     del->lineno = node->lineno;
                     del->index_id = remapInternedString(s->id);
                     fillScopingInfo(del, s->id, scoping);
-                    push_back(del);
                     break;
                 }
                 case AST_TYPE::List: {
@@ -2224,19 +2342,21 @@ public:
 
         int i = 0;
         for (auto v : node->values) {
-            BST_Print* remapped = new BST_Print();
+            TmpValue remapped_dest = dest;
+            if (i < node->values.size() - 1)
+                remapped_dest = _dup(dest);
+
+            auto remapped_value = remapExpr(v);
+
+            BST_Print* remapped = allocAndPush<BST_Print>();
             remapped->lineno = node->lineno;
 
-            if (i < node->values.size() - 1) {
-                unmapExpr(_dup(dest), &remapped->vreg_dest);
+            unmapExpr(remapped_dest, &remapped->vreg_dest);
+            if (i < node->values.size() - 1)
                 remapped->nl = false;
-            } else {
-                unmapExpr(dest, &remapped->vreg_dest);
+            else
                 remapped->nl = node->nl;
-            }
-
-            unmapExpr(remapExpr(v), &remapped->vreg_value);
-            push_back(remapped);
+            unmapExpr(remapped_value, &remapped->vreg_value);
 
             i++;
         }
@@ -2244,12 +2364,11 @@ public:
         if (node->values.size() == 0) {
             assert(node->nl);
 
-            BST_Print* final = new BST_Print();
+            BST_Print* final = allocAndPush<BST_Print>();
             final->lineno = node->lineno;
             // TODO not good to reuse 'dest' like this
             unmapExpr(dest, &final->vreg_dest);
             final->nl = node->nl;
-            push_back(final);
         }
 
         return true;
@@ -2274,20 +2393,26 @@ public:
     bool visit_if(AST_If* node) override {
         assert(curblock);
 
-        BST_Branch* br = new BST_Branch();
+        auto remapped_br_test = callNonzero(remapExpr(node->test));
+        BST_Branch* br = allocAndPush<BST_Branch>();
         br->lineno = node->lineno;
-        unmapExpr(callNonzero(remapExpr(node->test)), &br->vreg_test);
-        push_back(br);
+        unmapExpr(remapped_br_test, &br->vreg_test);
 
         CFGBlock* starting_block = curblock;
         CFGBlock* exit = cfg->addDeferredBlock();
         exit->info = "ifexit";
 
-        CFGBlock* iftrue = cfg->addBlock();
+        CFGBlock* iffalse = cfg->addDeferredBlock();
+        iffalse->info = "iffalse";
+        br->iffalse = (CFGBlock*)iffalse;
+        starting_block->connectTo(iffalse);
+
+        CFGBlock* iftrue = cfg->addDeferredBlock();
         iftrue->info = "iftrue";
-        br->iftrue = iftrue;
+        br->iftrue = (CFGBlock*)iftrue;
         starting_block->connectTo(iftrue);
-        curblock = iftrue;
+
+        setInsertPoint(iftrue);
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
             if (!curblock)
@@ -2297,12 +2422,7 @@ public:
             pushJump(exit);
         }
 
-        CFGBlock* iffalse = cfg->addBlock();
-        br->iffalse = iffalse;
-        starting_block->connectTo(iffalse);
-
-        iffalse->info = "iffalse";
-        curblock = iffalse;
+        setInsertPoint(iffalse);
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);
             if (!curblock)
@@ -2315,8 +2435,7 @@ public:
         if (exit->predecessors.size() == 0) {
             curblock = NULL;
         } else {
-            cfg->placeBlock(exit);
-            curblock = exit;
+            setInsertPoint(exit);
         }
 
         return true;
@@ -2339,39 +2458,47 @@ public:
     }
 
     bool visit_exec(AST_Exec* node) override {
-        BST_Exec* astexec = new BST_Exec();
+        auto remapped_body = remapExpr(node->body);
+        auto remapped_globals = remapExpr(node->globals);
+        auto remapped_locals = remapExpr(node->locals);
+
+        BST_Exec* astexec = allocAndPush<BST_Exec>();
         astexec->lineno = node->lineno;
-        unmapExpr(remapExpr(node->body), &astexec->vreg_body);
-        unmapExpr(remapExpr(node->globals), &astexec->vreg_globals);
-        unmapExpr(remapExpr(node->locals), &astexec->vreg_locals);
-        push_back(astexec);
+        unmapExpr(remapped_body, &astexec->vreg_body);
+        unmapExpr(remapped_globals, &astexec->vreg_globals);
+        unmapExpr(remapped_locals, &astexec->vreg_locals);
         return true;
     }
 
     bool visit_while(AST_While* node) override {
         assert(curblock);
 
-        CFGBlock* test_block = cfg->addBlock();
+        CFGBlock* test_block = cfg->addDeferredBlock();
         test_block->info = "while_test";
         pushJump(test_block);
 
-        curblock = test_block;
+        setInsertPoint(test_block);
         BST_Branch* br = makeBranch(remapExpr(node->test));
         CFGBlock* test_block_end = curblock;
-        push_back(br);
 
         // We need a reference to this block early on so we can break to it,
         // but we don't want it to be placed until after the orelse.
         CFGBlock* end = cfg->addDeferredBlock();
         end->info = "while_exit";
+
+        CFGBlock* body = cfg->addDeferredBlock();
+        body->info = "while_body_start";
+        br->iftrue = (CFGBlock*)body;
+        test_block_end->connectTo(body);
+
+        CFGBlock* orelse = cfg->addDeferredBlock();
+        orelse->info = "while_orelse_start";
+        br->iffalse = (CFGBlock*)orelse;
+        test_block_end->connectTo(orelse);
+
         pushLoopContinuation(test_block, end);
 
-        CFGBlock* body = cfg->addBlock();
-        body->info = "while_body_start";
-        br->iftrue = body;
-
-        test_block_end->connectTo(body);
-        curblock = body;
+        setInsertPoint(body);
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
             if (!curblock)
@@ -2381,11 +2508,7 @@ public:
             pushJump(test_block, true);
         popContinuation();
 
-        CFGBlock* orelse = cfg->addBlock();
-        orelse->info = "while_orelse_start";
-        br->iffalse = orelse;
-        test_block_end->connectTo(orelse);
-        curblock = orelse;
+        setInsertPoint(orelse);
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);
             if (!curblock)
@@ -2398,8 +2521,7 @@ public:
             delete end;
             curblock = NULL;
         } else {
-            curblock = end;
-            cfg->placeBlock(end);
+            setInsertPoint(end);
         }
 
         return true;
@@ -2407,7 +2529,7 @@ public:
 
     BST_stmt* makeKill(InternedString name) {
         // There might be a better way to represent this, maybe with a dedicated AST_Kill bytecode?
-        auto del = new BST_DeleteName();
+        auto del = allocAndPush<BST_DeleteName, false /* can't throw */>();
         del->index_id = remapInternedString(name);
         del->lineno = 0;
         fillScopingInfo(del, name, scoping);
@@ -2422,47 +2544,46 @@ public:
         // critical edges and needed to be broken, otherwise it's not too different.
 
         TmpValue remapped_iter = remapExpr(node->iter);
-        BST_GetIter* iter_call = new BST_GetIter;
+        BST_GetIter* iter_call = allocAndPush<BST_GetIter>();
         unmapExpr(remapped_iter, &iter_call->vreg_value);
         iter_call->lineno = node->lineno;
-
         TmpValue itername(createUniqueName("#iter_"), node->lineno);
         unmapExpr(itername, &iter_call->vreg_dst);
-        push_back(iter_call);
 
-        CFGBlock* test_block = cfg->addBlock();
+        CFGBlock* test_block = cfg->addDeferredBlock();
         pushJump(test_block);
-        curblock = test_block;
+        setInsertPoint(test_block);
 
-        BST_HasNext* test_call = new BST_HasNext;
+        auto itername_dup = _dup(itername);
+        BST_HasNext* test_call = allocAndPush<BST_HasNext>();
         test_call->lineno = node->lineno;
-        unmapExpr(_dup(itername), &test_call->vreg_value);
-        TmpValue tmp_has_call = pushBackCreateDst(test_call);
+        unmapExpr(itername_dup, &test_call->vreg_value);
+        TmpValue tmp_has_call = createDstName(test_call);
+
         BST_Branch* test_br = makeBranch(tmp_has_call);
 
-        push_back(test_br);
-        CFGBlock* test_true = cfg->addBlock();
-        CFGBlock* test_false = cfg->addBlock();
-        test_br->iftrue = test_true;
-        test_br->iffalse = test_false;
+        CFGBlock* test_true = cfg->addDeferredBlock();
+        CFGBlock* test_false = cfg->addDeferredBlock();
+        test_br->iftrue = (CFGBlock*)test_true;
+        test_br->iffalse = (CFGBlock*)test_false;
         curblock->connectTo(test_true);
         curblock->connectTo(test_false);
 
-        CFGBlock* loop_block = cfg->addBlock();
+        CFGBlock* loop_block = cfg->addDeferredBlock();
         CFGBlock* break_block = cfg->addDeferredBlock();
         CFGBlock* end_block = cfg->addDeferredBlock();
         CFGBlock* else_block = cfg->addDeferredBlock();
 
-        curblock = test_true;
+        setInsertPoint(test_true);
         // TODO simplify the breaking of these crit edges?
         pushJump(loop_block);
 
-        curblock = test_false;
+        setInsertPoint(test_false);
         pushJump(else_block);
 
         pushLoopContinuation(test_block, break_block);
 
-        curblock = loop_block;
+        setInsertPoint(loop_block);
         TmpValue next_name = makeCallAttr(_dup(itername), internString("next"), true);
         pushAssign(node->target, next_name);
 
@@ -2474,32 +2595,31 @@ public:
         popContinuation();
 
         if (curblock) {
-            BST_HasNext* end_call = new BST_HasNext;
-            unmapExpr(_dup(itername), &end_call->vreg_value);
+            remapped_iter = _dup(itername);
+            BST_HasNext* end_call = allocAndPush<BST_HasNext>();
+            unmapExpr(remapped_iter, &end_call->vreg_value);
             end_call->lineno = node->lineno;
-            TmpValue tmp_end_call = pushBackCreateDst(end_call);
+            TmpValue tmp_end_call = createDstName(end_call);
 
             BST_Branch* end_br = makeBranch(tmp_end_call);
-            push_back(end_br);
 
-            CFGBlock* end_true = cfg->addBlock();
-            CFGBlock* end_false = cfg->addBlock();
-            end_br->iftrue = end_true;
-            end_br->iffalse = end_false;
+            CFGBlock* end_true = cfg->addDeferredBlock();
+            CFGBlock* end_false = cfg->addDeferredBlock();
+            end_br->iftrue = (CFGBlock*)end_true;
+            end_br->iffalse = (CFGBlock*)end_false;
             curblock->connectTo(end_true);
             curblock->connectTo(end_false);
 
-            curblock = end_true;
+            setInsertPoint(end_true);
             pushJump(loop_block, true, getLastLinenoSub(node->body.back()));
 
-            curblock = end_false;
+            setInsertPoint(end_false);
             pushJump(else_block);
         }
 
-        cfg->placeBlock(else_block);
-        curblock = else_block;
+        setInsertPoint(else_block);
 
-        push_back(makeKill(itername.is));
+        makeKill(itername.is);
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);
             if (!curblock)
@@ -2511,9 +2631,8 @@ public:
         if (break_block->predecessors.size() == 0) {
             delete break_block;
         } else {
-            cfg->placeBlock(break_block);
-            curblock = break_block;
-            push_back(makeKill(itername.is));
+            setInsertPoint(break_block);
+            makeKill(itername.is);
             pushJump(end_block);
         }
 
@@ -2521,8 +2640,7 @@ public:
             delete end_block;
             curblock = NULL;
         } else {
-            cfg->placeBlock(end_block);
-            curblock = end_block;
+            setInsertPoint(end_block);
         }
 
         return true;
@@ -2531,16 +2649,22 @@ public:
     bool visit_raise(AST_Raise* node) override {
         assert(curblock);
 
-        BST_Raise* remapped = new BST_Raise();
-        remapped->lineno = node->lineno;
-
+        TmpValue remapped_arg0, remapped_arg1, remapped_arg2;
         if (node->arg0)
-            unmapExpr(remapExpr(node->arg0), &remapped->vreg_arg0);
+            remapped_arg0 = remapExpr(node->arg0);
         if (node->arg1)
-            unmapExpr(remapExpr(node->arg1), &remapped->vreg_arg1);
+            remapped_arg1 = remapExpr(node->arg1);
         if (node->arg2)
-            unmapExpr(remapExpr(node->arg2), &remapped->vreg_arg2);
-        push_back(remapped);
+            remapped_arg2 = remapExpr(node->arg2);
+
+        BST_Raise* remapped = allocAndPush<BST_Raise>();
+        remapped->lineno = node->lineno;
+        if (node->arg0)
+            unmapExpr(remapped_arg0, &remapped->vreg_arg0);
+        if (node->arg1)
+            unmapExpr(remapped_arg1, &remapped->vreg_arg1);
+        if (node->arg2)
+            unmapExpr(remapped_arg2, &remapped->vreg_arg2);
 
         if (!curblock)
             return true;
@@ -2584,8 +2708,7 @@ public:
         if (exc_handler_block->predecessors.size() == 0) {
             delete exc_handler_block;
         } else {
-            cfg->placeBlock(exc_handler_block);
-            curblock = exc_handler_block;
+            setInsertPoint(exc_handler_block);
 
             bool caught_all = false;
             for (AST_ExceptHandler* exc_handler : node->handlers) {
@@ -2595,26 +2718,28 @@ public:
                 if (exc_handler->type) {
                     TmpValue handled_type = remapExpr(exc_handler->type);
 
-                    BST_CheckExcMatch* is_caught_here = new BST_CheckExcMatch;
+                    auto remapped_exc_value_name = _dup(exc_value_name);
+
+                    BST_CheckExcMatch* is_caught_here = allocAndPush<BST_CheckExcMatch>();
                     // TODO This is supposed to be exc_type_name (value doesn't matter for checking matches)
-                    unmapExpr(_dup(exc_value_name), &is_caught_here->vreg_value);
+                    unmapExpr(remapped_exc_value_name, &is_caught_here->vreg_value);
                     unmapExpr(handled_type, &is_caught_here->vreg_cls);
                     is_caught_here->lineno = exc_handler->lineno;
-                    TmpValue name_is_caught_here = pushBackCreateDst(is_caught_here);
+                    TmpValue name_is_caught_here = createDstName(is_caught_here);
 
-                    BST_Branch* br = new BST_Branch();
-                    unmapExpr(callNonzero(name_is_caught_here), &br->vreg_test);
+                    auto remapped_br_test = callNonzero(name_is_caught_here);
+                    BST_Branch* br = allocAndPush<BST_Branch>();
+                    unmapExpr(remapped_br_test, &br->vreg_test);
                     br->lineno = exc_handler->lineno;
 
-                    CFGBlock* exc_handle = cfg->addBlock();
+                    CFGBlock* exc_handle = cfg->addDeferredBlock();
                     exc_next = cfg->addDeferredBlock();
 
-                    br->iftrue = exc_handle;
-                    br->iffalse = exc_next;
+                    br->iftrue = (CFGBlock*)exc_handle;
+                    br->iffalse = (CFGBlock*)exc_next;
                     curblock->connectTo(exc_handle);
                     curblock->connectTo(exc_next);
-                    push_back(br);
-                    curblock = exc_handle;
+                    setInsertPoint(exc_handle);
                 } else {
                     caught_all = true;
                 }
@@ -2623,11 +2748,10 @@ public:
                     pushAssign(exc_handler->name, _dup(exc_value_name));
                 }
 
-                BST_SetExcInfo* set_exc_info = new BST_SetExcInfo;
+                BST_SetExcInfo* set_exc_info = allocAndPush<BST_SetExcInfo>();
                 unmapExpr(exc_type_name, &set_exc_info->vreg_type);
                 unmapExpr(exc_value_name, &set_exc_info->vreg_value);
                 unmapExpr(exc_traceback_name, &set_exc_info->vreg_traceback);
-                push_back(set_exc_info);
 
                 for (AST_stmt* subnode : exc_handler->body) {
                     subnode->accept(this);
@@ -2639,16 +2763,14 @@ public:
                     pushJump(join_block);
                 }
 
-                if (exc_next) {
-                    cfg->placeBlock(exc_next);
-                } else {
+                if (!exc_next) {
                     assert(caught_all);
                 }
-                curblock = exc_next;
+                setInsertPoint(exc_next);
             }
 
             if (!caught_all) {
-                BST_Raise* raise = new BST_Raise();
+                BST_Raise* raise = allocAndPush<BST_Raise>();
                 unmapExpr(exc_type_name, &raise->vreg_arg0);
                 unmapExpr(exc_value_name, &raise->vreg_arg1);
                 unmapExpr(exc_traceback_name, &raise->vreg_arg2);
@@ -2659,7 +2781,6 @@ public:
                 // the last statement of the last except block.
                 raise->lineno = getLastLinenoSub(node->handlers.back()->body.back());
 
-                push_back(raise);
                 curblock = NULL;
             }
         }
@@ -2668,8 +2789,7 @@ public:
             delete join_block;
             curblock = NULL;
         } else {
-            cfg->placeBlock(join_block);
-            curblock = join_block;
+            setInsertPoint(join_block);
         }
 
         return true;
@@ -2710,14 +2830,12 @@ public:
         if (exc_handler_block->predecessors.size() == 0) {
             delete exc_handler_block;
         } else {
-            cfg->placeBlock(exc_handler_block);
-            curblock = exc_handler_block;
+            setInsertPoint(exc_handler_block);
             pushAssign(exc_why_name, makeNum(Why::EXCEPTION, node->lineno));
             pushJump(finally_block);
         }
 
-        cfg->placeBlock(finally_block);
-        curblock = finally_block;
+        setInsertPoint(finally_block);
 
         for (AST_stmt* subnode : node->finalbody) {
             subnode->accept(this);
@@ -2736,12 +2854,11 @@ public:
                 CFGBlock* reraise = cfg->addDeferredBlock();
                 CFGBlock* noexc = makeFinallyCont(Why::EXCEPTION, exc_why_name, reraise);
 
-                cfg->placeBlock(reraise);
-                curblock = reraise;
+                setInsertPoint(reraise);
                 pushReraise(getLastLinenoSub(node->finalbody.back()), exc_type_name, exc_value_name,
                             exc_traceback_name);
 
-                curblock = noexc;
+                setInsertPoint(noexc);
             }
         }
 
@@ -2826,8 +2943,7 @@ public:
             // TODO(rntz): test for this case
             delete exc_block;
         } else {
-            cfg->placeBlock(exc_block);
-            curblock = exc_block;
+            setInsertPoint(exc_block);
 
             // call the context-manager's exit method
             TmpValue suppressname(nodeName("suppress"), node->lineno);
@@ -2842,13 +2958,11 @@ public:
             exiter->info = "with_exiter";
             pushBranch(suppressname, exiter, reraise_block);
 
-            cfg->placeBlock(exiter);
-            curblock = exiter;
+            setInsertPoint(exiter);
             pushJump(exit_block);
 
             // otherwise, reraise the exception
-            cfg->placeBlock(reraise_block);
-            curblock = reraise_block;
+            setInsertPoint(reraise_block);
             pushReraise(getLastLinenoSub(node->body.back()), exc_type_name.is, exc_value_name.is,
                         exc_traceback_name.is);
         }
@@ -2858,8 +2972,7 @@ public:
             // TODO(rntz): test for this case, "with foo: raise bar"
             delete finally_block;
         } else {
-            cfg->placeBlock(finally_block);
-            curblock = finally_block;
+            setInsertPoint(finally_block);
             // call the context-manager's exit method, ignoring result
             makeCall(exitname, { makeNone(exitname.lineno), makeNone(exitname.lineno), makeNone(exitname.lineno) });
 
@@ -2877,8 +2990,7 @@ public:
             // make a test for it!
             delete exit_block;
         } else {
-            cfg->placeBlock(exit_block);
-            curblock = exit_block;
+            setInsertPoint(exit_block);
         }
 
         return true;
@@ -2902,19 +3014,20 @@ public:
     llvm::DenseSet<InternedString>
         name_is_read; // this is used to find unused desination vregs which we can transform to VREG_UNDEFINED
     std::vector<InternedString> vreg_sym_map;
-    llvm::DenseMap<int*, InternedString>& id_vreg;
+    llvm::DenseMap<TrackingVRegPtr, InternedString>& id_vreg;
 
     enum Step { TrackBlockUsage = 0, UserVisible, CrossBlock, SingleBlockUse } step;
 
-    AssignVRegsVisitor(const CodeConstants& code_constants, llvm::DenseMap<int*, InternedString>& id_vreg)
+    AssignVRegsVisitor(const CodeConstants& code_constants, llvm::DenseMap<TrackingVRegPtr, InternedString>& id_vreg)
         : NoopBSTVisitor(code_constants), current_block(0), next_vreg(0), id_vreg(id_vreg) {}
 
     bool visit_vreg(int* vreg, bool is_dst = false) override {
+        auto tracking_id = TrackingVRegPtr::create(vreg, current_block->cfg->bytecode);
         if (is_dst) {
-            assert(id_vreg.count(vreg));
+            assert(id_vreg.count(tracking_id));
             if (*vreg != VREG_UNDEFINED)
                 return true;
-            InternedString id = id_vreg[vreg];
+            InternedString id = id_vreg[tracking_id];
             if (step == TrackBlockUsage) {
                 sym_blocks_map[id].insert(current_block);
                 return true;
@@ -2935,14 +3048,13 @@ public:
             return true;
         }
 
-
-        if (!id_vreg.count(vreg)) {
+        if (!id_vreg.count(tracking_id)) {
             if (*vreg >= 0)
                 *vreg = VREG_UNDEFINED;
             return true;
         }
 
-        auto id = id_vreg[vreg];
+        auto id = id_vreg[tracking_id];
 
         if (step == TrackBlockUsage) {
             name_is_read.insert(id);
@@ -3030,7 +3142,7 @@ public:
 };
 
 void VRegInfo::assignVRegs(const CodeConstants& code_constants, CFG* cfg, const ParamNames& param_names,
-                           llvm::DenseMap<int*, InternedString>& id_vreg) {
+                           llvm::DenseMap<TrackingVRegPtr, InternedString>& id_vreg) {
     assert(!hasVRegsAssigned());
 
     // warning: don't rearrange the steps, they need to be run in this exact order!
@@ -3053,7 +3165,7 @@ void VRegInfo::assignVRegs(const CodeConstants& code_constants, CFG* cfg, const 
                 }
             }
 
-            for (BST_stmt* stmt : b->body) {
+            for (BST_stmt* stmt : *b) {
                 stmt->accept(&visitor);
             }
 
@@ -3073,6 +3185,7 @@ void VRegInfo::assignVRegs(const CodeConstants& code_constants, CFG* cfg, const 
     sym_vreg_map = std::move(visitor.sym_vreg_map);
 #endif
     vreg_sym_map = std::move(visitor.vreg_sym_map);
+    vreg_sym_map.shrink_to_fit();
     assert(hasVRegsAssigned());
 #if REUSE_VREGS
     assert(vreg_sym_map.size() == num_vregs_cross_block);
@@ -3080,7 +3193,6 @@ void VRegInfo::assignVRegs(const CodeConstants& code_constants, CFG* cfg, const 
     assert(vreg_sym_map.size() == num_vregs);
 #endif
 }
-
 
 static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body, AST_TYPE::AST_TYPE ast_type,
                                                  int lineno, AST_arguments* args, BoxedString* filename,
@@ -3100,11 +3212,11 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
     if (ast_type == AST_TYPE::ClassDef) {
         InternedString id = stringpool.get("__name__");
         // A classdef always starts with "__module__ = __name__"
-        auto module_name_value = new BST_LoadName;
+        auto module_name_value = visitor.allocAndPush<BST_LoadName>();
         module_name_value->lineno = lineno;
         module_name_value->index_id = visitor.remapInternedString(id);
         fillScopingInfo(module_name_value, id, scoping);
-        TmpValue module_name = visitor.pushBackCreateDst(module_name_value);
+        TmpValue module_name = visitor.createDstName(module_name_value);
         visitor.pushStoreName(stringpool.get("__module__"), module_name);
 
         // If the first statement is just a single string, transform it to an assignment to __doc__
@@ -3132,11 +3244,11 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
                 InternedString arg_name = stringpool.get("." + std::to_string(counter));
                 assert(scoping->getScopeTypeOfName(arg_name) == ScopeInfo::VarScopeType::FAST);
 
-                auto load = new BST_LoadName();
+                auto load = visitor.allocAndPush<BST_LoadName>();
                 load->index_id = visitor.remapInternedString(arg_name);
                 load->lineno = arg_expr->lineno;
                 fillScopingInfo(load, arg_name, scoping);
-                TmpValue val = visitor.pushBackCreateDst(load);
+                TmpValue val = visitor.createDstName(load);
 
                 visitor.pushAssign(arg_expr, val);
             } else {
@@ -3156,21 +3268,19 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
     // The functions we create for classdefs are supposed to return a dictionary of their locals.
     // This is the place that we add all of that:
     if (ast_type == AST_TYPE::ClassDef) {
-        BST_Locals* locals = new BST_Locals;
-        TmpValue name = visitor.pushBackCreateDst(locals);
+        BST_Locals* locals = visitor.allocAndPush<BST_Locals>();
+        TmpValue name = visitor.createDstName(locals);
 
-        BST_Return* rtn = new BST_Return();
+        BST_Return* rtn = visitor.allocAndPush<BST_Return>();
         rtn->lineno = getLastLineno(body, lineno);
         visitor.unmapExpr(name, &rtn->vreg_value);
-        visitor.push_back(rtn);
-    } else {
+    } else if (visitor.curblock) {
         // Put a fake "return" statement at the end of every function just to make sure they all have one;
         // we already have to support multiple return statements in a function, but this way we can avoid
         // having to support not having a return statement:
-        BST_Return* return_stmt = new BST_Return();
+        BST_Return* return_stmt = visitor.allocAndPush<BST_Return>();
         return_stmt->lineno = getLastLineno(body, lineno);
         return_stmt->vreg_value = VREG_UNDEFINED;
-        visitor.push_back(return_stmt);
     }
 
     if (VERBOSITY("cfg") >= 3) {
@@ -3181,24 +3291,23 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
 #ifndef NDEBUG
     ////
     // Check some properties expected by later stages:
-
     assert(rtn->getStartingBlock()->predecessors.size() == 0);
 
     for (CFGBlock* b : rtn->blocks) {
-        ASSERT(b->idx != -1, "Forgot to place a block!");
+        ASSERT(b->idx != -1 && b->isPlaced(), "Forgot to place a block!");
         for (CFGBlock* b2 : b->predecessors) {
-            ASSERT(b2->idx != -1, "Forgot to place a block!");
+            ASSERT(b2->idx != -1 && b->isPlaced(), "Forgot to place a block!");
         }
         for (CFGBlock* b2 : b->successors) {
-            ASSERT(b2->idx != -1, "Forgot to place a block!");
+            ASSERT(b2->idx != -1 && b->isPlaced(), "Forgot to place a block!");
         }
 
-        ASSERT(b->body.size(), "%d", b->idx);
+        ASSERT(b->body() != NULL, "%d", b->idx);
         ASSERT(b->successors.size() <= 2, "%d has too many successors!", b->idx);
         if (b->successors.size() == 0) {
-            BST_stmt* terminator = b->body.back();
-            assert(terminator->type == BST_TYPE::Return || terminator->type == BST_TYPE::Raise
-                   || terminator->type == BST_TYPE::Raise || terminator->type == BST_TYPE::Assert);
+            BST_stmt* terminator = b->getLastStmt();
+            assert(terminator->type() == BST_TYPE::Return || terminator->type() == BST_TYPE::Raise
+                   || terminator->type() == BST_TYPE::Assert);
         }
 
         if (b->predecessors.size() == 0) {
@@ -3253,54 +3362,40 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
 // need to be fixed.
 #if 0
     for (auto b : rtn->blocks) {
-        for (auto ast : b->body) {
-            if (ast->type == AST_TYPE::Jump)
+        for (auto bst : *b) {
+            if (bst->type() == BST_TYPE::Jump)
                 continue;
-            if (ast->type == AST_TYPE::Assign) {
-                auto asgn = ast_cast<AST_Assign>(ast);
-                if (asgn->value->type == AST_TYPE::LangPrimitive) {
-                    auto lp = ast_cast<AST_LangPrimitive>(asgn->value);
-                    if (lp->opcode == AST_LangPrimitive::LANDINGPAD)
-                        continue;
-                }
-            }
-            if (ast->type == AST_TYPE::Expr) {
-                auto expr = ast_cast<AST_Expr>(ast);
-                if (expr->value->type == AST_TYPE::LangPrimitive) {
-                    auto lp = ast_cast<AST_LangPrimitive>(expr->value);
-                    if (lp->opcode == AST_LangPrimitive::UNCACHE_EXC_INFO || lp->opcode == AST_LangPrimitive::SET_EXC_INFO)
-                        continue;
-                }
-            }
+            if (bst->type() == BST_TYPE::Landingpad)
+                continue;
+            if (bst->type() == BST_TYPE::UncacheExcInfo)
+                continue;
+            if (bst->type() == BST_TYPE::SetExcInfo)
+                continue;
 
-            if (ast->type == AST_TYPE::Delete) {
-                AST_Delete* del = ast_cast<AST_Delete>(ast);
-                assert(del->targets.size() == 1);
-                if (del->targets[0]->type == AST_TYPE::Name) {
-                    AST_Name* target = ast_cast<AST_Name>(del->targets[0]);
-                    if (target->id.s()[0] == '#') {
-                        continue;
-                    }
-                }
+            if (bst->type() == BST_TYPE::DeleteName) {
+                auto* del = bst_cast<BST_DeleteName>(bst);
+                InternedString id = visitor.code_constants.getInternedString(del->index_id);
+                if (id.s()[0] == '#')
+                    continue;
             }
 
 
-            //if (ast->type != AST_TYPE::Return)
+            //if (bst->type() != AST_TYPE::Return)
                 //continue;
-            if (ast->lineno == 0) {
-                rtn->print();
+            if (bst->lineno == 0) {
+                rtn->print(visitor.code_constants);
                 printf("\n");
-                print_ast(ast);
+                print_bst(bst, visitor.code_constants);
                 printf("\n");
             }
-            assert(ast->lineno > 0);
+            assert(bst->lineno > 0);
         }
     }
 #endif
 
 // TODO make sure the result of Invoke nodes are not used on the exceptional path
 #endif
-
+#if 0
     // Prune unnecessary blocks from the CFG.
     // Not strictly necessary, but makes the output easier to look at,
     // and can make the analyses more efficient.
@@ -3315,7 +3410,7 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
             if (b2->predecessors.size() != 1)
                 break;
 
-            BST_TYPE::BST_TYPE end_ast_type = b->body[b->body.size() - 1]->type;
+            BST_TYPE::BST_TYPE end_ast_type = b->body[b->body.size() - 1]->type();
             assert(end_ast_type == BST_TYPE::Jump || end_ast_type == BST_TYPE::Invoke);
             if (end_ast_type == BST_TYPE::Invoke) {
                 // TODO probably shouldn't be generating these anyway:
@@ -3342,9 +3437,17 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
             delete b2;
         }
     }
+#endif
 
     rtn->getVRegInfo().assignVRegs(visitor.code_constants, rtn, param_names, visitor.id_vreg);
 
+    rtn->bytecode.optimizeSize();
+    rtn->blocks.shrink_to_fit();
+
+    static StatCounter bst_bytecode_bytes("num_bst_bytecode_bytes");
+    bst_bytecode_bytes.log(rtn->bytecode.getSize());
+
+    // TODO add code which serializes the final bytecode to disk
 
     if (VERBOSITY("cfg") >= 2) {
         printf("Final cfg:\n");

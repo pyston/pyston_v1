@@ -101,8 +101,8 @@ private:
           speculation(speculation) {}
 
     void run() {
-        for (int i = 0; i < block->body.size(); i++) {
-            block->body[i]->accept_stmt(this);
+        for (BST_stmt* stmt : *block) {
+            stmt->accept_stmt(this);
         }
     }
 
@@ -525,8 +525,6 @@ private:
         getType(node->vreg_globals);
         getType(node->vreg_locals);
     }
-
-    void visit_invoke(BST_Invoke* node) override { node->stmt->accept_stmt(this); }
 
     void visit_jump(BST_Jump* node) override {}
 

@@ -74,6 +74,8 @@ public:
     static Box* executeInner(ASTInterpreter& interpreter, CFGBlock* start_block, BST_stmt* start_at);
 
 private:
+    Value executeStmt(BST_stmt* node);
+
     Value createFunction(BST_FunctionDef* node, BoxedCode* node_code);
     Value doBinOp(BST_stmt* node, Value left, Value right, int op, BinExpType exp_type);
     void doStore(int vreg, STOLEN(Value) value);
@@ -95,7 +97,6 @@ private:
     Value visit_importfrom(BST_ImportFrom* node);
     Value visit_importname(BST_ImportName* node);
     Value visit_importstar(BST_ImportStar* node);
-    Value visit_invoke(BST_Invoke* node);
     Value visit_jump(BST_Jump* node);
     Value visit_landingpad(BST_Landingpad* node);
     Value visit_list(BST_List* node);
@@ -362,7 +363,7 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
     } catch (ExcInfo e) {
         --num_inside;
         BST_stmt* stmt = getCurrentStatement();
-        if (stmt->type != BST_TYPE::Invoke)
+        if (!stmt->is_invoke())
             throw e;
 
         assert(getPythonFrameInfo(0) == getFrameInfo());
@@ -370,7 +371,7 @@ Box* ASTInterpreter::execJITedBlock(CFGBlock* b) {
         ++getCode()->cxx_exception_count[stmt];
         caughtCxxException(&e);
 
-        next_block = ((BST_Invoke*)stmt)->exc_dest;
+        next_block = stmt->get_exc_block();
         last_exception = e;
     }
     return nullptr;
@@ -384,7 +385,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
     assert((start_block == NULL) == (start_at == NULL));
     if (start_block == NULL) {
         start_block = interpreter.source_info->cfg->getStartingBlock();
-        start_at = start_block->body[0];
+        start_at = start_block->body();
     }
 
     // Important that this happens after RegisterHelper:
@@ -395,7 +396,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
     if (!from_start) {
         interpreter.current_block = start_block;
         bool started = false;
-        for (auto s : start_block->body) {
+        for (auto s : *start_block) {
             if (!started) {
                 if (s != start_at)
                     continue;
@@ -404,7 +405,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
 
             interpreter.setCurrentStatement(s);
             Py_XDECREF(v.o);
-            v = interpreter.visit_stmt(s);
+            v = interpreter.executeStmt(s);
         }
     } else {
         interpreter.next_block = start_block;
@@ -427,7 +428,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
                 // check if we returned from the baseline JIT because we should do a OSR.
                 if (unlikely(rtn == (Box*)ASTInterpreterJitInterface::osr_dummy_value)) {
                     BST_Jump* cur_stmt = (BST_Jump*)interpreter.getCurrentStatement();
-                    RELEASE_ASSERT(cur_stmt->type == BST_TYPE::Jump, "");
+                    RELEASE_ASSERT(cur_stmt->type() == BST_TYPE::Jump, "");
                     // WARNING: do not put a try catch + rethrow block around this code here.
                     //          it will confuse our unwinder!
                     rtn = interpreter.doOSR(cur_stmt);
@@ -449,14 +450,14 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
             interpreter.startJITing(interpreter.current_block);
         }
 
-        for (BST_stmt* s : interpreter.current_block->body) {
+        for (BST_stmt* s : *interpreter.current_block) {
             interpreter.setCurrentStatement(s);
             if (interpreter.jit)
                 interpreter.jit->emitSetCurrentInst(s);
             if (v.o) {
                 Py_DECREF(v.o);
             }
-            v = interpreter.visit_stmt(s);
+            v = interpreter.executeStmt(s);
         }
     }
     return v.o;
@@ -759,11 +760,14 @@ Box* ASTInterpreter::doOSR(BST_Jump* node) {
     }
 }
 
-Value ASTInterpreter::visit_invoke(BST_Invoke* node) {
+Value ASTInterpreter::executeStmt(BST_stmt* node) {
+    if (!node->is_invoke())
+        return visit_stmt(node);
+
     Value v;
     try {
-        v = visit_stmt(node->stmt);
-        next_block = node->normal_dest;
+        v = visit_stmt(node);
+        next_block = node->get_normal_block();
 
         if (jit) {
             jit->emitJump(next_block);
@@ -778,7 +782,7 @@ Value ASTInterpreter::visit_invoke(BST_Invoke* node) {
         ++getCode()->cxx_exception_count[node];
         caughtCxxException(&e);
 
-        next_block = node->exc_dest;
+        next_block = node->get_exc_block();
         last_exception = e;
     }
 
@@ -909,7 +913,7 @@ Value ASTInterpreter::visit_stmt(BST_stmt* node) {
     // to be careful to wrap pendingCallsCheckHelper, and it can signal that it was careful
     // by returning from the function instead of breaking.
 
-    switch (node->type) {
+    switch (node->type()) {
         case BST_TYPE::Assert:
             visit_assert((BST_Assert*)node);
             ASTInterpreterJitInterface::pendingCallsCheckHelper();
@@ -977,9 +981,6 @@ Value ASTInterpreter::visit_stmt(BST_stmt* node) {
             break;
         case BST_TYPE::Jump:
             return visit_jump((BST_Jump*)node);
-        case BST_TYPE::Invoke:
-            visit_invoke((BST_Invoke*)node);
-            break;
         case BST_TYPE::SetExcInfo:
             visit_setexcinfo((BST_SetExcInfo*)node);
             ASTInterpreterJitInterface::pendingCallsCheckHelper();
@@ -996,7 +997,7 @@ Value ASTInterpreter::visit_stmt(BST_stmt* node) {
         // Handle all cases which are derived from BST_stmt_with_dest
         default: {
             Value v;
-            switch (node->type) {
+            switch (node->type()) {
                 case BST_TYPE::CopyVReg:
                     v = visit_copyvreg((BST_CopyVReg*)node);
                     break;
@@ -1084,7 +1085,7 @@ Value ASTInterpreter::visit_stmt(BST_stmt* node) {
                     v = visit_makeslice((BST_MakeSlice*)node);
                     break;
                 default:
-                    RELEASE_ASSERT(0, "not implemented %d", node->type);
+                    RELEASE_ASSERT(0, "not implemented %d", node->type());
             };
             doStore(((BST_stmt_with_dest*)node)->vreg_dst, v);
             ASTInterpreterJitInterface::pendingCallsCheckHelper();
@@ -1425,14 +1426,14 @@ Value ASTInterpreter::visit_call(BST_Call* node) {
     bool is_callattr = false;
     bool callattr_clsonly = false;
     int* vreg_elts = NULL;
-    if (node->type == BST_TYPE::CallAttr) {
+    if (node->type() == BST_TYPE::CallAttr) {
         is_callattr = true;
         callattr_clsonly = false;
         auto* attr_ast = bst_cast<BST_CallAttr>(node);
         func = getVReg(attr_ast->vreg_value);
         attr = getCodeConstants().getInternedString(attr_ast->index_attr);
         vreg_elts = bst_cast<BST_CallAttr>(node)->elts;
-    } else if (node->type == BST_TYPE::CallClsAttr) {
+    } else if (node->type() == BST_TYPE::CallClsAttr) {
         is_callattr = true;
         callattr_clsonly = true;
         auto* attr_ast = bst_cast<BST_CallClsAttr>(node);
@@ -2109,30 +2110,28 @@ extern "C" Box* astInterpretDeoptFromASM(BoxedCode* code, BST_stmt* enclosing_st
     CFGBlock* start_block = NULL;
     BST_stmt* starting_statement = NULL;
     while (true) {
-        if (enclosing_stmt->type == BST_TYPE::Invoke) {
-            auto invoke = bst_cast<BST_Invoke>(enclosing_stmt);
-            start_block = invoke->normal_dest;
-            starting_statement = start_block->body[0];
-            enclosing_stmt = invoke->stmt;
-        } else if (enclosing_stmt->has_dest_vreg()) {
+        if (enclosing_stmt->is_invoke()) {
+            start_block = enclosing_stmt->get_normal_block();
+            starting_statement = start_block->body();
+        }
+        if (enclosing_stmt->has_dest_vreg()) {
             int vreg_dst = ((BST_stmt_with_dest*)enclosing_stmt)->vreg_dst;
             if (vreg_dst != VREG_UNDEFINED)
                 interpreter.addSymbol(vreg_dst, expr_val, true);
             break;
         } else {
-            RELEASE_ASSERT(0, "encountered an yet unimplemented opcode (got %d)", enclosing_stmt->type);
+            RELEASE_ASSERT(0, "encountered an yet unimplemented opcode (got %d)", enclosing_stmt->type());
         }
     }
 
     if (start_block == NULL) {
         // TODO innefficient
         for (auto block : code->source->cfg->blocks) {
-            int n = block->body.size();
-            for (int i = 0; i < n; i++) {
-                if (block->body[i] == enclosing_stmt) {
-                    ASSERT(i + 1 < n, "how could we deopt from a non-invoke terminator?");
+            for (auto it = block->begin(), it_end = block->end(); it != it_end; ++it) {
+                if (*it == enclosing_stmt) {
+                    ASSERT(!(*it)->is_terminator(), "how could we deopt from a non-invoke terminator?");
                     start_block = block;
-                    starting_statement = block->body[i + 1];
+                    starting_statement = *(++it);
                     break;
                 }
             }

@@ -58,35 +58,34 @@ namespace BST_TYPE {
     X(ImportFrom, 21)                                                                                                  \
     X(ImportName, 22)                                                                                                  \
     X(ImportStar, 23)                                                                                                  \
-    X(Invoke, 24)                                                                                                      \
-    X(Jump, 25)                                                                                                        \
-    X(Landingpad, 26)                                                                                                  \
-    X(List, 27)                                                                                                        \
-    X(LoadAttr, 28)                                                                                                    \
-    X(LoadName, 29)                                                                                                    \
-    X(LoadSub, 30)                                                                                                     \
-    X(LoadSubSlice, 31)                                                                                                \
-    X(Locals, 32)                                                                                                      \
-    X(MakeClass, 33)                                                                                                   \
-    X(MakeFunction, 34)                                                                                                \
-    X(MakeSlice, 35)                                                                                                   \
-    X(Nonzero, 36)                                                                                                     \
-    X(Print, 37)                                                                                                       \
-    X(PrintExpr, 38)                                                                                                   \
-    X(Raise, 39)                                                                                                       \
-    X(Repr, 40)                                                                                                        \
-    X(Return, 41)                                                                                                      \
-    X(Set, 42)                                                                                                         \
-    X(SetExcInfo, 43)                                                                                                  \
-    X(StoreAttr, 44)                                                                                                   \
-    X(StoreName, 45)                                                                                                   \
-    X(StoreSub, 46)                                                                                                    \
-    X(StoreSubSlice, 47)                                                                                               \
-    X(Tuple, 48)                                                                                                       \
-    X(UnaryOp, 49)                                                                                                     \
-    X(UncacheExcInfo, 50)                                                                                              \
-    X(UnpackIntoArray, 51)                                                                                             \
-    X(Yield, 52)
+    X(Jump, 24)                                                                                                        \
+    X(Landingpad, 25)                                                                                                  \
+    X(List, 26)                                                                                                        \
+    X(LoadAttr, 27)                                                                                                    \
+    X(LoadName, 28)                                                                                                    \
+    X(LoadSub, 29)                                                                                                     \
+    X(LoadSubSlice, 30)                                                                                                \
+    X(Locals, 31)                                                                                                      \
+    X(MakeClass, 32)                                                                                                   \
+    X(MakeFunction, 33)                                                                                                \
+    X(MakeSlice, 34)                                                                                                   \
+    X(Nonzero, 35)                                                                                                     \
+    X(Print, 36)                                                                                                       \
+    X(PrintExpr, 37)                                                                                                   \
+    X(Raise, 38)                                                                                                       \
+    X(Repr, 39)                                                                                                        \
+    X(Return, 40)                                                                                                      \
+    X(Set, 41)                                                                                                         \
+    X(SetExcInfo, 42)                                                                                                  \
+    X(StoreAttr, 43)                                                                                                   \
+    X(StoreName, 44)                                                                                                   \
+    X(StoreSub, 45)                                                                                                    \
+    X(StoreSubSlice, 46)                                                                                               \
+    X(Tuple, 47)                                                                                                       \
+    X(UnaryOp, 48)                                                                                                     \
+    X(UncacheExcInfo, 49)                                                                                              \
+    X(UnpackIntoArray, 50)                                                                                             \
+    X(Yield, 51)
 
 #define GENERATE_ENUM(ENUM, N) ENUM = N,
 #define GENERATE_STRING(STRING, N) m[N] = #STRING;
@@ -99,7 +98,6 @@ static const char* stringify(int n) {
     return m[n];
 }
 
-#undef FOREACH_TYPE
 #undef GENERATE_ENUM
 #undef GENERATE_STRING
 };
@@ -128,17 +126,78 @@ static constexpr int VREG_UNDEFINED = std::numeric_limits<int>::min();
 //  in order to make it easier for a human to understand we print the actual value of the constant between | characters.
 
 
+#define PACKED __attribute__((packed)) __attribute__((__aligned__(1)))
+
+class BSTAllocator {
+public:
+    BSTAllocator() = default;
+    BSTAllocator(BSTAllocator&) = delete;
+
+    void* allocate(int num_bytes) {
+        mem.resize(mem.size() + num_bytes, 0);
+        return &mem[mem.size() - num_bytes];
+    }
+    template <typename T> T* allocate() { return (T*)allocate(sizeof(T)); }
+
+    void reserve(int num_bytes) { mem.reserve(num_bytes); }
+    int getOffset(void* ptr) const {
+        auto offset = (unsigned char*)ptr - mem.data();
+        // assert(offset >= 0);
+        return offset;
+    }
+    int getSize() const { return mem.size(); }
+    void optimizeSize() { mem.shrink_to_fit(); }
+    unsigned char* getData() { return mem.data(); }
+    bool isInside(void* ptr) const { return ptr >= mem.data() && ptr <= &mem.back(); }
+
+private:
+    std::vector<unsigned char> mem;
+};
+
 class BST_stmt {
 public:
-    virtual ~BST_stmt() {}
+    static constexpr unsigned char invoke_flag = 64;
 
-    const BST_TYPE::BST_TYPE type;
+    // contains the opcode which can have the invoke bit set which signals that this stmt is inside a invoke and that a
+    // pointer to the normal CFGBlock and the exception block follow directly after the last field in the instruction.
+    unsigned char type_and_flags;
+
     uint32_t lineno;
 
-    virtual void accept(BSTVisitor* v) = 0;
-    virtual void accept_stmt(StmtVisitor* v) = 0;
 
-    virtual bool has_dest_vreg() const { return false; }
+    BST_TYPE::BST_TYPE type() const { return (BST_TYPE::BST_TYPE)(type_and_flags & (~invoke_flag)); }
+
+    bool is_invoke() const { return type_and_flags & invoke_flag; }
+    CFGBlock* get_normal_block() const {
+        assert(is_invoke());
+        return ((CFGBlock * const*)&((const unsigned char*)this)[size_in_bytes()])[-2];
+    }
+    CFGBlock* get_exc_block() const {
+        assert(is_invoke());
+        return ((CFGBlock * const*)&((const unsigned char*)this)[size_in_bytes()])[-1];
+    }
+
+    // if this instruction is inside a invoke it will return the size including the two CFGBlock* it contains
+    inline int size_in_bytes() const __attribute__((always_inline));
+    inline bool has_dest_vreg() const __attribute__((always_inline));
+    bool is_terminator() const __attribute__((always_inline)) {
+        if (is_invoke())
+            return true;
+        switch (type_and_flags) {
+            case BST_TYPE::Assert:
+            case BST_TYPE::Branch:
+            case BST_TYPE::Jump:
+            case BST_TYPE::Raise:
+            case BST_TYPE::Return:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    void accept(BSTVisitor* v);
+    void accept_stmt(StmtVisitor* v);
+
 
 // #define DEBUG_LINE_NUMBERS 1
 #ifdef DEBUG_LINE_NUMBERS
@@ -150,10 +209,10 @@ private:
 public:
     BST_stmt(BST_TYPE::BST_TYPE type);
 #else
-    BST_stmt(BST_TYPE::BST_TYPE type) : type(type), lineno(0) {}
+    BST_stmt(BST_TYPE::BST_TYPE type) : type_and_flags(type), lineno(0) {}
 #endif
-    BST_stmt(BST_TYPE::BST_TYPE type, uint32_t lineno) : type(type), lineno(lineno) {}
-};
+    BST_stmt(BST_TYPE::BST_TYPE type, uint32_t lineno) : type_and_flags(type), lineno(lineno) {}
+} PACKED;
 
 // base class of all nodes which have a single destination vreg
 class BST_stmt_with_dest : public BST_stmt {
@@ -161,28 +220,33 @@ public:
     int vreg_dst = VREG_UNDEFINED;
     BST_stmt_with_dest(BST_TYPE::BST_TYPE type) : BST_stmt(type) {}
     BST_stmt_with_dest(BST_TYPE::BST_TYPE type, int lineno) : BST_stmt(type, lineno) {}
-
-    bool has_dest_vreg() const override { return true; }
-};
+} PACKED;
 
 #define BSTNODE(opcode)                                                                                                \
-    virtual void accept(BSTVisitor* v);                                                                                \
-    virtual void accept_stmt(StmtVisitor* v);                                                                          \
+    void accept(BSTVisitor* v);                                                                                        \
+    void accept_stmt(StmtVisitor* v);                                                                                  \
     static const BST_TYPE::BST_TYPE TYPE = BST_TYPE::opcode;
 
 #define BSTFIXEDVREGS(opcode, base_class)                                                                              \
     BSTNODE(opcode)                                                                                                    \
-    BST_##opcode() : base_class(BST_TYPE::opcode) {}
+    static BST_##opcode* create(BSTAllocator& alloc) { return new (alloc) BST_##opcode(); }                            \
+    BST_##opcode() : base_class(BST_TYPE::opcode) {}                                                                   \
+    int size_in_bytes() const { return sizeof(*this); }                                                                \
+    static void* operator new(size_t s, BSTAllocator & alloc) { return alloc.allocate(s); }                            \
+    static void operator delete(void* ptr) { RELEASE_ASSERT(0, ""); }
 
 #define BSTVARVREGS(opcode, base_class, num_elts, vreg_dst)                                                            \
 public:                                                                                                                \
     BSTNODE(opcode)                                                                                                    \
-    static BST_##opcode* create(int num_elts) { return new (num_elts) BST_##opcode(num_elts); }                        \
-    static void operator delete(void* ptr) { ::operator delete[](ptr); }                                               \
+    static BST_##opcode* create(BSTAllocator& alloc, int num_elts) {                                                   \
+        return new (alloc, num_elts) BST_##opcode(num_elts);                                                           \
+    }                                                                                                                  \
+    static void operator delete(void* ptr) { RELEASE_ASSERT(0, ""); }                                                  \
+    int size_in_bytes() const { return offsetof(BST_##opcode, vreg_dst) + num_elts * sizeof(int); }                    \
                                                                                                                        \
 private:                                                                                                               \
-    static void* operator new(size_t, int num_elts) {                                                                  \
-        return ::new char[offsetof(BST_##opcode, vreg_dst) + num_elts * sizeof(int)];                                  \
+    static void* operator new(size_t, BSTAllocator & alloc, int num_elts) {                                            \
+        return alloc.allocate(offsetof(BST_##opcode, vreg_dst) + num_elts * sizeof(int));                              \
     }                                                                                                                  \
     BST_##opcode(int num_elts) : base_class(BST_TYPE::opcode), num_elts(num_elts) {                                    \
         for (int i = 0; i < num_elts; ++i) {                                                                           \
@@ -193,14 +257,15 @@ private:                                                                        
 #define BSTVARVREGS2(opcode, base_class, num_elts, num_elts2, vreg_dst)                                                \
 public:                                                                                                                \
     BSTNODE(opcode)                                                                                                    \
-    static BST_##opcode* create(int num_elts, int num_elts2) {                                                         \
-        return new (num_elts + num_elts2) BST_##opcode(num_elts, num_elts2);                                           \
+    static BST_##opcode* create(BSTAllocator& alloc, int num_elts, int num_elts2) {                                    \
+        return new (alloc, num_elts + num_elts2) BST_##opcode(num_elts, num_elts2);                                    \
     }                                                                                                                  \
     static void operator delete(void* ptr) { ::operator delete[](ptr); }                                               \
+    int size_in_bytes() const { return offsetof(BST_##opcode, vreg_dst) + (num_elts + num_elts2) * sizeof(int); }      \
                                                                                                                        \
 private:                                                                                                               \
-    static void* operator new(size_t, int num_elts_total) {                                                            \
-        return ::new char[offsetof(BST_##opcode, vreg_dst) + num_elts_total * sizeof(int)];                            \
+    static void* operator new(size_t, BSTAllocator & alloc, int num_elts_total) {                                      \
+        return alloc.allocate(offsetof(BST_##opcode, vreg_dst) + num_elts_total * sizeof(int));                        \
     }                                                                                                                  \
     BST_##opcode(int num_elts, int num_elts2)                                                                          \
         : base_class(BST_TYPE::opcode), num_elts(num_elts), num_elts2(num_elts2) {                                     \
@@ -212,14 +277,15 @@ private:                                                                        
 #define BSTVARVREGS2CALL(opcode, num_elts, num_elts2, vreg_dst)                                                        \
 public:                                                                                                                \
     BSTNODE(opcode)                                                                                                    \
-    static BST_##opcode* create(int num_elts, int num_elts2) {                                                         \
-        return new (num_elts + num_elts2) BST_##opcode(num_elts, num_elts2);                                           \
+    static BST_##opcode* create(BSTAllocator& alloc, int num_elts, int num_elts2) {                                    \
+        return new (alloc, num_elts + num_elts2) BST_##opcode(num_elts, num_elts2);                                    \
     }                                                                                                                  \
-    static void operator delete(void* ptr) { ::operator delete[](ptr); }                                               \
+    static void operator delete(void* ptr) { RELEASE_ASSERT(0, ""); }                                                  \
+    int size_in_bytes() const { return offsetof(BST_##opcode, vreg_dst) + (num_elts + num_elts2) * sizeof(int); }      \
                                                                                                                        \
 private:                                                                                                               \
-    static void* operator new(size_t, int num_elts_total) {                                                            \
-        return ::new char[offsetof(BST_##opcode, vreg_dst) + num_elts_total * sizeof(int)];                            \
+    static void* operator new(size_t, BSTAllocator & alloc, int num_elts_total) {                                      \
+        return alloc.allocate(offsetof(BST_##opcode, vreg_dst) + num_elts_total * sizeof(int));                        \
     }                                                                                                                  \
     BST_##opcode(int num_elts, int num_elts2) : BST_Call(BST_TYPE::opcode, num_elts, num_elts2) {                      \
         for (int i = 0; i < num_elts + num_elts2; ++i) {                                                               \
@@ -232,7 +298,7 @@ public:
     int vreg_msg = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(Assert, BST_stmt)
-};
+} PACKED;
 
 class BST_UnpackIntoArray : public BST_stmt {
 public:
@@ -241,7 +307,7 @@ public:
     int vreg_dst[1];
 
     BSTVARVREGS(UnpackIntoArray, BST_stmt, num_elts, vreg_dst)
-};
+} PACKED;
 
 // This is a special instruction which copies a vreg without destroying the source.
 // All other instructions always kill the operands (except if they are a constant) so if one needs the operand to stay
@@ -251,7 +317,7 @@ public:
     int vreg_src = VREG_UNDEFINED; // this vreg will not get killed!
 
     BSTFIXEDVREGS(CopyVReg, BST_stmt_with_dest)
-};
+} PACKED;
 
 
 class BST_StoreName : public BST_stmt {
@@ -268,7 +334,7 @@ public:
     int closure_offset = -1;
 
     BSTFIXEDVREGS(StoreName, BST_stmt)
-};
+} PACKED;
 
 class BST_StoreAttr : public BST_stmt {
 public:
@@ -277,7 +343,7 @@ public:
     int vreg_value = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(StoreAttr, BST_stmt)
-};
+} PACKED;
 
 class BST_StoreSub : public BST_stmt {
 public:
@@ -286,7 +352,7 @@ public:
     int vreg_value = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(StoreSub, BST_stmt)
-};
+} PACKED;
 
 class BST_StoreSubSlice : public BST_stmt {
 public:
@@ -295,7 +361,7 @@ public:
     int vreg_value = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(StoreSubSlice, BST_stmt)
-};
+} PACKED;
 
 class BST_LoadName : public BST_stmt_with_dest {
 public:
@@ -310,7 +376,7 @@ public:
     int closure_offset = -1;
 
     BSTFIXEDVREGS(LoadName, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_LoadAttr : public BST_stmt_with_dest {
 public:
@@ -319,7 +385,7 @@ public:
     bool clsonly = false;
 
     BSTFIXEDVREGS(LoadAttr, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_LoadSub : public BST_stmt_with_dest {
 public:
@@ -327,7 +393,7 @@ public:
     int vreg_slice = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(LoadSub, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_LoadSubSlice : public BST_stmt_with_dest {
 public:
@@ -335,7 +401,7 @@ public:
     int vreg_lower = VREG_UNDEFINED, vreg_upper = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(LoadSubSlice, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_AugBinOp : public BST_stmt_with_dest {
 public:
@@ -343,7 +409,7 @@ public:
     int vreg_left = VREG_UNDEFINED, vreg_right = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(AugBinOp, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_BinOp : public BST_stmt_with_dest {
 public:
@@ -351,7 +417,7 @@ public:
     int vreg_left = VREG_UNDEFINED, vreg_right = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(BinOp, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_Call : public BST_stmt_with_dest {
 public:
@@ -363,7 +429,7 @@ public:
 
     BST_Call(BST_TYPE::BST_TYPE type, int num_args, int num_keywords)
         : BST_stmt_with_dest(type), num_args(num_args), num_keywords(num_keywords) {}
-};
+} PACKED;
 
 class BST_CallFunc : public BST_Call {
 public:
@@ -371,7 +437,7 @@ public:
     int elts[1];
 
     BSTVARVREGS2CALL(CallFunc, num_args, num_keywords, elts)
-};
+} PACKED;
 
 class BST_CallAttr : public BST_Call {
 public:
@@ -380,7 +446,7 @@ public:
     int elts[1];
 
     BSTVARVREGS2CALL(CallAttr, num_args, num_keywords, elts)
-};
+} PACKED;
 
 class BST_CallClsAttr : public BST_Call {
 public:
@@ -389,7 +455,7 @@ public:
     int elts[1];
 
     BSTVARVREGS2CALL(CallClsAttr, num_args, num_keywords, elts)
-};
+} PACKED;
 
 
 class BST_Compare : public BST_stmt_with_dest {
@@ -399,7 +465,7 @@ public:
     int vreg_left = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(Compare, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_ClassDef : public BST_stmt {
 public:
@@ -408,13 +474,18 @@ public:
     const int num_decorator;
     int decorator[1];
 
+    static BST_ClassDef* create(int num_decorator) { return new (num_decorator) BST_ClassDef(num_decorator); }
+    static void* operator new(size_t, int num_decorator) {
+        return ::new unsigned char[offsetof(BST_ClassDef, decorator) + num_decorator * sizeof(int)];
+    }
+
     BSTVARVREGS(ClassDef, BST_stmt, num_decorator, decorator)
-};
+} PACKED;
 
 class BST_Dict : public BST_stmt_with_dest {
 public:
     BSTFIXEDVREGS(Dict, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_DeleteAttr : public BST_stmt {
 public:
@@ -422,7 +493,7 @@ public:
     int index_attr = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(DeleteAttr, BST_stmt)
-};
+} PACKED;
 
 class BST_DeleteName : public BST_stmt {
 public:
@@ -436,7 +507,7 @@ public:
     int closure_offset = -1;
 
     BSTFIXEDVREGS(DeleteName, BST_stmt)
-};
+} PACKED;
 
 class BST_DeleteSub : public BST_stmt {
 public:
@@ -444,7 +515,7 @@ public:
     int vreg_slice = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(DeleteSub, BST_stmt)
-};
+} PACKED;
 
 class BST_DeleteSubSlice : public BST_stmt {
 public:
@@ -453,7 +524,7 @@ public:
     int vreg_upper = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(DeleteSubSlice, BST_stmt)
-};
+} PACKED;
 
 class BST_Exec : public BST_stmt {
 public:
@@ -462,7 +533,7 @@ public:
     int vreg_locals = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(Exec, BST_stmt)
-};
+} PACKED;
 
 class BST_FunctionDef : public BST_stmt {
 public:
@@ -473,8 +544,15 @@ public:
 
     int elts[1]; // decorators followed by defaults
 
+    static BST_FunctionDef* create(int num_decorator, int num_defaults) {
+        return new (num_decorator + num_defaults) BST_FunctionDef(num_decorator, num_defaults);
+    }
+    static void* operator new(size_t, int num_elts) {
+        return ::new unsigned char[offsetof(BST_FunctionDef, elts) + num_elts * sizeof(int)];
+    }
+
     BSTVARVREGS2(FunctionDef, BST_stmt, num_decorator, num_defaults, elts)
-};
+} PACKED;
 
 class BST_List : public BST_stmt_with_dest {
 public:
@@ -482,14 +560,14 @@ public:
     int elts[1];
 
     BSTVARVREGS(List, BST_stmt_with_dest, num_elts, elts)
-};
+} PACKED;
 
 class BST_Repr : public BST_stmt_with_dest {
 public:
     int vreg_value = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(Repr, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_Print : public BST_stmt {
 public:
@@ -498,7 +576,7 @@ public:
     int vreg_value = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(Print, BST_stmt)
-};
+} PACKED;
 
 class BST_Raise : public BST_stmt {
 public:
@@ -509,14 +587,14 @@ public:
     int vreg_arg0 = VREG_UNDEFINED, vreg_arg1 = VREG_UNDEFINED, vreg_arg2 = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(Raise, BST_stmt)
-};
+} PACKED;
 
 class BST_Return : public BST_stmt {
 public:
     int vreg_value = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(Return, BST_stmt)
-};
+} PACKED;
 
 class BST_Set : public BST_stmt_with_dest {
 public:
@@ -524,14 +602,14 @@ public:
     int elts[1];
 
     BSTVARVREGS(Set, BST_stmt_with_dest, num_elts, elts)
-};
+} PACKED;
 
 class BST_MakeSlice : public BST_stmt_with_dest {
 public:
     int vreg_lower = VREG_UNDEFINED, vreg_upper = VREG_UNDEFINED, vreg_step = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(MakeSlice, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_Tuple : public BST_stmt_with_dest {
 public:
@@ -539,7 +617,7 @@ public:
     int elts[1];
 
     BSTVARVREGS(Tuple, BST_stmt_with_dest, num_elts, elts)
-};
+} PACKED;
 
 class BST_UnaryOp : public BST_stmt_with_dest {
 public:
@@ -547,14 +625,14 @@ public:
     AST_TYPE::AST_TYPE op_type;
 
     BSTFIXEDVREGS(UnaryOp, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_Yield : public BST_stmt_with_dest {
 public:
     int vreg_value = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(Yield, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_MakeFunction : public BST_stmt_with_dest {
 public:
@@ -562,9 +640,17 @@ public:
 
     BST_MakeFunction(BST_FunctionDef* fd, int index_func_def)
         : BST_stmt_with_dest(BST_TYPE::MakeFunction, fd->lineno), index_func_def(index_func_def) {}
+    int size_in_bytes() const { return sizeof(*this); }
+
+    static BST_MakeFunction* create(BSTAllocator& alloc, BST_FunctionDef* fd, int index_func_def) {
+        return new (alloc) BST_MakeFunction(fd, index_func_def);
+    }
+
+    static void* operator new(size_t s, BSTAllocator& alloc) { return alloc.allocate(s); }
+    static void operator delete(void* ptr) { RELEASE_ASSERT(0, ""); }
 
     BSTNODE(MakeFunction)
-};
+} PACKED;
 
 class BST_MakeClass : public BST_stmt_with_dest {
 public:
@@ -572,9 +658,17 @@ public:
 
     BST_MakeClass(BST_ClassDef* cd, int index_class_def)
         : BST_stmt_with_dest(BST_TYPE::MakeClass, cd->lineno), index_class_def(index_class_def) {}
+    int size_in_bytes() const { return sizeof(*this); }
+
+    static BST_MakeClass* create(BSTAllocator& alloc, BST_ClassDef* cd, int index_class_def) {
+        return new (alloc) BST_MakeClass(cd, index_class_def);
+    }
+
+    static void* operator new(size_t s, BSTAllocator& alloc) { return alloc.allocate(s); }
+    static void operator delete(void* ptr) { RELEASE_ASSERT(0, ""); }
 
     BSTNODE(MakeClass)
-};
+} PACKED;
 
 class CFGBlock;
 
@@ -584,44 +678,32 @@ public:
     CFGBlock* iftrue, *iffalse;
 
     BSTFIXEDVREGS(Branch, BST_stmt)
-};
+} PACKED;
 
 class BST_Jump : public BST_stmt {
 public:
     CFGBlock* target;
 
     BSTFIXEDVREGS(Jump, BST_stmt)
-};
-
-class BST_Invoke : public BST_stmt {
-public:
-    BST_stmt* stmt;
-
-    CFGBlock* normal_dest, *exc_dest;
-
-    BST_Invoke(BST_stmt* stmt) : BST_stmt(BST_TYPE::Invoke), stmt(stmt) {}
-
-    BSTNODE(Invoke)
-};
-
+} PACKED;
 
 // grabs the info about the last raised exception
 class BST_Landingpad : public BST_stmt_with_dest {
 public:
     BSTFIXEDVREGS(Landingpad, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_Locals : public BST_stmt_with_dest {
 public:
     BSTFIXEDVREGS(Locals, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_GetIter : public BST_stmt_with_dest {
 public:
     int vreg_value = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(GetIter, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_ImportFrom : public BST_stmt_with_dest {
 public:
@@ -629,7 +711,7 @@ public:
     int vreg_name = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(ImportFrom, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_ImportName : public BST_stmt_with_dest {
 public:
@@ -638,14 +720,14 @@ public:
     int vreg_name = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(ImportName, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_ImportStar : public BST_stmt_with_dest {
 public:
     int vreg_name = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(ImportStar, BST_stmt_with_dest)
-};
+} PACKED;
 
 // determines whether something is "true" for purposes of `if' and so forth
 class BST_Nonzero : public BST_stmt_with_dest {
@@ -653,7 +735,7 @@ public:
     int vreg_value = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(Nonzero, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_CheckExcMatch : public BST_stmt_with_dest {
 public:
@@ -661,7 +743,7 @@ public:
     int vreg_cls = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(CheckExcMatch, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_SetExcInfo : public BST_stmt {
 public:
@@ -670,27 +752,57 @@ public:
     int vreg_traceback = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(SetExcInfo, BST_stmt)
-};
+} PACKED;
 
 class BST_UncacheExcInfo : public BST_stmt {
 public:
     BSTFIXEDVREGS(UncacheExcInfo, BST_stmt)
-};
+} PACKED;
 
 class BST_HasNext : public BST_stmt_with_dest {
 public:
     int vreg_value = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(HasNext, BST_stmt_with_dest)
-};
+} PACKED;
 
 class BST_PrintExpr : public BST_stmt {
 public:
     int vreg_value = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(PrintExpr, BST_stmt)
-};
+} PACKED;
 
+
+template <typename T> T* bst_cast(const BST_stmt* node) {
+    ASSERT(!node || node->type() == T::TYPE, "%d", node ? node->type() : 0);
+    return static_cast<T*>(node);
+}
+
+int BST_stmt::size_in_bytes() const {
+    int s = is_invoke() ? 2 * sizeof(CFGBlock*) : 0;
+    switch (type()) {
+#define DISPATCH_SIZE(x, y)                                                                                            \
+    case BST_TYPE::x:                                                                                                  \
+        return bst_cast<const BST_##x>(this)->size_in_bytes() + s;
+        FOREACH_TYPE(DISPATCH_SIZE)
+    };
+    assert(0);
+    __builtin_unreachable();
+#undef DISPATCH_SIZE
+}
+
+bool BST_stmt::has_dest_vreg() const {
+    switch (type()) {
+#define DISPATCH_HAS_DEST(x, y)                                                                                        \
+    case BST_TYPE::x:                                                                                                  \
+        return std::is_base_of<BST_stmt_with_dest, BST_##x>();
+        FOREACH_TYPE(DISPATCH_HAS_DEST)
+    };
+    assert(0);
+    __builtin_unreachable();
+#undef DISPATCH_HAS_DEST
+}
 
 // this is not a real bytecode it's only used to initalize arguments
 class BST_Name {
@@ -715,7 +827,7 @@ public:
 };
 
 template <typename T> T* bst_cast(BST_stmt* node) {
-    ASSERT(!node || node->type == T::TYPE, "%d", node ? node->type : 0);
+    ASSERT(!node || node->type() == T::TYPE, "%d", node ? node->type() : 0);
     return static_cast<T*>(node);
 }
 
@@ -754,7 +866,6 @@ public:
     virtual bool visit_importfrom(BST_ImportFrom* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_importname(BST_ImportName* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_importstar(BST_ImportStar* node) { RELEASE_ASSERT(0, ""); }
-    virtual bool visit_invoke(BST_Invoke* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_jump(BST_Jump* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_landingpad(BST_Landingpad* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_list(BST_List* node) { RELEASE_ASSERT(0, ""); }
@@ -814,7 +925,6 @@ public:
     virtual bool visit_importfrom(BST_ImportFrom* node) override { return false; }
     virtual bool visit_importname(BST_ImportName* node) override { return false; }
     virtual bool visit_importstar(BST_ImportStar* node) override { return false; }
-    virtual bool visit_invoke(BST_Invoke* node) override { return false; }
     virtual bool visit_jump(BST_Jump* node) override { return false; }
     virtual bool visit_landingpad(BST_Landingpad* node) override { return false; }
     virtual bool visit_list(BST_List* node) override { return false; }
@@ -877,7 +987,6 @@ public:
     virtual void visit_importfrom(BST_ImportFrom* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_importname(BST_ImportName* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_importstar(BST_ImportStar* node) { RELEASE_ASSERT(0, ""); }
-    virtual void visit_invoke(BST_Invoke* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_jump(BST_Jump* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_landingpad(BST_Landingpad* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_list(BST_List* node) { RELEASE_ASSERT(0, ""); }
@@ -923,6 +1032,9 @@ public:
     virtual ~PrintVisitor() {}
     void flush() { stream.flush(); }
 
+    // checks if the stmt is inside an invoke an if true prints the destination blocks
+    bool check_if_invoke(BST_stmt* node);
+
     virtual bool visit_vreg(int* vreg, bool is_dst = false);
 
     virtual bool visit_assert(BST_Assert* node);
@@ -948,7 +1060,6 @@ public:
     virtual bool visit_importfrom(BST_ImportFrom* node);
     virtual bool visit_importname(BST_ImportName* node);
     virtual bool visit_importstar(BST_ImportStar* node);
-    virtual bool visit_invoke(BST_Invoke* node);
     virtual bool visit_jump(BST_Jump* node);
     virtual bool visit_landingpad(BST_Landingpad* node);
     virtual bool visit_list(BST_List* node);

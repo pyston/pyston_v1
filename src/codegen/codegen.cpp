@@ -69,7 +69,7 @@ SourceInfo::SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags futur
 }
 
 SourceInfo::~SourceInfo() {
-    // TODO: release memory..
+    delete cfg;
 }
 
 void FunctionAddressRegistry::registerFunction(const std::string& name, void* addr, int length,
