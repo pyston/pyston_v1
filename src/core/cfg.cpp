@@ -2917,7 +2917,7 @@ public:
     enum Step { TrackBlockUsage = 0, UserVisible, CrossBlock, SingleBlockUse } step;
 
     AssignVRegsVisitor(llvm::DenseMap<int*, InternedString>& id_vreg)
-        : NoopBSTVisitor(true /* skip child CFG nodes */), current_block(0), next_vreg(0), id_vreg(id_vreg) {}
+        : current_block(0), next_vreg(0), id_vreg(id_vreg) {}
 
     bool visit_vreg(int* vreg, bool is_dst = false) override {
         if (is_dst) {

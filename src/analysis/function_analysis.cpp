@@ -70,9 +70,7 @@ private:
 
 public:
     LivenessBBVisitor(LivenessAnalysis* analysis)
-        : NoopBSTVisitor(true /* skip child CFG nodes */),
-          statuses(analysis->cfg->getVRegInfo().getTotalNumOfVRegs()),
-          analysis(analysis) {}
+        : statuses(analysis->cfg->getVRegInfo().getTotalNumOfVRegs()), analysis(analysis) {}
 
     bool firstIsUse(int vreg) const { return getStatusFirst(vreg) == Status::USED; }
     bool firstIsDef(int vreg) const { return getStatusFirst(vreg) == Status::DEFINED; }
@@ -212,7 +210,7 @@ private:
     }
 
 public:
-    DefinednessVisitor(Map& state) : NoopBSTVisitor(true /* skip child CFG nodes */), state(state) {}
+    DefinednessVisitor(Map& state) : state(state) {}
     bool visit_vreg(int* vreg, bool is_dest) override {
         if (*vreg < 0)
             return false;

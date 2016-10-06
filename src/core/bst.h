@@ -725,9 +725,7 @@ template <typename T> T* bst_cast(BST_stmt* node) {
 
 class BSTVisitor {
 public:
-    const bool skip_visit_child_cfg;
-    // if skip_visit_child_cfg is set function and class defs will not visit their body nodes.
-    BSTVisitor(bool skip_visit_child_cfg) : skip_visit_child_cfg(skip_visit_child_cfg) {}
+    BSTVisitor() {}
     virtual ~BSTVisitor() {}
 
     // pseudo
@@ -790,7 +788,7 @@ public:
 class NoopBSTVisitor : public BSTVisitor {
 protected:
 public:
-    NoopBSTVisitor(bool skip_visit_child_cfg) : BSTVisitor(skip_visit_child_cfg) {}
+    NoopBSTVisitor() {}
     virtual ~NoopBSTVisitor() {}
 
     virtual bool visit_assert(BST_Assert* node) override { return false; }
@@ -919,7 +917,7 @@ private:
 
 public:
     PrintVisitor(const CodeConstants& code_constants, int indent, llvm::raw_ostream& stream)
-        : BSTVisitor(false /* visit child CFG */), stream(stream), code_constants(code_constants), indent(indent) {}
+        : stream(stream), code_constants(code_constants), indent(indent) {}
     virtual ~PrintVisitor() {}
     void flush() { stream.flush(); }
 

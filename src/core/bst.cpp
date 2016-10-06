@@ -43,12 +43,6 @@ template <class T> static void visitVector(const std::vector<T*>& vec, BSTVisito
     }
 }
 
-static void visitCFG(CFG* cfg, BSTVisitor* v) {
-    for (auto bb : cfg->blocks)
-        for (auto e : bb->body)
-            e->accept(v);
-}
-
 void BST_Assert::accept(BSTVisitor* v) {
     bool skip = v->visit_assert(this);
     if (skip)
@@ -180,8 +174,7 @@ void BST_ClassDef::accept(BSTVisitor* v) {
         v->visit_vreg(&decorator[i]);
     }
 
-    if (!v->skip_visit_child_cfg)
-        visitCFG(this->code->source->cfg, v);
+    // we dont't visit the body
 }
 
 void BST_ClassDef::accept_stmt(StmtVisitor* v) {
@@ -272,8 +265,7 @@ void BST_FunctionDef::accept(BSTVisitor* v) {
     for (int i = 0; i < num_decorator + num_defaults; ++i) {
         v->visit_vreg(&elts[i]);
     }
-    if (!v->skip_visit_child_cfg)
-        visitCFG(code->source->cfg, v);
+    // we dont't visit the body
 }
 
 void BST_FunctionDef::accept_stmt(StmtVisitor* v) {

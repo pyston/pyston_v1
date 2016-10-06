@@ -344,8 +344,7 @@ private:
     SymbolTable* sym_table;
     bool created_new_sym_table;
 
-    SymTableDstVRegDeleter(SymbolTable* sym_table)
-        : NoopBSTVisitor(true /* skip child CFG nodes */), sym_table(sym_table), created_new_sym_table(false) {}
+    SymTableDstVRegDeleter(SymbolTable* sym_table) : sym_table(sym_table), created_new_sym_table(false) {}
 
 protected:
     bool visit_vreg(int* vreg, bool is_dst = false) override {
