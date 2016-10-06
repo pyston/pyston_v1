@@ -1456,9 +1456,9 @@ Value ASTInterpreter::visit_call(BST_Call* node) {
         args_vars.push_back(v);
     }
 
-    std::vector<BoxedString*>* keyword_names = NULL;
+    const std::vector<BoxedString*>* keyword_names = NULL;
     if (node->num_keywords)
-        keyword_names = node->keywords_names.get();
+        keyword_names = getCodeConstants().getKeywordNames(node->index_keyword_names);
 
     if (node->vreg_starargs != VREG_UNDEFINED) {
         Value v = getVReg(node->vreg_starargs);

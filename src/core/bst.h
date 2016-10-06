@@ -359,8 +359,7 @@ public:
     const int num_args;
     const int num_keywords;
 
-    // used during execution stores all keyword names
-    std::unique_ptr<std::vector<BoxedString*>> keywords_names;
+    int index_keyword_names = -1;
 
     BST_Call(BST_TYPE::BST_TYPE type, int num_args, int num_keywords)
         : BST_stmt_with_dest(type), num_args(num_args), num_keywords(num_keywords) {}

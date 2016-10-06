@@ -1113,10 +1113,11 @@ private:
         rtn_shared->lineno = node->lineno;
 
         if (node->keywords.size()) {
-            rtn_shared->keywords_names = llvm::make_unique<std::vector<BoxedString*>>();
+            llvm::SmallVector<BoxedString*, 8> keywords_names;
             for (auto kw : node->keywords) {
-                rtn_shared->keywords_names->push_back(kw->arg.getBox());
+                keywords_names.push_back(kw->arg.getBox());
             }
+            rtn_shared->index_keyword_names = code_constants.addKeywordNames(keywords_names);
         }
 
         unmapExpr(remapExpr(node->starargs), &rtn_shared->vreg_starargs);

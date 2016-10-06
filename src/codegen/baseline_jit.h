@@ -264,13 +264,13 @@ public:
 
     RewriterVar* getInterp();
     RewriterVar* imm(uint64_t val);
-    RewriterVar* imm(void* val);
+    RewriterVar* imm(const void* val);
 
     RewriterVar* emitAugbinop(BST_stmt* node, RewriterVar* lhs, RewriterVar* rhs, int op_type);
     RewriterVar* emitApplySlice(RewriterVar* target, RewriterVar* lower, RewriterVar* upper);
     RewriterVar* emitBinop(BST_stmt* node, RewriterVar* lhs, RewriterVar* rhs, int op_type);
     RewriterVar* emitCallattr(BST_stmt* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
-                              const llvm::ArrayRef<RewriterVar*> args, std::vector<BoxedString*>* keyword_names);
+                              const llvm::ArrayRef<RewriterVar*> args, const std::vector<BoxedString*>* keyword_names);
     RewriterVar* emitCompare(BST_stmt* node, RewriterVar* lhs, RewriterVar* rhs, int op_type);
     RewriterVar* emitCreateDict();
     void emitDictSet(RewriterVar* dict, RewriterVar* k, RewriterVar* v);
@@ -301,7 +301,8 @@ public:
     RewriterVar* emitNotNonzero(RewriterVar* v);
     RewriterVar* emitRepr(RewriterVar* v);
     RewriterVar* emitRuntimeCall(BST_stmt* node, RewriterVar* obj, ArgPassSpec argspec,
-                                 const llvm::ArrayRef<RewriterVar*> args, std::vector<BoxedString*>* keyword_names);
+                                 const llvm::ArrayRef<RewriterVar*> args,
+                                 const std::vector<BoxedString*>* keyword_names);
     RewriterVar* emitUnaryop(RewriterVar* v, int op_type);
     std::vector<RewriterVar*> emitUnpackIntoArray(RewriterVar* v, uint64_t num);
     RewriterVar* emitYield(RewriterVar* v);
@@ -359,7 +360,7 @@ private:
 
     static void assertNameDefinedHelper(const char* id);
     static Box* callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, Box** args,
-                               std::vector<BoxedString*>* keyword_names);
+                               const std::vector<BoxedString*>* keyword_names);
     static Box* createDictHelper(uint64_t num, Box** keys, Box** values);
     static Box* createListHelper(uint64_t num, Box** data);
     static Box* createSetHelper(uint64_t num, Box** data);
@@ -368,7 +369,8 @@ private:
     static BORROWED(Box*) hasnextHelper(Box* b);
     static BORROWED(Box*) nonzeroHelper(Box* b);
     static BORROWED(Box*) notHelper(Box* b);
-    static Box* runtimeCallHelper(Box* obj, ArgPassSpec argspec, Box** args, std::vector<BoxedString*>* keyword_names);
+    static Box* runtimeCallHelper(Box* obj, ArgPassSpec argspec, Box** args,
+                                  const std::vector<BoxedString*>* keyword_names);
 
     void _emitGetLocal(RewriterVar* val_var, const char* name);
     void _emitJump(CFGBlock* b, RewriterVar* block_next, ExitInfo& exit_info);

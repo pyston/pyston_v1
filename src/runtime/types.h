@@ -1088,6 +1088,9 @@ private:
     // it's not a big deal if we get misses.
     mutable std::unordered_map<int64_t, BoxedFloat*> float_constants;
 
+    // TODO: when we support tuple constants inside vregs we can remove it and just use a normal constant vreg for it
+    std::vector<std::unique_ptr<std::vector<BoxedString*>>> keyword_names;
+
 public:
     CodeConstants() {}
     CodeConstants(CodeConstants&&) = default;
@@ -1114,6 +1117,12 @@ public:
         funcs_and_classes.emplace_back(stmt, code);
         return funcs_and_classes.size() - 1;
     }
+
+    int addKeywordNames(llvm::ArrayRef<BoxedString*> name) {
+        keyword_names.emplace_back(new std::vector<BoxedString*>(name.begin(), name.end()));
+        return keyword_names.size() - 1;
+    }
+    const std::vector<BoxedString*>* getKeywordNames(int constant) const { return keyword_names[constant].get(); }
 
     void dealloc() const;
 };
