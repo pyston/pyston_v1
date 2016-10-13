@@ -201,6 +201,10 @@ for run_idx in xrange(1):
                 if (clsname == 'ReconstitutionTest' and t == 'test_copy'):
                     continue
 
+                if (clsname == 'InstrumentationCollisionTest' and t == 'test_diamond_b2'):
+                    # Test needs instancemethod checking (due to a bug in the test)
+                    continue
+
                 # This test is flaky since it depends on set ordering.
                 # (It causes sporadic failures in cpython as well.)
                 if clsname == "SelectTest" and t == 'test_binds':
