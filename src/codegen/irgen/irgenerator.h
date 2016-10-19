@@ -116,7 +116,7 @@ public:
 
     SourceInfo* getSourceInfo() { return source_info; }
 
-    LivenessAnalysis* getLiveness() { return source_info->getLiveness(); }
+    LivenessAnalysis* getLiveness() { return source_info->getLiveness(getCodeConstants()); }
     PhiAnalysis* getPhis() { return phis.get(); }
 
     const ScopingResults& getScopeInfo();

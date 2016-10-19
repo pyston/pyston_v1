@@ -32,7 +32,9 @@ template <typename T> class BBAnalyzer {
 public:
     typedef VRegMap<T> Map;
     typedef llvm::DenseMap<CFGBlock*, Map> AllMap;
+    const CodeConstants& code_constants;
 
+    BBAnalyzer(const CodeConstants& code_constants) : code_constants(code_constants) {}
     virtual ~BBAnalyzer() {}
 
     virtual T merge(T from, T into) const = 0;

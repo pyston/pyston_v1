@@ -89,17 +89,16 @@ private:
     ExprTypeMap& expr_types;
     TypeSpeculations& type_speculations;
     TypeAnalysis::SpeculationLevel speculation;
-    const CodeConstants& code_constants;
 
     BasicBlockTypePropagator(CFGBlock* block, TypeMap& initial, ExprTypeMap& expr_types,
                              TypeSpeculations& type_speculations, TypeAnalysis::SpeculationLevel speculation,
                              const CodeConstants& code_constants)
-        : block(block),
+        : StmtVisitor(code_constants),
+          block(block),
           sym_table(initial),
           expr_types(expr_types),
           type_speculations(type_speculations),
-          speculation(speculation),
-          code_constants(code_constants) {}
+          speculation(speculation) {}
 
     void run() {
         for (int i = 0; i < block->body.size(); i++) {
@@ -280,10 +279,11 @@ private:
 
     void visit_callattr(BST_CallAttr* node) override {
         CompilerType* t = getType(node->vreg_value);
-        CompilerType* func = t->getattrType(node->attr, false);
+        InternedString attr = getCodeConstants().getInternedString(node->index_attr);
+        CompilerType* func = t->getattrType(attr, false);
 
         if (VERBOSITY() >= 2 && func == UNDEF) {
-            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno);
+            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), attr.c_str(), node->lineno);
             print_bst(node, code_constants);
             printf("\n");
         }
@@ -293,10 +293,11 @@ private:
 
     void visit_callclsattr(BST_CallClsAttr* node) override {
         CompilerType* t = getType(node->vreg_value);
-        CompilerType* func = t->getattrType(node->attr, true);
+        InternedString attr = getCodeConstants().getInternedString(node->index_attr);
+        CompilerType* func = t->getattrType(attr, true);
 
         if (VERBOSITY() >= 2 && func == UNDEF) {
-            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno);
+            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), attr.c_str(), node->lineno);
             print_bst(node, code_constants);
             printf("\n");
         }
@@ -380,7 +381,8 @@ private:
         auto name_scope = node->lookup_type;
 
         if (name_scope == ScopeInfo::VarScopeType::GLOBAL) {
-            if (node->id.s() == "None")
+            InternedString id = getCodeConstants().getInternedString(node->index_id);
+            if (id.s() == "None")
                 t = NONE;
         } else if (name_scope == ScopeInfo::VarScopeType::FAST || name_scope == ScopeInfo::VarScopeType::CLOSURE)
             t = getType(node->vreg);
@@ -390,7 +392,8 @@ private:
 
     void visit_loadattr(BST_LoadAttr* node) override {
         CompilerType* t = getType(node->vreg_value);
-        CompilerType* rtn = t->getattrType(node->attr, node->clsonly);
+        InternedString attr = getCodeConstants().getInternedString(node->index_attr);
+        CompilerType* rtn = t->getattrType(attr, node->clsonly);
 
         if (speculation != TypeAnalysis::NONE) {
             BoxedClass* speculated_class = predictClassFor(node);
@@ -398,7 +401,7 @@ private:
         }
 
         if (VERBOSITY() >= 2 && rtn == UNDEF) {
-            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno);
+            printf("Think %s.%s is undefined, at %d\n", t->debugName().c_str(), attr.c_str(), node->lineno);
             print_bst(node, code_constants);
             printf("\n");
         }
@@ -479,7 +482,7 @@ private:
     }
 
     void visit_makeclass(BST_MakeClass* mkclass) override {
-        BST_ClassDef* node = mkclass->class_def;
+        auto* node = bst_cast<BST_ClassDef>(getCodeConstants().getFuncOrClass(mkclass->index_class_def).first);
 
         for (int i = 0; i < node->num_decorator; ++i) {
             getType(node->decorator[i]);
@@ -505,7 +508,7 @@ private:
     }
 
     void visit_makefunction(BST_MakeFunction* mkfn) override {
-        BST_FunctionDef* node = mkfn->function_def;
+        auto* node = bst_cast<BST_FunctionDef>(getCodeConstants().getFuncOrClass(mkfn->index_func_def).first);
 
         for (int i = 0; i < node->num_defaults + node->num_decorator; ++i) {
             getType(node->elts[i]);

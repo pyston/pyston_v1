@@ -43,12 +43,6 @@ template <class T> static void visitVector(const std::vector<T*>& vec, BSTVisito
     }
 }
 
-static void visitCFG(CFG* cfg, BSTVisitor* v) {
-    for (auto bb : cfg->blocks)
-        for (auto e : bb->body)
-            e->accept(v);
-}
-
 void BST_Assert::accept(BSTVisitor* v) {
     bool skip = v->visit_assert(this);
     if (skip)
@@ -180,8 +174,7 @@ void BST_ClassDef::accept(BSTVisitor* v) {
         v->visit_vreg(&decorator[i]);
     }
 
-    if (!v->skip_visit_child_cfg)
-        visitCFG(this->code->source->cfg, v);
+    // we dont't visit the body
 }
 
 void BST_ClassDef::accept_stmt(StmtVisitor* v) {
@@ -272,8 +265,7 @@ void BST_FunctionDef::accept(BSTVisitor* v) {
     for (int i = 0; i < num_decorator + num_defaults; ++i) {
         v->visit_vreg(&elts[i]);
     }
-    if (!v->skip_visit_child_cfg)
-        visitCFG(code->source->cfg, v);
+    // we dont't visit the body
 }
 
 void BST_FunctionDef::accept_stmt(StmtVisitor* v) {
@@ -718,7 +710,7 @@ void BST_MakeFunction::accept(BSTVisitor* v) {
     if (skip)
         return;
 
-    function_def->accept(v);
+    bst_cast<BST_FunctionDef>(v->getCodeConstants().getFuncOrClass(index_func_def).first)->accept(v);
     v->visit_vreg(&vreg_dst, true);
 }
 
@@ -731,7 +723,7 @@ void BST_MakeClass::accept(BSTVisitor* v) {
     if (skip)
         return;
 
-    class_def->accept(v);
+    bst_cast<BST_ClassDef>(v->getCodeConstants().getFuncOrClass(index_class_def).first)->accept(v);
     v->visit_vreg(&vreg_dst, true);
 }
 
@@ -845,7 +837,7 @@ bool PrintVisitor::visit_callattr(BST_CallAttr* node) {
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_value);
     stream << ".";
-    stream << node->attr.s();
+    stream << code_constants.getInternedString(node->index_attr).s();
     stream << "(";
 
     bool prevarg = false;
@@ -875,7 +867,7 @@ bool PrintVisitor::visit_callclsattr(BST_CallClsAttr* node) {
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_value);
     stream << ":";
-    stream << node->attr.s();
+    stream << code_constants.getInternedString(node->index_attr).s();
     stream << "(";
 
     bool prevarg = false;
@@ -917,7 +909,7 @@ bool PrintVisitor::visit_classdef(BST_ClassDef* node) {
         stream << "\n";
         printIndent();
     }
-    stream << "class " << node->name.s() << "(";
+    stream << "class " << code_constants.getInternedString(node->index_name).s() << "(";
     visit_vreg(&node->vreg_bases_tuple);
     stream << ")";
 
@@ -962,7 +954,7 @@ bool PrintVisitor::visit_deleteattr(BST_DeleteAttr* node) {
     stream << "del ";
     visit_vreg(&node->vreg_value);
     stream << '.';
-    stream << node->attr.s();
+    stream << code_constants.getInternedString(node->index_attr).s();
     return true;
 }
 bool PrintVisitor::visit_deletename(BST_DeleteName* node) {
@@ -971,7 +963,7 @@ bool PrintVisitor::visit_deletename(BST_DeleteName* node) {
         visit_vreg(&node->vreg);
         stream << " ";
     }
-    stream << node->id.s();
+    stream << code_constants.getInternedString(node->index_id).s();
     return true;
 }
 
@@ -1007,8 +999,8 @@ bool PrintVisitor::visit_functiondef(BST_FunctionDef* node) {
     }
 
     stream << "def ";
-    if (node->name != InternedString())
-        stream << node->name.s();
+    if (node->index_name != VREG_UNDEFINED)
+        stream << code_constants.getInternedString(node->index_name).s();
     else
         stream << "<lambda>";
     stream << "(";
@@ -1234,14 +1226,14 @@ bool PrintVisitor::visit_loadname(BST_LoadName* node) {
         visit_vreg(&node->vreg);
         stream << " ";
     }
-    stream << node->id.s();
+    stream << code_constants.getInternedString(node->index_id).s();
     return true;
 }
 
 bool PrintVisitor::visit_loadattr(BST_LoadAttr* node) {
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_value);
-    stream << (node->clsonly ? ':' : '.') << node->attr.s();
+    stream << (node->clsonly ? ':' : '.') << code_constants.getInternedString(node->index_attr).s();
     return true;
 }
 
@@ -1273,7 +1265,7 @@ bool PrintVisitor::visit_storename(BST_StoreName* node) {
         visit_vreg(&node->vreg);
         stream << " ";
     }
-    stream << node->id.s();
+    stream << code_constants.getInternedString(node->index_id).s();
     stream << " = ";
     visit_vreg(&node->vreg_value);
     return true;
@@ -1281,7 +1273,7 @@ bool PrintVisitor::visit_storename(BST_StoreName* node) {
 
 bool PrintVisitor::visit_storeattr(BST_StoreAttr* node) {
     visit_vreg(&node->vreg_target);
-    stream << "." << node->attr.s() << " = ";
+    stream << "." << code_constants.getInternedString(node->index_attr).s() << " = ";
     visit_vreg(&node->vreg_value);
     return true;
 }
@@ -1344,7 +1336,6 @@ bool PrintVisitor::visit_unaryop(BST_UnaryOp* node) {
             break;
     }
     stream << "(";
-    // node->operand->accept(this);
     visit_vreg(&node->vreg_operand);
     stream << ")";
     return true;
@@ -1393,243 +1384,5 @@ bool PrintVisitor::visit_makeclass(BST_MakeClass* node) {
     visit_vreg(&node->vreg_dst, true);
     stream << "make_";
     return false;
-}
-
-namespace {
-class FlattenVisitor : public BSTVisitor {
-private:
-    std::vector<BST_stmt*>* output;
-    bool expand_scopes;
-
-public:
-    FlattenVisitor(std::vector<BST_stmt*>* output, bool expand_scopes)
-        : BSTVisitor(false /* visit child CFG */), output(output), expand_scopes(expand_scopes) {
-        assert(expand_scopes && "not sure if this works properly");
-    }
-
-    virtual bool visit_vreg(int* vreg, bool is_dst = false) { return false; }
-
-
-    virtual bool visit_assert(BST_Assert* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_copyvreg(BST_CopyVReg* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_augbinop(BST_AugBinOp* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_binop(BST_BinOp* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_callfunc(BST_CallFunc* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_callattr(BST_CallAttr* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_callclsattr(BST_CallClsAttr* node) {
-        output->push_back(node);
-        return false;
-    }
-
-    virtual bool visit_classdef(BST_ClassDef* node) {
-        output->push_back(node);
-        return !expand_scopes;
-    }
-    virtual bool visit_compare(BST_Compare* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_deletesub(BST_DeleteSub* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_deletesubslice(BST_DeleteSubSlice* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_deleteattr(BST_DeleteAttr* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_deletename(BST_DeleteName* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_dict(BST_Dict* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_exec(BST_Exec* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_functiondef(BST_FunctionDef* node) {
-        output->push_back(node);
-        return !expand_scopes;
-    }
-    virtual bool visit_invoke(BST_Invoke* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_list(BST_List* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_print(BST_Print* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_raise(BST_Raise* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_repr(BST_Repr* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_return(BST_Return* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_set(BST_Set* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_tuple(BST_Tuple* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_unaryop(BST_UnaryOp* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_unpackintoarray(BST_UnpackIntoArray* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_yield(BST_Yield* node) {
-        output->push_back(node);
-        return false;
-    }
-
-    virtual bool visit_branch(BST_Branch* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_jump(BST_Jump* node) {
-        output->push_back(node);
-        return false;
-    }
-
-    virtual bool visit_makeclass(BST_MakeClass* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_makefunction(BST_MakeFunction* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_makeslice(BST_MakeSlice* node) {
-        output->push_back(node);
-        return false;
-    }
-
-    virtual bool visit_landingpad(BST_Landingpad* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_locals(BST_Locals* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_getiter(BST_GetIter* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_importfrom(BST_ImportFrom* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_importname(BST_ImportName* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_importstar(BST_ImportStar* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_nonzero(BST_Nonzero* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_checkexcmatch(BST_CheckExcMatch* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_setexcinfo(BST_SetExcInfo* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_uncacheexcinfo(BST_UncacheExcInfo* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_hasnext(BST_HasNext* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_printexpr(BST_PrintExpr* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_loadname(BST_LoadName* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_loadattr(BST_LoadAttr* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_loadsub(BST_LoadSub* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_loadsubslice(BST_LoadSubSlice* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_storename(BST_StoreName* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_storesub(BST_StoreSub* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_storesubslice(BST_StoreSubSlice* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_storeattr(BST_StoreAttr* node) {
-        output->push_back(node);
-        return false;
-    }
-};
-}
-
-void flatten(llvm::ArrayRef<BST_stmt*> roots, std::vector<BST_stmt*>& output, bool expand_scopes) {
-    FlattenVisitor visitor(&output, expand_scopes);
-
-    for (int i = 0; i < roots.size(); i++) {
-        roots[i]->accept(&visitor);
-    }
 }
 }

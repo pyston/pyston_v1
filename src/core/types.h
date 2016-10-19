@@ -484,6 +484,7 @@ public:
 };
 
 // Data about a single textual function definition.
+class CodeConstants;
 class SourceInfo {
 private:
     std::unique_ptr<LivenessAnalysis> liveness_info;
@@ -499,7 +500,7 @@ public:
     // between ast.h and core/types.h
     int ast_type;
 
-    LivenessAnalysis* getLiveness();
+    LivenessAnalysis* getLiveness(const CodeConstants& code_constants);
 
     SourceInfo(BoxedModule* m, ScopingResults scoping, FutureFlags future_flags, int ast_type, bool is_generator);
     ~SourceInfo();

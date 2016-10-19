@@ -1079,12 +1079,17 @@ private:
     // all objects we need to decref when the code object dies
     mutable std::vector<Box*> owned_refs;
 
+    mutable std::vector<std::pair<BST_stmt*, BoxedCode*>> funcs_and_classes;
+
     // Note: DenseMap doesn't work here since we don't prevent the tombstone/empty
     // keys from reaching it.
     mutable std::unordered_map<int64_t, BoxedInt*> int_constants;
     // I'm not sure how well it works to use doubles as hashtable keys; thankfully
     // it's not a big deal if we get misses.
     mutable std::unordered_map<int64_t, BoxedFloat*> float_constants;
+
+    // TODO: when we support tuple constants inside vregs we can remove it and just use a normal constant vreg for it
+    std::vector<std::unique_ptr<std::vector<BoxedString*>>> keyword_names;
 
 public:
     CodeConstants() {}
@@ -1094,16 +1099,36 @@ public:
 
     BORROWED(Box*) getConstant(int vreg) const { return constants[-(vreg + 1)]; }
 
+    InternedString getInternedString(int vreg) const { return InternedString::unsafe((BoxedString*)getConstant(vreg)); }
+
     // returns the vreg num for the constant (which is a negative number)
     int createVRegEntryForConstant(Box* o) {
         constants.push_back(o);
         return -constants.size();
     }
 
+
     void addOwnedRef(Box* o) const { owned_refs.emplace_back(o); }
 
     BORROWED(BoxedInt*) getIntConstant(int64_t n) const;
     BORROWED(BoxedFloat*) getFloatConstant(double d) const;
+
+    std::pair<BST_stmt*, BORROWED(BoxedCode*)> getFuncOrClass(int constant) const {
+        return funcs_and_classes[constant];
+    }
+
+    int addInternedString(InternedString s) { return createVRegEntryForConstant(s.getBox()); }
+
+    int addFuncOrClass(BST_stmt* stmt, STOLEN(BoxedCode*) code) {
+        funcs_and_classes.emplace_back(stmt, code);
+        return funcs_and_classes.size() - 1;
+    }
+
+    int addKeywordNames(llvm::ArrayRef<BoxedString*> name) {
+        keyword_names.emplace_back(new std::vector<BoxedString*>(name.begin(), name.end()));
+        return keyword_names.size() - 1;
+    }
+    const std::vector<BoxedString*>* getKeywordNames(int constant) const { return keyword_names[constant].get(); }
 
     void dealloc() const;
 };
