@@ -2819,20 +2819,15 @@ public:
         return new AttrWrapperIter(self);
     }
 
-    static Box* eq(Box* _self, Box* _other) {
-        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
-        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+    static PyObject* richcompare(PyObject* v, PyObject* w, int op) noexcept {
+        RELEASE_ASSERT(v->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(v);
 
         // In order to not have to reimplement dict cmp: just create a real dict for now and us it.
-        BoxedDict* dict = (BoxedDict*)AttrWrapper::copy(_self);
+        BoxedDict* dict = (BoxedDict*)AttrWrapper::copy(v);
         AUTO_DECREF(dict);
-        assert(dict->cls == dict_cls);
-        static BoxedString* eq_str = getStaticString("__eq__");
-        return callattrInternal<CXX, NOT_REWRITABLE>(dict, eq_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(1),
-                                                     _other, NULL, NULL, NULL, NULL);
+        return dict_cls->tp_richcompare(dict, w, op);
     }
-
-    static Box* ne(Box* _self, Box* _other) { return incref(eq(_self, _other) == Py_True ? Py_False : Py_True); }
 
     friend class AttrWrapperIter;
 };
@@ -4606,10 +4601,6 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("has_key", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::hasKey, BOXED_BOOL, 2,
                                                                              "attrwrapper.has_key")));
     attrwrapper_cls->giveAttr(
-        "__eq__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::eq, UNKNOWN, 2, "attrwrapper.__eq__")));
-    attrwrapper_cls->giveAttr(
-        "__ne__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::ne, UNKNOWN, 2, "attrwrapper.__ne__")));
-    attrwrapper_cls->giveAttr(
         "keys", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::keys, LIST, 1, "attrwrapper.keys")));
     attrwrapper_cls->giveAttr(
         "values", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::values, LIST, 1, "attrwrapper.values")));
@@ -4631,7 +4622,14 @@ void setupRuntime() {
         "__iter__", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::iter, UNKNOWN, 1, "attrwrapper.__iter__")));
     attrwrapper_cls->giveAttr("update", new BoxedFunction(BoxedCode::create((void*)AttrWrapper::update, NONE, 1, true,
                                                                             true, "attrwrapper.update")));
+    assert(dict_cls->tp_richcompare);
+    attrwrapper_cls->tp_richcompare = dict_cls->tp_richcompare;
+    assert(dict_cls->tp_compare);
+    attrwrapper_cls->tp_compare = dict_cls->tp_compare;
+    add_operators(attrwrapper_cls);
+
     attrwrapper_cls->freeze();
+    assert(attrwrapper_cls->tp_richcompare == dict_cls->tp_richcompare);
     attrwrapper_cls->tp_iter = AttrWrapper::iter;
     attrwrapper_cls->tp_as_mapping->mp_subscript = (binaryfunc)AttrWrapper::getitem<CAPI>;
     attrwrapper_cls->tp_as_mapping->mp_ass_subscript = (objobjargproc)AttrWrapper::ass_sub;

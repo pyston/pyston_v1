@@ -667,7 +667,7 @@ Box* dictFromkeys(Box* cls, Box* iterable, Box* default_value) {
     return rtn;
 }
 
-Box* dictEq(BoxedDict* self, Box* _rhs) {
+static Box* dictEq(BoxedDict* self, Box* _rhs) {
     if (!PyDict_Check(self))
         raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'dict' object but received a '%s'",
                        getTypeName(self));
@@ -698,7 +698,7 @@ Box* dictEq(BoxedDict* self, Box* _rhs) {
     Py_RETURN_TRUE;
 }
 
-Box* dictNe(BoxedDict* self, Box* _rhs) {
+static Box* dictNe(BoxedDict* self, Box* _rhs) {
     Box* eq = dictEq(self, _rhs);
     if (eq == NotImplemented)
         return eq;
@@ -993,6 +993,11 @@ static int dict_compare(BoxedDict* a, BoxedDict* b) noexcept {
     int res = 0;
     Box* adiff, *bdiff, *aval, *bval;
 
+    if (a->cls == attrwrapper_cls)
+        return dict_compare(autoDecref(attrwrapperToDict(a)), b);
+    if (b->cls == attrwrapper_cls)
+        return dict_compare(a, autoDecref(attrwrapperToDict(b)));
+
     /* Compare lengths first */
     if (a->d.size() < b->d.size())
         return -1; /* a is shorter */
@@ -1038,12 +1043,27 @@ Finished:
 static PyObject* dict_richcompare(PyObject* v, PyObject* w, int op) noexcept {
     Box* res;
 
+    if (v->cls == attrwrapper_cls)
+        return dict_richcompare(autoDecref(attrwrapperToDict(v)), w, op);
+    if (w->cls == attrwrapper_cls)
+        return dict_richcompare(v, autoDecref(attrwrapperToDict(w)), op);
+
     if (!PyDict_Check(v) || !PyDict_Check(w)) {
         res = incref(Py_NotImplemented);
     } else if (op == Py_EQ) {
-        res = dictEq((BoxedDict*)v, (BoxedDict*)w);
+        try {
+            res = dictEq((BoxedDict*)v, (BoxedDict*)w);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
     } else if (op == Py_NE) {
-        res = dictNe((BoxedDict*)v, (BoxedDict*)w);
+        try {
+            res = dictNe((BoxedDict*)v, (BoxedDict*)w);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
     } else {
         /* Py3K warning if comparison isn't == or !=  */
         if (PyErr_WarnPy3k("dict inequality comparisons not supported "
@@ -1156,8 +1176,6 @@ void setupDict() {
                        new BoxedFunction(BoxedCode::create((void*)dictInit, NONE, 1, true, true, "dict.__init__")));
     dict_cls->giveAttr("__repr__", new BoxedFunction(BoxedCode::create((void*)dictRepr, STR, 1, "dict.__repr__")));
 
-    dict_cls->giveAttr("__eq__", new BoxedFunction(BoxedCode::create((void*)dictEq, UNKNOWN, 2, "dict.__eq__")));
-    dict_cls->giveAttr("__ne__", new BoxedFunction(BoxedCode::create((void*)dictNe, UNKNOWN, 2, "dict.__ne__")));
     dict_cls->giveAttr("__hash__", incref(Py_None));
     dict_cls->giveAttr("__iter__", new BoxedFunction(BoxedCode::create(
                                        (void*)dictIterKeys, typeFromClass(dictiterkey_cls), 1, "dict.__iter__")));
