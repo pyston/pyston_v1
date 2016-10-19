@@ -45,3 +45,28 @@ f(C.foo)
 f(C().foo)
 
 C().foo.__call__()
+
+
+# Check comparisons and hashing:
+class C(object):
+    def foo(self):
+        pass
+
+assert C.foo is not C.foo # This could be fine, but if it's true then the rest of the checks here don't make sense
+assert C.foo == C.foo
+assert not (C.foo != C.foo)
+assert not (C.foo < C.foo)
+assert not (C.foo > C.foo)
+assert C.foo >= C.foo
+assert C.foo <= C.foo
+assert len({C.foo, C.foo}) == 1
+
+c = C()
+assert c.foo is not c.foo # This could be fine, but if it's true then the rest of the checks here don't make sense
+assert c.foo == c.foo
+assert not (c.foo != c.foo)
+assert not (c.foo < c.foo)
+assert not (c.foo > c.foo)
+assert c.foo >= c.foo
+assert c.foo <= c.foo
+assert len({c.foo, c.foo}) == 1

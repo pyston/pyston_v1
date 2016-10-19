@@ -1872,25 +1872,35 @@ static Box* instancemethodRepr(Box* b) {
     return result;
 }
 
-Box* instancemethodEq(BoxedInstanceMethod* self, Box* rhs) {
-    if (rhs->cls != instancemethod_cls) {
-        return boxBool(false);
-    }
+static int instancemethod_compare(BoxedInstanceMethod* a, BoxedInstanceMethod* b) noexcept {
+    int cmp;
+    cmp = PyObject_Compare(a->func, b->func);
+    if (cmp)
+        return cmp;
 
-    BoxedInstanceMethod* rhs_im = static_cast<BoxedInstanceMethod*>(rhs);
-    if (self->func == rhs_im->func) {
-        if (self->obj == NULL && rhs_im->obj == NULL) {
-            return boxBool(true);
-        } else {
-            if (self->obj != NULL && rhs_im->obj != NULL) {
-                return compareInternal<NOT_REWRITABLE>(self->obj, rhs_im->obj, AST_TYPE::Eq, NULL);
-            } else {
-                return boxBool(false);
-            }
-        }
-    } else {
-        return boxBool(false);
-    }
+    if (a->obj == b->obj)
+        return 0;
+    if (a->obj == NULL || b->obj == NULL)
+        return (a->obj < b->obj) ? -1 : 1;
+    else
+        return PyObject_Compare(a->obj, b->obj);
+}
+
+Box* instancemethodHash(BoxedInstanceMethod* self) {
+    long x, y;
+    if (self->obj == NULL)
+        x = PyObject_Hash(Py_None);
+    else
+        x = PyObject_Hash(self->obj);
+    if (x == -1)
+        throwCAPIException();
+    y = PyObject_Hash(self->func);
+    if (y == -1)
+        throwCAPIException();
+    x = x ^ y;
+    if (x == -1)
+        x = -2;
+    return boxInt(x);
 }
 
 Box* sliceRepr(BoxedSlice* self) {
@@ -4530,8 +4540,8 @@ void setupRuntime() {
                                                               { NULL }));
     instancemethod_cls->giveAttr(
         "__repr__", new BoxedFunction(BoxedCode::create((void*)instancemethodRepr, STR, 1, "instancemethod.__repr__")));
-    instancemethod_cls->giveAttr(
-        "__eq__", new BoxedFunction(BoxedCode::create((void*)instancemethodEq, UNKNOWN, 2, "instancemethod.__eq__")));
+    instancemethod_cls->giveAttr("__hash__", new BoxedFunction(BoxedCode::create((void*)instancemethodHash, UNKNOWN, 1,
+                                                                                 "instancemethod.__hash__")));
     instancemethod_cls->giveAttr("__get__",
                                  new BoxedFunction(BoxedCode::create((void*)instancemethodGet, UNKNOWN, 3, false, false,
                                                                      "instancemethod.__get__")));
@@ -4548,6 +4558,9 @@ void setupRuntime() {
     // TODO: this should be handled via a getattro instead (which proxies to the function):
     instancemethod_cls->giveAttrDescriptor("__doc__", im_doc, NULL);
 
+    instancemethod_cls->tp_compare = (cmpfunc)instancemethod_compare;
+
+    add_operators(instancemethod_cls);
     instancemethod_cls->freeze();
 
     slice_cls->giveAttr("__new__",
