@@ -1071,7 +1071,15 @@ static PyObject* dict_richcompare(PyObject* v, PyObject* w, int op) noexcept {
                            1) < 0) {
             return NULL;
         }
-        res = incref(Py_NotImplemented);
+
+        // Pyston change: directly defer to tp_compare here, rather than letting
+        // PyObject_RichCompare do it.
+        // This is so that we can just embed a call to tp_richcompare rather than
+        // having to embed the full richcompare logic.
+        int c = dict_compare(static_cast<BoxedDict*>(v), static_cast<BoxedDict*>(w));
+        if (PyErr_Occurred())
+            return NULL;
+        return convert_3way_to_object(op, c);
     }
     return res;
 }
