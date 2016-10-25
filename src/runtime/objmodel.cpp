@@ -636,6 +636,26 @@ void BoxedClass::freeze() {
     assert(!is_constant);
     assert(tp_name); // otherwise debugging will be very hard
 
+// Check Python's "rule of three" for our builtin classes:
+#ifndef NDEBUG
+    auto eq_str = getStaticString("__eq__");
+    auto ne_str = getStaticString("__ne__");
+    auto le_str = getStaticString("__le__");
+    auto lt_str = getStaticString("__lt__");
+    auto ge_str = getStaticString("__ge__");
+    auto gt_str = getStaticString("__gt__");
+    auto hash_str = getStaticString("__hash__");
+    if (this->hasattr(eq_str)) {
+        assert(this->hasattr(ne_str));
+        assert(this->hasattr(le_str));
+        assert(this->hasattr(lt_str));
+        assert(this->hasattr(ge_str));
+        assert(this->hasattr(gt_str));
+        assert(this->hasattr(hash_str));
+    }
+#endif
+
+
     auto doc_str = getStaticString("__doc__");
     if (!hasattr(doc_str))
         giveAttr(incref(doc_str), boxString(tp_name));
