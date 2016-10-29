@@ -40,7 +40,7 @@ executeInnerAndSetupFrame:
 .size executeInnerAndSetupFrame,.-executeInnerAndSetupFrame
 
 // This function is just a small wrapper around astInterpretDeoptFromASM.
-// Our unwinder must be able to detect deopt frames and by writting this wrapper in assembler we can be sure to correctly
+// Our unwinder must be able to detect deopt frames and by writing this wrapper in assembler we can be sure to correctly
 // detect the frame independent of compiler optimizations because this function will always appear in the call stack.
 //
 // Box* astInterpretDeopt(FunctionMetadata* cf, AST_stmt* enclosing_stmt, Box* expr_val,
