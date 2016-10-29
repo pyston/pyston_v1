@@ -2353,7 +2353,7 @@
 
 2007-11-25  Andreas Tobler  <a.tobler@schweiz.org>
 
-	* src/closures.c: Move defintion of MAYBE_UNUSED from here to ...
+	* src/closures.c: Move definition of MAYBE_UNUSED from here to ...
 	* include/ffi_common.h: ... here.
 	Update copyright.
 
