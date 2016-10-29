@@ -2389,7 +2389,7 @@ bytearray_pop(PyByteArrayObject *self, PyObject *args)
 PyDoc_STRVAR(remove__doc__,
 "B.remove(int) -> None\n\
 \n\
-Remove the first occurance of a value in B.");
+Remove the first occurrence of a value in B.");
 static PyObject *
 bytearray_remove(PyByteArrayObject *self, PyObject *arg)
 {
