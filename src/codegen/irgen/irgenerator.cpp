@@ -2345,8 +2345,8 @@ private:
     }
 
     void doRaise(BST_Raise* node, const UnwindInfo& unw_info) {
-        // It looks like ommitting the second and third arguments are equivalent to passing None,
-        // but ommitting the first argument is *not* the same as passing None.
+        // It looks like omitting the second and third arguments are equivalent to passing None,
+        // but omitting the first argument is *not* the same as passing None.
 
         ExceptionStyle target_exception_style;
 
