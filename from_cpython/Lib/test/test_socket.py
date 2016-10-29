@@ -793,7 +793,7 @@ class BasicTCPTest(SocketConnectedTest):
         self.serv_conn.sendall(big_chunk)
 
     @unittest.skipUnless(hasattr(socket, 'fromfd'),
-                         'socket.fromfd not availble')
+                         'socket.fromfd not available')
     def testFromFd(self):
         # Testing fromfd()
         fd = self.cli_conn.fileno()
