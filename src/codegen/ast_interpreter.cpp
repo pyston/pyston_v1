@@ -2146,7 +2146,7 @@ extern "C" Box* astInterpretDeoptFromASM(BoxedCode* code, BST_stmt* enclosing_st
     }
 
     // clear the frame_state now that we have initalized the interpreter with it.
-    // this make sure that we don't have unneccessary references around (e.g. could be a problem for PASSED_GENERATOR)
+    // this make sure that we don't have unnecessary references around (e.g. could be a problem for PASSED_GENERATOR)
     Py_CLEAR(frame_state.locals);
 
     Box* v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
