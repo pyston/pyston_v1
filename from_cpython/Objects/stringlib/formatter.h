@@ -1128,7 +1128,7 @@ format_complex_internal(PyObject *value,
         goto done;
     }
 
-    /* Neither is zero pading. */
+    /* Neither is zero padding. */
     if (format->fill_char == '0') {
         PyErr_SetString(PyExc_ValueError,
                         "Zero padding is not allowed in complex format "
