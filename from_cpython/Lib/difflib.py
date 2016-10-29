@@ -339,7 +339,7 @@ class SequenceMatcher:
                     del b2j[elt]
 
         # Now for x in b, isjunk(x) == x in junk, but the latter is much faster.
-        # Sicne the number of *unique* junk elements is probably small, the
+        # Since the number of *unique* junk elements is probably small, the
         # memory burden of keeping this set alive is likely trivial compared to
         # the size of b2j.
         self.isbjunk = junk.__contains__
