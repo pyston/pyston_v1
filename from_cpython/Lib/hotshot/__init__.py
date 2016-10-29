@@ -1,4 +1,4 @@
-"""High-perfomance logging profiler, mostly written in C."""
+"""High-performance logging profiler, mostly written in C."""
 
 import _hotshot
 from _hotshot import ProfilerError
