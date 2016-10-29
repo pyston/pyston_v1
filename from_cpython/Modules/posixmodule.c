@@ -9493,7 +9493,7 @@ INITFUNC(void)
      * currently active platform.
      *
      * This block allow one to use a python binary that was build on
-     * OSX 10.4 on OSX 10.3, without loosing access to new APIs on
+     * OSX 10.4 on OSX 10.3, without losing access to new APIs on
      * OSX 10.4.
      */
 #ifdef HAVE_FSTATVFS
