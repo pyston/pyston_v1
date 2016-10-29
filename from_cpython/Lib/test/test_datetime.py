@@ -1993,7 +1993,7 @@ class TestTime(HarmlessMixedComparison, unittest.TestCase):
                                          hour_byte + base[1:])
 
 # A mixin for classes with a tzinfo= argument.  Subclasses must define
-# theclass as a class atribute, and theclass(1, 1, 1, tzinfo=whatever)
+# theclass as a class attribute, and theclass(1, 1, 1, tzinfo=whatever)
 # must be legit (which is true for time and datetime).
 class TZInfoBase:
 
