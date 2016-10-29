@@ -924,7 +924,7 @@ ffi_closure_SYSV_inner (ffi_closure *closure, struct call_context *context,
 			   therefore the structure is not represented as
 			   a contiguous sequence of bytes in our saved
 			   register context. We need to fake up a copy
-			   of the structure layed out in memory
+			   of the structure laid out in memory
 			   correctly. The fake can be tossed once the
 			   closure function has returned hence alloca()
 			   is sufficient. */
@@ -945,7 +945,7 @@ ffi_closure_SYSV_inner (ffi_closure *closure, struct call_context *context,
 			   therefore the structure is not represented as
 			   a contiguous sequence of bytes in our saved
 			   register context. We need to fake up a copy
-			   of the structure layed out in memory
+			   of the structure laid out in memory
 			   correctly. The fake can be tossed once the
 			   closure function has returned hence alloca()
 			   is sufficient. */
