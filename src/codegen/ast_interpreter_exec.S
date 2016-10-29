@@ -14,7 +14,7 @@
 
 // This functions sets up a fixed stack frame which we use to detect ASTInterpreter frames
 // and which makes it easy retrieve the passed ASTInterpreter pointer (stored at frame_ptr-8). 
-// It's written in ASM to make sure the stack layout keeps beeing the same and that nothing gets inlined.
+// It's written in ASM to make sure the stack layout keeps being the same and that nothing gets inlined.
 // Our unwinder treats this function specialy.
 
 // Box* executeInnerAndSetupFrame(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at)
