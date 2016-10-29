@@ -494,7 +494,7 @@ EVP_new(PyObject *self, PyObject *args, PyObject *kwdict)
 /*
  *  This macro generates constructor function definitions for specific
  *  hash algorithms.  These constructors are much faster than calling
- *  the generic one passing it a python string and are noticably
+ *  the generic one passing it a python string and are noticeably
  *  faster than calling a python new() wrapper.  Thats important for
  *  code that wants to make hashes of a bunch of small strings.
  */
