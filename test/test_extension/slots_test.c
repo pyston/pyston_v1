@@ -682,25 +682,25 @@ call_funcs(PyObject* _module, PyObject* args) {
     if (cls->tp_new) {
         printf("tp_new exists\n");
     } else {
-        printf("tp_new doesnt exist\n");
+        printf("tp_new doesn't exist\n");
     }
 
     if (cls->tp_init) {
         printf("tp_init exists\n");
     } else {
-        printf("tp_init doesnt exist\n");
+        printf("tp_init doesn't exist\n");
     }
 
     if (cls->tp_call) {
         printf("tp_call exists\n");
     } else {
-        printf("tp_call doesnt exist\n");
+        printf("tp_call doesn't exist\n");
     }
 
     if (cls->tp_getattr) {
         printf("tp_getattr exists\n");
     } else {
-        printf("tp_getattr doesnt exist\n");
+        printf("tp_getattr doesn't exist\n");
     }
 
     // we aren't checking for tp_getattro.  it's set in cpython and not in pyston
@@ -708,7 +708,7 @@ call_funcs(PyObject* _module, PyObject* args) {
     if (cls->tp_setattr) {
         printf("tp_setattr exists\n");
     } else {
-        printf("tp_setattr doesnt exist\n");
+        printf("tp_setattr doesn't exist\n");
     }
 
     // we aren't checking for tp_setattro.  it's set in cpython and not in pyston
@@ -716,7 +716,7 @@ call_funcs(PyObject* _module, PyObject* args) {
     if (cls->tp_descr_get) {
         printf("tp_descr_get exists\n");
     } else {
-        printf("tp_descr_get doesnt exist\n");
+        printf("tp_descr_get doesn't exist\n");
     }
 
     if (cls->tp_as_mapping) {
@@ -738,7 +738,7 @@ call_funcs(PyObject* _module, PyObject* args) {
             printf("mp_length exists and returned %ld\n", rtn);
         }
     } else {
-        printf("tp_as_mapping doesnt exist\n");
+        printf("tp_as_mapping doesn't exist\n");
     }
 
     if (cls->tp_as_sequence) {
@@ -756,7 +756,7 @@ call_funcs(PyObject* _module, PyObject* args) {
             Py_DECREF(rtn);
         }
     } else {
-        printf("tp_as_sequence doesnt exist\n");
+        printf("tp_as_sequence doesn't exist\n");
     }
 
     if (cls->tp_as_number) {
@@ -819,7 +819,7 @@ call_funcs(PyObject* _module, PyObject* args) {
 #undef CHECK_BIN
 
     } else {
-        printf("tp_as_number doesnt exist\n");
+        printf("tp_as_number doesn't exist\n");
     }
 
     Py_RETURN_NONE;
