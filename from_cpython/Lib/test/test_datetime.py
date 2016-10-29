@@ -883,7 +883,7 @@ class TestDate(HarmlessMixedComparison, unittest.TestCase):
         #self.assertRaises(ValueError, t.strftime, "%#")
 
         #oh well, some systems just ignore those invalid ones.
-        #at least, excercise them to make sure that no crashes
+        #at least, exercise them to make sure that no crashes
         #are generated
         for f in ["%e", "%", "%#"]:
             try:
