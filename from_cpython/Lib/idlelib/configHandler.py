@@ -335,7 +335,7 @@ class IdleConf:
             cfgParser=self.defaultCfg['highlight']
         else:
             raise InvalidTheme, 'Invalid theme type specified'
-        #foreground and background values are provded for each theme element
+        #foreground and background values are provided for each theme element
         #(apart from cursor) even though all these values are not yet used
         #by idle, to allow for their use in the future. Default values are
         #generally black and white.
