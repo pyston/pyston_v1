@@ -203,7 +203,7 @@ public:
 };
 
 
-// Stream which calculates the SHA256 hash of the data writen to.
+// Stream which calculates the SHA256 hash of the data written to.
 class HashOStream : public llvm::raw_ostream {
     EVP_MD_CTX* md_ctx;
 
