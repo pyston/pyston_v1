@@ -157,14 +157,14 @@ class Test(unittest.TestCase):
 
     def test_4(self):
         hier = [
-        ("t4.py", "raise RuntimeError('Shouldnt load t4.py')"),
+        ("t4.py", "raise RuntimeError('Shouldn't load t4.py')"),
         ("t4", None),
         ("t4 __init__"+os.extsep+"py", ""),
-        ("t4 sub.py", "raise RuntimeError('Shouldnt load sub.py')"),
+        ("t4 sub.py", "raise RuntimeError('Shouldn't load sub.py')"),
         ("t4 sub", None),
         ("t4 sub __init__"+os.extsep+"py", ""),
         ("t4 sub subsub"+os.extsep+"py",
-         "raise RuntimeError('Shouldnt load subsub.py')"),
+         "raise RuntimeError('Shouldn't load subsub.py')"),
         ("t4 sub subsub", None),
         ("t4 sub subsub __init__"+os.extsep+"py", "spam = 1"),
                ]
@@ -236,11 +236,11 @@ class Test(unittest.TestCase):
                 ("t7"+os.extsep+"py", ""),
                 ("t7 __init__"+os.extsep+"py", ""),
                 ("t7 sub"+os.extsep+"py",
-                 "raise RuntimeError('Shouldnt load sub.py')"),
+                 "raise RuntimeError('Shouldn't load sub.py')"),
                 ("t7 sub", None),
                 ("t7 sub __init__"+os.extsep+"py", ""),
                 ("t7 sub "+os.extsep+"py",
-                 "raise RuntimeError('Shouldnt load subsub.py')"),
+                 "raise RuntimeError('Shouldn't load subsub.py')"),
                 ("t7 sub subsub", None),
                 ("t7 sub subsub __init__"+os.extsep+"py",
                  "spam = 1"),
