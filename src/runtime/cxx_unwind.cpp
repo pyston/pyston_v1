@@ -563,7 +563,7 @@ static inline void unwind_loop(ExcInfo* exc_data) {
 
         int64_t switch_value = determine_action(&info, &entry);
         if (switch_value != CLEANUP_ACTION) {
-            // we're transfering control to a non-cleanup landing pad.
+            // we're transferring control to a non-cleanup landing pad.
             // i.e. a catch block.  thus ends our unwind session.
             endPythonUnwindSession(unwind_session);
 #if STAT_TIMERS
@@ -583,7 +583,7 @@ static inline void unwind_loop(ExcInfo* exc_data) {
         //
         // the only way this could bite us is if we somehow clobber
         // the PythonUnwindSession's storage, or cause a GC to occur, before
-        // transfering control to the landing pad in resume().
+        // transferring control to the landing pad in resume().
         //
         resume(&cursor, entry.landing_pad, switch_value, exc_data);
     }
