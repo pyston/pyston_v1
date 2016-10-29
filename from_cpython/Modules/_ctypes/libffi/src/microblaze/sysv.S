@@ -134,7 +134,7 @@ ffi_call_SYSV:
 	rsubi r11, r23, 8
 	beqi r11, ffi_call_SYSV_store64
 
-	/* Didnt match anything */
+	/* Didn't match anything */
 	bri ffi_call_SYSV_end
 
 ffi_call_SYSV_store64:
@@ -247,7 +247,7 @@ ffi_closure_SYSV_prepare_return:
 	rsubi r11, r10, 8
 	beqi r11, ffi_closure_SYSV_store64
 
-	/* Didnt match anything */
+	/* Didn't match anything */
 	bri ffi_closure_SYSV_end
 
 ffi_closure_SYSV_store64:

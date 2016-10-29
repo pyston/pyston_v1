@@ -1084,7 +1084,7 @@ static PyObject* filterunicode(PyObject* func, PyObject* strobj) {
                 /* do we need more space? */
                 Py_ssize_t need = j + reslen + len - i - 1;
 
-                /* check that didnt overflow */
+                /* check that didn't overflow */
                 if ((j > PY_SSIZE_T_MAX - reslen) || ((j + reslen) > PY_SSIZE_T_MAX - len) || ((j + reslen + len) < i)
                     || ((j + reslen + len - i) <= 0)) {
                     Py_DECREF(item);
