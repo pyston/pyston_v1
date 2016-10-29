@@ -2214,7 +2214,7 @@ private:
             = new ConcreteCompilerVariable(FRAME_INFO, irstate->getFrameInfoVar());
 
         // For OSR calls, we use the same calling convention as in some other places; namely,
-        // arg1, arg2, arg3, argarray [nargs is ommitted]
+        // arg1, arg2, arg3, argarray [nargs is omitted]
         // It would be nice to directly pass all variables as arguments, instead of packing them into
         // an array, for a couple reasons (eliminate copies, and allow for a tail call).
         // But this doesn't work if the IR is being interpreted, because the interpreter can't
