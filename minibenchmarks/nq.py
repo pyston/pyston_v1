@@ -56,7 +56,7 @@ setgaid = set(map(frozenset, posgaid))
 
 
 # all queens are equivalent, thus solution (Q1, Q2, Q3) == (Q1, Q3, Q2)
-# let's order queens, so that Q1 always preceeds on Q2 on the board
+# let's order queens, so that Q1 always precedes on Q2 on the board
 # then, let's do an exhaustive search with early pruning:
 # consider board of 4 [ , , , ] for 3 queens
 # position [ , ,Q1, ] will never generate a solution, because there's no space for both Q2 and Q3 left
