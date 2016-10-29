@@ -214,7 +214,7 @@ void ICSlotRewrite::commit(CommitHook* hook, std::vector<void*> gc_references,
         ic->slots.emplace_back(ic, ic_entry->start_addr + actual_size, empty_space);
     }
 
-    // if (VERBOSITY()) printf("Commiting to %p-%p\n", start, start + ic->slot_size);
+    // if (VERBOSITY()) printf("Committing to %p-%p\n", start, start + ic->slot_size);
     memcpy(slot_start, buf, original_size);
 
     ic_entry->clear(false /* don't invalidate */);
