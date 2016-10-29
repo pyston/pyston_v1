@@ -418,7 +418,7 @@ private:
         _emitByte(0x39);
         if (displacement == 0) {
             // Since we're emitting into a fixed-size section I guess there might not be
-            // too much benifit to the more compact encoding, but it makes me feel better:
+            // too much benefit to the more compact encoding, but it makes me feel better:
             _emitModRM(0b00, reg1, reg2);
         } else {
             _emitModRM(0b01, reg1, reg2);
