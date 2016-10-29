@@ -604,7 +604,7 @@ def unmountvolume(volume):
     putaway(volume)
 
 def putaway(object):
-    """puth the object away, whereever it came from."""
+    """puth the object away, wherever it came from."""
     finder = _getfinder()
     args = {}
     attrs = {}
