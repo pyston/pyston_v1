@@ -447,7 +447,7 @@ allocate_to_stack (struct arg_state *state, void *stack, unsigned alignment,
 static void
 copy_basic_type (void *dest, void *source, unsigned short type)
 {
-  /* This is neccessary to ensure that basic types are copied
+  /* This is necessary to ensure that basic types are copied
      sign extended to 64-bits as libffi expects.  */
   switch (type)
     {
