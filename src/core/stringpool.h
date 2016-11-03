@@ -139,7 +139,7 @@ template <> struct DenseMapInfo<pyston::InternedString> {
         return pyston::InternedString((pyston::BoxedString*)-1);
 #endif
     }
-    static unsigned getHashValue(const pyston::InternedString& val) { return std::hash<pyston::InternedString>()(val); }
+    static size_t getHashValue(const pyston::InternedString& val) { return std::hash<pyston::InternedString>()(val); }
     static bool isEqual(const pyston::InternedString& lhs, const pyston::InternedString& rhs) { return lhs == rhs; }
 };
 }
