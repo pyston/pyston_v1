@@ -479,7 +479,7 @@ private:
     unsigned NewNumEntries = getNumEntries() + 1;
     unsigned NumBuckets = getNumBuckets();
     if (LLVM_UNLIKELY(NewNumEntries * 3 >= NumBuckets * 2)) {
-      this->grow(NumBuckets * (NumBuckets > 50000 ? 2 : 4));
+      this->grow(NewNumEntries * (NewNumEntries > 50000 ? 2 : 4));
       LookupBucketFor(Key, TheBucket);
       NumBuckets = getNumBuckets();
     } else if (LLVM_UNLIKELY(NumBuckets-(NewNumEntries+getNumTombstones()) <=
