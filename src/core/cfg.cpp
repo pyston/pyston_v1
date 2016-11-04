@@ -3194,6 +3194,83 @@ void VRegInfo::assignVRegs(const CodeConstants& code_constants, CFG* cfg, const 
 #endif
 }
 
+// Prune unnecessary blocks from the CFG.
+// Not strictly necessary, but makes the output easier to look at,
+// and can make the analyses more efficient.
+// The extra blocks would get merged by LLVM passes, so I'm not sure
+// how much overall improvement there is.
+// returns num of removed blocks
+static int pruneUnnecessaryBlocks(CFG* rtn) {
+    llvm::DenseMap<CFGBlock*, CFGBlock*> blocks_to_merge;
+    // Must evaluate end() on every iteration because erase() will invalidate the end.
+    for (auto it = rtn->blocks.begin(); it != rtn->blocks.end(); ++it) {
+        CFGBlock* b = *it;
+
+        if (b->successors.size() == 1) {
+            CFGBlock* b2 = b->successors[0];
+            if (b2->predecessors.size() != 1)
+                continue;
+
+            auto last_stmt = b->getLastStmt();
+            if (last_stmt->is_invoke()) {
+                // TODO probably shouldn't be generating these anyway:
+                assert(last_stmt->get_normal_block() == last_stmt->get_exc_block());
+                continue;
+            }
+
+            assert(last_stmt->type() == BST_TYPE::Jump);
+
+            if (VERBOSITY("cfg") >= 2) {
+                // rtn->print();
+                printf("Joining blocks %d and %d\n", b->idx, b2->idx);
+            }
+
+            b->unconnectFrom(b2);
+
+            for (CFGBlock* b3 : b2->successors) {
+                b->connectTo(b3, true);
+                b2->unconnectFrom(b3);
+            }
+
+            rtn->blocks.erase(std::remove(rtn->blocks.begin(), rtn->blocks.end(), b2), rtn->blocks.end());
+
+            blocks_to_merge[b] = b2;
+        }
+    }
+
+    if (!blocks_to_merge.empty()) {
+        BSTAllocator final_bytecode;
+        final_bytecode.reserve(rtn->bytecode.getSize());
+
+        int offset = 0;
+        for (CFGBlock* b : rtn->blocks) {
+            int block_size = b->sizeInBytes();
+            int new_offset_of_block_start = offset;
+            bool should_merge_blocks = blocks_to_merge.count(b);
+            if (should_merge_blocks) {
+                // copy first block without the terminator
+                block_size -= b->getLastStmt()->size_in_bytes();
+                memcpy(final_bytecode.allocate(block_size), b->body(), block_size);
+                offset += block_size;
+                // copy second block and delete it
+                CFGBlock* second_block = blocks_to_merge[b];
+                int second_block_size = second_block->sizeInBytes();
+                memcpy(final_bytecode.allocate(second_block_size), second_block->body(), second_block_size);
+                offset += second_block_size;
+                delete second_block;
+            } else {
+                memcpy(final_bytecode.allocate(block_size), b->body(), block_size);
+                offset += block_size;
+            }
+            // update block start offset
+            b->offset_of_first_stmt = new_offset_of_block_start;
+        }
+        rtn->bytecode = std::move(final_bytecode);
+    }
+
+    return blocks_to_merge.size();
+}
+
 static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body, AST_TYPE::AST_TYPE ast_type,
                                                  int lineno, AST_arguments* args, BoxedString* filename,
                                                  SourceInfo* source, const ParamNames& param_names, ScopeInfo* scoping,
@@ -3395,51 +3472,10 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
 
 // TODO make sure the result of Invoke nodes are not used on the exceptional path
 #endif
-#if 0
-    // Prune unnecessary blocks from the CFG.
-    // Not strictly necessary, but makes the output easier to look at,
-    // and can make the analyses more efficient.
-    // The extra blocks would get merged by LLVM passes, so I'm not sure
-    // how much overall improvement there is.
-
-    // Must evaluate end() on every iteration because erase() will invalidate the end.
-    for (auto it = rtn->blocks.begin(); it != rtn->blocks.end(); ++it) {
-        CFGBlock* b = *it;
-        while (b->successors.size() == 1) {
-            CFGBlock* b2 = b->successors[0];
-            if (b2->predecessors.size() != 1)
-                break;
-
-            BST_TYPE::BST_TYPE end_ast_type = b->body[b->body.size() - 1]->type();
-            assert(end_ast_type == BST_TYPE::Jump || end_ast_type == BST_TYPE::Invoke);
-            if (end_ast_type == BST_TYPE::Invoke) {
-                // TODO probably shouldn't be generating these anyway:
-                auto invoke = bst_cast<BST_Invoke>(b->body.back());
-                assert(invoke->normal_dest == invoke->exc_dest);
-                break;
-            }
-
-            if (VERBOSITY("cfg") >= 2) {
-                // rtn->print();
-                printf("Joining blocks %d and %d\n", b->idx, b2->idx);
-            }
-
-            b->body.pop_back();
-            b->body.insert(b->body.end(), b2->body.begin(), b2->body.end());
-            b->unconnectFrom(b2);
-
-            for (CFGBlock* b3 : b2->successors) {
-                b->connectTo(b3, true);
-                b2->unconnectFrom(b3);
-            }
-
-            rtn->blocks.erase(std::remove(rtn->blocks.begin(), rtn->blocks.end(), b2), rtn->blocks.end());
-            delete b2;
-        }
-    }
-#endif
 
     rtn->getVRegInfo().assignVRegs(visitor.code_constants, rtn, param_names, visitor.id_vreg);
+
+    pruneUnnecessaryBlocks(rtn);
 
     rtn->bytecode.optimizeSize();
     rtn->blocks.shrink_to_fit();
