@@ -35,3 +35,5 @@ for i in xrange(100):
     pop()
 
 print print_final
+
+print {'logoq': 349, 'kprzd': 301, 'qemgi': 342, 'xpuhv': 310, 'dpmbn': 250, 'trvxs': 264}

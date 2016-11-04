@@ -1015,7 +1015,7 @@ struct BoxAndHash {
         }
         static BoxAndHash getEmptyKey() { return BoxAndHash((Box*)-1, 0); }
         static BoxAndHash getTombstoneKey() { return BoxAndHash((Box*)-2, 0); }
-        static unsigned getHashValue(BoxAndHash val) { return val.hash; }
+        static size_t getHashValue(BoxAndHash val) { return val.hash; }
     };
 };
 // Similar to the incref(Box*) function:

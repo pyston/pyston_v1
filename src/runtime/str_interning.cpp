@@ -33,8 +33,8 @@ template <> struct DenseMapInfo<pyston::BoxedString*> {
         return reinterpret_cast<pyston::BoxedString*>(Val);
     }
 
-    static unsigned getHashValue(pyston::BoxedString* s) { return pyston::strHashUnboxed(s); }
-    static unsigned getHashValue(llvm::StringRef s) { return pyston::strHashUnboxedStrRef(s); }
+    static size_t getHashValue(pyston::BoxedString* s) { return pyston::strHashUnboxed(s); }
+    static size_t getHashValue(llvm::StringRef s) { return pyston::strHashUnboxedStrRef(s); }
 
     static bool isSpecial(pyston::BoxedString* v) { return v == getEmptyKey() || v == getTombstoneKey(); }
     static bool isEqual(pyston::BoxedString* lhs, pyston::BoxedString* rhs) {

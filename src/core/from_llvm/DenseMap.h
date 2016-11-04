@@ -446,6 +446,7 @@ private:
 
     TheBucket->getFirst() = Key;
     new (&TheBucket->getSecond()) ValueT(Value);
+    TheBucket = growMaybe(Key, TheBucket);
     return TheBucket;
   }
 
@@ -455,6 +456,7 @@ private:
 
     TheBucket->getFirst() = Key;
     new (&TheBucket->getSecond()) ValueT(std::move(Value));
+    TheBucket = growMaybe(Key, TheBucket);
     return TheBucket;
   }
 
@@ -463,6 +465,21 @@ private:
 
     TheBucket->getFirst() = std::move(Key);
     new (&TheBucket->getSecond()) ValueT(std::move(Value));
+    TheBucket = growMaybe(Key, TheBucket);
+    return TheBucket;
+  }
+
+  BucketT* growMaybe(const KeyT& Key, BucketT *TheBucket) {
+    unsigned NewNumEntries = getNumEntries();
+    unsigned NumBuckets = getNumBuckets();
+    if (LLVM_UNLIKELY(NewNumEntries * 3 >= NumBuckets * 2)) {
+      this->grow(NewNumEntries * (NewNumEntries > 50000 ? 2 : 4));
+      LookupBucketFor(Key, TheBucket);
+    } else if (LLVM_UNLIKELY(NumBuckets-(NewNumEntries+getNumTombstones()) <=
+                             NumBuckets/8)) {
+      this->grow(NumBuckets);
+      LookupBucketFor(Key, TheBucket);
+    }
     return TheBucket;
   }
 
@@ -478,14 +495,10 @@ private:
     // causing infinite loops in lookup.
     unsigned NewNumEntries = getNumEntries() + 1;
     unsigned NumBuckets = getNumBuckets();
-    if (LLVM_UNLIKELY(NewNumEntries * 3 >= NumBuckets * 2)) {
+    if (LLVM_UNLIKELY(NumBuckets == 0)) {
       this->grow(NewNumEntries * (NewNumEntries > 50000 ? 2 : 4));
       LookupBucketFor(Key, TheBucket);
       NumBuckets = getNumBuckets();
-    } else if (LLVM_UNLIKELY(NumBuckets-(NewNumEntries+getNumTombstones()) <=
-                             NumBuckets/8)) {
-      this->grow(NumBuckets);
-      LookupBucketFor(Key, TheBucket);
     }
     assert(TheBucket);
 
