@@ -359,6 +359,15 @@ protected:
         (*sym_table)[*vreg] = NULL;
         return false;
     }
+    bool visit_storename(BST_StoreName* node) override {
+        InternedString name = getCodeConstants().getInternedString(node->index_id);
+        assert(name.c_str()[0] == '#'); // it must be a temporary
+        // You might think I need to check whether `name' is being assigned globally or locally,
+        // since a global assign doesn't affect the symbol table. However, the CFG pass only
+        // generates invoke-assigns to temporary variables. Just to be sure, we assert:
+        assert(node->lookup_type != ScopeInfo::VarScopeType::GLOBAL);
+        return false;
+    }
 
 public:
     static std::pair<SymbolTable*, bool /* created_new_sym_table */>
