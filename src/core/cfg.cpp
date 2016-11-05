@@ -36,6 +36,12 @@
 //#define VERBOSITY(x) 2
 
 namespace pyston {
+// This class helps keeping track of the memory locations of vregs inside the bytecode by storing them as offsets from
+// the start of the bytecode if the address is inside the bytecode otherwise it is just stored as a regular pointer.
+// We can't directly keep track of the locations with normal pointers because during bytecode emission the memory
+// location grows several times which will move around the memory location.
+// TODO: all vreg locations should be inside the bytecode but currently we still emit a few references to outside vregs
+// for the BST_ClassDef and BST_FunctionDef nodes. We should try to remove them.
 class TrackingVRegPtr {
 private:
     union {
