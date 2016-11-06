@@ -20,7 +20,7 @@ limitations under the License.
 
 Some directories are distributed under different licenses, and contain
 separate LICENSE files, which applies to all files in that directory
-and its decendents, unless overridden by another LICENSE file.
+and its descendants, unless overridden by another LICENSE file.
 
 
 Regardless of any separate LICENSE files, all code in this repository

@@ -645,7 +645,7 @@ Box* complexRFloordiv(BoxedComplex* lhs, Box* _rhs) {
 
 extern "C" Box* complexEq(BoxedComplex* lhs, Box* rhs) {
     if (lhs->cls != complex_cls) {
-        raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'complex' object but recieved a '%s'",
+        raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
     }
     Box* res = complex_richcompare(lhs, rhs, Py_EQ);
@@ -658,7 +658,7 @@ extern "C" Box* complexEq(BoxedComplex* lhs, Box* rhs) {
 
 extern "C" Box* complexNe(BoxedComplex* lhs, Box* rhs) {
     if (lhs->cls != complex_cls) {
-        raiseExcHelper(TypeError, "descriptor '__ne__' requires a 'complex' object but recieved a '%s'",
+        raiseExcHelper(TypeError, "descriptor '__ne__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
     }
     Box* res = complex_richcompare(lhs, rhs, Py_NE);
@@ -671,7 +671,7 @@ extern "C" Box* complexNe(BoxedComplex* lhs, Box* rhs) {
 
 extern "C" Box* complexLe(BoxedComplex* lhs, Box* rhs) {
     if (lhs->cls != complex_cls) {
-        raiseExcHelper(TypeError, "descriptor '__le__' requires a 'complex' object but recieved a '%s'",
+        raiseExcHelper(TypeError, "descriptor '__le__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
     }
     Box* res = complex_richcompare(lhs, rhs, Py_LE);
@@ -684,7 +684,7 @@ extern "C" Box* complexLe(BoxedComplex* lhs, Box* rhs) {
 
 extern "C" Box* complexLt(BoxedComplex* lhs, Box* rhs) {
     if (lhs->cls != complex_cls) {
-        raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'complex' object but recieved a '%s'",
+        raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
     }
     Box* res = complex_richcompare(lhs, rhs, Py_LT);
@@ -696,7 +696,7 @@ extern "C" Box* complexLt(BoxedComplex* lhs, Box* rhs) {
 
 extern "C" Box* complexGe(BoxedComplex* lhs, Box* rhs) {
     if (lhs->cls != complex_cls) {
-        raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'complex' object but recieved a '%s'",
+        raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
     }
     Box* res = complex_richcompare(lhs, rhs, Py_GE);
@@ -709,7 +709,7 @@ extern "C" Box* complexGe(BoxedComplex* lhs, Box* rhs) {
 
 extern "C" Box* complexGt(BoxedComplex* lhs, Box* rhs) {
     if (lhs->cls != complex_cls) {
-        raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'complex' object but recieved a '%s'",
+        raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'complex' object but received a '%s'",
                        getTypeName(lhs));
     }
     Box* res = complex_richcompare(lhs, rhs, Py_GT);

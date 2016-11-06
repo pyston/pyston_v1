@@ -121,7 +121,7 @@ class CustSetClass(object):
 a=CustSetClass()
 a.attr
 a.val
-#del won't invoke __getattr__ or __getattribute__ to check wether attr is an attribute of a
+#del won't invoke __getattr__ or __getattribute__ to check whether attr is an attribute of a
 try:
     del a.attr
 except AttributeError, e:

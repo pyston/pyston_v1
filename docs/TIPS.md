@@ -286,7 +286,7 @@ In that case, the backtrace might not be very helpful. For example:
 
 ```
 
-The backtrace is misleading since it suggests that an error occured on line 852, which is entirely wrong (that line is never actually reached!).
+The backtrace is misleading since it suggests that an error occurred on line 852, which is entirely wrong (that line is never actually reached!).
 
 If that happens, you should either add a try/catch pair, or use C-style exceptions instead.
 

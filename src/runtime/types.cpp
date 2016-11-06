@@ -1703,11 +1703,11 @@ static int function_set_defaults(Box* b, Box* v, void*) noexcept {
     // The better way to handle this would be to not add the __defaults__ descriptor to the
     // builtin_function_or_method_cls so that it would be an AttributeError to try to access it,
     // and leave this assert.
-    RELEASE_ASSERT(func->can_change_defaults, "trying to change the defaults on a non-defaults-changable function.");
+    RELEASE_ASSERT(func->can_change_defaults, "trying to change the defaults on a non-defaults-changeable function.");
 
     // Changing defaults of builtins would be very scary.  Python functions are safe since they
     // store their arguments into their symbol table, but builtin functions are free to let them
-    // stay borrowed.  If a builtin function has changable defaults, and it can call into arbitrary
+    // stay borrowed.  If a builtin function has changeable defaults, and it can call into arbitrary
     // user code, then it could call something that changes its own defaults, and all of a sudden
     // one of its arguments gets deallocated from under it.
 

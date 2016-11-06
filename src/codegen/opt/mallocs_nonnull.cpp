@@ -184,5 +184,5 @@ FunctionPass* createMallocsNonNullPass() {
 }
 }
 
-static RegisterPass<pyston::MallocsNonNullPass> X("mallocs_nonnull", "Use the fact that malloc() doesnt return NULL",
+static RegisterPass<pyston::MallocsNonNullPass> X("mallocs_nonnull", "Use the fact that malloc() doesn't return NULL",
                                                   true, false);

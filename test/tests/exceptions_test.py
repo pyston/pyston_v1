@@ -356,7 +356,7 @@ def f12():
         try:
             raise e
         except Exception as l[0]:
-            print "shouldnt get here"
+            print "shouldn't get here"
     except Exception as e2:
         # print it to stderr, so that our tester's error message substituter can
         # deal with differences between error messages between different Python
@@ -369,7 +369,7 @@ def f12():
         try:
             raise e
         except Exception as l[1/0]:
-            print "shouldnt get here"
+            print "shouldn't get here"
     except Exception as e2:
         print e2
 f12()
