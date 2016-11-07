@@ -149,7 +149,7 @@ ExternalProject_Add(libjemalloc
                     SOURCE_DIR ${CMAKE_SOURCE_DIR}/build_deps/jemalloc
                     DEPENDS gitsubmodules
                     UPDATE_COMMAND autoconf
-                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/build_deps/jemalloc/configure --prefix=${CMAKE_BINARY_DIR}/jemalloc --enable-autogen --enable-prof-libunwind
+                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/build_deps/jemalloc/configure --prefix=${CMAKE_BINARY_DIR}/jemalloc --enable-autogen --enable-prof --enable-prof-libunwind
                     BUILD_COMMAND ${MAKE_PRG}
                     INSTALL_COMMAND ${MAKE_PRG} install_bin install_lib
                     LOG_UPDATE ON
