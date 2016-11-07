@@ -75,9 +75,9 @@ public:
     // contains the address of the entry function
     std::pair<CFGBlock*, Box*>(*entry_code)(void* interpeter, CFGBlock* block, Box** vregs);
 
-    llvm::SmallVector<CFGBlock*, 2> predecessors, successors;
-    int idx; // index in the CFG
+    llvm::TinyPtrVector<CFGBlock*> predecessors;
     const char* info;
+    int idx;                  // index in the CFG
     int offset_of_first_stmt; // offset of this block into the bytecode array in bytes
 
 #ifndef NDEBUG
@@ -85,8 +85,11 @@ public:
     bool allowed_to_add_stuff = false;
 #endif
 
+    // returns the successors by looking at the terminator (which requires iterating over all instructions in the block)
+    llvm::SmallVector<CFGBlock*, 2> successors() const;
+
     CFGBlock(CFG* cfg, int idx, const char* info = NULL)
-        : cfg(cfg), code(NULL), entry_code(NULL), idx(idx), info(info), offset_of_first_stmt(-1) {}
+        : cfg(cfg), code(NULL), entry_code(NULL), info(info), idx(idx), offset_of_first_stmt(-1) {}
 
     BST_stmt* body() {
         auto it = begin();

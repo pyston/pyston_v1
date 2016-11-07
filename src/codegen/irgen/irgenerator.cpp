@@ -2604,7 +2604,7 @@ private:
                 ConcreteCompilerVariable* v = val->makeConverted(emitter, phi_type);
                 symbol_table[vreg] = v;
             } else {
-                if (myblock->successors.size()) {
+                if (myblock->successors().size()) {
                     // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't
                     // want
                     // here, but this is just for debugging so I guess let it happen for now:
@@ -2730,20 +2730,21 @@ public:
             ASSERT(p.second->getType()->isUsable(), "%d", p.first);
         }
 
-        if (myblock->successors.size() == 0) {
+        auto successors = myblock->successors();
+        if (successors.size() == 0) {
             st->clear();
             symbol_table.clear();
             return EndingState(st, phi_st, def_vars, curblock, outgoing_exc_state);
-        } else if (myblock->successors.size() > 1) {
+        } else if (successors.size() > 1) {
             // Since there are no critical edges, all successors come directly from this node,
             // so there won't be any required phis.
             return EndingState(st, phi_st, def_vars, curblock, outgoing_exc_state);
         }
 
-        assert(myblock->successors.size() == 1); // other cases should have been handled
+        assert(successors.size() == 1); // other cases should have been handled
 
         // In theory this case shouldn't be necessary:
-        if (myblock->successors[0]->predecessors.size() == 1) {
+        if (successors[0]->predecessors.size() == 1) {
             // If the next block has a single predecessor, don't have to
             // emit any phis.
             // Should probably not emit no-op jumps like this though.

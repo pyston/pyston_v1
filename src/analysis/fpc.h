@@ -83,8 +83,7 @@ void computeFixedPoint(typename BBAnalyzer<T>::Map&& initial_map, CFGBlock* init
 
         analyzer.processBB(ending, block);
 
-        for (int i = 0; i < block->successors.size(); i++) {
-            CFGBlock* next_block = block->successors[i];
+        for (CFGBlock* next_block : block->successors()) {
             bool changed = false;
             bool initial = false;
             if (starting_states.count(next_block) == 0) {

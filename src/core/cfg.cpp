@@ -231,25 +231,33 @@ static int getLastLineno(llvm::ArrayRef<AST_stmt*> body, int default_lineno) {
     return getLastLinenoSub(body.back());
 }
 
-void CFGBlock::connectTo(CFGBlock* successor, bool allow_backedge) {
-    assert(successors.size() <= 1);
+llvm::SmallVector<CFGBlock*, 2> CFGBlock::successors() const {
+    llvm::SmallVector<CFGBlock*, 2> successors;
+    auto* last = getLastStmt();
+    if (last->type() == BST_TYPE::Jump) {
+        successors.push_back(bst_cast<BST_Jump>(last)->target);
+    } else if (last->type() == BST_TYPE::Branch) {
+        assert(bst_cast<BST_Branch>(last)->iftrue != bst_cast<BST_Branch>(last)->iffalse);
+        successors.push_back(bst_cast<BST_Branch>(last)->iftrue);
+        successors.push_back(bst_cast<BST_Branch>(last)->iffalse);
+    } else if (last->is_invoke()) {
+        successors.push_back(last->get_normal_block());
+        if (last->get_exc_block() != last->get_normal_block())
+            successors.push_back(last->get_exc_block());
+    }
+    return successors;
+}
 
+void CFGBlock::connectTo(CFGBlock* successor, bool allow_backedge) {
     if (!allow_backedge) {
         assert(this->idx >= 0);
         ASSERT(successor->idx == -1 || successor->idx > this->idx, "edge from %d (%s) to %d (%s)", this->idx,
                this->info, successor->idx, successor->info);
     }
-    // assert(successors.count(successor) == 0);
-    // assert(successor->predecessors.count(this) == 0);
-
-    successors.push_back(successor);
     successor->predecessors.push_back(this);
 }
 
 void CFGBlock::unconnectFrom(CFGBlock* successor) {
-    // assert(successors.count(successor));
-    // assert(successor->predecessors.count(this));
-    successors.erase(std::remove(successors.begin(), successors.end(), successor), successors.end());
     successor->predecessors.erase(std::remove(successor->predecessors.begin(), successor->predecessors.end(), this),
                                   successor->predecessors.end());
 }
@@ -264,8 +272,8 @@ void CFGBlock::print(const CodeConstants& code_constants, llvm::raw_ostream& str
         stream << " " << predecessors[j]->idx;
     }
     stream << " Successors:";
-    for (int j = 0; j < successors.size(); j++) {
-        stream << " " << successors[j]->idx;
+    for (CFGBlock* successor : successors()) {
+        stream << " " << successor->idx;
     }
     stream << "\n";
 
@@ -3225,8 +3233,9 @@ static int pruneUnnecessaryBlocks(CFG* rtn) {
     for (auto it = rtn->blocks.begin(); it != rtn->blocks.end(); ++it) {
         CFGBlock* b = *it;
 
-        if (b->successors.size() == 1) {
-            CFGBlock* b2 = b->successors[0];
+        auto b_successors = b->successors();
+        if (b_successors.size() == 1) {
+            CFGBlock* b2 = b_successors[0];
             if (b2->predecessors.size() != 1)
                 continue;
 
@@ -3246,7 +3255,7 @@ static int pruneUnnecessaryBlocks(CFG* rtn) {
 
             b->unconnectFrom(b2);
 
-            for (CFGBlock* b3 : b2->successors) {
+            for (CFGBlock* b3 : b2->successors()) {
                 b->connectTo(b3, true);
                 b2->unconnectFrom(b3);
             }
@@ -3394,13 +3403,13 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
         for (CFGBlock* b2 : b->predecessors) {
             ASSERT(b2->idx != -1 && b->isPlaced(), "Forgot to place a block!");
         }
-        for (CFGBlock* b2 : b->successors) {
+        for (CFGBlock* b2 : b->successors()) {
             ASSERT(b2->idx != -1 && b->isPlaced(), "Forgot to place a block!");
         }
 
         ASSERT(b->body() != NULL, "%d", b->idx);
-        ASSERT(b->successors.size() <= 2, "%d has too many successors!", b->idx);
-        if (b->successors.size() == 0) {
+        ASSERT(b->successors().size() <= 2, "%d has too many successors!", b->idx);
+        if (b->successors().size() == 0) {
             BST_stmt* terminator = b->getLastStmt();
             assert(terminator->type() == BST_TYPE::Return || terminator->type() == BST_TYPE::Raise
                    || terminator->type() == BST_TYPE::Assert);
@@ -3420,11 +3429,11 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
     // the cfg-computing code directly avoids making critical edges.
     // Either way, double check to make sure that we don't have any:
     for (int i = 0; i < rtn->blocks.size(); i++) {
-        if (rtn->blocks[i]->successors.size() >= 2) {
-            for (int j = 0; j < rtn->blocks[i]->successors.size(); j++) {
+        auto successors = rtn->blocks[i]->successors();
+        if (successors.size() >= 2) {
+            for (CFGBlock* successor : successors) {
                 // It's ok to have zero predecessors if you are the entry block
-                ASSERT(rtn->blocks[i]->successors[j]->predecessors.size() < 2, "Critical edge from %d to %d!", i,
-                       rtn->blocks[i]->successors[j]->idx);
+                ASSERT(successor->predecessors.size() < 2, "Critical edge from %d to %d!", i, successor->idx);
             }
         }
     }

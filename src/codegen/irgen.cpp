@@ -246,8 +246,7 @@ static std::vector<std::pair<CFGBlock*, CFGBlock*>> computeBlockTraversalOrder(c
         while (idx < rtn.size()) {
             CFGBlock* cur = rtn[idx].first;
 
-            for (int i = 0; i < cur->successors.size(); i++) {
-                CFGBlock* b = cur->successors[i];
+            for (CFGBlock* b : cur->successors()) {
                 assert(blocks.count(b));
                 if (in_queue.count(b))
                     continue;
@@ -268,7 +267,7 @@ static std::vector<std::pair<CFGBlock*, CFGBlock*>> computeBlockTraversalOrder(c
                 continue;
 
             // Avoid picking any blocks where we can't add an epilogue to the predecessors
-            if (b->predecessors.size() == 1 && b->predecessors[0]->successors.size() > 1)
+            if (b->predecessors.size() == 1 && b->predecessors[0]->successors().size() > 1)
                 continue;
 
             if (best == NULL || b->idx < best->idx)
@@ -972,8 +971,7 @@ static void computeBlockSetClosure(BlockSet& blocks) {
             continue;
         expanded.insert(b);
 
-        for (int i = 0; i < b->successors.size(); i++) {
-            CFGBlock* b2 = b->successors[i];
+        for (CFGBlock* b2 : b->successors()) {
             blocks.insert(b2);
             q.push_back(b2);
         }

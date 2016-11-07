@@ -125,7 +125,7 @@ bool LivenessAnalysis::isLiveAtEnd(int vreg, CFGBlock* block) {
         return false;
 #endif
 
-    if (block->successors.size() == 0)
+    if (block->successors().size() == 0)
         return false;
 
     if (!result_cache[vreg].size()) {
@@ -376,10 +376,11 @@ PhiAnalysis::PhiAnalysis(VRegMap<DefinednessAnalysis::DefinitionLevel> initial_m
 }
 
 const VRegSet& PhiAnalysis::getAllRequiredAfter(CFGBlock* block) {
-    if (block->successors.size() == 0)
+    auto successors = block->successors();
+    if (successors.size() == 0)
         return empty_set;
-    assert(required_phis.count(block->successors[0]));
-    return required_phis.find(block->successors[0])->second;
+    assert(required_phis.count(successors[0]));
+    return required_phis.find(successors[0])->second;
 }
 
 const VRegSet& PhiAnalysis::getAllRequiredFor(CFGBlock* block) {
@@ -394,19 +395,20 @@ bool PhiAnalysis::isRequired(int vreg, CFGBlock* block) {
 }
 
 bool PhiAnalysis::isRequiredAfter(int vreg, CFGBlock* block) {
+    auto successors = block->successors();
     assert(vreg >= 0);
     // If there are multiple successors, then none of them are allowed
     // to require any phi nodes
-    if (block->successors.size() != 1)
+    if (successors.size() != 1)
         return false;
 
     // Fall back to the other method:
-    return isRequired(vreg, block->successors[0]);
+    return isRequired(vreg, successors[0]);
 }
 
 bool PhiAnalysis::isPotentiallyUndefinedAfter(int vreg, CFGBlock* block) {
     assert(vreg >= 0);
-    for (auto b : block->successors) {
+    for (auto b : block->successors()) {
         if (isPotentiallyUndefinedAt(vreg, b))
             return true;
     }
