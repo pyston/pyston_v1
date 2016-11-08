@@ -31,6 +31,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// The following Pyston changes were made:
+// - Hash codes are now size_t (64bit) instead of unsigned (32bit)
+// - The map uses the Python allocator
+// - The initial size is now configurable
+// - The probing policy has been changed from quadratic to CPython's "perturb" system
+// - The growth policy has been changed to match CPython's
+//   (quadruple until 50k, then double; max fill factor 3/4)
+
 #ifndef PYSTON_CORE_FROMLLVM_DENSEMAP_H
 #define PYSTON_CORE_FROMLLVM_DENSEMAP_H
 
@@ -43,7 +51,6 @@
 #include <new>
 #include <utility>
 
-#include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/Support/AlignOf.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/MathExtras.h"
@@ -52,6 +59,8 @@
 
 // Pyston change: use the python allocator
 #include "Python.h"
+
+#include "core/from_llvm/DenseMapInfo.h"
 
 namespace pyston {
 
@@ -367,11 +376,11 @@ protected:
     std::swap(getNumTombstones(), RHS.getNumTombstones());
   }
 
-  static unsigned getHashValue(const KeyT &Val) {
+  static size_t getHashValue(const KeyT &Val) {
     return KeyInfoT::getHashValue(Val);
   }
   template<typename LookupKeyT>
-  static unsigned getHashValue(const LookupKeyT &Val) {
+  static size_t getHashValue(const LookupKeyT &Val) {
     return KeyInfoT::getHashValue(Val);
   }
   static const KeyT getEmptyKey() {
@@ -437,6 +446,7 @@ private:
 
     TheBucket->getFirst() = Key;
     new (&TheBucket->getSecond()) ValueT(Value);
+    TheBucket = growMaybe(Key, TheBucket);
     return TheBucket;
   }
 
@@ -446,6 +456,7 @@ private:
 
     TheBucket->getFirst() = Key;
     new (&TheBucket->getSecond()) ValueT(std::move(Value));
+    TheBucket = growMaybe(Key, TheBucket);
     return TheBucket;
   }
 
@@ -454,6 +465,21 @@ private:
 
     TheBucket->getFirst() = std::move(Key);
     new (&TheBucket->getSecond()) ValueT(std::move(Value));
+    TheBucket = growMaybe(Key, TheBucket);
+    return TheBucket;
+  }
+
+  BucketT* growMaybe(const KeyT& Key, BucketT *TheBucket) {
+    unsigned NewNumEntries = getNumEntries();
+    unsigned NumBuckets = getNumBuckets();
+    if (LLVM_UNLIKELY(NewNumEntries * 3 >= NumBuckets * 2)) {
+      this->grow(NewNumEntries * (NewNumEntries > 50000 ? 2 : 4));
+      LookupBucketFor(Key, TheBucket);
+    } else if (LLVM_UNLIKELY(NumBuckets-(NewNumEntries+getNumTombstones()) <=
+                             NumBuckets/8)) {
+      this->grow(NumBuckets);
+      LookupBucketFor(Key, TheBucket);
+    }
     return TheBucket;
   }
 
@@ -469,14 +495,10 @@ private:
     // causing infinite loops in lookup.
     unsigned NewNumEntries = getNumEntries() + 1;
     unsigned NumBuckets = getNumBuckets();
-    if (LLVM_UNLIKELY(NewNumEntries * 4 >= NumBuckets * 3)) {
-      this->grow(NumBuckets * 2);
+    if (LLVM_UNLIKELY(NumBuckets == 0)) {
+      this->grow(NewNumEntries * (NewNumEntries > 50000 ? 2 : 4));
       LookupBucketFor(Key, TheBucket);
       NumBuckets = getNumBuckets();
-    } else if (LLVM_UNLIKELY(NumBuckets-(NewNumEntries+getNumTombstones()) <=
-                             NumBuckets/8)) {
-      this->grow(NumBuckets);
-      LookupBucketFor(Key, TheBucket);
     }
     assert(TheBucket);
 
@@ -515,10 +537,14 @@ private:
            !KeyInfoT::isEqual(Val, TombstoneKey) &&
            "Empty/Tombstone value shouldn't be inserted into map!");
 
-    unsigned BucketNo = getHashValue(Val) & (NumBuckets-1);
-    unsigned ProbeAmt = 1;
+
+    size_t mask = (NumBuckets - 1);
+    size_t perturb = getHashValue(Val);
+    size_t i = perturb & mask;
+    static_assert(sizeof(perturb) == sizeof(void*), "");
+
     while (1) {
-      const BucketT *ThisBucket = BucketsPtr + BucketNo;
+      const BucketT *ThisBucket = BucketsPtr + (i & mask);
       // Found Val's bucket?  If so, return it.
       if (LLVM_LIKELY(KeyInfoT::isEqual(Val, ThisBucket->getFirst()))) {
         FoundBucket = ThisBucket;
@@ -542,8 +568,8 @@ private:
 
       // Otherwise, it's a hash collision or a tombstone, continue quadratic
       // probing.
-      BucketNo += ProbeAmt++;
-      BucketNo &= (NumBuckets-1);
+      i = (i << 2) + i + perturb + 1;
+      perturb >>= 5;
     }
   }
 
