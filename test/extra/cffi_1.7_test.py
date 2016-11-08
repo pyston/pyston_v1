@@ -30,7 +30,12 @@ def install_and_test_cffi():
     # dir_to_test = "."
     # I just picked a subdirectory; I don't really know what it's testing.
     dir_to_test = os.path.join(CFFI_DIR,  "testing", "cffi1")
-    run_test([PYTEST_EXE, dir_to_test], cwd=CFFI_DIR, expected=expected)
+    expected_log_hash = '''
+    gBEACAAQEAIAwICAAAAAAABAAAAAAAACAAAAEAAAEAAAAEQEQAAAAKAAARFEEACKAAABAACAAAAA
+    QgAAAEAQBAACgAEAAABAAAAAAAFAAAoAAAAAAACAAAACAAIAAUiAIAAAAAODgAAgEIQBABAACgAC
+    GBACAAAAICEAABAAgQA=
+    '''
+    run_test([PYTEST_EXE, dir_to_test], cwd=CFFI_DIR, expected=expected, expected_log_hash=expected_log_hash)
 
 create_virtenv(ENV_NAME, ["pytest==2.8.7", "py==1.4.31", "pycparser==2.14"], force_create = True)
 install_and_test_cffi()

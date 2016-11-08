@@ -15,5 +15,9 @@ packages += ["-e", "git+https://github.com/dahlia/libsass-python@0.8.3#egg=libsa
 create_virtenv(ENV_NAME, packages, force_create = True)
 
 expected = [{'ran': 75}]
-run_test([PYTHON_EXE, "setup.py", "test"], cwd=SASS_DIR, expected=expected)
-
+expected_log_hash = '''
+wEAIQAAAAAQEhBAAAAgQIF0QAAAQQAAAQigEAAwwABACAARUEBEAACTAAAQAEAAIAABJgQAEACAC
+AEAAUQQACBAAAAEBBABAARAAAQgCAHAWBQQAAABkaDABQAAYYAAEJtgCAIAgcoASgAwgUAAIRAQR
+QAQgIAQACCAgFEDEiFA=
+'''
+run_test([PYTHON_EXE, "setup.py", "test"], cwd=SASS_DIR, expected=expected, expected_log_hash=expected_log_hash)

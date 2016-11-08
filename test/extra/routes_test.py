@@ -13,4 +13,9 @@ create_virtenv(ENV_NAME, pkg, force_create = True)
 
 ROUTES_DIR = os.path.abspath(os.path.join(SRC_DIR, "routes"))
 expected = [{ "ran" : 141 }]
-run_test([PYTHON_EXE, "setup.py", "test"], cwd=ROUTES_DIR, expected=expected)
+expected_log_hash = '''
+ggSACQMCAQZABAAUIIMCEABCAAAgQAACDAUABAKgAAgEAAECIAAgIAgBABQICCDoIkNQgQAAIQQE
+xACSGAIAoIAAAgAQAQEIAAAQAFhWACgBBHAEYAAgIBQAUGAAAAIABCAEQEgAAAFAACAAAo5EgBAA
+AAAQCSBIURAAwDCAkQA=
+'''
+run_test([PYTHON_EXE, "setup.py", "test"], cwd=ROUTES_DIR, expected=expected, expected_log_hash=expected_log_hash)

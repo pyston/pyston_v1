@@ -11,4 +11,12 @@ pkg = ["nose==1.3.7", "-e", "git+http://github.com/maxmind/geoip-api-python.git@
 create_virtenv(ENV_NAME, pkg, force_create = True)
 GEOIP_DIR = os.path.abspath(os.path.join(SRC_DIR, "geoip"))
 expected = [{'ran': 10}]
-run_test([PYTHON_EXE, "setup.py", "test"], cwd=GEOIP_DIR, expected=expected)
+
+expected_log_hash = '''
+ggAAAAAAQAQAAAAACAAAAAAAAAAAAAIABIAAAAAAgAACAAAAAAAIAAAAAAAAAAIIBAAAgABABAgA
+AAAAAAAAAAAAAAAAAAAAAAQAAIgAAAAAAAAAAQBAABAAEAEAAAAAAAAAAAgAAAAIAIAAAAEAAAAA
+AIAAAAgAAAAAAAAAAAA=
+'''
+
+
+run_test([PYTHON_EXE, "setup.py", "test"], cwd=GEOIP_DIR, expected=expected, expected_log_hash=expected_log_hash)

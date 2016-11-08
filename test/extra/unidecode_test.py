@@ -20,7 +20,12 @@ def install_and_test_unidecode():
     subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=UNIDECODE_DIR)
     
     expected = [{'ran': 8}]
-    run_test([PYTHON_EXE, "setup.py", "test"], cwd=UNIDECODE_DIR, expected=expected)
-    
+    expected_log_hash = '''
+    gECAAAAAAAAAAABAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAA
+    AAAAGAAAAAAAAAAAAAAAAAQAAggAAAAAAAAAAAAAABAAAAIAAAAAAAAAAAAAAAggAAAAAAAAAAAA
+    AAAAAAAAAAAAAAAAAAA=
+    '''
+
+    run_test([PYTHON_EXE, "setup.py", "test"], cwd=UNIDECODE_DIR, expected=expected, expected_log_hash=expected_log_hash)
 create_virtenv(ENV_NAME, None, force_create = True)
 install_and_test_unidecode()

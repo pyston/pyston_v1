@@ -20,4 +20,9 @@ subprocess.check_call([PYTHON_EXE, "setup.py", "build"], cwd=BABEL_DIR)
 subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=BABEL_DIR)
 
 expected = [{"ran": 227, "failures": 3, "errors": 3}]
-run_test([NOSETESTS_EXE], cwd=BABEL_DIR, expected=expected)
+expected_log_hash = '''
+gAIAAAAACQAAAABAAAAABAAAAIAAEAAAAAAAAAAAAEAEBAAAAAAAkAAAAAAAAAAAQAAEgAAAAAAA
+AAAAAAAAAQAACAgAAAAAAAAAIAAJAAAAAAAAAAAAAAAAAAAAAEAAAAAAAhAAAAAAAAAAEACAAAAA
+EIgAAAAQAAAAAIAAAAA=
+'''
+run_test([NOSETESTS_EXE], cwd=BABEL_DIR, expected=expected, expected_log_hash=expected_log_hash)

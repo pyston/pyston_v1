@@ -77,8 +77,13 @@ except:
 
     raise
 
+expected_log_hash = '''
+gAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAQAAAAAABAAACAAAAAAAAAAAAA
+AAAgAAAAAAAAAAAAAAA=
+'''
 test_helper.run_test(['sh', '-c', '. %s/bin/activate && python %s/numpy/tools/test-installed-numpy.py' % (ENV_DIR, ENV_DIR)],
-        ENV_NAME, [dict(ran=6139, failures=1)])
+        ENV_NAME, [dict(ran=6139, failures=1)], expected_log_hash=expected_log_hash)
 
 print
 print "PASSED"

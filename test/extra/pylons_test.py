@@ -18,12 +18,17 @@ def install_and_test_pylons():
     PYLONS_DIR = os.path.abspath(os.path.join(SRC_DIR, "Pylons-0.9.6.2"))
 
     subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=PYLONS_DIR)
- 
+
     # most of the errors are because of our coerceUnicodeToStr which raises a TypeError instead of a UnicodeError
     # but as we don't support the unicode string correctly every where I don't want to change this currently.
     expected = [{ "ran": 50, "errors": 7}]
-    run_test([NOSE_EXE], cwd=PYLONS_DIR, expected=expected)
- 
+    expected_log_hash = '''
+    wLKBAAEAEQAABEAgAAUAYBABtBACiIFIAoAIIAiAYAIUBADgCOIAggAIBACQCAgIgAGBgCAsAIAB
+    FCIAQAAQAQQAmQoAAACEMQAiAaIAFIgAEEAAAUgAAGAIQAEAAEBQQABQAEAAAAAAAiEiIEAAAEIC
+    ECBAiigwIAAABAQIAQE=
+    '''
+    run_test([NOSE_EXE], cwd=PYLONS_DIR, expected=expected, expected_log_hash=expected_log_hash)
+
 pkg = [ "Mako==1.0.3",
         "decorator==4.0.9",
         "simplejson==3.8.2",

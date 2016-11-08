@@ -26,7 +26,7 @@ def install_and_test_lxml():
                       "skip_sslv2_tests.patch",
                       "fix_testsuite_ftbfs.patch",
                       "fix_testsuite_tls1.2.patch",
-                      "fix_testsuite_sha256.patch")	
+                      "fix_testsuite_sha256.patch")
 
     for patch in debian_patches:
         PATCH_FILE = os.path.abspath(os.path.join(M2CRYPTO_DIR, "debian", "patches", patch))
@@ -39,11 +39,16 @@ def install_and_test_lxml():
     # M2Crypto can't find the opensslconf without this
     env["DEB_HOST_MULTIARCH"] = "/usr/include/x86_64-linux-gnu"
     # SWIG does not work with pyston if this define is not set
-    env["CFLAGS"] = "-DSWIG_PYTHON_SLOW_GETSET_THIS" 
+    env["CFLAGS"] = "-DSWIG_PYTHON_SLOW_GETSET_THIS"
     subprocess.check_call([PYTHON_EXE, "setup.py", "install"], cwd=M2CRYPTO_DIR, env=env)
 
     expected = [{'ran': 235, 'errors': 5, 'skipped': 2}]
-    run_test([PYTHON_EXE, "setup.py", "test"], cwd=M2CRYPTO_DIR, expected=expected)
-   
+    expected_log_hash = '''
+    rAAABwigI04NBogROC1ATTYBiAUIAMhCMKBLQAC1SMALgBCRQIIAgKOpBBGgIaMKAAUAkVgCUJAA
+    ABCMAIwJAQAAwONQATYSBmEYSACDAEUoRABkJKEAhBBEMgYMwQoFABBwCETByQggaAkAqAgUgAAG
+    QBWgAamiIaSEIIIiGjE=
+    '''
+    run_test([PYTHON_EXE, "setup.py", "test"], cwd=M2CRYPTO_DIR, expected=expected, expected_log_hash=expected_log_hash)
+
 create_virtenv(ENV_NAME, None, force_create = True)
 install_and_test_lxml()
