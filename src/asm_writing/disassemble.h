@@ -15,7 +15,9 @@
 #ifndef PYSTON_ASMWRITING_DISASSEMBLE_H
 #define PYSTON_ASMWRITING_DISASSEMBLE_H
 
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/raw_ostream.h"
