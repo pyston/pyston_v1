@@ -89,7 +89,7 @@ test_hotshot            No module named _hotshot
 test_idle               No module named Tkinter
 test_imageop            No module named imageop
 test_imgfile            no module named imgfile
-test_importhooks        "import compiler" doesnt work
+test_importhooks        "import compiler" doesn't work
 test_import             Marshaling code objects not supported
 test_inspect            missing sys.exc_traceback
 test_io                 memory/gc issue?

@@ -16,7 +16,7 @@ try:
 except ImportError, e:
     print e
 
-# Run it all again inside a funtion scope:
+# Run it all again inside a function scope:
 def f():
     try:
         import non_existent_module

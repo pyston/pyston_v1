@@ -408,7 +408,7 @@ imp_modules_reloading_clear(void)
 }
 
 /* Helper for sys */
-// Pyston change: use diferent implementation from import.cpp
+// Pyston change: use different implementation from import.cpp
 #if 0
 PyObject *
 PyImport_GetModuleDict(void)

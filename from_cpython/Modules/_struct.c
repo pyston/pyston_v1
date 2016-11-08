@@ -1846,7 +1846,7 @@ static PyObject *
 clearcache(PyObject *self)
 {
     // `cache` is already registered as a static root; we would need to unregister it.
-    Py_FatalError("_struct.clearcache dosen't currently work well with Pyston");
+    Py_FatalError("_struct.clearcache doesn't currently work well with Pyston");
     abort();
     Py_CLEAR(cache);
     Py_RETURN_NONE;

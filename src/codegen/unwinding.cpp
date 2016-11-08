@@ -580,7 +580,7 @@ public:
     }
 
     void handleCFrame(unw_cursor_t* cursor) {
-        // deinit the previous frame and do decrefs if neccessary
+        // deinit the previous frame and do decrefs if necessary
         // but we need to pause unwinding because decrefing objects can cause finalizers to get run (and they can use
         // exceptions).
         unw_word_t ip = get_cursor_ip(cursor);

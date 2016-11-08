@@ -510,7 +510,7 @@ class PyBuildExt(build_ext):
                 add_dir_to_list(inc_dirs, d)
             for d in (
                 '/lib64', '/usr/lib64',
-                # Pyston change: add addtional search path for lib
+                # Pyston change: add additional search path for lib
                 '/lib', '/usr/lib', '/usr/lib/x86_64-linux-gnu'
                 ):
                 add_dir_to_list(lib_dirs, d)

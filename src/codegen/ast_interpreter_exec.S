@@ -14,7 +14,7 @@
 
 // This functions sets up a fixed stack frame which we use to detect ASTInterpreter frames
 // and which makes it easy retrieve the passed ASTInterpreter pointer (stored at frame_ptr-8). 
-// It's written in ASM to make sure the stack layout keeps beeing the same and that nothing gets inlined.
+// It's written in ASM to make sure the stack layout keeps being the same and that nothing gets inlined.
 // Our unwinder treats this function specialy.
 
 // Box* executeInnerAndSetupFrame(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at)
@@ -40,7 +40,7 @@ executeInnerAndSetupFrame:
 .size executeInnerAndSetupFrame,.-executeInnerAndSetupFrame
 
 // This function is just a small wrapper around astInterpretDeoptFromASM.
-// Our unwinder must be able to detect deopt frames and by writting this wrapper in assembler we can be sure to correctly
+// Our unwinder must be able to detect deopt frames and by writing this wrapper in assembler we can be sure to correctly
 // detect the frame independent of compiler optimizations because this function will always appear in the call stack.
 //
 // Box* astInterpretDeopt(FunctionMetadata* cf, AST_stmt* enclosing_stmt, Box* expr_val,

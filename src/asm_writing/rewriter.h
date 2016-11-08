@@ -250,7 +250,7 @@ private:
     // Call this on the result at the end of the action in which it's created
     // TODO we should have a better way of dealing with variables that have 0 uses
     void releaseIfNoUses();
-    // Helper funciton to release all the resources that this var is using.
+    // Helper function to release all the resources that this var is using.
     // Don't call it directly: call bumpUse and releaseIfNoUses instead.
     void _release();
     bool isDoneUsing() { return next_use == uses.size(); }

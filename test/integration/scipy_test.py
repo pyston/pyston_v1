@@ -12,7 +12,7 @@ from test_helper import run_test
 """
 Using this test file.
 
-Note that sometimes it can be a pain to run this script everytime you make a
+Note that sometimes it can be a pain to run this script every time you make a
 change, as it does take a while. You can cd to the scipy_test_env_* directory
 and run the binaries inside of that folder, which will be able to "see" the
 SciPy module. For example:
