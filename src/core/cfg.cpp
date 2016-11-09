@@ -1464,8 +1464,10 @@ private:
         static BoxedString* gen_name = getStaticString("<generator>");
 
         BoxedCode* code = cfgizer->runRecursively(new_body, gen_name, node->lineno, genexp_args, node);
-        BST_FunctionDef* func = BST_FunctionDef::create(0, 0);
-        BST_MakeFunction* mkfunc = allocAndPush<BST_MakeFunction>(func, code_constants.addFuncOrClass(func, code));
+        BST_MakeFunction* mkfunc = allocAndPush<BST_MakeFunction>(0, 0);
+        mkfunc->lineno = node->lineno;
+        mkfunc->vreg_code_obj = code_constants.createVRegEntryForConstant(code);
+        code_constants.addOwnedRef(code);
         TmpValue func_var_name = createDstName(mkfunc);
 
         return makeCall(func_var_name, { first });
@@ -1522,8 +1524,10 @@ private:
         static BoxedString* comp_name = getStaticString("<comperehension>");
 
         BoxedCode* code = cfgizer->runRecursively(new_body, comp_name, node->lineno, args, node);
-        BST_FunctionDef* func = BST_FunctionDef::create(0, 0);
-        BST_MakeFunction* mkfunc = allocAndPush<BST_MakeFunction>(func, code_constants.addFuncOrClass(func, code));
+        BST_MakeFunction* mkfunc = allocAndPush<BST_MakeFunction>(0, 0);
+        mkfunc->lineno = node->lineno;
+        mkfunc->vreg_code_obj = code_constants.createVRegEntryForConstant(code);
+        code_constants.addOwnedRef(code);
         TmpValue func_var_name = createDstName(mkfunc);
 
         return makeCall(func_var_name, { first });
@@ -1564,16 +1568,22 @@ private:
 
         stmt->value = node->body; // don't remap now; will be CFG'ed later
 
-        auto bdef = BST_FunctionDef::create(0 /* decorators */, node->args->defaults.size());
-        bdef->lineno = node->lineno;
+        llvm::SmallVector<TmpValue, 8> remapped_defaults;
+        for (int i = 0; i < node->args->defaults.size(); ++i) {
+            remapped_defaults.emplace_back(remapExpr(node->args->defaults[i]));
+        }
+
+        auto mkfn = allocAndPush<BST_MakeFunction>(0 /* decorators */, node->args->defaults.size());
+        mkfn->lineno = node->lineno;
 
         for (int i = 0; i < node->args->defaults.size(); ++i) {
-            unmapExpr(remapExpr(node->args->defaults[i]), &bdef->elts[i]);
+            unmapExpr(remapped_defaults[i], &mkfn->elts[i]);
         }
 
         auto name = getStaticString("<lambda>");
-        auto* code = cfgizer->runRecursively({ stmt }, name, node->lineno, node->args, node);
-        auto mkfn = allocAndPush<BST_MakeFunction>(bdef, code_constants.addFuncOrClass(bdef, code));
+        auto* code = cfgizer->runRecursively({ stmt }, name, mkfn->lineno, node->args, node);
+        mkfn->vreg_code_obj = code_constants.createVRegEntryForConstant(code);
+        code_constants.addOwnedRef(code);
 
         return createDstName(mkfn);
     }
@@ -1896,18 +1906,20 @@ public:
         }
         TmpValue bases_name = createDstName(bases);
 
-        auto def = BST_ClassDef::create(node->decorator_list.size());
-        def->lineno = node->lineno;
-        def->index_name = remapInternedString(node->name);
+        auto mkclass = allocAndPush<BST_MakeClass>(node->decorator_list.size());
+        mkclass->lineno = node->lineno;
+        mkclass->index_name = remapInternedString(node->name);
 
         for (int i = 0; i < node->decorator_list.size(); ++i) {
-            unmapExpr(remapped_deco[i], &def->decorator[i]);
+            unmapExpr(remapped_deco[i], &mkclass->decorator[i]);
         }
 
-        unmapExpr(bases_name, &def->vreg_bases_tuple);
+        unmapExpr(bases_name, &mkclass->vreg_bases_tuple);
 
         auto* code = cfgizer->runRecursively(node->body, node->name.getBox(), node->lineno, NULL, node);
-        auto mkclass = allocAndPush<BST_MakeClass>(def, code_constants.addFuncOrClass(def, code));
+        mkclass->vreg_code_obj = code_constants.createVRegEntryForConstant(code);
+        code_constants.addOwnedRef(code);
+
         auto tmp = createDstName(mkclass);
         pushAssign(TmpValue(scoping->mangleName(node->name), node->lineno), tmp);
 
@@ -1926,21 +1938,22 @@ public:
             remapped_defaults.emplace_back(remapExpr(node->args->defaults[i]));
         }
 
-        auto def = BST_FunctionDef::create(node->decorator_list.size(), node->args->defaults.size());
-        def->lineno = node->lineno;
-        def->index_name = remapInternedString(node->name);
+        auto mkfunc = allocAndPush<BST_MakeFunction>(node->decorator_list.size(), node->args->defaults.size());
+        mkfunc->lineno = node->lineno;
+        mkfunc->index_name = remapInternedString(node->name);
 
         // Decorators are evaluated before the defaults, so this *must* go before remapArguments().
         // TODO(rntz): do we have a test for this
         for (int i = 0; i < node->decorator_list.size(); ++i) {
-            unmapExpr(remapped_deco[i], &def->elts[i]);
+            unmapExpr(remapped_deco[i], &mkfunc->elts[i]);
         }
         for (int i = 0; i < node->args->defaults.size(); ++i) {
-            unmapExpr(remapped_defaults[i], &def->elts[node->decorator_list.size() + i]);
+            unmapExpr(remapped_defaults[i], &mkfunc->elts[node->decorator_list.size() + i]);
         }
 
         auto* code = cfgizer->runRecursively(node->body, node->name.getBox(), node->lineno, node->args, node);
-        auto mkfunc = allocAndPush<BST_MakeFunction>(def, code_constants.addFuncOrClass(def, code));
+        mkfunc->vreg_code_obj = code_constants.createVRegEntryForConstant(code);
+        code_constants.addOwnedRef(code);
         auto tmp = createDstName(mkfunc);
         pushAssign(TmpValue(scoping->mangleName(node->name), node->lineno), tmp);
 

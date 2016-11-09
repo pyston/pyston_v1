@@ -43,49 +43,47 @@ namespace BST_TYPE {
     X(CallClsAttr, 6)                                                                                                  \
     X(CallFunc, 7)                                                                                                     \
     X(CheckExcMatch, 8)                                                                                                \
-    X(ClassDef, 9)                                                                                                     \
-    X(Compare, 10)                                                                                                     \
-    X(CopyVReg, 11)                                                                                                    \
-    X(DeleteAttr, 12)                                                                                                  \
-    X(DeleteName, 13)                                                                                                  \
-    X(DeleteSub, 14)                                                                                                   \
-    X(DeleteSubSlice, 15)                                                                                              \
-    X(Dict, 16)                                                                                                        \
-    X(Exec, 17)                                                                                                        \
-    X(FunctionDef, 18)                                                                                                 \
-    X(GetIter, 19)                                                                                                     \
-    X(HasNext, 20)                                                                                                     \
-    X(ImportFrom, 21)                                                                                                  \
-    X(ImportName, 22)                                                                                                  \
-    X(ImportStar, 23)                                                                                                  \
-    X(Jump, 24)                                                                                                        \
-    X(Landingpad, 25)                                                                                                  \
-    X(List, 26)                                                                                                        \
-    X(LoadAttr, 27)                                                                                                    \
-    X(LoadName, 28)                                                                                                    \
-    X(LoadSub, 29)                                                                                                     \
-    X(LoadSubSlice, 30)                                                                                                \
-    X(Locals, 31)                                                                                                      \
-    X(MakeClass, 32)                                                                                                   \
-    X(MakeFunction, 33)                                                                                                \
-    X(MakeSlice, 34)                                                                                                   \
-    X(Nonzero, 35)                                                                                                     \
-    X(Print, 36)                                                                                                       \
-    X(PrintExpr, 37)                                                                                                   \
-    X(Raise, 38)                                                                                                       \
-    X(Repr, 39)                                                                                                        \
-    X(Return, 40)                                                                                                      \
-    X(Set, 41)                                                                                                         \
-    X(SetExcInfo, 42)                                                                                                  \
-    X(StoreAttr, 43)                                                                                                   \
-    X(StoreName, 44)                                                                                                   \
-    X(StoreSub, 45)                                                                                                    \
-    X(StoreSubSlice, 46)                                                                                               \
-    X(Tuple, 47)                                                                                                       \
-    X(UnaryOp, 48)                                                                                                     \
-    X(UncacheExcInfo, 49)                                                                                              \
-    X(UnpackIntoArray, 50)                                                                                             \
-    X(Yield, 51)
+    X(Compare, 9)                                                                                                      \
+    X(CopyVReg, 10)                                                                                                    \
+    X(DeleteAttr, 11)                                                                                                  \
+    X(DeleteName, 12)                                                                                                  \
+    X(DeleteSub, 13)                                                                                                   \
+    X(DeleteSubSlice, 14)                                                                                              \
+    X(Dict, 15)                                                                                                        \
+    X(Exec, 16)                                                                                                        \
+    X(GetIter, 17)                                                                                                     \
+    X(HasNext, 18)                                                                                                     \
+    X(ImportFrom, 19)                                                                                                  \
+    X(ImportName, 20)                                                                                                  \
+    X(ImportStar, 21)                                                                                                  \
+    X(Jump, 22)                                                                                                        \
+    X(Landingpad, 23)                                                                                                  \
+    X(List, 24)                                                                                                        \
+    X(LoadAttr, 25)                                                                                                    \
+    X(LoadName, 26)                                                                                                    \
+    X(LoadSub, 27)                                                                                                     \
+    X(LoadSubSlice, 28)                                                                                                \
+    X(Locals, 29)                                                                                                      \
+    X(MakeClass, 30)                                                                                                   \
+    X(MakeFunction, 31)                                                                                                \
+    X(MakeSlice, 32)                                                                                                   \
+    X(Nonzero, 33)                                                                                                     \
+    X(Print, 34)                                                                                                       \
+    X(PrintExpr, 35)                                                                                                   \
+    X(Raise, 36)                                                                                                       \
+    X(Repr, 37)                                                                                                        \
+    X(Return, 38)                                                                                                      \
+    X(Set, 39)                                                                                                         \
+    X(SetExcInfo, 40)                                                                                                  \
+    X(StoreAttr, 41)                                                                                                   \
+    X(StoreName, 42)                                                                                                   \
+    X(StoreSub, 43)                                                                                                    \
+    X(StoreSubSlice, 44)                                                                                               \
+    X(Tuple, 45)                                                                                                       \
+    X(UnaryOp, 46)                                                                                                     \
+    X(UncacheExcInfo, 47)                                                                                              \
+    X(UnpackIntoArray, 48)                                                                                             \
+    X(Yield, 49)
 
 #define GENERATE_ENUM(ENUM, N) ENUM = N,
 #define GENERATE_STRING(STRING, N) m[N] = #STRING;
@@ -241,13 +239,13 @@ public:                                                                         
     static BST_##opcode* create(BSTAllocator& alloc, int num_elts) {                                                   \
         return new (alloc, num_elts) BST_##opcode(num_elts);                                                           \
     }                                                                                                                  \
-    static void operator delete(void* ptr) { RELEASE_ASSERT(0, ""); }                                                  \
     int size_in_bytes() const { return offsetof(BST_##opcode, vreg_dst) + num_elts * sizeof(int); }                    \
                                                                                                                        \
 private:                                                                                                               \
     static void* operator new(size_t, BSTAllocator & alloc, int num_elts) {                                            \
         return alloc.allocate(offsetof(BST_##opcode, vreg_dst) + num_elts * sizeof(int));                              \
     }                                                                                                                  \
+    static void operator delete(void* ptr) { RELEASE_ASSERT(0, ""); }                                                  \
     BST_##opcode(int num_elts) : base_class(BST_TYPE::opcode), num_elts(num_elts) {                                    \
         for (int i = 0; i < num_elts; ++i) {                                                                           \
             vreg_dst[i] = VREG_UNDEFINED;                                                                              \
@@ -260,13 +258,13 @@ public:                                                                         
     static BST_##opcode* create(BSTAllocator& alloc, int num_elts, int num_elts2) {                                    \
         return new (alloc, num_elts + num_elts2) BST_##opcode(num_elts, num_elts2);                                    \
     }                                                                                                                  \
-    static void operator delete(void* ptr) { ::operator delete[](ptr); }                                               \
     int size_in_bytes() const { return offsetof(BST_##opcode, vreg_dst) + (num_elts + num_elts2) * sizeof(int); }      \
                                                                                                                        \
 private:                                                                                                               \
     static void* operator new(size_t, BSTAllocator & alloc, int num_elts_total) {                                      \
         return alloc.allocate(offsetof(BST_##opcode, vreg_dst) + num_elts_total * sizeof(int));                        \
     }                                                                                                                  \
+    static void operator delete(void* ptr) { RELEASE_ASSERT(0, ""); }                                                  \
     BST_##opcode(int num_elts, int num_elts2)                                                                          \
         : base_class(BST_TYPE::opcode), num_elts(num_elts), num_elts2(num_elts2) {                                     \
         for (int i = 0; i < num_elts + num_elts2; ++i) {                                                               \
@@ -467,21 +465,6 @@ public:
     BSTFIXEDVREGS(Compare, BST_stmt_with_dest)
 } PACKED;
 
-class BST_ClassDef : public BST_stmt {
-public:
-    int index_name = VREG_UNDEFINED;
-    int vreg_bases_tuple = VREG_UNDEFINED;
-    const int num_decorator;
-    int decorator[1];
-
-    static BST_ClassDef* create(int num_decorator) { return new (num_decorator) BST_ClassDef(num_decorator); }
-    static void* operator new(size_t, int num_decorator) {
-        return ::new unsigned char[offsetof(BST_ClassDef, decorator) + num_decorator * sizeof(int)];
-    }
-
-    BSTVARVREGS(ClassDef, BST_stmt, num_decorator, decorator)
-} PACKED;
-
 class BST_Dict : public BST_stmt_with_dest {
 public:
     BSTFIXEDVREGS(Dict, BST_stmt_with_dest)
@@ -533,25 +516,6 @@ public:
     int vreg_locals = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(Exec, BST_stmt)
-} PACKED;
-
-class BST_FunctionDef : public BST_stmt {
-public:
-    int index_name = VREG_UNDEFINED; // if the name is not set this is a lambda
-
-    const int num_decorator;
-    const int num_defaults;
-
-    int elts[1]; // decorators followed by defaults
-
-    static BST_FunctionDef* create(int num_decorator, int num_defaults) {
-        return new (num_decorator + num_defaults) BST_FunctionDef(num_decorator, num_defaults);
-    }
-    static void* operator new(size_t, int num_elts) {
-        return ::new unsigned char[offsetof(BST_FunctionDef, elts) + num_elts * sizeof(int)];
-    }
-
-    BSTVARVREGS2(FunctionDef, BST_stmt, num_decorator, num_defaults, elts)
 } PACKED;
 
 class BST_List : public BST_stmt_with_dest {
@@ -636,38 +600,27 @@ public:
 
 class BST_MakeFunction : public BST_stmt_with_dest {
 public:
-    const int index_func_def;
+    int index_name = VREG_UNDEFINED; // if the name is not set this is a lambda
+    int vreg_code_obj = VREG_UNDEFINED;
 
-    BST_MakeFunction(BST_FunctionDef* fd, int index_func_def)
-        : BST_stmt_with_dest(BST_TYPE::MakeFunction, fd->lineno), index_func_def(index_func_def) {}
-    int size_in_bytes() const { return sizeof(*this); }
+    const int num_decorator;
+    const int num_defaults;
 
-    static BST_MakeFunction* create(BSTAllocator& alloc, BST_FunctionDef* fd, int index_func_def) {
-        return new (alloc) BST_MakeFunction(fd, index_func_def);
-    }
+    int elts[1]; // decorators followed by defaultss
 
-    static void* operator new(size_t s, BSTAllocator& alloc) { return alloc.allocate(s); }
-    static void operator delete(void* ptr) { RELEASE_ASSERT(0, ""); }
-
-    BSTNODE(MakeFunction)
+    BSTVARVREGS2(MakeFunction, BST_stmt_with_dest, num_decorator, num_defaults, elts)
 } PACKED;
 
 class BST_MakeClass : public BST_stmt_with_dest {
 public:
-    const int index_class_def;
+    int index_name = VREG_UNDEFINED;
+    int vreg_code_obj = VREG_UNDEFINED;
 
-    BST_MakeClass(BST_ClassDef* cd, int index_class_def)
-        : BST_stmt_with_dest(BST_TYPE::MakeClass, cd->lineno), index_class_def(index_class_def) {}
-    int size_in_bytes() const { return sizeof(*this); }
+    int vreg_bases_tuple = VREG_UNDEFINED;
+    const int num_decorator;
+    int decorator[1];
 
-    static BST_MakeClass* create(BSTAllocator& alloc, BST_ClassDef* cd, int index_class_def) {
-        return new (alloc) BST_MakeClass(cd, index_class_def);
-    }
-
-    static void* operator new(size_t s, BSTAllocator& alloc) { return alloc.allocate(s); }
-    static void operator delete(void* ptr) { RELEASE_ASSERT(0, ""); }
-
-    BSTNODE(MakeClass)
+    BSTVARVREGS(MakeClass, BST_stmt_with_dest, num_decorator, decorator)
 } PACKED;
 
 class CFGBlock;
@@ -851,7 +804,6 @@ public:
     virtual bool visit_callclsattr(BST_CallClsAttr* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_callfunc(BST_CallFunc* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_checkexcmatch(BST_CheckExcMatch* node) { RELEASE_ASSERT(0, ""); }
-    virtual bool visit_classdef(BST_ClassDef* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_compare(BST_Compare* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_copyvreg(BST_CopyVReg* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_deleteattr(BST_DeleteAttr* node) { RELEASE_ASSERT(0, ""); }
@@ -860,7 +812,6 @@ public:
     virtual bool visit_deletesubslice(BST_DeleteSubSlice* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_dict(BST_Dict* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_exec(BST_Exec* node) { RELEASE_ASSERT(0, ""); }
-    virtual bool visit_functiondef(BST_FunctionDef* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_getiter(BST_GetIter* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_hasnext(BST_HasNext* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_importfrom(BST_ImportFrom* node) { RELEASE_ASSERT(0, ""); }
@@ -910,7 +861,6 @@ public:
     virtual bool visit_callclsattr(BST_CallClsAttr* node) override { return false; }
     virtual bool visit_callfunc(BST_CallFunc* node) override { return false; }
     virtual bool visit_checkexcmatch(BST_CheckExcMatch* node) override { return false; }
-    virtual bool visit_classdef(BST_ClassDef* node) override { return false; }
     virtual bool visit_compare(BST_Compare* node) override { return false; }
     virtual bool visit_copyvreg(BST_CopyVReg* node) override { return false; }
     virtual bool visit_deleteattr(BST_DeleteAttr* node) override { return false; }
@@ -919,7 +869,6 @@ public:
     virtual bool visit_deletesubslice(BST_DeleteSubSlice* node) override { return false; }
     virtual bool visit_dict(BST_Dict* node) override { return false; }
     virtual bool visit_exec(BST_Exec* node) override { return false; }
-    virtual bool visit_functiondef(BST_FunctionDef* node) override { return false; }
     virtual bool visit_getiter(BST_GetIter* node) override { return false; }
     virtual bool visit_hasnext(BST_HasNext* node) override { return false; }
     virtual bool visit_importfrom(BST_ImportFrom* node) override { return false; }
@@ -972,7 +921,6 @@ public:
     virtual void visit_callclsattr(BST_CallClsAttr* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_callfunc(BST_CallFunc* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_checkexcmatch(BST_CheckExcMatch* node) { RELEASE_ASSERT(0, ""); }
-    virtual void visit_classdef(BST_ClassDef* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_compare(BST_Compare* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_copyvreg(BST_CopyVReg* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_deleteattr(BST_DeleteAttr* node) { RELEASE_ASSERT(0, ""); }
@@ -981,7 +929,6 @@ public:
     virtual void visit_deletesubslice(BST_DeleteSubSlice* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_dict(BST_Dict* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_exec(BST_Exec* node) { RELEASE_ASSERT(0, ""); }
-    virtual void visit_functiondef(BST_FunctionDef* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_getiter(BST_GetIter* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_hasnext(BST_HasNext* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_importfrom(BST_ImportFrom* node) { RELEASE_ASSERT(0, ""); }
@@ -1045,7 +992,6 @@ public:
     virtual bool visit_callclsattr(BST_CallClsAttr* node);
     virtual bool visit_callfunc(BST_CallFunc* node);
     virtual bool visit_checkexcmatch(BST_CheckExcMatch* node);
-    virtual bool visit_classdef(BST_ClassDef* node);
     virtual bool visit_compare(BST_Compare* node);
     virtual bool visit_copyvreg(BST_CopyVReg* node);
     virtual bool visit_deleteattr(BST_DeleteAttr* node);
@@ -1054,7 +1000,6 @@ public:
     virtual bool visit_deletesubslice(BST_DeleteSubSlice* node);
     virtual bool visit_dict(BST_Dict* node);
     virtual bool visit_exec(BST_Exec* node);
-    virtual bool visit_functiondef(BST_FunctionDef* node);
     virtual bool visit_getiter(BST_GetIter* node);
     virtual bool visit_hasnext(BST_HasNext* node);
     virtual bool visit_importfrom(BST_ImportFrom* node);

@@ -76,7 +76,7 @@ public:
 private:
     Value executeStmt(BST_stmt* node);
 
-    Value createFunction(BST_FunctionDef* node, BoxedCode* node_code);
+    Value createFunction(BST_MakeFunction* node, BoxedCode* node_code);
     Value doBinOp(BST_stmt* node, Value left, Value right, int op, BinExpType exp_type);
     void doStore(int vreg, STOLEN(Value) value);
     void doStoreArg(BST_Name* name, STOLEN(Value) value);
@@ -1126,7 +1126,7 @@ Value ASTInterpreter::visit_return(BST_Return* node) {
     return s;
 }
 
-Value ASTInterpreter::createFunction(BST_FunctionDef* node, BoxedCode* code) {
+Value ASTInterpreter::createFunction(BST_MakeFunction* node, BoxedCode* code) {
     assert(code);
 
     std::vector<Box*> defaults;
@@ -1205,16 +1205,17 @@ Value ASTInterpreter::createFunction(BST_FunctionDef* node, BoxedCode* code) {
     return rtn;
 }
 
-Value ASTInterpreter::visit_makeFunction(BST_MakeFunction* mkfn) {
-    auto func_entry = getCodeConstants().getFuncOrClass(mkfn->index_func_def);
-    auto node = bst_cast<BST_FunctionDef>(func_entry.first);
+Value ASTInterpreter::visit_makeFunction(BST_MakeFunction* node) {
+    BoxedCode* code = (BoxedCode*)getCodeConstants().getConstant(node->vreg_code_obj);
+    assert(code);
+    assert(code->cls == code_cls);
 
     std::vector<Value> decorators;
     decorators.reserve(node->num_decorator);
     for (int i = 0; i < node->num_decorator; ++i)
         decorators.push_back(getVReg(node->elts[i]));
 
-    Value func = createFunction(node, func_entry.second);
+    Value func = createFunction(node, code);
 
     for (int i = decorators.size() - 1; i >= 0; i--) {
         func.o = runtimeCall(autoDecref(decorators[i].o), ArgPassSpec(1), autoDecref(func.o), 0, 0, 0, 0);
@@ -1227,11 +1228,8 @@ Value ASTInterpreter::visit_makeFunction(BST_MakeFunction* mkfn) {
     return func;
 }
 
-Value ASTInterpreter::visit_makeClass(BST_MakeClass* mkclass) {
+Value ASTInterpreter::visit_makeClass(BST_MakeClass* node) {
     abortJITing();
-
-    auto class_entry = getCodeConstants().getFuncOrClass(mkclass->index_class_def);
-    auto node = bst_cast<BST_ClassDef>(class_entry.first);
 
     BoxedTuple* bases_tuple = (BoxedTuple*)getVReg(node->vreg_bases_tuple).o;
     assert(bases_tuple->cls == tuple_cls);
@@ -1243,8 +1241,9 @@ Value ASTInterpreter::visit_makeClass(BST_MakeClass* mkclass) {
         decorators.push_back(getVReg(node->decorator[i]).o);
     }
 
-    BoxedCode* code = class_entry.second;
+    BoxedCode* code = (BoxedCode*)getCodeConstants().getConstant(node->vreg_code_obj);
     assert(code);
+    assert(code->cls == code_cls);
 
     const ScopingResults& scope_info = code->source->scoping;
 

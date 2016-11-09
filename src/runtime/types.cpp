@@ -4053,12 +4053,6 @@ BORROWED(BoxedFloat*) CodeConstants::getFloatConstant(double d) const {
 void CodeConstants::dealloc() const {
     decrefArray(owned_refs.data(), owned_refs.size());
     owned_refs.clear();
-    for (auto&& e : funcs_and_classes) {
-        Py_DECREF(e.second);
-        assert(e.first->type() == BST_TYPE::FunctionDef || e.first->type() == BST_TYPE::ClassDef);
-        delete[] e.first;
-    }
-    funcs_and_classes.clear();
 }
 
 #ifndef Py_REF_DEBUG

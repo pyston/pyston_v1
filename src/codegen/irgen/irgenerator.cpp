@@ -1488,10 +1488,7 @@ private:
         return new ConcreteCompilerVariable(UNKNOWN, rtn);
     }
 
-    CompilerVariable* evalMakeClass(BST_MakeClass* mkclass, const UnwindInfo& unw_info) {
-        auto class_entry = irstate->getCodeConstants().getFuncOrClass(mkclass->index_class_def);
-        BST_ClassDef* node = bst_cast<BST_ClassDef>(class_entry.first);
-
+    CompilerVariable* evalMakeClass(BST_MakeClass* node, const UnwindInfo& unw_info) {
         CompilerVariable* _bases_tuple = evalVReg(node->vreg_bases_tuple);
         ConcreteCompilerVariable* bases_tuple = _bases_tuple->makeConverted(emitter, _bases_tuple->getBoxType());
 
@@ -1500,8 +1497,9 @@ private:
             decorators.push_back(evalVReg(node->decorator[i]));
         }
 
-        BoxedCode* code = class_entry.second;
+        BoxedCode* code = (BoxedCode*)irstate->getCodeConstants().getConstant(node->vreg_code_obj);
         assert(code);
+        assert(code->cls == code_cls);
         const ScopingResults& scope_info = code->source->scoping;
 
         // TODO duplication with _createFunction:
@@ -1544,7 +1542,7 @@ private:
         return cls;
     }
 
-    CompilerVariable* _createFunction(BST_FunctionDef* node, BoxedCode* code, const UnwindInfo& unw_info) {
+    CompilerVariable* _createFunction(BST_MakeFunction* node, BoxedCode* code, const UnwindInfo& unw_info) {
         assert(code);
 
         std::vector<ConcreteCompilerVariable*> defaults;
@@ -1572,16 +1570,17 @@ private:
         return func;
     }
 
-    CompilerVariable* evalMakeFunction(BST_MakeFunction* mkfn, const UnwindInfo& unw_info) {
-        auto func_entry = irstate->getCodeConstants().getFuncOrClass(mkfn->index_func_def);
-        BST_FunctionDef* node = bst_cast<BST_FunctionDef>(func_entry.first);
+    CompilerVariable* evalMakeFunction(BST_MakeFunction* node, const UnwindInfo& unw_info) {
+        BoxedCode* code = (BoxedCode*)irstate->getCodeConstants().getConstant(node->vreg_code_obj);
+        assert(code);
+        assert(code->cls == code_cls);
 
         std::vector<CompilerVariable*> decorators;
         for (int i = 0; i < node->num_decorator; ++i) {
             decorators.push_back(evalVReg(node->elts[i]));
         }
 
-        CompilerVariable* func = _createFunction(node, func_entry.second, unw_info);
+        CompilerVariable* func = _createFunction(node, code, unw_info);
 
         for (int i = decorators.size() - 1; i >= 0; i--) {
             func = decorators[i]->call(emitter, getOpInfoForNode(node, unw_info), ArgPassSpec(1), { func }, NULL);

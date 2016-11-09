@@ -30,10 +30,11 @@ static BoxedCode* getCodeObjectOfFirstMakeFunction(BoxedCode* module_code) {
     for (BST_stmt* stmt : *module_code->source->cfg->getStartingBlock()) {
         if (stmt->type() !=  BST_TYPE::MakeFunction)
             continue;
-        code = module_code->code_constants.getFuncOrClass(bst_cast<BST_MakeFunction>(stmt)->index_func_def).second;
+        code = (BoxedCode*)module_code->code_constants.getConstant(bst_cast<BST_MakeFunction>(stmt)->vreg_code_obj);
+        assert(code);
+        assert(code->cls == code_cls);
         break;
     }
-    assert(code);
     return code;
 }
 

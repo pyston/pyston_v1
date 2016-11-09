@@ -183,23 +183,6 @@ void BST_Compare::accept_stmt(StmtVisitor* v) {
     return v->visit_compare(this);
 }
 
-void BST_ClassDef::accept(BSTVisitor* v) {
-    bool skip = v->visit_classdef(this);
-    if (skip)
-        return;
-
-    v->visit_vreg(&vreg_bases_tuple);
-    for (int i = 0; i < num_decorator; ++i) {
-        v->visit_vreg(&decorator[i]);
-    }
-
-    // we dont't visit the body
-}
-
-void BST_ClassDef::accept_stmt(StmtVisitor* v) {
-    v->visit_classdef(this);
-}
-
 void BST_DeleteAttr::accept(BSTVisitor* v) {
     bool skip = v->visit_deleteattr(this);
     if (skip)
@@ -274,21 +257,6 @@ void BST_Exec::accept(BSTVisitor* v) {
 
 void BST_Exec::accept_stmt(StmtVisitor* v) {
     v->visit_exec(this);
-}
-
-void BST_FunctionDef::accept(BSTVisitor* v) {
-    bool skip = v->visit_functiondef(this);
-    if (skip)
-        return;
-
-    for (int i = 0; i < num_decorator + num_defaults; ++i) {
-        v->visit_vreg(&elts[i]);
-    }
-    // we dont't visit the body
-}
-
-void BST_FunctionDef::accept_stmt(StmtVisitor* v) {
-    v->visit_functiondef(this);
 }
 
 void BST_Landingpad::accept(BSTVisitor* v) {
@@ -717,7 +685,9 @@ void BST_MakeFunction::accept(BSTVisitor* v) {
     if (skip)
         return;
 
-    bst_cast<BST_FunctionDef>(v->getCodeConstants().getFuncOrClass(index_func_def).first)->accept(v);
+    for (int i = 0; i < num_decorator + num_defaults; ++i) {
+        v->visit_vreg(&elts[i]);
+    }
     v->visit_vreg(&vreg_dst, true);
 }
 
@@ -730,7 +700,10 @@ void BST_MakeClass::accept(BSTVisitor* v) {
     if (skip)
         return;
 
-    bst_cast<BST_ClassDef>(v->getCodeConstants().getFuncOrClass(index_class_def).first)->accept(v);
+    v->visit_vreg(&vreg_bases_tuple);
+    for (int i = 0; i < num_decorator; ++i) {
+        v->visit_vreg(&decorator[i]);
+    }
     v->visit_vreg(&vreg_dst, true);
 }
 
@@ -931,35 +904,6 @@ bool PrintVisitor::visit_compare(BST_Compare* node) {
     return true;
 }
 
-bool PrintVisitor::visit_classdef(BST_ClassDef* node) {
-    check_if_invoke(node);
-
-    for (int i = 0, n = node->num_decorator; i < n; i++) {
-        stream << "@";
-        visit_vreg(&node->decorator[i]);
-        stream << "\n";
-        printIndent();
-    }
-    stream << "class " << code_constants.getInternedString(node->index_name).s() << "(";
-    visit_vreg(&node->vreg_bases_tuple);
-    stream << ")";
-
-    indent += 4;
-    stream << '\n';
-    printIndent();
-    stream << "...";
-#if 0
-    for (int i = 0, n = node->body.size(); i < n; i++) {
-        stream << "\n";
-        printIndent();
-        node->body[i]->accept(this);
-    }
-#endif
-    indent -= 4;
-
-    return true;
-}
-
 bool PrintVisitor::visit_deletesub(BST_DeleteSub* node) {
     check_if_invoke(node);
 
@@ -1030,48 +974,6 @@ bool PrintVisitor::visit_exec(BST_Exec* node) {
         }
     }
     stream << "\n";
-    return true;
-}
-
-bool PrintVisitor::visit_functiondef(BST_FunctionDef* node) {
-    check_if_invoke(node);
-
-    for (int i = 0; i < node->num_decorator; ++i) {
-        stream << "@";
-        visit_vreg(&node->elts[i]);
-        stream << "\n";
-        printIndent();
-    }
-
-    stream << "def ";
-    if (node->index_name != VREG_UNDEFINED)
-        stream << code_constants.getInternedString(node->index_name).s();
-    else
-        stream << "<lambda>";
-    stream << "(";
-
-    for (int i = 0; i < node->num_defaults; ++i) {
-        if (i > 0)
-            stream << ", ";
-
-        stream << "<default " << i << ">=";
-        visit_vreg(&node->elts[node->num_decorator + i]);
-    }
-
-    stream << ")";
-
-    indent += 4;
-    stream << '\n';
-    printIndent();
-    stream << "...";
-#if 0
-    for (int i = 0; i < node->body.size(); i++) {
-        stream << "\n";
-        printIndent();
-        node->body[i]->accept(this);
-    }
-#endif
-    indent -= 4;
     return true;
 }
 
@@ -1483,15 +1385,64 @@ bool PrintVisitor::visit_makefunction(BST_MakeFunction* node) {
     check_if_invoke(node);
 
     visit_vreg(&node->vreg_dst, true);
-    stream << "make_";
-    return false;
+    stream << "make_def ";
+
+    for (int i = 0; i < node->num_decorator; ++i) {
+        stream << "@";
+        visit_vreg(&node->elts[i]);
+        stream << "\n";
+        printIndent();
+    }
+
+    if (node->index_name != VREG_UNDEFINED)
+        stream << code_constants.getInternedString(node->index_name).s();
+    else
+        stream << "<lambda>";
+    stream << "(";
+
+    for (int i = 0; i < node->num_defaults; ++i) {
+        if (i > 0)
+            stream << ", ";
+
+        stream << "<default " << i << ">=";
+        visit_vreg(&node->elts[node->num_decorator + i]);
+    }
+
+    stream << ")\n";
+
+    indent += 4;
+    printIndent();
+    visit_vreg(&node->vreg_code_obj);
+    stream << "\n";
+    printIndent();
+    stream << "...\n";
+    indent -= 4;
+    return true;
 }
 
 bool PrintVisitor::visit_makeclass(BST_MakeClass* node) {
     check_if_invoke(node);
 
     visit_vreg(&node->vreg_dst, true);
-    stream << "make_";
-    return false;
+    stream << "make_class ";
+
+    for (int i = 0, n = node->num_decorator; i < n; i++) {
+        stream << "@";
+        visit_vreg(&node->decorator[i]);
+        stream << "\n";
+        printIndent();
+    }
+    stream << code_constants.getInternedString(node->index_name).s() << "(";
+    visit_vreg(&node->vreg_bases_tuple);
+    stream << ")\n";
+
+    indent += 4;
+    printIndent();
+    visit_vreg(&node->vreg_code_obj);
+    stream << "\n";
+    printIndent();
+    stream << "...\n";
+    indent -= 4;
+    return true;
 }
 }
