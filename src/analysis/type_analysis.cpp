@@ -101,8 +101,8 @@ private:
           speculation(speculation) {}
 
     void run() {
-        for (int i = 0; i < block->body.size(); i++) {
-            block->body[i]->accept_stmt(this);
+        for (BST_stmt* stmt : *block) {
+            stmt->accept_stmt(this);
         }
     }
 

@@ -640,7 +640,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
             // Function-entry safepoint:
             // TODO might be more efficient to do post-call safepoints?
-            generator->doSafePoint(block->body[0]);
+            generator->doSafePoint(block->body);
         } else if (entry_descriptor && block == entry_descriptor->backedge->target) {
             assert(block->predecessors.size() > 1);
             assert(osr_entry_block);
@@ -733,7 +733,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 //   are disallowed
 
                 auto pred = block->predecessors[0];
-                auto last_inst = pred->body.back();
+                auto last_inst = pred->getLastStmt();
 
                 SymbolTable* sym_table = ending_symbol_tables[pred];
                 bool created_new_sym_table = false;
@@ -800,7 +800,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             if (predecessor->idx > block->idx) {
                 // Loop safepoint:
                 // TODO does it matter which side of the backedge these are on?
-                generator->doSafePoint(block->body[0]);
+                generator->doSafePoint(block->body);
                 break;
             }
         }
@@ -815,7 +815,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         llvm_exit_blocks[block] = ending_st.ending_block;
 
         if (ending_st.exception_state.size()) {
-            BST_stmt* last_stmt = block->body.back();
+            BST_stmt* last_stmt = block->getLastStmt();
             assert(last_stmt->type == BST_TYPE::Invoke);
             CFGBlock* exc_block = bst_cast<BST_Invoke>(last_stmt)->exc_dest;
             assert(!incoming_exception_state.count(exc_block));
