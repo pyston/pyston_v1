@@ -37,7 +37,10 @@ print ">> "
 # - no shiftjis encoding
 # - slightly different error messages
 expected = [{"failed" : 22, "passed" : 112}]
-run_test([PYTEST_EXE], cwd=PASTE_TEST_DIR, expected=expected)
-
-
+expected_log_hash = '''
+ghA0YC2ZyyvAxlQASAgCMAglIjZ2pwSCB8wuCIgiAYGKAITIQgIQLRgRYwA0e1BchxcHGsShlUij
+OBXOA0E4AQIkzEKIOCikJYUgRF5hh8YJVAioAI6FDJB8waBqoGC7hEIDCdEZkACMA4IDaLABMFSi
+n7AogIFoJ4iCeUEEggM=
+'''
+run_test([PYTEST_EXE], cwd=PASTE_TEST_DIR, expected=expected, expected_log_hash=expected_log_hash)
 

@@ -535,7 +535,8 @@ def main(orig_dir):
 
     TEST_DIR = os.path.join(orig_dir, opts.test_dir)
     EXTMODULE_DIR_PYSTON = os.path.abspath(os.path.dirname(os.path.realpath(IMAGE)) + "/test/test_extension/")
-    EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(IMAGE)) + "/test/test_extension/build/lib.linux-x86_64-2.7/")
+    # EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(IMAGE)) + "/test/test_extension/build/lib.linux-x86_64-2.7/")
+    EXTMODULE_DIR = os.path.abspath(orig_dir) + "/test/test_extension/build/lib.linux-x86_64-2.7/"
     patterns = opts.pattern
 
     IS_OPTIMIZED = int(subprocess.check_output([IMAGE, "-c", 'import sysconfig; print int("-O0" not in sysconfig.get_config_var(\"CFLAGS\"))']))

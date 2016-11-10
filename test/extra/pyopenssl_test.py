@@ -25,4 +25,9 @@ subprocess.check_call(["sed", "-i", 's/\\(def test_export_text.*\\)/\\1\\n      
 print os.path.join(PYOPENSSL_DIR, "test", "test_crypto.py")
 
 expected = [{'ran': 438}]
-run_test([NOSETESTS_EXE], cwd=PYOPENSSL_DIR, expected=expected)
+expected_log_hash = '''
+gAAAAAAAAAAAAAAgAgAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAIAAAAAAgAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAEAAAAAAAA
+AAAAACAAAAAAgAAAAAA=
+'''
+run_test([NOSETESTS_EXE], cwd=PYOPENSSL_DIR, expected=expected, expected_log_hash=expected_log_hash)

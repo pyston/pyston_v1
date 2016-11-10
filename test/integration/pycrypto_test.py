@@ -59,7 +59,13 @@ assert enc_data != test_string
 assert key.decrypt(enc_data) == test_string
 
 expected = [{'ran': 1891}]
-test_helper.run_test([sys.executable, "setup.py", "test"], pycrypto_dir, expected)
+expected_log_hash = '''
+gAAAAAAAAAAAAABAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAIAAIAgAAAAAAA
+BAABAABAAAAAAAAAAAAAAAQAAAgAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAA=
+'''
+
+test_helper.run_test([sys.executable, "setup.py", "test"], pycrypto_dir, expected, expected_log_hash=expected_log_hash)
 
 print "-- Tests finished"
 

@@ -32,9 +32,14 @@ def install_and_test_lxml():
     print "Applied lxml patch"
 
     subprocess.check_call([PYTHON_EXE, "setup.py", "build_ext", "-i", "--with-cython"], cwd=LXML_DIR)
- 
+
     expected = [{'ran': 1381}]
-    run_test([PYTHON_EXE, "test.py"], cwd=LXML_DIR, expected=expected)
-    
+    expected_log_hash = '''
+    gAAAAAAAAQAAAAAIAAAAAAAAAAAAgAAAAAAAAABAAACCAEgAAAAAgAIAAAAAAACAAAAAoAAAAAAA
+    ABAAAAAAAAAAAAAigAAAAAAAAAAQAAAwAgAAAAAAAAAAAAAAAAIAAAAEAAAACAAAAAAAAABBAAAA
+    AAAAAAAAAAAAAAAAAAA=
+    '''
+    run_test([PYTHON_EXE, "test.py"], cwd=LXML_DIR, expected=expected, expected_log_hash=expected_log_hash)
+
 create_virtenv(ENV_NAME, None, force_create = True)
 install_and_test_lxml()
