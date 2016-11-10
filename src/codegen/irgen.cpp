@@ -359,10 +359,19 @@ protected:
         (*sym_table)[*vreg] = NULL;
         return false;
     }
+    bool visit_storename(BST_StoreName* node) override {
+        InternedString name = getCodeConstants().getInternedString(node->index_id);
+        assert(name.c_str()[0] == '#'); // it must be a temporary
+        // You might think I need to check whether `name' is being assigned globally or locally,
+        // since a global assign doesn't affect the symbol table. However, the CFG pass only
+        // generates invoke-assigns to temporary variables. Just to be sure, we assert:
+        assert(node->lookup_type != ScopeInfo::VarScopeType::GLOBAL);
+        return false;
+    }
 
 public:
     static std::pair<SymbolTable*, bool /* created_new_sym_table */>
-    removeDestVRegsFromSymTable(const CodeConstants& code_constants, SymbolTable* sym_table, BST_Invoke* stmt) {
+    removeDestVRegsFromSymTable(const CodeConstants& code_constants, SymbolTable* sym_table, BST_stmt* stmt) {
         SymTableDstVRegDeleter visitor(code_constants, sym_table);
         stmt->accept(&visitor);
         return std::make_pair(visitor.sym_table, visitor.created_new_sym_table);
@@ -640,7 +649,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
             // Function-entry safepoint:
             // TODO might be more efficient to do post-call safepoints?
-            generator->doSafePoint(block->body[0]);
+            generator->doSafePoint(block->body());
         } else if (entry_descriptor && block == entry_descriptor->backedge->target) {
             assert(block->predecessors.size() > 1);
             assert(osr_entry_block);
@@ -733,13 +742,13 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 //   are disallowed
 
                 auto pred = block->predecessors[0];
-                auto last_inst = pred->body.back();
+                auto last_inst = pred->getLastStmt();
 
                 SymbolTable* sym_table = ending_symbol_tables[pred];
                 bool created_new_sym_table = false;
-                if (last_inst->type == BST_TYPE::Invoke && bst_cast<BST_Invoke>(last_inst)->exc_dest == block)
+                if (last_inst->is_invoke() && last_inst->get_exc_block() == block)
                     std::tie(sym_table, created_new_sym_table) = SymTableDstVRegDeleter::removeDestVRegsFromSymTable(
-                        irstate->getCodeConstants(), sym_table, bst_cast<BST_Invoke>(last_inst));
+                        irstate->getCodeConstants(), sym_table, last_inst);
 
                 generator->copySymbolsFrom(sym_table);
                 for (auto&& p : *definedness_tables[pred]) {
@@ -800,7 +809,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             if (predecessor->idx > block->idx) {
                 // Loop safepoint:
                 // TODO does it matter which side of the backedge these are on?
-                generator->doSafePoint(block->body[0]);
+                generator->doSafePoint(block->body());
                 break;
             }
         }
@@ -815,9 +824,9 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         llvm_exit_blocks[block] = ending_st.ending_block;
 
         if (ending_st.exception_state.size()) {
-            BST_stmt* last_stmt = block->body.back();
-            assert(last_stmt->type == BST_TYPE::Invoke);
-            CFGBlock* exc_block = bst_cast<BST_Invoke>(last_stmt)->exc_dest;
+            BST_stmt* last_stmt = block->getLastStmt();
+            assert(last_stmt->is_invoke());
+            CFGBlock* exc_block = last_stmt->get_exc_block();
             assert(!incoming_exception_state.count(exc_block));
 
             incoming_exception_state.insert(std::make_pair(exc_block, ending_st.exception_state));

@@ -101,8 +101,8 @@ private:
           speculation(speculation) {}
 
     void run() {
-        for (int i = 0; i < block->body.size(); i++) {
-            block->body[i]->accept_stmt(this);
+        for (BST_stmt* stmt : *block) {
+            stmt->accept_stmt(this);
         }
     }
 
@@ -481,9 +481,7 @@ private:
         }
     }
 
-    void visit_makeclass(BST_MakeClass* mkclass) override {
-        auto* node = bst_cast<BST_ClassDef>(getCodeConstants().getFuncOrClass(mkclass->index_class_def).first);
-
+    void visit_makeclass(BST_MakeClass* node) override {
         for (int i = 0; i < node->num_decorator; ++i) {
             getType(node->decorator[i]);
         }
@@ -492,7 +490,7 @@ private:
 
         // TODO should we speculate that classdefs will generally return a class?
         // return typeFromClass(type_cls);
-        _doSet(mkclass->vreg_dst, UNKNOWN);
+        _doSet(node->vreg_dst, UNKNOWN);
     }
 
     void visit_deletesub(BST_DeleteSub* node) override { getType(node->vreg_value); }
@@ -507,9 +505,7 @@ private:
             assert(node->vreg == VREG_UNDEFINED);
     }
 
-    void visit_makefunction(BST_MakeFunction* mkfn) override {
-        auto* node = bst_cast<BST_FunctionDef>(getCodeConstants().getFuncOrClass(mkfn->index_func_def).first);
-
+    void visit_makefunction(BST_MakeFunction* node) override {
         for (int i = 0; i < node->num_defaults + node->num_decorator; ++i) {
             getType(node->elts[i]);
         }
@@ -517,7 +513,7 @@ private:
         CompilerType* t = UNKNOWN;
         if (node->num_decorator == 0)
             t = typeFromClass(function_cls);
-        _doSet(mkfn->vreg_dst, t);
+        _doSet(node->vreg_dst, t);
     }
 
     void visit_exec(BST_Exec* node) override {
@@ -525,8 +521,6 @@ private:
         getType(node->vreg_globals);
         getType(node->vreg_locals);
     }
-
-    void visit_invoke(BST_Invoke* node) override { node->stmt->accept_stmt(this); }
 
     void visit_jump(BST_Jump* node) override {}
 

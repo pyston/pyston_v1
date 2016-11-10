@@ -35,7 +35,6 @@ class MDNode;
 
 namespace pyston {
 
-class BST_Invoke;
 class CFGBlock;
 class GCBuilder;
 struct PatchpointInfo;

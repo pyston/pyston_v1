@@ -43,6 +43,25 @@ template <class T> static void visitVector(const std::vector<T*>& vec, BSTVisito
     }
 }
 
+void BST_stmt::accept(BSTVisitor* v) {
+    switch (type()) {
+#define DISPATCH_ACCEPT(x, y)                                                                                          \
+    case BST_TYPE::x:                                                                                                  \
+        return bst_cast<BST_##x>(this)->accept(v);
+        FOREACH_TYPE(DISPATCH_ACCEPT)
+    };
+}
+
+void BST_stmt::accept_stmt(StmtVisitor* v) {
+    switch (type()) {
+#define DISPATCH_ACCEPT_STMT(x, y)                                                                                     \
+    case BST_TYPE::x:                                                                                                  \
+        return bst_cast<BST_##x>(this)->accept_stmt(v);
+        FOREACH_TYPE(DISPATCH_ACCEPT_STMT)
+    };
+}
+
+
 void BST_Assert::accept(BSTVisitor* v) {
     bool skip = v->visit_assert(this);
     if (skip)
@@ -164,23 +183,6 @@ void BST_Compare::accept_stmt(StmtVisitor* v) {
     return v->visit_compare(this);
 }
 
-void BST_ClassDef::accept(BSTVisitor* v) {
-    bool skip = v->visit_classdef(this);
-    if (skip)
-        return;
-
-    v->visit_vreg(&vreg_bases_tuple);
-    for (int i = 0; i < num_decorator; ++i) {
-        v->visit_vreg(&decorator[i]);
-    }
-
-    // we dont't visit the body
-}
-
-void BST_ClassDef::accept_stmt(StmtVisitor* v) {
-    v->visit_classdef(this);
-}
-
 void BST_DeleteAttr::accept(BSTVisitor* v) {
     bool skip = v->visit_deleteattr(this);
     if (skip)
@@ -255,33 +257,6 @@ void BST_Exec::accept(BSTVisitor* v) {
 
 void BST_Exec::accept_stmt(StmtVisitor* v) {
     v->visit_exec(this);
-}
-
-void BST_FunctionDef::accept(BSTVisitor* v) {
-    bool skip = v->visit_functiondef(this);
-    if (skip)
-        return;
-
-    for (int i = 0; i < num_decorator + num_defaults; ++i) {
-        v->visit_vreg(&elts[i]);
-    }
-    // we dont't visit the body
-}
-
-void BST_FunctionDef::accept_stmt(StmtVisitor* v) {
-    v->visit_functiondef(this);
-}
-
-void BST_Invoke::accept(BSTVisitor* v) {
-    bool skip = v->visit_invoke(this);
-    if (skip)
-        return;
-
-    this->stmt->accept(v);
-}
-
-void BST_Invoke::accept_stmt(StmtVisitor* v) {
-    return v->visit_invoke(this);
 }
 
 void BST_Landingpad::accept(BSTVisitor* v) {
@@ -710,7 +685,9 @@ void BST_MakeFunction::accept(BSTVisitor* v) {
     if (skip)
         return;
 
-    bst_cast<BST_FunctionDef>(v->getCodeConstants().getFuncOrClass(index_func_def).first)->accept(v);
+    for (int i = 0; i < num_decorator + num_defaults; ++i) {
+        v->visit_vreg(&elts[i]);
+    }
     v->visit_vreg(&vreg_dst, true);
 }
 
@@ -723,7 +700,10 @@ void BST_MakeClass::accept(BSTVisitor* v) {
     if (skip)
         return;
 
-    bst_cast<BST_ClassDef>(v->getCodeConstants().getFuncOrClass(index_class_def).first)->accept(v);
+    v->visit_vreg(&vreg_bases_tuple);
+    for (int i = 0; i < num_decorator; ++i) {
+        v->visit_vreg(&decorator[i]);
+    }
     v->visit_vreg(&vreg_dst, true);
 }
 
@@ -773,7 +753,15 @@ bool PrintVisitor::visit_vreg(int* vreg, bool is_dst) {
     return true;
 }
 
+bool PrintVisitor::check_if_invoke(BST_stmt* node) {
+    if (node->is_invoke())
+        stream << "invoke " << node->get_normal_block()->idx << " " << node->get_exc_block()->idx << ": ";
+    return false;
+}
+
 bool PrintVisitor::visit_assert(BST_Assert* node) {
+    check_if_invoke(node);
+
     stream << "assert 0";
     if (node->vreg_msg != VREG_UNDEFINED) {
         stream << ", ";
@@ -783,6 +771,8 @@ bool PrintVisitor::visit_assert(BST_Assert* node) {
 }
 
 bool PrintVisitor::visit_copyvreg(BST_CopyVReg* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << "nokill ";
     visit_vreg(&node->vreg_src);
@@ -790,6 +780,8 @@ bool PrintVisitor::visit_copyvreg(BST_CopyVReg* node) {
 }
 
 bool PrintVisitor::visit_augbinop(BST_AugBinOp* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_left);
     stream << " =" << getOpSymbol(node->op_type) << " ";
@@ -798,6 +790,8 @@ bool PrintVisitor::visit_augbinop(BST_AugBinOp* node) {
 }
 
 bool PrintVisitor::visit_binop(BST_BinOp* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_left);
     stream << " " << getOpSymbol(node->op_type) << " ";
@@ -806,6 +800,8 @@ bool PrintVisitor::visit_binop(BST_BinOp* node) {
 }
 
 bool PrintVisitor::visit_callfunc(BST_CallFunc* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_func);
     stream << "(";
@@ -834,6 +830,8 @@ bool PrintVisitor::visit_callfunc(BST_CallFunc* node) {
 }
 
 bool PrintVisitor::visit_callattr(BST_CallAttr* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_value);
     stream << ".";
@@ -864,6 +862,8 @@ bool PrintVisitor::visit_callattr(BST_CallAttr* node) {
 }
 
 bool PrintVisitor::visit_callclsattr(BST_CallClsAttr* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_value);
     stream << ":";
@@ -894,6 +894,8 @@ bool PrintVisitor::visit_callclsattr(BST_CallClsAttr* node) {
 }
 
 bool PrintVisitor::visit_compare(BST_Compare* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_left);
     stream << " " << getOpSymbol(node->op) << " ";
@@ -902,34 +904,9 @@ bool PrintVisitor::visit_compare(BST_Compare* node) {
     return true;
 }
 
-bool PrintVisitor::visit_classdef(BST_ClassDef* node) {
-    for (int i = 0, n = node->num_decorator; i < n; i++) {
-        stream << "@";
-        visit_vreg(&node->decorator[i]);
-        stream << "\n";
-        printIndent();
-    }
-    stream << "class " << code_constants.getInternedString(node->index_name).s() << "(";
-    visit_vreg(&node->vreg_bases_tuple);
-    stream << ")";
-
-    indent += 4;
-    stream << '\n';
-    printIndent();
-    stream << "...";
-#if 0
-    for (int i = 0, n = node->body.size(); i < n; i++) {
-        stream << "\n";
-        printIndent();
-        node->body[i]->accept(this);
-    }
-#endif
-    indent -= 4;
-
-    return true;
-}
-
 bool PrintVisitor::visit_deletesub(BST_DeleteSub* node) {
+    check_if_invoke(node);
+
     stream << "del ";
     visit_vreg(&node->vreg_value);
     stream << "[";
@@ -938,6 +915,8 @@ bool PrintVisitor::visit_deletesub(BST_DeleteSub* node) {
     return true;
 }
 bool PrintVisitor::visit_deletesubslice(BST_DeleteSubSlice* node) {
+    check_if_invoke(node);
+
     stream << "del ";
     visit_vreg(&node->vreg_value);
     stream << "[";
@@ -951,6 +930,8 @@ bool PrintVisitor::visit_deletesubslice(BST_DeleteSubSlice* node) {
     return true;
 }
 bool PrintVisitor::visit_deleteattr(BST_DeleteAttr* node) {
+    check_if_invoke(node);
+
     stream << "del ";
     visit_vreg(&node->vreg_value);
     stream << '.';
@@ -958,6 +939,8 @@ bool PrintVisitor::visit_deleteattr(BST_DeleteAttr* node) {
     return true;
 }
 bool PrintVisitor::visit_deletename(BST_DeleteName* node) {
+    check_if_invoke(node);
+
     stream << "del ";
     if (node->lookup_type == ScopeInfo::VarScopeType::FAST || node->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
         visit_vreg(&node->vreg);
@@ -968,12 +951,16 @@ bool PrintVisitor::visit_deletename(BST_DeleteName* node) {
 }
 
 bool PrintVisitor::visit_dict(BST_Dict* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << "{}";
     return true;
 }
 
 bool PrintVisitor::visit_exec(BST_Exec* node) {
+    check_if_invoke(node);
+
     stream << "exec ";
 
     visit_vreg(&node->vreg_body);
@@ -990,63 +977,23 @@ bool PrintVisitor::visit_exec(BST_Exec* node) {
     return true;
 }
 
-bool PrintVisitor::visit_functiondef(BST_FunctionDef* node) {
-    for (int i = 0; i < node->num_decorator; ++i) {
-        stream << "@";
-        visit_vreg(&node->elts[i]);
-        stream << "\n";
-        printIndent();
-    }
-
-    stream << "def ";
-    if (node->index_name != VREG_UNDEFINED)
-        stream << code_constants.getInternedString(node->index_name).s();
-    else
-        stream << "<lambda>";
-    stream << "(";
-
-    for (int i = 0; i < node->num_defaults; ++i) {
-        if (i > 0)
-            stream << ", ";
-
-        stream << "<default " << i << ">=";
-        visit_vreg(&node->elts[node->num_decorator + i]);
-    }
-
-    stream << ")";
-
-    indent += 4;
-    stream << '\n';
-    printIndent();
-    stream << "...";
-#if 0
-    for (int i = 0; i < node->body.size(); i++) {
-        stream << "\n";
-        printIndent();
-        node->body[i]->accept(this);
-    }
-#endif
-    indent -= 4;
-    return true;
-}
-
-bool PrintVisitor::visit_invoke(BST_Invoke* node) {
-    stream << "invoke " << node->normal_dest->idx << " " << node->exc_dest->idx << ": ";
-    node->stmt->accept(this);
-    return true;
-}
-
 bool PrintVisitor::visit_landingpad(BST_Landingpad* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << ":LANDINGPAD()";
     return true;
 }
 bool PrintVisitor::visit_locals(BST_Locals* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << ":LOCALS()";
     return true;
 }
 bool PrintVisitor::visit_getiter(BST_GetIter* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << ":GET_ITER(";
     visit_vreg(&node->vreg_value);
@@ -1054,6 +1001,8 @@ bool PrintVisitor::visit_getiter(BST_GetIter* node) {
     return true;
 }
 bool PrintVisitor::visit_importfrom(BST_ImportFrom* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << ":IMPORT_FROM(";
     visit_vreg(&node->vreg_module);
@@ -1063,6 +1012,8 @@ bool PrintVisitor::visit_importfrom(BST_ImportFrom* node) {
     return true;
 }
 bool PrintVisitor::visit_importname(BST_ImportName* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << ":IMPORT_NAME(";
     visit_vreg(&node->vreg_from);
@@ -1072,6 +1023,8 @@ bool PrintVisitor::visit_importname(BST_ImportName* node) {
     return true;
 }
 bool PrintVisitor::visit_importstar(BST_ImportStar* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << ":IMPORT_STAR(";
     visit_vreg(&node->vreg_name);
@@ -1079,6 +1032,8 @@ bool PrintVisitor::visit_importstar(BST_ImportStar* node) {
     return true;
 }
 bool PrintVisitor::visit_nonzero(BST_Nonzero* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << ":NONZERO(";
     visit_vreg(&node->vreg_value);
@@ -1086,6 +1041,8 @@ bool PrintVisitor::visit_nonzero(BST_Nonzero* node) {
     return true;
 }
 bool PrintVisitor::visit_checkexcmatch(BST_CheckExcMatch* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << ":CHECK_EXC_MATCH(";
     visit_vreg(&node->vreg_value);
@@ -1095,6 +1052,8 @@ bool PrintVisitor::visit_checkexcmatch(BST_CheckExcMatch* node) {
     return true;
 }
 bool PrintVisitor::visit_setexcinfo(BST_SetExcInfo* node) {
+    check_if_invoke(node);
+
     stream << ":SET_EXC_INFO(";
     visit_vreg(&node->vreg_value);
     stream << ", ";
@@ -1105,10 +1064,14 @@ bool PrintVisitor::visit_setexcinfo(BST_SetExcInfo* node) {
     return true;
 }
 bool PrintVisitor::visit_uncacheexcinfo(BST_UncacheExcInfo* node) {
+    check_if_invoke(node);
+
     stream << ":UNCACHE_EXC_INFO()";
     return true;
 }
 bool PrintVisitor::visit_hasnext(BST_HasNext* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << ":HAS_NEXT(";
     visit_vreg(&node->vreg_value);
@@ -1116,6 +1079,8 @@ bool PrintVisitor::visit_hasnext(BST_HasNext* node) {
     return true;
 }
 bool PrintVisitor::visit_printexpr(BST_PrintExpr* node) {
+    check_if_invoke(node);
+
     stream << ":PRINT_EXPR(";
     visit_vreg(&node->vreg_value);
     stream << ")";
@@ -1123,6 +1088,8 @@ bool PrintVisitor::visit_printexpr(BST_PrintExpr* node) {
 }
 
 bool PrintVisitor::visit_list(BST_List* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << "[";
     for (int i = 0, n = node->num_elts; i < n; ++i) {
@@ -1135,6 +1102,8 @@ bool PrintVisitor::visit_list(BST_List* node) {
 }
 
 bool PrintVisitor::visit_print(BST_Print* node) {
+    check_if_invoke(node);
+
     stream << "print ";
     if (node->vreg_dest != VREG_UNDEFINED) {
         stream << ">>";
@@ -1149,6 +1118,8 @@ bool PrintVisitor::visit_print(BST_Print* node) {
 }
 
 bool PrintVisitor::visit_raise(BST_Raise* node) {
+    check_if_invoke(node);
+
     stream << "raise";
     if (node->vreg_arg0 != VREG_UNDEFINED) {
         stream << " ";
@@ -1166,6 +1137,8 @@ bool PrintVisitor::visit_raise(BST_Raise* node) {
 }
 
 bool PrintVisitor::visit_repr(BST_Repr* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << "`";
     visit_vreg(&node->vreg_value);
@@ -1174,6 +1147,8 @@ bool PrintVisitor::visit_repr(BST_Repr* node) {
 }
 
 bool PrintVisitor::visit_return(BST_Return* node) {
+    check_if_invoke(node);
+
     stream << "return ";
     if (node->vreg_value != VREG_UNDEFINED)
         visit_vreg(&node->vreg_value);
@@ -1181,6 +1156,8 @@ bool PrintVisitor::visit_return(BST_Return* node) {
 }
 
 bool PrintVisitor::visit_set(BST_Set* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     // An empty set literal is not writeable in Python (it's a dictionary),
     // but we sometimes generate it (ex in set comprehension lowering).
@@ -1204,6 +1181,8 @@ bool PrintVisitor::visit_set(BST_Set* node) {
 }
 
 bool PrintVisitor::visit_makeslice(BST_MakeSlice* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << "<slice>(";
     if (node->vreg_lower != VREG_UNDEFINED)
@@ -1221,6 +1200,8 @@ bool PrintVisitor::visit_makeslice(BST_MakeSlice* node) {
 }
 
 bool PrintVisitor::visit_loadname(BST_LoadName* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     if (node->lookup_type == ScopeInfo::VarScopeType::FAST || node->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
         visit_vreg(&node->vreg);
@@ -1231,6 +1212,8 @@ bool PrintVisitor::visit_loadname(BST_LoadName* node) {
 }
 
 bool PrintVisitor::visit_loadattr(BST_LoadAttr* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_value);
     stream << (node->clsonly ? ':' : '.') << code_constants.getInternedString(node->index_attr).s();
@@ -1238,6 +1221,8 @@ bool PrintVisitor::visit_loadattr(BST_LoadAttr* node) {
 }
 
 bool PrintVisitor::visit_loadsub(BST_LoadSub* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_value);
     stream << "[";
@@ -1247,6 +1232,8 @@ bool PrintVisitor::visit_loadsub(BST_LoadSub* node) {
 }
 
 bool PrintVisitor::visit_loadsubslice(BST_LoadSubSlice* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     visit_vreg(&node->vreg_value);
     stream << "[";
@@ -1261,6 +1248,8 @@ bool PrintVisitor::visit_loadsubslice(BST_LoadSubSlice* node) {
 }
 
 bool PrintVisitor::visit_storename(BST_StoreName* node) {
+    check_if_invoke(node);
+
     if (node->lookup_type == ScopeInfo::VarScopeType::FAST || node->lookup_type == ScopeInfo::VarScopeType::CLOSURE) {
         visit_vreg(&node->vreg);
         stream << " ";
@@ -1272,6 +1261,8 @@ bool PrintVisitor::visit_storename(BST_StoreName* node) {
 }
 
 bool PrintVisitor::visit_storeattr(BST_StoreAttr* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_target);
     stream << "." << code_constants.getInternedString(node->index_attr).s() << " = ";
     visit_vreg(&node->vreg_value);
@@ -1279,6 +1270,8 @@ bool PrintVisitor::visit_storeattr(BST_StoreAttr* node) {
 }
 
 bool PrintVisitor::visit_storesub(BST_StoreSub* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_target);
     stream << "[";
     visit_vreg(&node->vreg_slice);
@@ -1288,6 +1281,8 @@ bool PrintVisitor::visit_storesub(BST_StoreSub* node) {
 }
 
 bool PrintVisitor::visit_storesubslice(BST_StoreSubSlice* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_target);
     stream << "[";
     if (node->vreg_lower != VREG_UNDEFINED)
@@ -1302,6 +1297,8 @@ bool PrintVisitor::visit_storesubslice(BST_StoreSubSlice* node) {
 }
 
 bool PrintVisitor::visit_tuple(BST_Tuple* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << "(";
     int n = node->num_elts;
@@ -1317,6 +1314,8 @@ bool PrintVisitor::visit_tuple(BST_Tuple* node) {
 }
 
 bool PrintVisitor::visit_unaryop(BST_UnaryOp* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     switch (node->op_type) {
         case AST_TYPE::Invert:
@@ -1342,6 +1341,8 @@ bool PrintVisitor::visit_unaryop(BST_UnaryOp* node) {
 }
 
 bool PrintVisitor::visit_unpackintoarray(BST_UnpackIntoArray* node) {
+    check_if_invoke(node);
+
     stream << "(";
     for (int i = 0; i < node->num_elts; ++i) {
         visit_vreg(&node->vreg_dst[i]);
@@ -1355,6 +1356,8 @@ bool PrintVisitor::visit_unpackintoarray(BST_UnpackIntoArray* node) {
 }
 
 bool PrintVisitor::visit_yield(BST_Yield* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
     stream << "yield ";
     if (node->vreg_value != VREG_UNDEFINED)
@@ -1363,6 +1366,8 @@ bool PrintVisitor::visit_yield(BST_Yield* node) {
 }
 
 bool PrintVisitor::visit_branch(BST_Branch* node) {
+    check_if_invoke(node);
+
     stream << "if ";
     visit_vreg(&node->vreg_test);
     stream << " goto " << node->iftrue->idx << " else goto " << node->iffalse->idx;
@@ -1370,19 +1375,74 @@ bool PrintVisitor::visit_branch(BST_Branch* node) {
 }
 
 bool PrintVisitor::visit_jump(BST_Jump* node) {
+    check_if_invoke(node);
+
     stream << "goto " << node->target->idx;
     return true;
 }
 
 bool PrintVisitor::visit_makefunction(BST_MakeFunction* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
-    stream << "make_";
-    return false;
+    stream << "make_def ";
+
+    for (int i = 0; i < node->num_decorator; ++i) {
+        stream << "@";
+        visit_vreg(&node->elts[i]);
+        stream << "\n";
+        printIndent();
+    }
+
+    if (node->index_name != VREG_UNDEFINED)
+        stream << code_constants.getInternedString(node->index_name).s();
+    else
+        stream << "<lambda>";
+    stream << "(";
+
+    for (int i = 0; i < node->num_defaults; ++i) {
+        if (i > 0)
+            stream << ", ";
+
+        stream << "<default " << i << ">=";
+        visit_vreg(&node->elts[node->num_decorator + i]);
+    }
+
+    stream << ")\n";
+
+    indent += 4;
+    printIndent();
+    visit_vreg(&node->vreg_code_obj);
+    stream << "\n";
+    printIndent();
+    stream << "...\n";
+    indent -= 4;
+    return true;
 }
 
 bool PrintVisitor::visit_makeclass(BST_MakeClass* node) {
+    check_if_invoke(node);
+
     visit_vreg(&node->vreg_dst, true);
-    stream << "make_";
-    return false;
+    stream << "make_class ";
+
+    for (int i = 0, n = node->num_decorator; i < n; i++) {
+        stream << "@";
+        visit_vreg(&node->decorator[i]);
+        stream << "\n";
+        printIndent();
+    }
+    stream << code_constants.getInternedString(node->index_name).s() << "(";
+    visit_vreg(&node->vreg_bases_tuple);
+    stream << ")\n";
+
+    indent += 4;
+    printIndent();
+    visit_vreg(&node->vreg_code_obj);
+    stream << "\n";
+    printIndent();
+    stream << "...\n";
+    indent -= 4;
+    return true;
 }
 }

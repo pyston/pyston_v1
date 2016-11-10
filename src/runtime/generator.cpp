@@ -563,7 +563,7 @@ extern "C" int PyGen_NeedsFinalizing(PyGenObject* gen) noexcept {
 
     return true;
 // TODO: is this safe? probably not...
-// return self->paused_frame_info->stmt->type == AST_TYPE::Invoke;
+// return self->paused_frame_info->stmt->is_invoke();
 #if 0
     int i;
     PyFrameObject* f = gen->gi_frame;

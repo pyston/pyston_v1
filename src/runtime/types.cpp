@@ -30,6 +30,7 @@
 #include "codegen/ast_interpreter.h"
 #include "codegen/entry.h"
 #include "codegen/unwinding.h"
+#include "core/bst.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -4052,10 +4053,6 @@ BORROWED(BoxedFloat*) CodeConstants::getFloatConstant(double d) const {
 void CodeConstants::dealloc() const {
     decrefArray(owned_refs.data(), owned_refs.size());
     owned_refs.clear();
-    for (auto&& e : funcs_and_classes) {
-        Py_DECREF(e.second);
-    }
-    funcs_and_classes.clear();
 }
 
 #ifndef Py_REF_DEBUG

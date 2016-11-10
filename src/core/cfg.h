@@ -75,20 +75,68 @@ public:
     // contains the address of the entry function
     std::pair<CFGBlock*, Box*>(*entry_code)(void* interpeter, CFGBlock* block, Box** vregs);
 
-    llvm::SmallVector<BST_stmt*, 4> body;
     llvm::SmallVector<CFGBlock*, 2> predecessors, successors;
     int idx; // index in the CFG
     const char* info;
+    int offset_of_first_stmt; // offset of this block into the bytecode array in bytes
 
-    typedef llvm::SmallVector<BST_stmt*, 4>::iterator iterator;
+#ifndef NDEBUG
+    // only one block at a time is allowed to add instructions to the CFG
+    bool allowed_to_add_stuff = false;
+#endif
 
-    CFGBlock(CFG* cfg, int idx) : cfg(cfg), code(NULL), entry_code(NULL), idx(idx), info(NULL) {}
+    CFGBlock(CFG* cfg, int idx, const char* info = NULL)
+        : cfg(cfg), code(NULL), entry_code(NULL), idx(idx), info(info), offset_of_first_stmt(-1) {}
+
+    BST_stmt* body() {
+        auto it = begin();
+        return it != end() ? *it : NULL;
+    }
+    int sizeInBytes() const {
+        int size = 0;
+        for (BST_stmt* stmt : *this) {
+            size += stmt->size_in_bytes();
+        }
+        return size;
+    }
+    BST_stmt* getLastStmt() const {
+        // TODO: this is inefficient
+        for (BST_stmt* stmt : *this) {
+            if (stmt->is_terminator())
+                return stmt;
+        }
+        return NULL;
+    }
+    bool isPlaced() const { return offset_of_first_stmt != -1; }
 
     void connectTo(CFGBlock* successor, bool allow_backedge = false);
     void unconnectFrom(CFGBlock* successor);
 
-    void push_back(BST_stmt* node) { body.push_back(node); }
     void print(const CodeConstants& code_constants, llvm::raw_ostream& stream = llvm::outs());
+
+    class iterator {
+    private:
+        BST_stmt* stmt;
+
+    public:
+        iterator(BST_stmt* stmt) : stmt(stmt) {}
+
+        bool operator!=(const iterator& rhs) const { return stmt != rhs.stmt; }
+        bool operator==(const iterator& rhs) const { return stmt == rhs.stmt; }
+        iterator& operator++() __attribute__((always_inline)) {
+            if (likely(stmt)) {
+                if (unlikely(stmt->is_terminator()))
+                    *this = CFGBlock::end();
+                else
+                    stmt = (BST_stmt*)&((unsigned char*)stmt)[stmt->size_in_bytes()];
+            }
+            return *this;
+        }
+        BST_stmt* operator*() const { return stmt; }
+    };
+
+    inline iterator begin() const;
+    static iterator end() { return iterator(NULL); }
 };
 
 // the vregs are split into three parts.
@@ -169,7 +217,7 @@ public:
 
     bool hasVRegsAssigned() const { return num_vregs != -1; }
     void assignVRegs(const CodeConstants& code_constants, CFG* cfg, const ParamNames& param_names,
-                     llvm::DenseMap<int*, InternedString>& id_vreg);
+                     llvm::DenseMap<class TrackingVRegPtr, InternedString>& id_vreg);
 };
 
 // Control Flow Graph
@@ -180,21 +228,18 @@ private:
 
 public:
     std::vector<CFGBlock*> blocks;
+    BSTAllocator bytecode;
 
 public:
     CFG() : next_idx(0) {}
+    ~CFG() {
+        for (auto&& block : blocks) {
+            delete block;
+        }
+    }
 
     CFGBlock* getStartingBlock() { return blocks[0]; }
     VRegInfo& getVRegInfo() { return vreg_info; }
-
-    CFGBlock* addBlock() {
-        int idx = next_idx;
-        next_idx++;
-        CFGBlock* block = new CFGBlock(this, idx);
-        blocks.push_back(block);
-
-        return block;
-    }
 
     // Creates a block which must be placed later, using placeBlock().
     // Must be placed on same CFG it was created on.
@@ -205,14 +250,42 @@ public:
     }
 
     void placeBlock(CFGBlock* block) {
+        assert(!block->isPlaced());
+
+#ifndef NDEBUG
+        // check that there is no block with the same offset of first stmt
+        assert(!block->allowed_to_add_stuff);
+        std::unordered_map<int /* offset */, int> check_no_dup_blocks;
+        for (auto&& b : blocks) {
+            b->allowed_to_add_stuff = false;
+            ++check_no_dup_blocks[b->offset_of_first_stmt];
+        }
+        ++check_no_dup_blocks[bytecode.getSize()];
+        assert(check_no_dup_blocks[bytecode.getSize()] == 1);
+        for (auto&& e : check_no_dup_blocks) {
+            assert(e.second == 1);
+        }
+#endif
+
         assert(block->idx == -1);
         block->idx = next_idx;
         next_idx++;
         blocks.push_back(block);
+        block->offset_of_first_stmt = bytecode.getSize();
+
+#ifndef NDEBUG
+        block->allowed_to_add_stuff = true;
+#endif
     }
 
     void print(const CodeConstants& code_constants, llvm::raw_ostream& stream = llvm::outs());
 };
+
+CFGBlock::iterator CFGBlock::begin() const {
+    if (offset_of_first_stmt >= cfg->bytecode.getSize())
+        return end();
+    return iterator((BST_stmt*)&cfg->bytecode.getData()[offset_of_first_stmt]);
+}
 
 class VRegSet {
 private:

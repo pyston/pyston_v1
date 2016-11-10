@@ -27,13 +27,14 @@ protected:
 
 static BoxedCode* getCodeObjectOfFirstMakeFunction(BoxedCode* module_code) {
     BoxedCode* code = NULL;
-    for (BST_stmt* stmt : module_code->source->cfg->blocks[0]->body) {
-        if (stmt->type !=  BST_TYPE::MakeFunction)
+    for (BST_stmt* stmt : *module_code->source->cfg->getStartingBlock()) {
+        if (stmt->type() !=  BST_TYPE::MakeFunction)
             continue;
-        code = module_code->code_constants.getFuncOrClass(bst_cast<BST_MakeFunction>(stmt)->index_func_def).second;
+        code = (BoxedCode*)module_code->code_constants.getConstant(bst_cast<BST_MakeFunction>(stmt)->vreg_code_obj);
+        assert(code);
+        assert(code->cls == code_cls);
         break;
     }
-    assert(code);
     return code;
 }
 
@@ -74,7 +75,7 @@ TEST_F(AnalysisTest, augassign) {
 
     for (CFGBlock* block : cfg->blocks) {
         //printf("%d\n", block->idx);
-        if (block->body.back()->type != BST_TYPE::Return)
+        if (block->getLastStmt()->type() != BST_TYPE::Return)
             ASSERT_TRUE(liveness->isLiveAtEnd(vregs.getVReg(module->interned_strings->get("a")), block));
     }
 
@@ -116,10 +117,10 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
 
     CFGBlock* loop_backedge = cfg->blocks[5];
     ASSERT_EQ(6, loop_backedge->idx);
-    ASSERT_EQ(1, loop_backedge->body.size());
+    ASSERT_TRUE(loop_backedge->body()->is_terminator());
 
-    ASSERT_EQ(BST_TYPE::Jump, loop_backedge->body[0]->type);
-    BST_Jump* backedge = bst_cast<BST_Jump>(loop_backedge->body[0]);
+    ASSERT_EQ(BST_TYPE::Jump, loop_backedge->body()->type());
+    BST_Jump* backedge = bst_cast<BST_Jump>(loop_backedge->body());
     ASSERT_LE(backedge->target->idx, loop_backedge->idx);
 
     std::unique_ptr<PhiAnalysis> phis;
