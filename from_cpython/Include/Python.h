@@ -152,7 +152,7 @@ PyAPI_FUNC(void) PyGC_Disable(void) PYSTON_NOEXCEPT;
 // automatically filter out any objects that are only indirectly leaked.
 //
 // This will destroy the heap, so it has to be the last thing called.
-PyAPI_FUNC(void) _PyGC_FindLeaks(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyGC_FindLeaks(PyObject**) PYSTON_NOEXCEPT;
 #endif
 
 #ifdef __cplusplus
