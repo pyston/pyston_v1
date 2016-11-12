@@ -519,6 +519,8 @@ has_finalizer(PyObject *op)
 static void
 untrack_dicts(PyGC_Head *head)
 {
+    // Pyston change: skip this (see note in dict.cpp)
+#if 0
     PyGC_Head *next, *gc = head->gc.gc_next;
     while (gc != head) {
         PyObject *op = FROM_GC(gc);
@@ -527,6 +529,7 @@ untrack_dicts(PyGC_Head *head)
             _PyDict_MaybeUntrack(op);
         gc = next;
     }
+#endif
 }
 
 /* Move the objects in unreachable with __del__ methods into `finalizers`.

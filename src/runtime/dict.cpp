@@ -1112,6 +1112,13 @@ int BoxedDict::clear(PyObject* op) noexcept {
     return 0;
 }
 
+// Pyston change: this is a CPython optimization that we don't support fully.
+// It looks like they try to untrack dicts to remove GC pressure, but then
+// if GC-aware objects get added to the dict then we need to re-track the dict.
+// We're missing that latter part, leading to memory leaks.
+//
+// This isn't as important to us because we don't have as many dict objects.
+#if 0
 extern "C" void _PyDict_MaybeUntrack(PyObject* op) noexcept {
     if (!PyDict_CheckExact(op) || !_PyObject_GC_IS_TRACKED(op))
         return;
@@ -1125,6 +1132,7 @@ extern "C" void _PyDict_MaybeUntrack(PyObject* op) noexcept {
 
     _PyObject_GC_UNTRACK(op);
 }
+#endif
 
 // We use cpythons dictview implementation from dictobject.c
 extern "C" PyObject* dictview_new(PyObject* dict, PyTypeObject* type) noexcept;
