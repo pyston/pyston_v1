@@ -741,7 +741,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 //   are disallowed
 
                 auto pred = block->predecessors[0];
-                auto last_inst = pred->getLastStmt();
+                auto last_inst = pred->getTerminator();
 
                 SymbolTable* sym_table = ending_symbol_tables[pred];
                 bool created_new_sym_table = false;
@@ -823,7 +823,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         llvm_exit_blocks[block] = ending_st.ending_block;
 
         if (ending_st.exception_state.size()) {
-            BST_stmt* last_stmt = block->getLastStmt();
+            BST_stmt* last_stmt = block->getTerminator();
             assert(last_stmt->is_invoke());
             CFGBlock* exc_block = last_stmt->get_exc_block();
             assert(!incoming_exception_state.count(exc_block));

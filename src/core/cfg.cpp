@@ -233,7 +233,7 @@ static int getLastLineno(llvm::ArrayRef<AST_stmt*> body, int default_lineno) {
 
 llvm::SmallVector<CFGBlock*, 2> CFGBlock::successors() const {
     llvm::SmallVector<CFGBlock*, 2> successors;
-    auto* last = getLastStmt();
+    auto* last = getTerminator();
     if (last->type() == BST_TYPE::Jump) {
         successors.push_back(bst_cast<BST_Jump>(last)->target);
     } else if (last->type() == BST_TYPE::Branch) {
@@ -3239,7 +3239,7 @@ static int pruneUnnecessaryBlocks(CFG* rtn) {
             if (b2->predecessors.size() != 1)
                 continue;
 
-            auto last_stmt = b->getLastStmt();
+            auto last_stmt = b->getTerminator();
             if (last_stmt->is_invoke()) {
                 // TODO probably shouldn't be generating these anyway:
                 assert(last_stmt->get_normal_block() == last_stmt->get_exc_block());
@@ -3277,7 +3277,7 @@ static int pruneUnnecessaryBlocks(CFG* rtn) {
             bool should_merge_blocks = blocks_to_merge.count(b);
             if (should_merge_blocks) {
                 // copy first block without the terminator
-                block_size -= b->getLastStmt()->size_in_bytes();
+                block_size -= b->getTerminator()->size_in_bytes();
                 memcpy(final_bytecode.allocate(block_size), b->body(), block_size);
                 offset += block_size;
                 // copy second block and delete it
@@ -3410,7 +3410,7 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
         ASSERT(b->body() != NULL, "%d", b->idx);
         ASSERT(b->successors().size() <= 2, "%d has too many successors!", b->idx);
         if (b->successors().size() == 0) {
-            BST_stmt* terminator = b->getLastStmt();
+            BST_stmt* terminator = b->getTerminator();
             assert(terminator->type() == BST_TYPE::Return || terminator->type() == BST_TYPE::Raise
                    || terminator->type() == BST_TYPE::Assert);
         }

@@ -102,7 +102,7 @@ public:
         }
         return size;
     }
-    BST_stmt* getLastStmt() const {
+    BST_stmt* getTerminator() const {
         // TODO: this is inefficient
         for (BST_stmt* stmt : *this) {
             if (stmt->is_terminator())
