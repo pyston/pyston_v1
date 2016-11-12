@@ -598,11 +598,14 @@ void setupDescr() {
                                             ParamNames({ "", "fget", "fset", "fdel", "doc" }, "", "")),
                           { Py_None, Py_None, Py_None, NULL }));
     property_cls->giveAttr("__get__",
-                           new BoxedFunction(BoxedCode::create((void*)propertyGet, UNKNOWN, 3, "property.__get__")));
+                           new BoxedFunction(BoxedCode::create((void*)propertyGet, UNKNOWN, 3, "property.__get__", "",
+                                                               ParamNames({ "self", "obj", "type" }, "", ""))));
     property_cls->giveAttr("__set__",
-                           new BoxedFunction(BoxedCode::create((void*)propertySet, UNKNOWN, 3, "property.__set__")));
+                           new BoxedFunction(BoxedCode::create((void*)propertySet, UNKNOWN, 3, "property.__set__", "",
+                                                               ParamNames({ "self", "obj", "value" }, "", ""))));
     property_cls->giveAttr("__delete__",
-                           new BoxedFunction(BoxedCode::create((void*)propertyDel, UNKNOWN, 2, "property.__delete__")));
+                           new BoxedFunction(BoxedCode::create((void*)propertyDel, UNKNOWN, 2, "property.__delete__",
+                                                               "", ParamNames({ "self", "obj" }, "", ""))));
     property_cls->giveAttr("getter",
                            new BoxedFunction(BoxedCode::create((void*)propertyGetter, UNKNOWN, 2, "property.getter")));
     property_cls->giveAttr("setter",

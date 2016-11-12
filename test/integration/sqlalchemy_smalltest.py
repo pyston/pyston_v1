@@ -247,6 +247,9 @@ for run_idx in xrange(1):
                 if (clsname == "SubclassGrowthTest" and t == "test_subclass"):
                     continue
 
+                if (clsname == "ArgInspectionTest" and t == 'test_callable_argspec_py_builtin'):
+                    continue
+
                 print "Running", t
                 n.setup()
                 try:
