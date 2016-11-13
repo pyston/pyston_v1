@@ -4386,7 +4386,8 @@ void setupRuntime() {
     // but unfortunately that will set tp_setattro to slot_tp_setattro on object_cls and all already-made subclasses!
     // Punting on that until needed; hopefully by then we will have better Pyston slots support.
 
-    auto typeCallObj = BoxedCode::create((void*)typeCall, UNKNOWN, 1, true, true, "type.__call__");
+    auto typeCallObj = BoxedCode::create((void*)typeCall, UNKNOWN, 1, true, true, "type.__call__", "",
+                                         ParamNames({ "self" }, "args", "kw"));
     typeCallObj->internal_callable.capi_val = &typeCallInternal<CAPI>;
     typeCallObj->internal_callable.cxx_val = &typeCallInternal<CXX>;
 
@@ -4498,7 +4499,8 @@ void setupRuntime() {
         "__get__",
         new BoxedFunction(BoxedCode::create((void*)functionGet, UNKNOWN, 3, "function.__get__"), { Py_None }));
     function_cls->giveAttr("__call__", new BoxedFunction(BoxedCode::create((void*)functionCall, UNKNOWN, 1, true, true,
-                                                                           "function.__call__")));
+                                                                           "function.__call__", "",
+                                                                           ParamNames({ "self" }, "args", "kw"))));
     function_cls->giveAttr("__nonzero__", new BoxedFunction(BoxedCode::create((void*)functionNonzero, BOXED_BOOL, 1,
                                                                               "function.__nonzero__")));
     function_cls->giveAttrDescriptor("func_code", function_code, function_set_code);
@@ -4517,7 +4519,8 @@ void setupRuntime() {
                                                    offsetof(BoxedBuiltinFunctionOrMethod, modname));
     builtin_function_or_method_cls->giveAttr(
         "__call__", new BoxedFunction(BoxedCode::create((void*)builtinFunctionOrMethodCall, UNKNOWN, 1, true, true,
-                                                        "builtin_function_or_method.__call__")));
+                                                        "builtin_function_or_method.__call__", "",
+                                                        ParamNames({ "self" }, "args", "kw"))));
 
     builtin_function_or_method_cls->giveAttr(
         "__repr__", new BoxedFunction(BoxedCode::create((void*)builtinFunctionOrMethodRepr, STR, 1,
@@ -4537,9 +4540,9 @@ void setupRuntime() {
     instancemethod_cls->giveAttr("__get__",
                                  new BoxedFunction(BoxedCode::create((void*)instancemethodGet, UNKNOWN, 3, false, false,
                                                                      "instancemethod.__get__")));
-    instancemethod_cls->giveAttr("__call__",
-                                 new BoxedFunction(BoxedCode::create((void*)instancemethodCall, UNKNOWN, 1, true, true,
-                                                                     "instancemethod.__call__")));
+    instancemethod_cls->giveAttr("__call__", new BoxedFunction(BoxedCode::create(
+                                                 (void*)instancemethodCall, UNKNOWN, 1, true, true,
+                                                 "instancemethod.__call__", "", ParamNames({ "self" }, "args", "kw"))));
     instancemethod_cls->giveAttrMember("im_func", T_OBJECT, offsetof(BoxedInstanceMethod, func));
     instancemethod_cls->giveAttrBorrowed("__func__", instancemethod_cls->getattr(getStaticString("im_func")));
     instancemethod_cls->giveAttrMember("im_self", T_OBJECT, offsetof(BoxedInstanceMethod, obj));

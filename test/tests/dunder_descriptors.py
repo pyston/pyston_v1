@@ -73,3 +73,8 @@ def f3():
     D.__get__ = get
     print type(C())
 f3()
+
+# misc tests:
+import sys
+sys.getrecursionlimit.__call__.__call__.__call__()
+TypeError.__call__.__call__.__call__()

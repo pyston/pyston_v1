@@ -74,8 +74,9 @@ Box* BoxedCode::varnames(Box* b, void*) noexcept {
     BoxedCode* code = static_cast<BoxedCode*>(b);
 
     auto& param_names = code->param_names;
-    if (!param_names.takes_param_names)
-        return incref(EmptyTuple);
+
+    RELEASE_ASSERT(param_names.takes_param_names, "shouldn't have created '%s' as a BoxedFunction",
+                   code->name->c_str());
 
     std::vector<Box*> elts;
     for (auto sr : param_names.allArgsAsStr())
@@ -91,9 +92,9 @@ Box* BoxedCode::flags(Box* b, void*) noexcept {
     BoxedCode* code = static_cast<BoxedCode*>(b);
 
     int flags = 0;
-    if (code->param_names.has_vararg_name)
+    if (code->takes_varargs)
         flags |= CO_VARARGS;
-    if (code->param_names.has_kwarg_name)
+    if (code->takes_kwargs)
         flags |= CO_VARKEYWORDS;
     if (code->isGenerator())
         flags |= CO_GENERATOR;
@@ -129,6 +130,9 @@ BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, int fi
       num_args(num_args),
       times_interpreted(0),
       internal_callable(NULL, NULL) {
+    // If any param names are specified, make sure all of them are (to avoid common mistakes):
+    ASSERT(this->param_names.numNormalArgs() == 0 || this->param_names.numNormalArgs() == num_args, "%d %d",
+           this->param_names.numNormalArgs(), num_args);
 }
 
 BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const char* name, const char* doc,

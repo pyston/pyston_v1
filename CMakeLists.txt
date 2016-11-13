@@ -311,8 +311,9 @@ add_subdirectory(tools)
 add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/linkdeps_dummy.c COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/linkdeps_dummy.c DEPENDS ${CMAKE_SOURCE_DIR}/section_ordering.txt)
 
 add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON> linkdeps_dummy.c)
-# Wrap the stdlib in --whole-archive to force all the symbols to be included and eventually exported
+add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_BINARY_DIR}/pyston ${CMAKE_BINARY_DIR}/python DEPENDS pyston)
 
+# Wrap the stdlib in --whole-archive to force all the symbols to be included and eventually exported
 target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m z readline sqlite3 gmp mpfr ssl crypto unwind liblz4 util ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES} ${CMAKE_BINARY_DIR}/jemalloc/lib/libjemalloc.a)
 add_dependencies(pyston libjemalloc)
 

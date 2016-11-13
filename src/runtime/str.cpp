@@ -1763,11 +1763,9 @@ Box* strIsLower(BoxedString* self) {
         Py_RETURN_FALSE;
 
     for (const auto& c : str) {
-        if (std::isspace(c) || std::isdigit(c)) {
-            continue;
-        } else if (!std::islower(c)) {
+        if (isupper(c)) {
             Py_RETURN_FALSE;
-        } else {
+        } else if (!lowered && islower(c)) {
             lowered = true;
         }
     }
@@ -1785,7 +1783,7 @@ Box* strIsUpper(BoxedString* self) {
 
     bool cased = false;
     for (const auto& c : str) {
-        if (std::islower(c))
+        if (islower(c))
             Py_RETURN_FALSE;
         else if (!cased && isupper(c))
             cased = true;
@@ -2741,12 +2739,14 @@ void setupStr() {
     str_cls->giveAttr("istitle", new BoxedFunction(BoxedCode::create((void*)strIsTitle, BOXED_BOOL, 1, "str.istitle")));
     str_cls->giveAttr("isupper", new BoxedFunction(BoxedCode::create((void*)strIsUpper, BOXED_BOOL, 1, "str.isupper")));
 
-    str_cls->giveAttr(
-        "decode",
-        new BoxedFunction(BoxedCode::create((void*)strDecode, UNKNOWN, 3, false, false, "str.decode"), { 0, 0 }));
-    str_cls->giveAttr(
-        "encode",
-        new BoxedFunction(BoxedCode::create((void*)strEncode, UNKNOWN, 3, false, false, "str.encode"), { 0, 0 }));
+    str_cls->giveAttr("decode",
+                      new BoxedFunction(BoxedCode::create((void*)strDecode, UNKNOWN, 3, false, false, "str.decode", "",
+                                                          ParamNames({ "", "encoding", "errors" }, NULL, NULL)),
+                                        { 0, 0 }));
+    str_cls->giveAttr("encode",
+                      new BoxedFunction(BoxedCode::create((void*)strEncode, UNKNOWN, 3, false, false, "str.encode", "",
+                                                          ParamNames({ "", "encoding", "errors" }, NULL, NULL)),
+                                        { 0, 0 }));
 
     str_cls->giveAttr("lower", new BoxedFunction(BoxedCode::create((void*)strLower, STR, 1, "str.lower")));
     str_cls->giveAttr("swapcase", new BoxedFunction(BoxedCode::create((void*)strSwapcase, STR, 1, "str.swapcase")));

@@ -76,10 +76,13 @@ before_script:
   - mysql -e 'create database mysqldb_test charset utf8;'
 
 script:
+  - df
   - ccache -z
   - time ninja -j4 pyston check-deps && PYSTON_RUN_ARGS=G travis_wait 60 ctest --output-on-failure
   - ccache -s
-  - if [ -n "$(git status --porcelain --untracked=no)" ]; then echo "test suite left the source directory dirty"; git status; false; fi
+  - df
+  - free -m
+  # - if [ -n "$(git status --porcelain --untracked=no)" ]; then echo "test suite left the source directory dirty"; git status; false; fi
 
 os:
   - linux

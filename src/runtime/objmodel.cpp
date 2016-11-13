@@ -1483,6 +1483,10 @@ void Box::appendNewHCAttr(BORROWED(Box*) new_attr, SetattrRewriteArgs* rewrite_a
 }
 
 void Box::giveAttr(STOLEN(BoxedString*) attr, STOLEN(Box*) val) {
+    // While it's certainly possible to put builtin_function_or_method objects on a type, this is in practice never
+    // what you want to do, because those objects don't have bind-on-get behavior.
+    assert(cls == module_cls || val->cls != builtin_function_or_method_cls);
+
     assert(!this->hasattr(attr));
     // Would be nice to have a stealing version of setattr:
     this->setattr(attr, val, NULL);

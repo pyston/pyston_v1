@@ -1013,7 +1013,7 @@ static inline int listContainsShared(BoxedList* self, Box* elt) {
         if (identity_eq)
             return true;
 
-        int r = PyObject_RichCompareBool(e, elt, Py_EQ);
+        int r = PyObject_RichCompareBool(elt, e, Py_EQ);
         if (r == -1)
             throwCAPIException();
 
