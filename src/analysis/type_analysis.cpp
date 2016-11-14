@@ -51,8 +51,9 @@ ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockStart(int vreg, CFGBlock* 
 }
 
 ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockEnd(int vreg, CFGBlock* block) {
-    assert(block->successors.size() > 0);
-    return getTypeAtBlockStart(vreg, block->successors[0]);
+    auto successors = block->successors();
+    assert(successors.size() > 0);
+    return getTypeAtBlockStart(vreg, successors[0]);
 }
 
 
@@ -571,8 +572,9 @@ private:
 
 public:
     ConcreteCompilerType* getTypeAtBlockEnd(int vreg, CFGBlock* block) override {
-        assert(block->successors.size() > 0);
-        return getTypeAtBlockStart(vreg, block->successors[0]);
+        auto successors = block->successors();
+        assert(successors.size() > 0);
+        return getTypeAtBlockStart(vreg, successors[0]);
     }
     ConcreteCompilerType* getTypeAtBlockStart(int vreg, CFGBlock* block) override {
         assert(starting_types.count(block));
@@ -686,8 +688,7 @@ public:
                 }
             }
 
-            for (int i = 0; i < block->successors.size(); i++) {
-                CFGBlock* next_block = block->successors[i];
+            for (CFGBlock* next_block : block->successors()) {
                 bool first = (starting_types.count(next_block) == 0);
                 if (first)
                     starting_types.insert(std::make_pair(next_block, TypeMap(num_vregs)));

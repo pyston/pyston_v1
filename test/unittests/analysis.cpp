@@ -75,7 +75,7 @@ TEST_F(AnalysisTest, augassign) {
 
     for (CFGBlock* block : cfg->blocks) {
         //printf("%d\n", block->idx);
-        if (block->getLastStmt()->type() != BST_TYPE::Return)
+        if (block->getTerminator()->type() != BST_TYPE::Return)
             ASSERT_TRUE(liveness->isLiveAtEnd(vregs.getVReg(module->interned_strings->get("a")), block));
     }
 
