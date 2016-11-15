@@ -10,7 +10,7 @@ The jemalloc documentation about profiling can be found [here](https://github.co
 an example usage is:
 ```
 ~/pyston$ MALLOC_CONF="prof:true,prof_prefix:jeprof.out" ./pyston_release minibenchmarks/raytrace.py
-~/pyston$ build_deps/jemalloc/bin/pprof pyston_release jeprof.out.*
+~/pyston$ ./build/Release/jemalloc/bin/jeprof pyston_release jeprof.out.*
 (pprof) top3
 Total: 4.5 MB
      1.0  22.2%  22.2%      1.0  22.2% pyston::BST_FunctionDef::operator new (inline)

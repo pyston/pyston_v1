@@ -28,6 +28,7 @@
 [submodule "build_deps/jemalloc"]
 	path = build_deps/jemalloc
 	url = git://github.com/jemalloc/jemalloc.git
+	ignore = untracked
 [submodule "test/lib/decorator"]
 	path = test/lib/decorator
 	url = https://github.com/micheles/decorator
