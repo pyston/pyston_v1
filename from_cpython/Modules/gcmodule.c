@@ -519,6 +519,8 @@ has_finalizer(PyObject *op)
 static void
 untrack_dicts(PyGC_Head *head)
 {
+    // Pyston change: skip this (see note in dict.cpp)
+#if 0
     PyGC_Head *next, *gc = head->gc.gc_next;
     while (gc != head) {
         PyObject *op = FROM_GC(gc);
@@ -527,6 +529,7 @@ untrack_dicts(PyGC_Head *head)
             _PyDict_MaybeUntrack(op);
         gc = next;
     }
+#endif
 }
 
 /* Move the objects in unreachable with __del__ methods into `finalizers`.
@@ -890,7 +893,7 @@ extern PyObject refchain;
 
 // Pyston addition.  Mostly copied from collect() but stripped down a lot.
 void
-_PyGC_FindLeaks(void)
+_PyGC_FindLeaks(PyObject** also)
 {
     int i;
     PyGC_Head *young; /* the generation we are examining */
@@ -906,6 +909,15 @@ _PyGC_FindLeaks(void)
 
     traverseproc traverse;
     PyGC_Head *gc = young->gc.gc_next;
+
+    while (*also) {
+        PyObject* o = *also;
+        traverse = Py_TYPE(o)->tp_traverse;
+        (void) traverse(o,
+                       (visitproc)visit_findleaks,
+                       NULL);
+        also++;
+    }
     for (; gc != young; gc=gc->gc.gc_next) {
         traverse = Py_TYPE(FROM_GC(gc))->tp_traverse;
         (void) traverse(FROM_GC(gc),
@@ -915,11 +927,25 @@ _PyGC_FindLeaks(void)
 
     PyObject* op;
     fprintf(stderr, "Leaked references:\n");
+
     for (op = refchain._ob_next; op != &refchain; op = op->_ob_next) {
         if (op->ob_refcnt == 0)
             continue;
-        fprintf(stderr, "%p [%" PY_FORMAT_SIZE_T "d] %s     \033[40mwatch -l ((PyObject*)%p)->ob_refcnt\033[0m\n", op,
-                op->ob_refcnt, Py_TYPE(op)->tp_name, op);
+        if (Py_TYPE(op) == &PyString_Type)
+            fprintf(stderr, "%p [%" PY_FORMAT_SIZE_T "d] %s ('%.20s')     \033[40mwatch -l "
+                            "((PyObject*)%p)->ob_refcnt\033[0m\n",
+                    op, op->ob_refcnt, Py_TYPE(op)->tp_name, PyString_AS_STRING(op), op);
+        else if (Py_TYPE(op) == &PyInt_Type)
+            fprintf(stderr, "%p [%" PY_FORMAT_SIZE_T "d] %s (%ld)     \033[40mwatch -l "
+                            "((PyObject*)%p)->ob_refcnt\033[0m\n",
+                    op, op->ob_refcnt, Py_TYPE(op)->tp_name, PyInt_AsLong(op), op);
+        else if (Py_TYPE(op) == &PyType_Type)
+            fprintf(stderr, "%p [%" PY_FORMAT_SIZE_T "d] %s ('%s')     \033[40mwatch -l "
+                            "((PyObject*)%p)->ob_refcnt\033[0m\n",
+                    op, op->ob_refcnt, Py_TYPE(op)->tp_name, ((PyTypeObject*)op)->tp_name, op);
+        else
+            fprintf(stderr, "%p [%" PY_FORMAT_SIZE_T "d] %s     \033[40mwatch -l ((PyObject*)%p)->ob_refcnt\033[0m\n",
+                    op, op->ob_refcnt, Py_TYPE(op)->tp_name, op);
     }
 }
 #endif

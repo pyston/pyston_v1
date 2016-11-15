@@ -31,3 +31,9 @@ class C(object):
 print __module__ # prints "2"
 print __name__ # prints "2"
 print __doc__ # prints "hello world"
+
+def f3():
+    # All execs are name-forcing:
+    exec "g='hi world'" in {}, locals()
+    print g
+f3()

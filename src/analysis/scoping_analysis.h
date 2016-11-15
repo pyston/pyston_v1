@@ -28,6 +28,15 @@ class AST_Module;
 class AST_Expression;
 class AST_Suite;
 
+enum class NameLookupUsage {
+    // Normal scope
+    NONE,
+    // Loads to unstored names are NAME:
+    SOME,
+    // All stores and loads are NAME lookups:
+    ALL,
+};
+
 class ScopeInfo {
 public:
     ScopeInfo() {}
@@ -78,11 +87,7 @@ public:
     };
     virtual VarScopeType getScopeTypeOfName(InternedString name) = 0;
 
-    // Returns true if the scope may contain NAME variables.
-    // In particular, it returns true for ClassDef scope, for any scope
-    // with an `exec` statement or `import *` statement in it, or for any
-    // `exec` or `eval` scope.
-    virtual bool usesNameLookup() = 0;
+    virtual NameLookupUsage getNameLookupUsage() = 0;
 
     virtual bool areLocalsFromModule() = 0;
 

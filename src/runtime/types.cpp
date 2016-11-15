@@ -3919,14 +3919,19 @@ static int type_traverse(PyTypeObject* type, visitproc visit, void* arg) {
     Py_VISIT(type->tp_bases);
     Py_VISIT(type->tp_base);
 
-    // TODO: should have something like this to traverse GC references in the type runtime ICs:
-    // if (type->hasnext_ic)
-    // Py_TRAVERSE(*type->hasnext_ic);
+// TODO: should have something like this to traverse GC references in the type runtime ICs:
+// if (type->hasnext_ic)
+// Py_TRAVERSE(*type->hasnext_ic);
 
-    /* There's no need to visit type->tp_subclasses or
-       ((PyHeapTypeObject *)type)->ht_slots, because they can't be involved
-       in cycles; tp_subclasses is a list of weak references,
-       and slots is a tuple of strings. */
+/* There's no need to visit type->tp_subclasses or
+   ((PyHeapTypeObject *)type)->ht_slots, because they can't be involved
+   in cycles; tp_subclasses is a list of weak references,
+   and slots is a tuple of strings. */
+
+#ifdef Py_TRACE_REFS
+    // This is nice for our find_leaks feature:
+    Py_VISIT(type->tp_subclasses);
+#endif
 
     return 0;
 }
@@ -4928,8 +4933,17 @@ extern "C" void Py_Finalize() noexcept {
 
     if (assert_refs) {
 #ifdef Py_TRACE_REFS
+        // TODO This really should be done by hooking the type_dealloc function,
+        // since we don't know that the memory wasn't reused:
+        std::vector<Box*> leaked_classes;
+        for (Box* b : classes) {
+            if (!PyObject_IS_GC(b) && b->ob_refcnt > 0)
+                leaked_classes.push_back(b);
+        }
+        leaked_classes.push_back(0);
+
         if (_Py_RefTotal != 0)
-            _PyGC_FindLeaks();
+            _PyGC_FindLeaks(&leaked_classes[0]);
 #endif
 
         RELEASE_ASSERT(_Py_RefTotal == 0, "%ld refs remaining!", _Py_RefTotal);

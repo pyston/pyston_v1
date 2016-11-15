@@ -31,7 +31,7 @@ ScopingResults::ScopingResults(ScopeInfo* scope_info, bool globals_from_module)
       creates_closure(scope_info->createsClosure()),
       takes_closure(scope_info->takesClosure()),
       passes_through_closure(scope_info->passesThroughClosure()),
-      uses_name_lookup(scope_info->usesNameLookup()),
+      uses_name_lookup(scope_info->getNameLookupUsage() != NameLookupUsage::NONE),
       closure_size(creates_closure ? scope_info->getClosureSize() : 0) {
     deref_info = scope_info->getAllDerefVarsAndInfo();
 }
@@ -145,7 +145,7 @@ public:
             return VarScopeType::GLOBAL;
     }
 
-    bool usesNameLookup() override { return false; }
+    NameLookupUsage getNameLookupUsage() override { return NameLookupUsage::NONE; }
 
     bool areLocalsFromModule() override { return true; }
 
@@ -211,7 +211,7 @@ public:
             return VarScopeType::NAME;
     }
 
-    bool usesNameLookup() override { return true; }
+    NameLookupUsage getNameLookupUsage() override { return NameLookupUsage::ALL; }
 
     bool areLocalsFromModule() override { return false; }
 
@@ -264,7 +264,15 @@ struct ScopingAnalysis::ScopeNameUsage {
     // (not even if the variables would refer to a closure in an in-between child).
     AST_ImportFrom* nameForcingNodeImportStar;
     AST_Exec* nameForcingNodeBareExec;
-    bool hasNameForcingSyntax() { return nameForcingNodeImportStar != NULL || nameForcingNodeBareExec != NULL; }
+    AST_Exec* nameForcingNodeExec;
+
+    NameLookupUsage getNameLookupUsage() {
+        if (nameForcingNodeImportStar != NULL || nameForcingNodeBareExec != NULL)
+            return NameLookupUsage::ALL;
+        if (nameForcingNodeExec != NULL)
+            return NameLookupUsage::SOME;
+        return NameLookupUsage::NONE;
+    }
 
     // If it has a free variable / if any child has a free variable
     // `free` is set to true if there is a variable which is read but not written,
@@ -281,6 +289,7 @@ struct ScopingAnalysis::ScopeNameUsage {
           scoping(scoping),
           nameForcingNodeImportStar(NULL),
           nameForcingNodeBareExec(NULL),
+          nameForcingNodeExec(NULL),
           free(false),
           child_free(false) {
         if (node->type == AST_TYPE::ClassDef) {
@@ -330,7 +339,7 @@ private:
     ScopeInfo* parent;
     ScopingAnalysis::ScopeNameUsage* usage;
     AST* ast;
-    bool usesNameLookup_;
+    NameLookupUsage name_usage;
 
     llvm::DenseMap<InternedString, size_t> closure_offsets;
 
@@ -342,12 +351,12 @@ private:
     bool passthrough_accesses = false;
 
 public:
-    ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, bool usesNameLookup,
+    ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, NameLookupUsage name_usage,
                   bool globals_from_module)
         : parent(parent),
           usage(usage),
           ast(ast),
-          usesNameLookup_(usesNameLookup),
+          name_usage(name_usage),
           allDerefVarsAndInfoCached(false),
           globals_from_module(globals_from_module) {
         assert(usage);
@@ -398,7 +407,7 @@ public:
         if (r.got_from_closure)
             return VarScopeType::DEREF;
 
-        if (usesNameLookup_) {
+        if (name_usage == NameLookupUsage::ALL || (name_usage == NameLookupUsage::SOME && !r.written)) {
             return VarScopeType::NAME;
         } else {
             if (!r.written)
@@ -410,7 +419,7 @@ public:
         }
     }
 
-    bool usesNameLookup() override { return usesNameLookup_; }
+    NameLookupUsage getNameLookupUsage() override { return name_usage; }
 
     bool areLocalsFromModule() override { return false; }
 
@@ -532,6 +541,11 @@ public:
     void doBareExec(AST_Exec* node) {
         if (cur->nameForcingNodeBareExec == NULL)
             cur->nameForcingNodeBareExec = node;
+    }
+
+    void doExec(AST_Exec* node) {
+        if (cur->nameForcingNodeExec == NULL)
+            cur->nameForcingNodeExec = node;
     }
 
     bool visit_name(AST_Name* node) override {
@@ -767,6 +781,8 @@ public:
     bool visit_exec(AST_Exec* node) override {
         if (node->globals == NULL) {
             doBareExec(node);
+        } else {
+            doExec(node);
         }
         return false;
     }
@@ -896,7 +912,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
 
     for (const auto& p : *usages) {
         ScopeNameUsage* usage = p.second;
-        if (usage->hasNameForcingSyntax()) {
+        if (usage->getNameLookupUsage() == NameLookupUsage::ALL) {
             if (usage->child_free)
                 raiseNameForcingSyntaxError("contains a nested function with free variables", usage);
             else if (usage->free)
@@ -932,7 +948,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
         switch (node->type) {
             case AST_TYPE::ClassDef: {
                 this->scopes[node] = llvm::make_unique<ScopeInfoBase>(parent_info, usage, usage->node,
-                                                                      true /* usesNameLookup */, globals_from_module);
+                                                                      NameLookupUsage::ALL, globals_from_module);
                 break;
             }
             case AST_TYPE::FunctionDef:
@@ -940,9 +956,8 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             case AST_TYPE::GeneratorExp:
             case AST_TYPE::DictComp:
             case AST_TYPE::SetComp: {
-                this->scopes[node] = llvm::make_unique<ScopeInfoBase>(
-                    parent_info, usage, usage->node, usage->hasNameForcingSyntax() /* usesNameLookup */,
-                    globals_from_module);
+                this->scopes[node] = llvm::make_unique<ScopeInfoBase>(parent_info, usage, usage->node,
+                                                                      usage->getNameLookupUsage(), globals_from_module);
                 break;
             }
             default:
