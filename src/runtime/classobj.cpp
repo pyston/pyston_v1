@@ -1927,6 +1927,19 @@ extern "C" PyObject* PyMethod_Self(PyObject* im) noexcept {
     return ((BoxedInstanceMethod*)im)->obj;
 }
 
+extern "C" int PyMethod_SetSelf(PyObject* im, PyObject* instance) noexcept {
+    if (!PyMethod_Check(im)) {
+        PyErr_BadInternalCall();
+        return 0;
+    }
+
+    Box* old = ((BoxedInstanceMethod*)im)->obj;
+    Py_INCREF(instance);
+    ((BoxedInstanceMethod*)im)->obj = instance;
+    Py_XDECREF(old);
+    return 1;
+}
+
 extern "C" PyObject* PyMethod_Class(PyObject* im) noexcept {
     if (!PyMethod_Check(im)) {
         PyErr_BadInternalCall();

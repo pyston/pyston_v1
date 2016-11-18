@@ -75,6 +75,9 @@ PyAPI_FUNC(PyObject *) PyMethod_Function(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyMethod_Self(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyMethod_Class(PyObject *) PYSTON_NOEXCEPT;
 
+// Pyston change: add help API to allow extensions to set the fields of PyMethodObject
+ PyAPI_FUNC(int) PyMethod_SetSelf(PyObject *, PyObject*) PYSTON_NOEXCEPT;
+
 /* Look up attribute with name (a string) on instance object pinst, using
  * only the instance and base class dicts.  If a descriptor is found in
  * a class dict, the descriptor is returned without calling it.
