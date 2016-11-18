@@ -942,12 +942,12 @@ private:
     CompilerVariable* evalImportFrom(BST_ImportFrom* node, const UnwindInfo& unw_info) {
         CompilerVariable* module = evalVReg(node->vreg_module);
         ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
+        InternedString name = irstate->getCodeConstants().getInternedString(node->index_id);
 
-        CompilerVariable* name = evalVReg(node->vreg_name);
-        ConcreteCompilerVariable* converted_name = name->makeConverted(emitter, name->getBoxType());
-
-        llvm::Value* r = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(),
-                                             converted_name->getValue());
+        llvm::Value* converted_name = embedRelocatablePtr(name, g.llvm_boxedstring_type_ptr);
+        emitter.setType(converted_name, RefType::BORROWED);
+        llvm::Value* r
+            = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(), converted_name);
         emitter.setType(r, RefType::OWNED);
 
         CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r);
@@ -973,12 +973,12 @@ private:
         CompilerVariable* froms = evalVReg(node->vreg_from);
         ConcreteCompilerVariable* converted_froms = froms->makeConverted(emitter, froms->getBoxType());
 
-        CompilerVariable* name = evalVReg(node->vreg_name);
-        ConcreteCompilerVariable* converted_name = name->makeConverted(emitter, name->getBoxType());
+        InternedString name = irstate->getCodeConstants().getInternedString(node->index_id);
 
-        llvm::Value* imported
-            = emitter.createCall(unw_info, g.funcs.import, { getConstantInt(level, g.i32), converted_froms->getValue(),
-                                                             converted_name->getValue() });
+        llvm::Value* converted_name = embedRelocatablePtr(name, g.llvm_boxedstring_type_ptr);
+        emitter.setType(converted_name, RefType::BORROWED);
+        llvm::Value* imported = emitter.createCall(
+            unw_info, g.funcs.import, { getConstantInt(level, g.i32), converted_froms->getValue(), converted_name });
         emitter.setType(imported, RefType::OWNED);
         ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported);
         return v;

@@ -293,8 +293,8 @@ public:
     RewriterVar* emitGetLocalMustExist(int vreg);
     RewriterVar* emitGetPystonIter(RewriterVar* v);
     RewriterVar* emitHasnext(RewriterVar* v);
-    RewriterVar* emitImportFrom(RewriterVar* module, RewriterVar* name);
-    RewriterVar* emitImportName(int level, RewriterVar* from_imports, RewriterVar* module_name);
+    RewriterVar* emitImportFrom(RewriterVar* module, BoxedString* s);
+    RewriterVar* emitImportName(int level, RewriterVar* from_imports, BoxedString* s);
     RewriterVar* emitImportStar(RewriterVar* module);
     RewriterVar* emitLandingpad();
     RewriterVar* emitNonzero(RewriterVar* v);

@@ -300,7 +300,7 @@ void BST_ImportFrom::accept(BSTVisitor* v) {
         return;
 
     v->visit_vreg(&vreg_module);
-    v->visit_vreg(&vreg_name);
+    v->visit_vreg(&index_id);
     v->visit_vreg(&vreg_dst, true);
 }
 
@@ -314,7 +314,7 @@ void BST_ImportName::accept(BSTVisitor* v) {
         return;
 
     v->visit_vreg(&vreg_from);
-    v->visit_vreg(&vreg_name);
+    v->visit_vreg(&index_id);
     v->visit_vreg(&vreg_dst, true);
 }
 
@@ -1007,7 +1007,7 @@ bool PrintVisitor::visit_importfrom(BST_ImportFrom* node) {
     stream << ":IMPORT_FROM(";
     visit_vreg(&node->vreg_module);
     stream << ", ";
-    visit_vreg(&node->vreg_name);
+    visit_vreg(&node->index_id);
     stream << ")";
     return true;
 }
@@ -1018,7 +1018,7 @@ bool PrintVisitor::visit_importname(BST_ImportName* node) {
     stream << ":IMPORT_NAME(";
     visit_vreg(&node->vreg_from);
     stream << ", ";
-    visit_vreg(&node->vreg_name);
+    visit_vreg(&node->index_id);
     stream << ", " << node->level << ")";
     return true;
 }

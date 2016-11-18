@@ -1990,7 +1990,7 @@ public:
             import->level = level;
 
             unmapExpr(makeNone(node->lineno), &import->vreg_from);
-            unmapExpr(makeStr(a->name.s(), node->lineno), &import->vreg_name);
+            import->index_id = remapInternedString(a->name);
 
             TmpValue tmpname = createDstName(import);
 
@@ -2049,7 +2049,7 @@ public:
         import->level = level;
 
         unmapExpr(tuple_name, &import->vreg_from);
-        unmapExpr(makeStr(node->module.s()), &import->vreg_name);
+        import->index_id = remapInternedString(internString(node->module.s()));
 
         TmpValue tmp_module_name = createDstName(import);
 
@@ -2068,7 +2068,7 @@ public:
                 BST_ImportFrom* import_from = allocAndPush<BST_ImportFrom>();
                 import_from->lineno = node->lineno;
                 unmapExpr(remapped_tmp_module_name, &import_from->vreg_module);
-                unmapExpr(makeStr(a->name.s()), &import_from->vreg_name);
+                import_from->index_id = remapInternedString(a->name);
 
                 TmpValue tmp_import_name = createDstName(import_from);
                 pushAssign(a->asname.s().size() ? a->asname : a->name, tmp_import_name);

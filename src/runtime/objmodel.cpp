@@ -7462,11 +7462,10 @@ extern "C" void setGlobal(Box* globals, BoxedString* name, STOLEN(Box*) value) {
     }
 }
 
-extern "C" Box* importFrom(Box* _m, Box* _name) {
+extern "C" Box* importFrom(Box* _m, BoxedString* name) {
     STAT_TIMER(t0, "us_timer_importFrom", 10);
 
-    assert(_name->cls == str_cls);
-    BoxedString* name = (BoxedString*)_name;
+    assert(name->cls == str_cls);
 
     Box* r = getattrInternal<CXX>(_m, name);
     if (r)

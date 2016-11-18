@@ -482,12 +482,12 @@ RewriterVar* JitFragmentWriter::emitHasnext(RewriterVar* v) {
     return rtn;
 }
 
-RewriterVar* JitFragmentWriter::emitImportFrom(RewriterVar* module, RewriterVar* name) {
-    return call(false, (void*)importFrom, module, name)->setType(RefType::OWNED);
+RewriterVar* JitFragmentWriter::emitImportFrom(RewriterVar* module, BoxedString* s) {
+    return call(false, (void*)importFrom, module, imm(s))->setType(RefType::OWNED);
 }
 
-RewriterVar* JitFragmentWriter::emitImportName(int level, RewriterVar* from_imports, RewriterVar* module_name) {
-    return call(false, (void*)import, imm(level), from_imports, module_name)->setType(RefType::OWNED);
+RewriterVar* JitFragmentWriter::emitImportName(int level, RewriterVar* from_imports, BoxedString* s) {
+    return call(false, (void*)import, imm(level), from_imports, imm(s))->setType(RefType::OWNED);
 }
 
 RewriterVar* JitFragmentWriter::emitImportStar(RewriterVar* module) {

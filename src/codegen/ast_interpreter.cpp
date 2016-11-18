@@ -819,25 +819,26 @@ Value ASTInterpreter::visit_importfrom(BST_ImportFrom* node) {
     Value module = getVReg(node->vreg_module);
     AUTO_DECREF(module.o);
 
-    Value name_boxed = getVReg(node->vreg_name);
-    AUTO_DECREF(name_boxed.o);
+    InternedString name = getCodeConstants().getInternedString(node->index_id);
 
     Value v;
     if (jit)
-        v.var = jit->emitImportFrom(module, name_boxed);
-    v.o = importFrom(module.o, (BoxedString*)name_boxed.o);
+        v.var = jit->emitImportFrom(module, name);
+    v.o = importFrom(module.o, (BoxedString*)name);
     return v;
 }
+
 Value ASTInterpreter::visit_importname(BST_ImportName* node) {
     int level = node->level;
     Value froms = getVReg(node->vreg_from);
     AUTO_DECREF(froms.o);
-    Value module_name = getVReg(node->vreg_name);
-    AUTO_DECREF(module_name.o);
+
+    InternedString name = getCodeConstants().getInternedString(node->index_id);
+
     Value v;
     if (jit)
-        v.var = jit->emitImportName(level, froms, module_name);
-    v.o = import(level, froms.o, (BoxedString*)module_name.o);
+        v.var = jit->emitImportName(level, froms, name.getBox());
+    v.o = import(level, froms.o, (BoxedString*)name);
     return v;
 }
 
