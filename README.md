@@ -51,7 +51,12 @@ See [travis-ci.org/dropbox/pyston/builds](https://travis-ci.org/dropbox/pyston/b
 
 ### Roadmap
 
-##### v0.6: coming soon
+##### v0.7: coming soon
+
+##### v0.6: [released 11/21/2016](https://blog.pyston.org/2016/11/22/pyston-0-6-released/)
+- focused on reducing the memory usage with the result that the peak memory usage on various benchmarks nearly halved.
+- new bytecode
+- lots of fixes for compatibility issues and other bugs
 
 ##### v0.5.1: [released 7/14/2016](https://blog.pyston.org/2016/07/14/pyston-0-5-1-released/)
 - misc baseline JIT and inline cache improvements
