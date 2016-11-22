@@ -166,7 +166,8 @@ public:
         HANDED_OFF,
         REF_USED,
     };
-    void setAttr(int offset, RewriterVar* other, SetattrType type = SetattrType::UNKNOWN);
+    void setAttr(int offset, RewriterVar* other, SetattrType type = SetattrType::UNKNOWN,
+                 assembler::MovType store_wide = assembler::MovType::Q);
 
     // Replaces an owned ref with another one.  Does the equivalent of:
     // Box* prev = this[offset];
@@ -568,7 +569,7 @@ protected:
                   assembler::MovType type = assembler::MovType::Q);
     void _getAttrFloat(RewriterVar* result, RewriterVar* var, int offset, Location loc = Location::any());
     void _getAttrDouble(RewriterVar* result, RewriterVar* var, int offset, Location loc = Location::any());
-    void _setAttr(RewriterVar* var, int offset, RewriterVar* other);
+    void _setAttr(RewriterVar* var, int offset, RewriterVar* other, assembler::MovType store_wide);
     void _cmp(RewriterVar* result, RewriterVar* var1, AST_TYPE::AST_TYPE cmp_type, RewriterVar* var2,
               Location loc = Location::any());
     void _toBool(RewriterVar* result, RewriterVar* var, Location loc = Location::any());

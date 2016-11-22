@@ -144,7 +144,9 @@ public:
 
     void clear_reg(Register reg); // = xor reg, reg
 
+    void mov_generic(Immediate src, Indirect dest, MovType type);
     void mov_generic(Indirect src, Register dest, MovType type);
+    void mov_generic(Register src, Indirect dest, MovType type);
 
     void push(Register reg);
     void pop(Register reg);

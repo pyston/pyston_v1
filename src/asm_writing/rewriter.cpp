@@ -697,7 +697,7 @@ void Rewriter::_toBool(RewriterVar* result, RewriterVar* var, Location dest) {
     assertConsistent();
 }
 
-void RewriterVar::setAttr(int offset, RewriterVar* val, SetattrType type) {
+void RewriterVar::setAttr(int offset, RewriterVar* val, SetattrType type, assembler::MovType store_wide) {
     STAT_TIMER(t0, "us_timer_rewriter", 10);
 
     // Check that the caller promises to handle lifetimes appropriately.
@@ -706,7 +706,9 @@ void RewriterVar::setAttr(int offset, RewriterVar* val, SetattrType type) {
     // decref between the store and the pass.
     if (val->reftype == RefType::OWNED)
         assert(type != SetattrType::UNKNOWN);
-    rewriter->addAction([=]() { rewriter->_setAttr(this, offset, val); }, { this, val }, ActionType::MUTATION);
+    assert(store_wide == assembler::MovType::Q || type == SetattrType::UNKNOWN);
+    rewriter->addAction([=]() { rewriter->_setAttr(this, offset, val, store_wide); }, { this, val },
+                        ActionType::MUTATION);
 }
 
 void RewriterVar::replaceAttr(int offset, RewriterVar* val, bool prev_nullable) {
@@ -722,19 +724,22 @@ void RewriterVar::replaceAttr(int offset, RewriterVar* val, bool prev_nullable) 
         prev->decref();
 }
 
-void Rewriter::_setAttr(RewriterVar* ptr, int offset, RewriterVar* val) {
+void Rewriter::_setAttr(RewriterVar* ptr, int offset, RewriterVar* val, assembler::MovType store_wide) {
     if (LOG_IC_ASSEMBLY)
         assembler->comment("_setAttr");
+
+    assert(store_wide == assembler::MovType::Q
+           || store_wide == assembler::MovType::L && "we only support this modes for now");
 
     if (ptr->isScratchAllocation()) {
         auto dest_loc = indirectFor(ptr->getScratchLocation(offset));
         bool is_immediate;
         assembler::Immediate imm = val->tryGetAsImmediate(&is_immediate);
         if (is_immediate) {
-            assembler->movq(imm, dest_loc);
+            assembler->mov_generic(imm, dest_loc, store_wide);
         } else {
             assembler::Register val_reg = val->getInReg(Location::any(), false);
-            assembler->mov(val_reg, dest_loc);
+            assembler->mov_generic(val_reg, dest_loc, store_wide);
         }
     } else {
         assembler::Register ptr_reg = ptr->getInReg();
@@ -743,12 +748,11 @@ void Rewriter::_setAttr(RewriterVar* ptr, int offset, RewriterVar* val) {
         assembler::Immediate imm = val->tryGetAsImmediate(&is_immediate);
 
         if (is_immediate) {
-            assembler->movq(imm, assembler::Indirect(ptr_reg, offset));
+            assembler->mov_generic(imm, assembler::Indirect(ptr_reg, offset), store_wide);
         } else {
             assembler::Register val_reg = val->getInReg(Location::any(), false, /* otherThan */ ptr_reg);
             assert(ptr_reg != val_reg);
-
-            assembler->mov(val_reg, assembler::Indirect(ptr_reg, offset));
+            assembler->mov_generic(val_reg, assembler::Indirect(ptr_reg, offset), store_wide);
         }
     }
 

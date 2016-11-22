@@ -715,8 +715,9 @@ void JitFragmentWriter::emitSetBlockLocal(int vreg, STOLEN(RewriterVar*) v) {
         comment("BJIT: emitSetBlockLocal() end");
 }
 
-void JitFragmentWriter::emitSetCurrentInst(BST_stmt* node) {
-    getInterp()->setAttr(ASTInterpreterJitInterface::getCurrentInstOffset(), imm(node));
+void JitFragmentWriter::emitSetCurrentInst(int offset) {
+    getInterp()->setAttr(ASTInterpreterJitInterface::getCurrentInstOffset(), imm(offset),
+                         RewriterVar::SetattrType::UNKNOWN, assembler::MovType::L);
 }
 
 void JitFragmentWriter::emitSetExcInfo(RewriterVar* type, RewriterVar* value, RewriterVar* traceback) {

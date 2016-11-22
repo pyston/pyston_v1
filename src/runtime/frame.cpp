@@ -140,7 +140,7 @@ public:
             return boxInt(f->_linenumber);
         }
 
-        BST_stmt* stmt = f->frame_info->stmt;
+        BST_stmt* stmt = f->frame_info->code->source->cfg->getStmtFromOffset(f->frame_info->stmt_offset);
         ASSERT(stmt->lineno > 0 && stmt->lineno < 1000000, "%d", stmt->lineno);
         return boxInt(stmt->lineno);
     }
@@ -155,8 +155,10 @@ public:
         globals(this, NULL);
         assert(!_locals);
         _locals = incref(locals(this, NULL));
-        ASSERT(frame_info->stmt->lineno > 0 && frame_info->stmt->lineno < 1000000, "%d", frame_info->stmt->lineno);
-        _linenumber = frame_info->stmt->lineno;
+
+        BST_stmt* stmt = frame_info->code->source->cfg->getStmtFromOffset(frame_info->stmt_offset);
+        ASSERT(stmt->lineno > 0 && stmt->lineno < 1000000, "%d", stmt->lineno);
+        _linenumber = stmt->lineno;
 
         frame_info = NULL; // this means exited == true
         assert(hasExited());

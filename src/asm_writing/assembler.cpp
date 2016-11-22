@@ -258,35 +258,7 @@ void Assembler::mov(Immediate val, Register dest, bool force_64bit_load) {
 }
 
 void Assembler::movq(Immediate src, Indirect dest) {
-    int64_t src_val = src.val;
-    assert(fitsInto<int32_t>(src_val));
-
-    int rex = REX_W;
-
-    int dest_idx = dest.base.regnum;
-
-    if (dest_idx >= 8) {
-        rex |= REX_B;
-        dest_idx -= 8;
-    }
-
-    emitRex(rex);
-    emitByte(0xc7);
-
-    bool needssib = (dest_idx == 0b100);
-    int mode = getModeFromOffset(dest.offset, dest_idx);
-    emitModRM(mode, 0, dest_idx);
-
-    if (needssib)
-        emitSIB(0b00, 0b100, dest_idx);
-
-    if (mode == 0b01) {
-        emitByte(dest.offset);
-    } else if (mode == 0b10) {
-        emitInt(dest.offset, 4);
-    }
-
-    emitInt(src_val, 4);
+    mov_generic(src, dest, MovType::Q);
 }
 
 void Assembler::mov(Register src, Register dest) {
@@ -314,37 +286,7 @@ void Assembler::mov(Register src, Register dest) {
 }
 
 void Assembler::mov(Register src, Indirect dest) {
-    int rex = REX_W;
-
-    int src_idx = src.regnum;
-    int dest_idx = dest.base.regnum;
-
-    assert(src_idx != dest_idx && "while valid this is almost certainly a register allocator bug");
-
-    if (src_idx >= 8) {
-        rex |= REX_R;
-        src_idx -= 8;
-    }
-    if (dest_idx >= 8) {
-        rex |= REX_B;
-        dest_idx -= 8;
-    }
-
-    emitRex(rex);
-    emitByte(0x89);
-
-    bool needssib = (dest_idx == 0b100);
-    int mode = getModeFromOffset(dest.offset, dest_idx);
-    emitModRM(mode, src_idx, dest_idx);
-
-    if (needssib)
-        emitSIB(0b00, 0b100, dest_idx);
-
-    if (mode == 0b01) {
-        emitByte(dest.offset);
-    } else if (mode == 0b10) {
-        emitInt(dest.offset, 4);
-    }
+    mov_generic(src, dest, MovType::Q);
 }
 
 void Assembler::mov(Indirect src, Register dest) {
@@ -491,6 +433,78 @@ void Assembler::mov_generic(Indirect src, Register dest, MovType type) {
         emitByte(src.offset);
     } else if (mode == 0b10) {
         emitInt(src.offset, 4);
+    }
+}
+
+void Assembler::mov_generic(Immediate src, Indirect dest, MovType type) {
+    int64_t src_val = src.val;
+    assert(fitsInto<int32_t>(src_val));
+
+    assert(type == MovType::Q || type == MovType::L && "we only support this modes for now");
+    int rex = type == MovType::Q ? REX_W : 0;
+
+    int dest_idx = dest.base.regnum;
+
+    if (dest_idx >= 8) {
+        rex |= REX_B;
+        dest_idx -= 8;
+    }
+
+    if (rex)
+        emitRex(rex);
+    emitByte(0xc7);
+
+    bool needssib = (dest_idx == 0b100);
+    int mode = getModeFromOffset(dest.offset, dest_idx);
+    emitModRM(mode, 0, dest_idx);
+
+    if (needssib)
+        emitSIB(0b00, 0b100, dest_idx);
+
+    if (mode == 0b01) {
+        emitByte(dest.offset);
+    } else if (mode == 0b10) {
+        emitInt(dest.offset, 4);
+    }
+
+    emitInt(src_val, 4);
+}
+
+void Assembler::mov_generic(Register src, Indirect dest, MovType type) {
+    assert(type == MovType::Q || type == MovType::L && "we only support this modes for now");
+    int rex = type == MovType::Q ? REX_W : 0;
+
+    assert(type != MovType::L && "untested");
+
+    int src_idx = src.regnum;
+    int dest_idx = dest.base.regnum;
+
+    assert(src_idx != dest_idx && "while valid this is almost certainly a register allocator bug");
+
+    if (src_idx >= 8) {
+        rex |= REX_R;
+        src_idx -= 8;
+    }
+    if (dest_idx >= 8) {
+        rex |= REX_B;
+        dest_idx -= 8;
+    }
+
+    if (rex)
+        emitRex(rex);
+    emitByte(0x89);
+
+    bool needssib = (dest_idx == 0b100);
+    int mode = getModeFromOffset(dest.offset, dest_idx);
+    emitModRM(mode, src_idx, dest_idx);
+
+    if (needssib)
+        emitSIB(0b00, 0b100, dest_idx);
+
+    if (mode == 0b01) {
+        emitByte(dest.offset);
+    } else if (mode == 0b10) {
+        emitInt(dest.offset, 4);
     }
 }
 

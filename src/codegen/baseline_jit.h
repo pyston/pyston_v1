@@ -322,7 +322,7 @@ public:
     void emitReturn(RewriterVar* v);
     void emitSetAttr(BST_stmt* node, RewriterVar* obj, BoxedString* s, STOLEN(RewriterVar*) attr);
     void emitSetBlockLocal(int vreg, STOLEN(RewriterVar*) v);
-    void emitSetCurrentInst(BST_stmt* node);
+    void emitSetCurrentInst(int offset);
     void emitSetExcInfo(RewriterVar* type, RewriterVar* value, RewriterVar* traceback);
     void emitSetGlobal(BoxedString* s, STOLEN(RewriterVar*) v, bool are_globals_from_module);
     void emitSetItemName(BoxedString* s, RewriterVar* v);
