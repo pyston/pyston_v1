@@ -143,6 +143,10 @@ void initGlobalFuncs(GlobalState& g) {
     assert(g.llvm_boxedstring_type_ptr);
     g.llvm_boxedstring_type_ptr = g.llvm_boxedstring_type_ptr->getPointerTo();
 
+    g.llvm_boxedtuple_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedTuple");
+    assert(g.llvm_boxedtuple_type_ptr);
+    g.llvm_boxedtuple_type_ptr = g.llvm_boxedtuple_type_ptr->getPointerTo();
+
     g.llvm_dict_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedDict");
     assert(g.llvm_dict_type_ptr);
     g.llvm_dict_type_ptr = g.llvm_dict_type_ptr->getPointerTo();

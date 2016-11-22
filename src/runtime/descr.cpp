@@ -228,7 +228,7 @@ static Box* classmethodGet(Box* self, Box* obj, Box* type) {
 
 template <ExceptionStyle S>
 Box* methodDescrTppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
-                        Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+                        Box** args, BoxedTuple* keyword_names) noexcept(S == CAPI) {
     if (S == CAPI) {
         try {
             return methodDescrTppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
@@ -454,7 +454,7 @@ int BoxedClassmethod::clear(Box* _self) noexcept {
 
 template <ExceptionStyle S>
 Box* wrapperDescrTppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-                         Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+                         Box* arg3, Box** args, BoxedTuple* keyword_names) noexcept(S == CAPI) {
     if (S == CAPI) {
         try {
             return wrapperDescrTppCall<CXX>(_self, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
@@ -565,7 +565,7 @@ Box* wrapperDescrTppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec 
 
 template <ExceptionStyle S>
 Box* wrapperObjectTppCall(Box* _self, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-                          Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+                          Box* arg3, Box** args, BoxedTuple* keyword_names) noexcept(S == CAPI) {
     STAT_TIMER(t0, "us_timer_boxedwrapperobject_call", (_self->cls->is_user_defined ? 10 : 20));
 
     assert(_self->cls == &wrappertype);

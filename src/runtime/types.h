@@ -238,8 +238,8 @@ public:
 
     pyston_inquiry tpp_hasnext;
 
-    ExceptionSwitchableFunction<Box*, Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
-                                const std::vector<BoxedString*>*> tpp_call;
+    ExceptionSwitchableFunction<Box*, Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**, BoxedTuple*>
+        tpp_call;
 
     bool hasGenericGetattr() {
         if (tp_getattr || tp_getattro != object_cls->tp_getattro)
@@ -1086,9 +1086,6 @@ private:
     // all entries are owned by code constants and will get decrefed in the destructor.
     mutable std::unordered_map<int64_t, BoxedFloat*> float_constants;
 
-    // TODO: when we support tuple constants inside vregs we can remove it and just use a normal constant vreg for it
-    std::vector<std::unique_ptr<std::vector<BoxedString*>>> keyword_names;
-
 public:
     CodeConstants() {}
     CodeConstants(CodeConstants&&) = default;
@@ -1109,12 +1106,6 @@ public:
 
     BORROWED(BoxedInt*) getIntConstant(int64_t n) const;
     BORROWED(BoxedFloat*) getFloatConstant(double d) const;
-
-    int addKeywordNames(llvm::ArrayRef<BoxedString*> name) {
-        keyword_names.emplace_back(new std::vector<BoxedString*>(name.begin(), name.end()));
-        return keyword_names.size() - 1;
-    }
-    const std::vector<BoxedString*>* getKeywordNames(int constant) const { return keyword_names[constant].get(); }
 };
 
 
@@ -1161,7 +1152,7 @@ public:
     // This can be used to implement functions which know how to rewrite themselves,
     // such as typeCall.
     typedef ExceptionSwitchableFunction<Box*, BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*,
-                                        Box**, const std::vector<BoxedString*>*> InternalCallable;
+                                        Box**, BoxedTuple*> InternalCallable;
     InternalCallable internal_callable;
 
     // Constructor for Python code objects:

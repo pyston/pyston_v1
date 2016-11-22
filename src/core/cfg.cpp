@@ -1246,11 +1246,11 @@ private:
         rtn_shared->lineno = node->lineno;
 
         if (node->keywords.size()) {
-            llvm::SmallVector<BoxedString*, 8> keywords_names;
-            for (auto kw : node->keywords) {
-                keywords_names.push_back(kw->arg.getBox());
+            auto tuple = BoxedTuple::create(node->keywords.size());
+            for (int i = 0; i < node->keywords.size(); ++i) {
+                tuple->elts[i] = incref(node->keywords[i]->arg.getBox());
             }
-            rtn_shared->index_keyword_names = code_constants.addKeywordNames(keywords_names);
+            rtn_shared->index_keyword_names = addConst(tuple);
         }
 
         unmapExpr(remapped_starargs, &rtn_shared->vreg_starargs);

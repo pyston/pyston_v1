@@ -1119,9 +1119,9 @@ private:
         }
 
         std::vector<CompilerVariable*> args;
-        const std::vector<BoxedString*>* keyword_names = NULL;
+        BoxedTuple* keyword_names = NULL;
         if (node->num_keywords)
-            keyword_names = irstate->getCodeConstants().getKeywordNames(node->index_keyword_names);
+            keyword_names = (BoxedTuple*)irstate->getCodeConstants().getConstant(node->index_keyword_names);
 
         for (int i = 0; i < node->num_args + node->num_keywords; i++) {
             CompilerVariable* a = evalVReg(vreg_elts[i]);
