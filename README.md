@@ -35,7 +35,7 @@ docker run -it pyston/pyston-numpy
 To install it yourself, one needs a modified Cython, as well as to install numpy from source in order to invoke our modified Cython.
 
 ```
-pip install https://github.com/dropbox/pyston/releases/download/v0.5.1/Cython-0.24-pyston.tar.gz
+pip install https://github.com/dropbox/pyston/releases/download/v0.6/Cython-0.24-pyston.tar.gz
 pip install git+git://github.com/numpy/numpy@v1.11.0
 ```
 
