@@ -374,7 +374,7 @@ static Box* instanceGetattributeSimple(BoxedInstance* inst, BoxedString* attr_st
 
     Box* r = inst->getattr<rewritable>(attr_str, rewrite_args);
     if (r) {
-        if (rewrite_args)
+        if (rewrite_args && rewrite_args->isSuccessful())
             rewrite_args->assertReturnConvention(ReturnConvention::HAS_RETURN);
         return incref(r);
     }
