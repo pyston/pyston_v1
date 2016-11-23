@@ -1046,7 +1046,7 @@ struct FrameInfo {
     Box** vregs;
     int num_vregs;
 
-    BST_stmt* stmt; // current statement
+    int stmt_offset; // offset of current statement from the bytecode start
     // This is either a module or a dict
     BORROWED(Box*) globals;
 
@@ -1070,7 +1070,7 @@ struct FrameInfo {
           passed_closure(0),
           vregs(0),
           num_vregs(INT_MAX),
-          stmt(0),
+          stmt_offset(-1),
           globals(0),
           back(0),
           code(0) {}

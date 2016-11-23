@@ -170,12 +170,11 @@ public:
     }
 #endif
 
-    BST_stmt* getCurrentStatement() {
-        assert(frame_info.stmt);
-        return frame_info.stmt;
-    }
+    BST_stmt* getCurrentStatement() { return source_info->cfg->getStmtFromOffset(getFrameInfo()->stmt_offset); }
 
-    void setCurrentStatement(BST_stmt* stmt) { frame_info.stmt = stmt; }
+    void setCurrentStatement(BST_stmt* stmt) {
+        getFrameInfo()->stmt_offset = stmt ? source_info->cfg->bytecode.getOffset(stmt) : -1;
+    }
 
     BoxedCode* getCode() { return frame_info.code; }
     FrameInfo* getFrameInfo() { return &frame_info; }
@@ -453,7 +452,7 @@ Box* ASTInterpreter::executeInner(ASTInterpreter& interpreter, CFGBlock* start_b
         for (BST_stmt* s : *interpreter.current_block) {
             interpreter.setCurrentStatement(s);
             if (interpreter.jit)
-                interpreter.jit->emitSetCurrentInst(s);
+                interpreter.jit->emitSetCurrentInst(interpreter.getFrameInfo()->stmt_offset);
             if (v.o) {
                 Py_DECREF(v.o);
             }
@@ -1817,7 +1816,8 @@ int ASTInterpreterJitInterface::getCurrentBlockOffset() {
 }
 
 int ASTInterpreterJitInterface::getCurrentInstOffset() {
-    return offsetof(ASTInterpreter, frame_info.stmt);
+    static_assert(sizeof(FrameInfo::stmt_offset) == 4, "caller assumes that");
+    return offsetof(ASTInterpreter, frame_info.stmt_offset);
 }
 
 int ASTInterpreterJitInterface::getEdgeCountOffset() {

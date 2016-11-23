@@ -366,8 +366,8 @@ public:
     }
 
     BST_stmt* getCurrentStatement() {
-        assert(getFrameInfo()->stmt);
-        return getFrameInfo()->stmt;
+        assert(getFrameInfo()->stmt_offset != -1);
+        return (BST_stmt*)&getCode()->source->cfg->bytecode.getData()[getFrameInfo()->stmt_offset];
     }
 
     BORROWED(Box*) getGlobalsDict() {
@@ -486,9 +486,9 @@ bool frameIsPythonFrame(unw_word_t ip, unw_word_t bp, unw_cursor_t* cursor, Pyth
 }
 
 static const LineInfo lineInfoForFrameInfo(FrameInfo* frame_info) {
-    BST_stmt* current_stmt = frame_info->stmt;
     auto* code = frame_info->code;
     assert(code);
+    BST_stmt* current_stmt = code->source->cfg->getStmtFromOffset(frame_info->stmt_offset);
 
     return LineInfo(current_stmt->lineno, code->filename, code->name);
 }
@@ -1069,7 +1069,7 @@ std::string getCurrentPythonLine() {
         auto* code = frame_info->code;
         auto source = code->source.get();
 
-        auto current_stmt = frame_info->stmt;
+        auto current_stmt = source->cfg->getStmtFromOffset(frame_info->stmt_offset);
 
         stream << code->filename->c_str() << ":" << current_stmt->lineno;
         return stream.str();

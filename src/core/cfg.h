@@ -281,6 +281,12 @@ public:
 #endif
     }
 
+    BST_stmt* getStmtFromOffset(int offset) {
+        if (offset == -1)
+            return NULL;
+        return (BST_stmt*)&bytecode.getData()[offset];
+    }
+
     void print(const CodeConstants& code_constants, llvm::raw_ostream& stream = llvm::outs());
 };
 

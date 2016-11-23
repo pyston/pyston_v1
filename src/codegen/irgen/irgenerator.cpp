@@ -208,17 +208,17 @@ template <typename Builder> static llvm::Value* getNumVRegsGep(Builder& builder,
 }
 
 template <typename Builder> static llvm::Value* getStmtGep(Builder& builder, llvm::Value* v) {
-    static_assert(offsetof(FrameInfo, stmt) == 64, "");
+    static_assert(offsetof(FrameInfo, stmt_offset) == 60, "");
     return builder.CreateConstInBoundsGEP2_32(v, 0, 6);
 }
 
 template <typename Builder> static llvm::Value* getGlobalsGep(Builder& builder, llvm::Value* v) {
-    static_assert(offsetof(FrameInfo, globals) == 72, "");
+    static_assert(offsetof(FrameInfo, globals) == 64, "");
     return builder.CreateConstInBoundsGEP2_32(v, 0, 7);
 }
 
 template <typename Builder> static llvm::Value* getCodeGep(Builder& builder, llvm::Value* v) {
-    static_assert(offsetof(FrameInfo, code) == 72 + 16, "");
+    static_assert(offsetof(FrameInfo, code) == 64 + 16, "");
     return builder.CreateConstInBoundsGEP2_32(v, 0, 9);
 }
 
@@ -652,8 +652,7 @@ public:
     // Only patchpoint don't need to set the current statement because the stmt will be inluded in the stackmap args.
     void emitSetCurrentStmt(BST_stmt* stmt) {
         if (stmt)
-            getBuilder()->CreateStore(stmt ? embedRelocatablePtr(stmt, g.llvm_bststmt_type_ptr)
-                                           : getNullPtr(g.llvm_bststmt_type_ptr),
+            getBuilder()->CreateStore(getConstantInt(irstate->getCFG()->bytecode.getOffset(stmt), g.i32),
                                       irstate->getStmtVar());
     }
 
@@ -2992,7 +2991,7 @@ public:
 
             emitter.setCurrentBasicBlock(capi_exc_dest);
             assert(!phi_node);
-            phi_node = emitter.getBuilder()->CreatePHI(g.llvm_bststmt_type_ptr, 0);
+            phi_node = emitter.getBuilder()->CreatePHI(g.i32, 0);
 
             emitter.emitSetCurrentStmt(current_stmt);
             emitter.getBuilder()->CreateCall(g.funcs.caughtCapiException);
@@ -3050,7 +3049,8 @@ public:
         critedge_breaker->moveBefore(capi_exc_dest);
         llvm::BranchInst::Create(capi_exc_dest, critedge_breaker);
 
-        phi_node->addIncoming(embedRelocatablePtr(current_stmt, g.llvm_bststmt_type_ptr), critedge_breaker);
+        phi_node->addIncoming(getConstantInt(irstate->getCFG()->bytecode.getOffset(current_stmt), g.i32),
+                              critedge_breaker);
 
         return critedge_breaker;
     }
