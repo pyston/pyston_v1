@@ -58,9 +58,16 @@ void dumpPrettyIR(llvm::Function* f);
 // And I think that that should be valid, but clang doesn't seem to be accepting it.
 template <typename T, typename... Args> T* createAfter(llvm::Instruction* create_after, Args... args) {
     if (llvm::InvokeInst* ii = llvm::dyn_cast<llvm::InvokeInst>(create_after)) {
-        return new T(args..., ii->getNormalDest()->getFirstInsertionPt());
-    } else
-        return new T(args..., create_after->getNextNode());
+        auto* block = ii->getNormalDest();
+        if (block->empty())
+            return new T(args..., block);
+        else
+            return new T(args..., block->getFirstInsertionPt());
+    } else {
+        auto* new_inst = new T(args...);
+        new_inst->insertAfter(create_after);
+        return new_inst;
+    }
 }
 }
 
