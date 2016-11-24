@@ -2397,8 +2397,8 @@ public:
         ASSERT(other_type == UNKNOWN || other_type == BOXED_BOOL, "%s", other_type->debugName().c_str());
         llvm::Value* boxed = emitter.getBuilder()->CreateSelect(
             i1FromBool(emitter, var),
-            emitter.setType(embedRelocatablePtr(Py_True, g.llvm_value_type_ptr), RefType::BORROWED),
-            emitter.setType(embedRelocatablePtr(Py_False, g.llvm_value_type_ptr), RefType::BORROWED));
+            emitter.setType(embedRelocatablePtr(Py_True, g.llvm_value_type_ptr, "cTrue"), RefType::BORROWED),
+            emitter.setType(embedRelocatablePtr(Py_False, g.llvm_value_type_ptr, "cFalse"), RefType::BORROWED));
         emitter.setType(boxed, RefType::BORROWED);
         return new ConcreteCompilerVariable(other_type, boxed);
     }
