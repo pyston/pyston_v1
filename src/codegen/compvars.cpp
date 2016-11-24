@@ -1373,7 +1373,19 @@ CompilerVariable* makeInt(int64_t n) {
 
 CompilerVariable* makeUnboxedInt(IREmitter& emitter, ConcreteCompilerVariable* v) {
     assert(v->getType() == BOXED_INT);
-    llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, v->getValue());
+
+    // if the llvm value is a pointer to boxed object extract the value to save a unboxing call.
+    llvm::Value* unboxed = NULL;
+    if (llvm::GlobalValue* GV = llvm::dyn_cast<llvm::GlobalValue>(v->getValue()->stripPointerCasts())) {
+        if (GV->getName().startswith("c")) {
+            auto* ptr = (BoxedInt*)const_cast<void*>(getValueOfRelocatableSym(GV->getName()));
+            if (ptr)
+                unboxed = llvm::ConstantInt::get(g.i64, unboxInt(ptr), true);
+        }
+    }
+    if (!unboxed)
+        unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, v->getValue());
+
     return new IntType::VAR(&_INT, std::make_shared<IntType::Unboxed>(unboxed, v));
 }
 
@@ -1649,24 +1661,25 @@ CompilerVariable* makeFloat(double n) {
 
 CompilerVariable* makeUnboxedFloat(IREmitter& emitter, ConcreteCompilerVariable* v) {
     assert(v->getType() == BOXED_FLOAT);
-    llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, v->getValue());
+
+    // if the llvm value is a pointer to boxed object extract the value to save a unboxing call.
+    llvm::Value* unboxed = NULL;
+    if (llvm::GlobalValue* GV = llvm::dyn_cast<llvm::GlobalValue>(v->getValue()->stripPointerCasts())) {
+        if (GV->getName().startswith("c")) {
+            auto* ptr = (BoxedFloat*)const_cast<void*>(getValueOfRelocatableSym(GV->getName()));
+            if (ptr)
+                unboxed = llvm::ConstantFP::get(g.double_, unboxFloat(ptr));
+        }
+    }
+    if (!unboxed)
+        unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, v->getValue());
+
     return new FloatType::VAR(&_FLOAT, std::make_shared<FloatType::Unboxed>(unboxed, v));
 }
 
 CompilerVariable* makeUnboxedFloat(IREmitter& emitter, llvm::Value* v) {
     assert(v->getType() == g.llvm_value_type_ptr);
     return makeUnboxedFloat(emitter, new ConcreteCompilerVariable(BOXED_FLOAT, v));
-}
-
-
-ConcreteCompilerVariable* makeLong(IREmitter& emitter, Box* v) {
-    return new ConcreteCompilerVariable(
-        LONG, emitter.setType(embedRelocatablePtr(v, g.llvm_value_type_ptr), RefType::BORROWED));
-}
-
-ConcreteCompilerVariable* makePureImaginary(IREmitter& emitter, Box* v) {
-    return new ConcreteCompilerVariable(
-        BOXED_COMPLEX, emitter.setType(embedRelocatablePtr(v, g.llvm_value_type_ptr), RefType::BORROWED));
 }
 
 class KnownClassobjType : public ValuedCompilerType<BoxedClass*> {
