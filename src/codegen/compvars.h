@@ -363,7 +363,7 @@ CompilerVariable* makeUnicode(IREmitter& emitter, llvm::StringRef);
 CompilerVariable* makeFunction(IREmitter& emitter, BoxedCode*, llvm::Value* closure, llvm::Value* globals,
                                const std::vector<ConcreteCompilerVariable*>& defaults);
 ConcreteCompilerVariable* undefVariable();
-CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts);
+CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts, ConcreteCompilerVariable* boxed = NULL);
 
 CompilerType* typeOfClassobj(BoxedClass*);
 CompilerType* makeTupleType(const std::vector<CompilerType*>& elt_types);

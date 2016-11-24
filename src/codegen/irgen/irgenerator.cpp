@@ -1225,34 +1225,42 @@ private:
         }
     }
 
+    CompilerVariable* evalConstObj(Box* o) {
+        if (o->cls == none_cls)
+            return emitter.getNone();
+        else if (o->cls == ellipsis_cls)
+            return getEllipsis();
+
+        llvm::Value* rtn = embedRelocatablePtr(o, g.llvm_value_type_ptr);
+        emitter.setType(rtn, RefType::BORROWED);
+
+        if (o->cls == int_cls)
+            return makeUnboxedInt(emitter, rtn);
+        else if (o->cls == float_cls)
+            return makeUnboxedFloat(emitter, rtn);
+        else if (o->cls == complex_cls)
+            return new ConcreteCompilerVariable(BOXED_COMPLEX, rtn);
+        else if (o->cls == long_cls)
+            return new ConcreteCompilerVariable(LONG, rtn);
+        else if (o->cls == str_cls)
+            return new ConcreteCompilerVariable(STR, rtn);
+        else if (o->cls == unicode_cls)
+            return new ConcreteCompilerVariable(typeFromClass(unicode_cls), rtn);
+        else if (o->cls == tuple_cls) {
+            auto* tuple = (BoxedTuple*)o;
+            std::vector<CompilerVariable*> elts;
+            for (int i = 0; i < tuple->size(); ++i) {
+                elts.push_back(evalConstObj(tuple->elts[i]));
+            }
+            return makeTuple(elts, new ConcreteCompilerVariable(BOXED_TUPLE, rtn));
+        } else
+            RELEASE_ASSERT(0, "");
+    }
+
     CompilerVariable* evalVReg(int vreg, bool is_kill = true) {
         assert(vreg != VREG_UNDEFINED);
-        if (vreg < 0) {
-            Box* o = irstate->getCode()->code_constants.getConstant(vreg);
-
-            if (o->cls == none_cls)
-                return emitter.getNone();
-            else if (o->cls == ellipsis_cls)
-                return getEllipsis();
-
-            llvm::Value* rtn = embedRelocatablePtr(o, g.llvm_value_type_ptr);
-            emitter.setType(rtn, RefType::BORROWED);
-
-            if (o->cls == int_cls)
-                return makeUnboxedInt(emitter, rtn);
-            else if (o->cls == float_cls)
-                return makeUnboxedFloat(emitter, rtn);
-            else if (o->cls == complex_cls)
-                return new ConcreteCompilerVariable(BOXED_COMPLEX, rtn);
-            else if (o->cls == long_cls)
-                return new ConcreteCompilerVariable(LONG, rtn);
-            else if (o->cls == str_cls)
-                return new ConcreteCompilerVariable(STR, rtn);
-            else if (o->cls == unicode_cls)
-                return new ConcreteCompilerVariable(typeFromClass(unicode_cls), rtn);
-            else
-                RELEASE_ASSERT(0, "");
-        }
+        if (vreg < 0)
+            return evalConstObj(irstate->getCode()->code_constants.getConstant(vreg));
         CompilerVariable* rtn = symbol_table[vreg];
         if (is_kill) {
             symbol_table[vreg] = NULL;

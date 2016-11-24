@@ -2724,14 +2724,14 @@ CompilerType* makeTupleType(const std::vector<CompilerType*>& elt_types) {
     return TupleType::make(elt_types);
 }
 
-CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts) {
+CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts, ConcreteCompilerVariable* boxed) {
     std::vector<CompilerType*> elt_types;
     for (int i = 0; i < elts.size(); i++) {
         elt_types.push_back(elts[i]->getType());
     }
     TupleType* type = TupleType::make(elt_types);
 
-    auto alloc_var = std::make_shared<TupleType::Unboxed>(elts, nullptr);
+    auto alloc_var = std::make_shared<TupleType::Unboxed>(elts, boxed);
     return new TupleType::VAR(type, alloc_var);
 }
 
