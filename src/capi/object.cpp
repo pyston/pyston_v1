@@ -609,6 +609,9 @@ extern "C" PyObject** _PyObject_GetDictPtr(PyObject* obj) noexcept {
         }
         return (PyObject**)((char*)obj + dictoffset);
     } else {
+        if (!tp->instancesHaveDictAttrs())
+            return NULL;
+
         fatalOrError(PyExc_NotImplementedError, "unimplemented for hcattrs");
         return nullptr;
     }
