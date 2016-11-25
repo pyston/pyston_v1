@@ -1074,16 +1074,16 @@ class CodeConstants {
 private:
     // stores all constants accessible by vregs in the corrext order
     // constants[-(vreg + 1)] will allow one to retrieve the constant for a vreg
+    // all entries are owned by code constants and will get decrefed in the destructor.
     std::vector<Box*> constants;
-
-    // all objects we need to decref when the code object dies
-    mutable std::vector<Box*> owned_refs;
 
     // Note: DenseMap doesn't work here since we don't prevent the tombstone/empty
     // keys from reaching it.
+    // all entries are owned by code constants and will get decrefed in the destructor.
     mutable std::unordered_map<int64_t, BoxedInt*> int_constants;
     // I'm not sure how well it works to use doubles as hashtable keys; thankfully
     // it's not a big deal if we get misses.
+    // all entries are owned by code constants and will get decrefed in the destructor.
     mutable std::unordered_map<int64_t, BoxedFloat*> float_constants;
 
     // TODO: when we support tuple constants inside vregs we can remove it and just use a normal constant vreg for it
@@ -1093,33 +1093,30 @@ public:
     CodeConstants() {}
     CodeConstants(CodeConstants&&) = default;
     CodeConstants& operator=(CodeConstants&&) = default;
-    ~CodeConstants() { dealloc(); }
+    ~CodeConstants();
 
     BORROWED(Box*) getConstant(int vreg) const { return constants[-(vreg + 1)]; }
 
     InternedString getInternedString(int vreg) const { return InternedString::unsafe((BoxedString*)getConstant(vreg)); }
 
     // returns the vreg num for the constant (which is a negative number)
-    int createVRegEntryForConstant(Box* o) {
+    int createVRegEntryForConstant(STOLEN(Box*) o) {
         constants.push_back(o);
         return -constants.size();
     }
 
-
-    void addOwnedRef(Box* o) const { owned_refs.emplace_back(o); }
+    void optimizeSize() { constants.shrink_to_fit(); }
 
     BORROWED(BoxedInt*) getIntConstant(int64_t n) const;
     BORROWED(BoxedFloat*) getFloatConstant(double d) const;
 
-    int addInternedString(InternedString s) { return createVRegEntryForConstant(s.getBox()); }
+    int addInternedString(InternedString s) { return createVRegEntryForConstant(incref(s.getBox())); }
 
     int addKeywordNames(llvm::ArrayRef<BoxedString*> name) {
         keyword_names.emplace_back(new std::vector<BoxedString*>(name.begin(), name.end()));
         return keyword_names.size() - 1;
     }
     const std::vector<BoxedString*>* getKeywordNames(int constant) const { return keyword_names[constant].get(); }
-
-    void dealloc() const;
 };
 
 
