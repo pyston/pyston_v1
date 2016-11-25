@@ -38,12 +38,14 @@ namespace pyston {
 // but doing it this way makes it clearer what's going on.
 
 static llvm::StringMap<const void*> relocatable_syms;
+static llvm::DenseMap<const void*, llvm::Constant*> addr_gv_map;
 
 void clearRelocatableSymsMap() {
     relocatable_syms.clear();
+    addr_gv_map.clear();
 }
 
-const void* getValueOfRelocatableSym(const std::string& str) {
+const void* getValueOfRelocatableSym(llvm::StringRef str) {
     auto it = relocatable_syms.find(str);
     if (it != relocatable_syms.end())
         return it->second;
@@ -56,23 +58,28 @@ llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type, llvm::St
     if (!ENABLE_JIT_OBJECT_CACHE)
         return embedConstantPtr(addr, type);
 
-    std::string name;
-    if (!shared_name.empty()) {
-        llvm::GlobalVariable* gv = g.cur_module->getGlobalVariable(shared_name, /* AllowInternal */ true);
-        if (gv)
-            return gv;
-        assert(!relocatable_syms.count(name));
-        name = shared_name;
-    } else {
-        int nsyms = relocatable_syms.size();
-        name = (llvm::Twine("c") + llvm::Twine(nsyms)).str();
+    llvm::Constant*& gv = addr_gv_map[addr];
+    if (!gv) {
+        std::string name;
+        if (!shared_name.empty()) {
+            assert(!relocatable_syms.count(shared_name));
+            name = shared_name;
+        } else {
+            int nsyms = relocatable_syms.size();
+            name = (llvm::Twine("c") + llvm::Twine(nsyms)).str();
+        }
+
+        relocatable_syms[name] = addr;
+
+        llvm::Type* var_type = type->getPointerElementType();
+        gv = new llvm::GlobalVariable(*g.cur_module, var_type, /* isConstant */ false,
+                                      llvm::GlobalVariable::ExternalLinkage, 0, name);
     }
 
-    relocatable_syms[name] = addr;
+    if (gv->getType() != type)
+        return llvm::ConstantExpr::getPointerCast(gv, type);
 
-    llvm::Type* var_type = type->getPointerElementType();
-    return new llvm::GlobalVariable(*g.cur_module, var_type, /* isConstant */ false,
-                                    llvm::GlobalVariable::ExternalLinkage, 0, name);
+    return gv;
 }
 
 llvm::Constant* embedConstantPtr(const void* addr, llvm::Type* type) {

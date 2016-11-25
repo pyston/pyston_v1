@@ -348,8 +348,6 @@ CompilerVariable* makeUnboxedFloat(IREmitter&, llvm::Value*);
 
 llvm::Value* makeLLVMBool(bool b);
 ConcreteCompilerVariable* makeBool(bool);
-ConcreteCompilerVariable* makeLong(IREmitter&, Box*);
-ConcreteCompilerVariable* makePureImaginary(IREmitter&, Box*);
 CompilerVariable* makeStr(BoxedString*);
 CompilerVariable* makeUnicode(Box*);
 
