@@ -176,6 +176,13 @@ ParamNames::ParamNames(const std::vector<const char*>& args, const char* vararg,
         all_args.emplace_back(kwarg);
 }
 
+ParamNames::~ParamNames() {
+    if (all_args_contains_names) {
+        for (auto&& e : all_args)
+            delete e.name;
+    }
+}
+
 std::vector<const char*> ParamNames::allArgsAsStr() const {
     std::vector<const char*> ret;
     ret.reserve(all_args.size());

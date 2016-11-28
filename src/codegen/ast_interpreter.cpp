@@ -313,7 +313,7 @@ void ASTInterpreter::startJITing(CFGBlock* block, int exit_offset, llvm::DenseSe
 
     // small optimization: we know that the passed arguments in the entry block are non zero
     if (block == block->cfg->getStartingBlock() && block->predecessors.empty()) {
-        auto param_names = getCode()->param_names;
+        auto& param_names = getCode()->param_names;
         for (auto&& arg : param_names.allArgsAsName()) {
             if (arg->vreg >= 0)
                 known_non_null_vregs.insert(arg->vreg);

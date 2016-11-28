@@ -116,7 +116,7 @@ void BoxedCode::dealloc(Box* b) noexcept {
 }
 
 BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, int firstlineno,
-                     std::unique_ptr<SourceInfo> source, CodeConstants code_constants, ParamNames param_names,
+                     std::unique_ptr<SourceInfo> source, CodeConstants code_constants, ParamNames&& param_names,
                      BoxedString* filename, BoxedString* name, Box* doc)
     : source(std::move(source)),
       code_constants(std::move(code_constants)),
@@ -136,7 +136,7 @@ BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, int fi
 }
 
 BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const char* name, const char* doc,
-                     const ParamNames& param_names)
+                     ParamNames&& param_names)
     : source(nullptr),
       // TODO what to do with this?
       filename(nullptr),
@@ -145,7 +145,7 @@ BoxedCode::BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const 
       firstlineno(-1),
       _doc(doc[0] == '\0' ? incref(Py_None) : boxString(doc)),
 
-      param_names(param_names),
+      param_names(std::move(param_names)),
       takes_varargs(takes_varargs),
       takes_kwargs(takes_kwargs),
       num_args(num_args),
