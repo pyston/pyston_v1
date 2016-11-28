@@ -234,8 +234,13 @@ struct ParamNames {
     unsigned char has_vararg_name : 1;
     unsigned char has_kwarg_name : 1;
 
+    ParamNames(ParamNames&) = delete;
+    ParamNames(ParamNames&&) = default;
+    ~ParamNames();
+
     explicit ParamNames(AST_arguments* ast, InternedStringPool& pool);
     ParamNames(const std::vector<const char*>& args, const char* vararg, const char* kwarg);
+
     static ParamNames empty() { return ParamNames(); }
 
     int numNormalArgs() const { return all_args.size() - has_vararg_name - has_kwarg_name; }

@@ -1171,11 +1171,12 @@ public:
 
     // Constructor for Python code objects:
     BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, int firstlineno, std::unique_ptr<SourceInfo> source,
-              CodeConstants code_constants, ParamNames param_names, BoxedString* filename, BoxedString* name, Box* doc);
+              CodeConstants code_constants, ParamNames&& param_names, BoxedString* filename, BoxedString* name,
+              Box* doc);
 
     // Constructor for code objects created by the runtime:
     BoxedCode(int num_args, bool takes_varargs, bool takes_kwargs, const char* name, const char* doc = "",
-              const ParamNames& param_names = ParamNames::empty());
+              ParamNames&& param_names = ParamNames::empty());
 
 
     // The dummy constructor for PyCode_New:
@@ -1203,22 +1204,20 @@ public:
     // Helper function, meant for the C++ runtime, which allocates a BoxedCode object and calls addVersion
     // once to it.
     static BoxedCode* create(void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs, bool takes_kwargs,
-                             const char* name, const char* doc = "",
-                             const ParamNames& param_names = ParamNames::empty(),
+                             const char* name, const char* doc = "", ParamNames&& param_names = ParamNames::empty(),
                              ExceptionStyle exception_style = CXX) {
         assert(!param_names.takes_param_names || nargs == param_names.numNormalArgs());
         assert(takes_varargs || !param_names.has_vararg_name);
         assert(takes_kwargs || !param_names.has_kwarg_name);
 
-        BoxedCode* code = new BoxedCode(nargs, takes_varargs, takes_kwargs, name, doc, param_names);
+        BoxedCode* code = new BoxedCode(nargs, takes_varargs, takes_kwargs, name, doc, std::move(param_names));
         code->addVersion(f, rtn_type, exception_style);
         return code;
     }
 
     static BoxedCode* create(void* f, ConcreteCompilerType* rtn_type, int nargs, const char* name, const char* doc = "",
-                             const ParamNames& param_names = ParamNames::empty(),
-                             ExceptionStyle exception_style = CXX) {
-        return create(f, rtn_type, nargs, false, false, name, doc, param_names, exception_style);
+                             ParamNames&& param_names = ParamNames::empty(), ExceptionStyle exception_style = CXX) {
+        return create(f, rtn_type, nargs, false, false, name, doc, std::move(param_names), exception_style);
     }
 
     // tries to free the bjit allocated code. returns true on success
