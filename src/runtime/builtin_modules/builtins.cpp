@@ -2324,7 +2324,7 @@ In the second form, the callable is called until it returns the sentinel.");
 
 PyDoc_STRVAR(len_doc, "len(object) -> integer\n\
 \n\
-Return the number of items of a sequence or mapping.");
+Return the number of items of a sequence or collection.");
 
 PyDoc_STRVAR(locals_doc, "locals() -> dictionary\n\
 \n\

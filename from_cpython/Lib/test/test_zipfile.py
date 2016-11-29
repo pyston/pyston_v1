@@ -476,14 +476,14 @@ class TestsWithSourceFile(unittest.TestCase):
                 (r'C:/foo/bar', 'foo/bar'),
                 (r'C://foo/bar', 'foo/bar'),
                 (r'C:\foo\bar', 'foo/bar'),
-                (r'//conky/mountpoint/foo/bar', 'conky/mountpoint/foo/bar'),
-                (r'\\conky\mountpoint\foo\bar', 'conky/mountpoint/foo/bar'),
+                (r'//conky/mountpoint/foo/bar', 'foo/bar'),
+                (r'\\conky\mountpoint\foo\bar', 'foo/bar'),
                 (r'///conky/mountpoint/foo/bar', 'conky/mountpoint/foo/bar'),
                 (r'\\\conky\mountpoint\foo\bar', 'conky/mountpoint/foo/bar'),
                 (r'//conky//mountpoint/foo/bar', 'conky/mountpoint/foo/bar'),
                 (r'\\conky\\mountpoint\foo\bar', 'conky/mountpoint/foo/bar'),
-                (r'//?/C:/foo/bar', '_/C_/foo/bar'),
-                (r'\\?\C:\foo\bar', '_/C_/foo/bar'),
+                (r'//?/C:/foo/bar', 'foo/bar'),
+                (r'\\?\C:\foo\bar', 'foo/bar'),
                 (r'C:/../C:/foo/bar', 'C_/foo/bar'),
                 (r'a:b\c<d>e|f"g?h*i', 'b/c_d_e_f_g_h_i'),
                 ('../../foo../../ba..r', 'foo/ba..r'),
@@ -1156,6 +1156,21 @@ class OtherTests(unittest.TestCase):
     def test_create_zipinfo_before_1980(self):
         self.assertRaises(ValueError,
                           zipfile.ZipInfo, 'seventies', (1979, 1, 1, 0, 0, 0))
+
+    def test_zipfile_with_short_extra_field(self):
+        """If an extra field in the header is less than 4 bytes, skip it."""
+        zipdata = (
+            b'PK\x03\x04\x14\x00\x00\x00\x00\x00\x93\x9b\xad@\x8b\x9e'
+            b'\xd9\xd3\x01\x00\x00\x00\x01\x00\x00\x00\x03\x00\x03\x00ab'
+            b'c\x00\x00\x00APK\x01\x02\x14\x03\x14\x00\x00\x00\x00'
+            b'\x00\x93\x9b\xad@\x8b\x9e\xd9\xd3\x01\x00\x00\x00\x01\x00\x00'
+            b'\x00\x03\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\xa4\x81\x00'
+            b'\x00\x00\x00abc\x00\x00PK\x05\x06\x00\x00\x00\x00'
+            b'\x01\x00\x01\x003\x00\x00\x00%\x00\x00\x00\x00\x00'
+        )
+        with zipfile.ZipFile(io.BytesIO(zipdata), 'r') as zipf:
+            # testzip returns the name of the first corrupt file, or None
+            self.assertIsNone(zipf.testzip())
 
     def tearDown(self):
         unlink(TESTFN)

@@ -65,6 +65,7 @@ class CommonTest(unittest.TestCase):
             self.assertTrue(object is not realresult)
 
     # check that object.method(*args) raises exc
+    # Pyston change:
     def checkraises(self, exc, obj, methodname, *args):
         obj = self.fixtype(obj)
         args = self.fixtype(args)
@@ -1055,7 +1056,9 @@ class MixinStrUnicodeUserStringTest:
         self.checkequal('a b c', ' ', 'join', BadSeq2())
 
         self.checkraises(TypeError, ' ', 'join')
+        # Pyston change:
         self.checkraises(TypeError, ' ', 'join', None)
+
         self.checkraises(TypeError, ' ', 'join', 7)
         self.checkraises(TypeError, ' ', 'join', Sequence([7, 'hello', 123L]))
         try:

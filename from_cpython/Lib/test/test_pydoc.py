@@ -15,8 +15,8 @@ import types
 import test.test_support
 from collections import namedtuple
 from test.script_helper import assert_python_ok
-from test.test_support import (
-    TESTFN, rmtree, reap_children, captured_stdout, captured_stderr)
+from test.test_support import (TESTFN, rmtree, reap_children, captured_stdout,
+                               captured_stderr, requires_docstrings)
 
 from test import pydoc_mod
 
@@ -39,6 +39,7 @@ FILE
 CLASSES
     __builtin__.object
         B
+        C
     A
 \x20\x20\x20\x20
     class A
@@ -60,6 +61,26 @@ CLASSES
      |  Data and other attributes defined here:
      |\x20\x20
      |  NO_MEANING = 'eggs'
+\x20\x20\x20\x20
+    class C(__builtin__.object)
+     |  Methods defined here:
+     |\x20\x20
+     |  get_answer(self)
+     |      Return say_no()
+     |\x20\x20
+     |  is_it_true(self)
+     |      Return self.get_answer()
+     |\x20\x20
+     |  say_no(self)
+     |\x20\x20
+     |  ----------------------------------------------------------------------
+     |  Data descriptors defined here:
+     |\x20\x20
+     |  __dict__
+     |      dictionary for instance variables (if defined)
+     |\x20\x20
+     |  __weakref__
+     |      list of weak references to the object (if defined)
 
 FUNCTIONS
     doc_func()
@@ -109,6 +130,7 @@ expected_html_pattern = \
 </font></dt><dd>
 <dl>
 <dt><font face="helvetica, arial"><a href="test.pydoc_mod.html#B">B</a>
+</font></dt><dt><font face="helvetica, arial"><a href="test.pydoc_mod.html#C">C</a>
 </font></dt></dl>
 </dd>
 <dt><font face="helvetica, arial"><a href="test.pydoc_mod.html#A">A</a>
@@ -143,6 +165,28 @@ expected_html_pattern = \
 Data and other attributes defined here:<br>
 <dl><dt><strong>NO_MEANING</strong> = 'eggs'</dl>
 
+</td></tr></table> <p>
+<table width="100%%" cellspacing=0 cellpadding=2 border=0 summary="section">
+<tr bgcolor="#ffc8d8">
+<td colspan=3 valign=bottom>&nbsp;<br>
+<font color="#000000" face="helvetica, arial"><a name="C">class <strong>C</strong></a>(<a href="__builtin__.html#object">__builtin__.object</a>)</font></td></tr>
+\x20\x20\x20\x20
+<tr><td bgcolor="#ffc8d8"><tt>&nbsp;&nbsp;&nbsp;</tt></td><td>&nbsp;</td>
+<td width="100%%">Methods defined here:<br>
+<dl><dt><a name="C-get_answer"><strong>get_answer</strong></a>(self)</dt><dd><tt>Return&nbsp;<a href="#C-say_no">say_no</a>()</tt></dd></dl>
+
+<dl><dt><a name="C-is_it_true"><strong>is_it_true</strong></a>(self)</dt><dd><tt>Return&nbsp;self.<a href="#C-get_answer">get_answer</a>()</tt></dd></dl>
+
+<dl><dt><a name="C-say_no"><strong>say_no</strong></a>(self)</dt></dl>
+
+<hr>
+Data descriptors defined here:<br>
+<dl><dt><strong>__dict__</strong></dt>
+<dd><tt>dictionary&nbsp;for&nbsp;instance&nbsp;variables&nbsp;(if&nbsp;defined)</tt></dd>
+</dl>
+<dl><dt><strong>__weakref__</strong></dt>
+<dd><tt>list&nbsp;of&nbsp;weak&nbsp;references&nbsp;to&nbsp;the&nbsp;object&nbsp;(if&nbsp;defined)</tt></dd>
+</dl>
 </td></tr></table></td></tr></table><p>
 <table width="100%%" cellspacing=0 cellpadding=2 border=0 summary="section">
 <tr bgcolor="#eeaa77">
@@ -257,6 +301,7 @@ class PydocBaseTest(unittest.TestCase):
 
 class PydocDocTest(unittest.TestCase):
 
+    @requires_docstrings
     @unittest.skipIf(sys.flags.optimize >= 2,
                      "Docstrings are omitted with -O2 and above")
     def test_html_doc(self):
@@ -274,6 +319,7 @@ class PydocDocTest(unittest.TestCase):
             print_diffs(expected_html, result)
             self.fail("outputs are not equal, see diff above")
 
+    @requires_docstrings
     @unittest.skipIf(sys.flags.optimize >= 2,
                      "Docstrings are omitted with -O2 and above")
     def test_text_doc(self):
@@ -289,6 +335,14 @@ class PydocDocTest(unittest.TestCase):
         # Test issue8225 to ensure no doc link appears for xml.etree
         result, doc_loc = get_pydoc_text(xml.etree)
         self.assertEqual(doc_loc, "", "MODULE DOCS incorrectly includes a link")
+
+    def test_getpager_with_stdin_none(self):
+        previous_stdin = sys.stdin
+        try:
+            sys.stdin = None
+            pydoc.getpager() # Shouldn't fail.
+        finally:
+            sys.stdin = previous_stdin
 
     def test_non_str_name(self):
         # issue14638
@@ -534,7 +588,7 @@ class TestHelper(unittest.TestCase):
             try:
                 pydoc.render_doc(name)
             except ImportError:
-                self.fail('finding the doc of {!r} failed'.format(o))
+                self.fail('finding the doc of {!r} failed'.format(name))
 
         for name in ('not__builtin__', 'strrr', 'strr.translate',
                      'str.trrrranslate', '__builtin__.strrr',

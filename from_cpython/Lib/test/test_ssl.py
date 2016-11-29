@@ -1404,9 +1404,12 @@ def test_main(verbose=False):
     global CERTFILE, SVN_PYTHON_ORG_ROOT_CERT, NOKIACERT, NULLBYTECERT
     CERTFILE = os.path.join(os.path.dirname(__file__) or os.curdir,
                             "keycert.pem")
-    SVN_PYTHON_ORG_ROOT_CERT = os.path.join(
-        os.path.dirname(__file__) or os.curdir,
-        "https_svn_python_org_root.pem")
+    # Pyston change: seems the ca file to svn.python.org is invalid now
+    # use the system's root ca file temporarilly.
+    # SVN_PYTHON_ORG_ROOT_CERT = os.path.join(
+    #     os.path.dirname(__file__) or os.curdir,
+    #     "https_svn_python_org_root.pem")
+    SVN_PYTHON_ORG_ROOT_CERT = '/etc/ssl/certs/ca-certificates.crt'
     NOKIACERT = os.path.join(os.path.dirname(__file__) or os.curdir,
                              "nokia.pem")
     NULLBYTECERT = os.path.join(os.path.dirname(__file__) or os.curdir,

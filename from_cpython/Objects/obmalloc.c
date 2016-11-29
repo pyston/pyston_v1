@@ -545,6 +545,8 @@ new_arena(void)
 {
     struct arena_object* arenaobj;
     uint excess;        /* number of bytes above pool alignment */
+    void *address;
+    int err;
 
 #ifdef PYMALLOC_DEBUG
     if (Py_GETENV("PYTHONMALLOCSTATS"))
@@ -598,12 +600,14 @@ new_arena(void)
     unused_arena_objects = arenaobj->nextarena;
     assert(arenaobj->address == 0);
 #ifdef ARENAS_USE_MMAP
-    arenaobj->address = (uptr)mmap(NULL, ARENA_SIZE, PROT_READ|PROT_WRITE,
-                                   MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    address = mmap(NULL, ARENA_SIZE, PROT_READ|PROT_WRITE,
+                   MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    err = (address == MAP_FAILED);
 #else
-    arenaobj->address = (uptr)malloc(ARENA_SIZE);
+    address = malloc(ARENA_SIZE);
+    err = (address == 0);
 #endif    
-    if (arenaobj->address == 0) {
+    if (err) {
         /* The allocation failed: return NULL after putting the
          * arenaobj back.
          */
@@ -611,6 +615,7 @@ new_arena(void)
         unused_arena_objects = arenaobj;
         return NULL;
     }
+    arenaobj->address = (uptr)address;
 
     ++narenas_currently_allocated;
 #ifdef PYMALLOC_DEBUG

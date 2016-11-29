@@ -1,3 +1,4 @@
+# coding: utf-8
 import ntpath
 import os
 import sys
@@ -34,6 +35,21 @@ class TestNtpath(unittest.TestCase):
                ('c:', '\\foo\\bar'))
         tester('ntpath.splitdrive("c:/foo/bar")',
                ('c:', '/foo/bar'))
+        tester('ntpath.splitdrive("\\\\conky\\mountpoint\\foo\\bar")',
+               ('\\\\conky\\mountpoint', '\\foo\\bar'))
+        tester('ntpath.splitdrive("//conky/mountpoint/foo/bar")',
+               ('//conky/mountpoint', '/foo/bar'))
+        tester('ntpath.splitdrive("\\\\\\conky\\mountpoint\\foo\\bar")',
+            ('', '\\\\\\conky\\mountpoint\\foo\\bar'))
+        tester('ntpath.splitdrive("///conky/mountpoint/foo/bar")',
+            ('', '///conky/mountpoint/foo/bar'))
+        tester('ntpath.splitdrive("\\\\conky\\\\mountpoint\\foo\\bar")',
+               ('', '\\\\conky\\\\mountpoint\\foo\\bar'))
+        tester('ntpath.splitdrive("//conky//mountpoint/foo/bar")',
+               ('', '//conky//mountpoint/foo/bar'))
+        # Issue #19911: UNC part containing U+0130
+        self.assertEqual(ntpath.splitdrive(u'//conky/MOUNTPOİNT/foo/bar'),
+                         (u'//conky/MOUNTPOİNT', '/foo/bar'))
 
     def test_splitunc(self):
         tester('ntpath.splitunc("c:\\foo\\bar")',
@@ -62,10 +78,10 @@ class TestNtpath(unittest.TestCase):
 
         tester('ntpath.split("c:\\")', ('c:\\', ''))
         tester('ntpath.split("\\\\conky\\mountpoint\\")',
-               ('\\\\conky\\mountpoint', ''))
+               ('\\\\conky\\mountpoint\\', ''))
 
         tester('ntpath.split("c:/")', ('c:/', ''))
-        tester('ntpath.split("//conky/mountpoint/")', ('//conky/mountpoint', ''))
+        tester('ntpath.split("//conky/mountpoint/")', ('//conky/mountpoint/', ''))
 
     def test_isabs(self):
         tester('ntpath.isabs("c:\\")', 1)
@@ -114,9 +130,9 @@ class TestNtpath(unittest.TestCase):
         tester("ntpath.join('c:/', 'x/y')", 'c:/x/y')
         tester("ntpath.join('c:/a/b', 'x/y')", 'c:/a/b\\x/y')
         tester("ntpath.join('c:/a/b/', 'x/y')", 'c:/a/b/x/y')
-        #tester("ntpath.join('//computer/share', 'x/y')", '//computer/share\\x/y')
-        #tester("ntpath.join('//computer/share/', 'x/y')", '//computer/share/x/y')
-        #tester("ntpath.join('//computer/share/a/b', 'x/y')", '//computer/share/a/b\\x/y')
+        tester("ntpath.join('//computer/share', 'x/y')", '//computer/share\\x/y')
+        tester("ntpath.join('//computer/share/', 'x/y')", '//computer/share/x/y')
+        tester("ntpath.join('//computer/share/a/b', 'x/y')", '//computer/share/a/b\\x/y')
 
         tester("ntpath.join('a/b', '/x/y')", '/x/y')
         tester("ntpath.join('/a/b', '/x/y')", '/x/y')
@@ -124,9 +140,9 @@ class TestNtpath(unittest.TestCase):
         tester("ntpath.join('c:a/b', '/x/y')", 'c:/x/y')
         tester("ntpath.join('c:/', '/x/y')", 'c:/x/y')
         tester("ntpath.join('c:/a/b', '/x/y')", 'c:/x/y')
-        #tester("ntpath.join('//computer/share', '/x/y')", '//computer/share/x/y')
-        #tester("ntpath.join('//computer/share/', '/x/y')", '//computer/share/x/y')
-        #tester("ntpath.join('//computer/share/a', '/x/y')", '//computer/share/x/y')
+        tester("ntpath.join('//computer/share', '/x/y')", '//computer/share/x/y')
+        tester("ntpath.join('//computer/share/', '/x/y')", '//computer/share/x/y')
+        tester("ntpath.join('//computer/share/a', '/x/y')", '//computer/share/x/y')
 
         tester("ntpath.join('c:', 'C:x/y')", 'C:x/y')
         tester("ntpath.join('c:a/b', 'C:x/y')", 'C:a/b\\x/y')
@@ -212,6 +228,41 @@ class TestNtpath(unittest.TestCase):
             check('%{}% bar'.format(snonascii), 'ham%s bar' % snonascii)
             check('%spam%bar', '%sbar' % snonascii)
             check('%{}%bar'.format(snonascii), 'ham%sbar' % snonascii)
+
+    def test_expanduser(self):
+        tester('ntpath.expanduser("test")', 'test')
+
+        with test_support.EnvironmentVarGuard() as env:
+            env.clear()
+            tester('ntpath.expanduser("~test")', '~test')
+
+            env['HOMEPATH'] = 'eric\\idle'
+            env['HOMEDRIVE'] = 'C:\\'
+            tester('ntpath.expanduser("~test")', 'C:\\eric\\test')
+            tester('ntpath.expanduser("~")', 'C:\\eric\\idle')
+
+            del env['HOMEDRIVE']
+            tester('ntpath.expanduser("~test")', 'eric\\test')
+            tester('ntpath.expanduser("~")', 'eric\\idle')
+
+            env.clear()
+            env['USERPROFILE'] = 'C:\\eric\\idle'
+            tester('ntpath.expanduser("~test")', 'C:\\eric\\test')
+            tester('ntpath.expanduser("~")', 'C:\\eric\\idle')
+
+            env.clear()
+            env['HOME'] = 'C:\\idle\\eric'
+            tester('ntpath.expanduser("~test")', 'C:\\idle\\test')
+            tester('ntpath.expanduser("~")', 'C:\\idle\\eric')
+
+            tester('ntpath.expanduser("~test\\foo\\bar")',
+                   'C:\\idle\\test\\foo\\bar')
+            tester('ntpath.expanduser("~test/foo/bar")',
+                   'C:\\idle\\test/foo/bar')
+            tester('ntpath.expanduser("~\\foo\\bar")',
+                   'C:\\idle\\eric\\foo\\bar')
+            tester('ntpath.expanduser("~/foo/bar")',
+                   'C:\\idle\\eric/foo/bar')
 
     def test_abspath(self):
         # ntpath.abspath() can only be used on a system with the "nt" module
