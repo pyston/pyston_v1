@@ -4036,10 +4036,8 @@ int BoxedClosure::clear(Box* _o) noexcept {
 
 BORROWED(BoxedInt*) CodeConstants::getIntConstant(int64_t n) const {
     BoxedInt*& r = int_constants[n];
-    if (!r) {
+    if (!r)
         r = (BoxedInt*)boxInt(n);
-        addOwnedRef(r);
-    }
     return r;
 }
 
@@ -4049,16 +4047,20 @@ BORROWED(BoxedFloat*) CodeConstants::getFloatConstant(double d) const {
     memcpy(&double_as_int64, &d, sizeof(d));
 
     BoxedFloat*& r = float_constants[double_as_int64];
-    if (!r) {
+    if (!r)
         r = (BoxedFloat*)boxFloat(d);
-        addOwnedRef(r);
-    }
     return r;
 }
 
-void CodeConstants::dealloc() const {
-    decrefArray(owned_refs.data(), owned_refs.size());
-    owned_refs.clear();
+CodeConstants::~CodeConstants() {
+    if (!constants.empty())
+        decrefArray(constants.data(), constants.size());
+    for (auto&& e : int_constants) {
+        Py_DECREF(e.second);
+    }
+    for (auto&& e : float_constants) {
+        Py_DECREF(e.second);
+    }
 }
 
 #ifndef Py_REF_DEBUG

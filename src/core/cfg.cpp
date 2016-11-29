@@ -457,7 +457,6 @@ private:
     // it's not a big deal if we get misses.
     std::unordered_map<int64_t, Box*> imaginary_constants;
     llvm::StringMap<Box*> long_constants;
-    llvm::DenseMap<InternedString, int> interned_string_constants;
 
     unsigned int next_var_index = 0;
 
@@ -671,12 +670,8 @@ private:
     }
 
     int remapInternedString(InternedString id) {
-        auto it = interned_string_constants.find(id);
-        if (it != interned_string_constants.end())
-            return it->second;
-        int index = code_constants.addInternedString(id);
-        interned_string_constants[id] = index;
-        return index;
+        // all our string constants are interned so we can just use normal string handling
+        return makeStr(id.s()).vreg_const;
     }
 
     TmpValue remapName(AST_Name* name) {
@@ -695,11 +690,13 @@ private:
         return createDstName(rtn);
     }
 
-    int addConst(Box* o) {
+    int addConst(STOLEN(Box*) o) {
         // make sure all consts are unique
         auto it = consts.find(o);
-        if (it != consts.end())
+        if (it != consts.end()) {
+            Py_DECREF(o);
             return it->second;
+        }
         int vreg = code_constants.createVRegEntryForConstant(o);
         consts[o] = vreg;
         return vreg;
@@ -712,73 +709,32 @@ private:
         return rtn;
     }
 
-    TmpValue makeNum(int64_t n, int lineno) {
-        Box* o = code_constants.getIntConstant(n);
-        int vreg_const = addConst(o);
-        return TmpValue(vreg_const, lineno);
-    }
-
     TmpValue remapNum(AST_Num* num) {
-        Box* o = NULL;
-        if (num->num_type == AST_Num::INT) {
-            o = code_constants.getIntConstant(num->n_int);
-        } else if (num->num_type == AST_Num::FLOAT) {
-            o = code_constants.getFloatConstant(num->n_float);
-        } else if (num->num_type == AST_Num::LONG) {
-            Box*& r = long_constants[num->n_long];
-            if (!r) {
-                r = createLong(num->n_long);
-                code_constants.addOwnedRef(r);
-            }
-            o = r;
-        } else if (num->num_type == AST_Num::COMPLEX) {
-            Box*& r = imaginary_constants[getDoubleBits(num->n_float)];
-            if (!r) {
-                r = createPureImaginary(num->n_float);
-                code_constants.addOwnedRef(r);
-            }
-            o = r;
-        } else
-            RELEASE_ASSERT(0, "not implemented");
-
-        int vreg_const = addConst(o);
-        return TmpValue(vreg_const, num->lineno);
+        Box* o = createConstObject(num);
+        return TmpValue(addConst(o), num->lineno);
     }
 
     TmpValue makeStr(llvm::StringRef str, int lineno = 0) {
-        BoxedString*& o = str_constants[str];
-        // we always intern the string
-        if (!o) {
-            o = internStringMortal(str);
-            code_constants.addOwnedRef(o);
-        }
-        int vreg_const = addConst(o);
-        return TmpValue(vreg_const, lineno);
+        AST_Str ast_str(str.str());
+        Box* o = createConstObject(&ast_str);
+        return TmpValue(addConst(o), lineno);
     }
 
     TmpValue remapStr(AST_Str* str) {
-        // TODO make this serializable
-        if (str->str_type == AST_Str::STR) {
-            return makeStr(str->str_data, str->lineno);
-        } else if (str->str_type == AST_Str::UNICODE) {
-            Box*& r = unicode_constants[str->str_data];
-            if (!r) {
-                r = decodeUTF8StringPtr(str->str_data);
-                code_constants.addOwnedRef(r);
-            }
-            return TmpValue(addConst(r), str->lineno);
-        }
-        RELEASE_ASSERT(0, "%d", str->str_type);
+        Box* o = createConstObject(str);
+        return TmpValue(addConst(o), str->lineno);
     }
 
-    TmpValue makeNum(int n, int lineno) {
-        Box* o = code_constants.getIntConstant(n);
-        int vreg_const = addConst(o);
-        return TmpValue(vreg_const, lineno);
+    TmpValue makeNum(int64_t n, int lineno) {
+        AST_Num ast_num;
+        ast_num.num_type = AST_Num::INT;
+        ast_num.n_int = n;
+        Box* o = createConstObject(&ast_num);
+        return TmpValue(addConst(o), lineno);
     }
 
     TmpValue makeNone(int lineno) {
-        int vreg_const = addConst(Py_None);
+        int vreg_const = addConst(incref(Py_None));
         return TmpValue(vreg_const, lineno);
     }
 
@@ -1403,7 +1359,7 @@ private:
     }
 
     TmpValue remapEllipsis(AST_Ellipsis* node) {
-        int vreg_const = addConst(Ellipsis);
+        int vreg_const = addConst(incref(Ellipsis));
         return TmpValue(vreg_const, node->lineno);
     }
 
@@ -1481,8 +1437,7 @@ private:
         BoxedCode* code = cfgizer->runRecursively(new_body, gen_name, node->lineno, genexp_args, node);
         BST_MakeFunction* mkfunc = allocAndPush<BST_MakeFunction>(0, 0);
         mkfunc->lineno = node->lineno;
-        mkfunc->vreg_code_obj = code_constants.createVRegEntryForConstant(code);
-        code_constants.addOwnedRef(code);
+        mkfunc->vreg_code_obj = addConst(code);
         TmpValue func_var_name = createDstName(mkfunc);
 
         return makeCall(func_var_name, { first });
@@ -1541,8 +1496,7 @@ private:
         BoxedCode* code = cfgizer->runRecursively(new_body, comp_name, node->lineno, args, node);
         BST_MakeFunction* mkfunc = allocAndPush<BST_MakeFunction>(0, 0);
         mkfunc->lineno = node->lineno;
-        mkfunc->vreg_code_obj = code_constants.createVRegEntryForConstant(code);
-        code_constants.addOwnedRef(code);
+        mkfunc->vreg_code_obj = addConst(code);
         TmpValue func_var_name = createDstName(mkfunc);
 
         return makeCall(func_var_name, { first });
@@ -1597,8 +1551,7 @@ private:
 
         auto name = getStaticString("<lambda>");
         auto* code = cfgizer->runRecursively({ stmt }, name, mkfn->lineno, node->args, node);
-        mkfn->vreg_code_obj = code_constants.createVRegEntryForConstant(code);
-        code_constants.addOwnedRef(code);
+        mkfn->vreg_code_obj = addConst(code);
 
         return createDstName(mkfn);
     }
@@ -1686,6 +1639,51 @@ private:
         return rtn;
     }
 
+    Box* createConstObject(AST* node) {
+        if (node->type == AST_TYPE::Str) {
+            auto* str = ast_cast<AST_Str>(node);
+            if (str->str_type == AST_Str::STR) {
+                BoxedString*& o = str_constants[str->str_data];
+                // we always intern the string
+                if (!o)
+                    o = internStringMortal(str->str_data);
+                else
+                    incref(o);
+                return o;
+            } else if (str->str_type == AST_Str::UNICODE) {
+                Box*& r = unicode_constants[str->str_data];
+                if (!r)
+                    r = decodeUTF8StringPtr(str->str_data);
+                else
+                    incref(r);
+                return r;
+            } else
+                RELEASE_ASSERT(0, "not implemented");
+        } else if (node->type == AST_TYPE::Num) {
+            auto* num = ast_cast<AST_Num>(node);
+            if (num->num_type == AST_Num::INT)
+                return incref(code_constants.getIntConstant(num->n_int));
+            else if (num->num_type == AST_Num::FLOAT)
+                return incref(code_constants.getFloatConstant(num->n_float));
+            else if (num->num_type == AST_Num::LONG) {
+                Box*& r = long_constants[num->n_long];
+                if (!r)
+                    r = createLong(num->n_long);
+                else
+                    incref(r);
+                return r;
+            } else if (num->num_type == AST_Num::COMPLEX) {
+                Box*& r = imaginary_constants[getDoubleBits(num->n_float)];
+                if (!r)
+                    r = createPureImaginary(num->n_float);
+                else
+                    incref(r);
+                return r;
+            } else
+                RELEASE_ASSERT(0, "not implemented");
+        }
+        RELEASE_ASSERT(0, "not implemented");
+    }
 
     TmpValue remapTuple(AST_Tuple* node) {
         assert(node->ctx_type == AST_TYPE::Load);
@@ -1932,8 +1930,7 @@ public:
         unmapExpr(bases_name, &mkclass->vreg_bases_tuple);
 
         auto* code = cfgizer->runRecursively(node->body, node->name.getBox(), node->lineno, NULL, node);
-        mkclass->vreg_code_obj = code_constants.createVRegEntryForConstant(code);
-        code_constants.addOwnedRef(code);
+        mkclass->vreg_code_obj = addConst(code);
 
         auto tmp = createDstName(mkclass);
         pushAssign(TmpValue(scoping->mangleName(node->name), node->lineno), tmp);
@@ -1967,8 +1964,7 @@ public:
         }
 
         auto* code = cfgizer->runRecursively(node->body, node->name.getBox(), node->lineno, node->args, node);
-        mkfunc->vreg_code_obj = code_constants.createVRegEntryForConstant(code);
-        code_constants.addOwnedRef(code);
+        mkfunc->vreg_code_obj = addConst(code);
         auto tmp = createDstName(mkfunc);
         pushAssign(TmpValue(scoping->mangleName(node->name), node->lineno), tmp);
 
@@ -3512,6 +3508,7 @@ static std::pair<CFG*, CodeConstants> computeCFG(llvm::ArrayRef<AST_stmt*> body,
 
     pruneUnnecessaryBlocks(rtn);
 
+    visitor.code_constants.optimizeSize();
     rtn->bytecode.optimizeSize();
     rtn->blocks.shrink_to_fit();
 
