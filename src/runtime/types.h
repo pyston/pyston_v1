@@ -1110,8 +1110,6 @@ public:
     BORROWED(BoxedInt*) getIntConstant(int64_t n) const;
     BORROWED(BoxedFloat*) getFloatConstant(double d) const;
 
-    int addInternedString(InternedString s) { return createVRegEntryForConstant(incref(s.getBox())); }
-
     int addKeywordNames(llvm::ArrayRef<BoxedString*> name) {
         keyword_names.emplace_back(new std::vector<BoxedString*>(name.begin(), name.end()));
         return keyword_names.size() - 1;

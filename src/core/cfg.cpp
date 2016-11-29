@@ -457,7 +457,6 @@ private:
     // it's not a big deal if we get misses.
     std::unordered_map<int64_t, Box*> imaginary_constants;
     llvm::StringMap<Box*> long_constants;
-    llvm::DenseMap<InternedString, int> interned_string_constants;
 
     unsigned int next_var_index = 0;
 
@@ -671,12 +670,8 @@ private:
     }
 
     int remapInternedString(InternedString id) {
-        auto it = interned_string_constants.find(id);
-        if (it != interned_string_constants.end())
-            return it->second;
-        int index = code_constants.addInternedString(id);
-        interned_string_constants[id] = index;
-        return index;
+        // all our string constants are interned so we can just use normal string handling
+        return makeStr(id.s()).vreg_const;
     }
 
     TmpValue remapName(AST_Name* name) {
