@@ -1428,6 +1428,7 @@ extern "C" BORROWED(PyObject*) PyEval_GetBuiltins(void) noexcept {
 Box* ellipsisRepr(Box* self) {
     return boxString("Ellipsis");
 }
+
 Box* divmod(Box* lhs, Box* rhs) {
     return binopInternal<NOT_REWRITABLE, false>(lhs, rhs, AST_TYPE::DivMod, NULL);
 }
@@ -2381,6 +2382,7 @@ void setupBuiltins() {
         = BoxedClass::create(type_cls, object_cls, 0, 0, sizeof(Box), false, "ellipsis", false, NULL, NULL, false);
     ellipsis_cls->giveAttr("__repr__",
                            new BoxedFunction(BoxedCode::create((void*)ellipsisRepr, STR, 1, "ellipsis.__repr__")));
+    ellipsis_cls->freeze();
     Ellipsis = new (ellipsis_cls) Box();
     assert(Ellipsis->cls);
 

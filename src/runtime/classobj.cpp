@@ -374,7 +374,7 @@ static Box* instanceGetattributeSimple(BoxedInstance* inst, BoxedString* attr_st
 
     Box* r = inst->getattr<rewritable>(attr_str, rewrite_args);
     if (r) {
-        if (rewrite_args)
+        if (rewrite_args && rewrite_args->isSuccessful())
             rewrite_args->assertReturnConvention(ReturnConvention::HAS_RETURN);
         return incref(r);
     }
@@ -1925,6 +1925,19 @@ extern "C" PyObject* PyMethod_Self(PyObject* im) noexcept {
         return NULL;
     }
     return ((BoxedInstanceMethod*)im)->obj;
+}
+
+extern "C" int PyMethod_SetSelf(PyObject* im, PyObject* instance) noexcept {
+    if (!PyMethod_Check(im)) {
+        PyErr_BadInternalCall();
+        return 0;
+    }
+
+    Box* old = ((BoxedInstanceMethod*)im)->obj;
+    Py_INCREF(instance);
+    ((BoxedInstanceMethod*)im)->obj = instance;
+    Py_XDECREF(old);
+    return 1;
 }
 
 extern "C" PyObject* PyMethod_Class(PyObject* im) noexcept {

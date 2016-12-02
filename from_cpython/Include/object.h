@@ -538,6 +538,11 @@ PyAPI_FUNC(int) PyObject_HasAttrString(PyObject *, const char *) PYSTON_NOEXCEPT
 PyAPI_FUNC(PyObject *) PyObject_GetAttr(PyObject *, PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyObject_SetAttr(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyObject_HasAttr(PyObject *, PyObject *) PYSTON_NOEXCEPT;
+// Pyston change: Add new APIs to access instance's dict
+PyAPI_FUNC(PyObject *) PyObject_GetDictCopy(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyObject_ClearDict(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyObject_UpdateDict(PyObject *, PyObject *) PYSTON_NOEXCEPT;
+
 PyAPI_FUNC(PyObject **) _PyObject_GetDictPtr(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyObject_SelfIter(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) _PyObject_NextNotImplemented(PyObject *) PYSTON_NOEXCEPT;

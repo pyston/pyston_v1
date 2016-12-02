@@ -614,6 +614,35 @@ extern "C" PyObject** _PyObject_GetDictPtr(PyObject* obj) noexcept {
     }
 }
 
+// This function returns the copy of object's dict, not a writable dict.
+extern "C" PyObject* PyObject_GetDictCopy(PyObject* obj) noexcept {
+    PyTypeObject* tp = Py_TYPE(obj);
+    if (!tp->instancesHaveHCAttrs()) {
+        if (!tp->instancesHaveDictAttrs())
+            return NULL;
+        return PyDict_Copy(obj->getDict());
+    } else {
+        Box* attrwrapper = obj->getAttrWrapper();
+        // unwritable dict, this is just a copy of object's dict.
+        return attrwrapperToDict(attrwrapper);
+    }
+}
+
+extern "C" void PyObject_ClearDict(PyObject* obj) noexcept {
+    obj->clearAttrsForDealloc();
+}
+
+// This API just add or update key-value pairs. It will not remove existed items
+// if the key is not contained in the new dict.
+extern "C" void PyObject_UpdateDict(PyObject* obj, PyObject* dict) noexcept {
+    PyObject* d_key, *d_value;
+    Py_ssize_t i = 0;
+    while (PyDict_Next(dict, &i, &d_key, &d_value)) {
+        if (PyObject_SetAttr(obj, d_key, d_value) < 0)
+            return;
+    }
+}
+
 /* These methods are used to control infinite recursion in repr, str, print,
    etc.  Container objects that may recursively contain themselves,
    e.g. builtin dictionaries and lists, should used Py_ReprEnter() and

@@ -661,7 +661,7 @@ public:
 class BST_ImportFrom : public BST_stmt_with_dest {
 public:
     int vreg_module = VREG_UNDEFINED;
-    int vreg_name = VREG_UNDEFINED;
+    int index_id = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(ImportFrom, BST_stmt_with_dest)
 } PACKED;
@@ -670,7 +670,7 @@ class BST_ImportName : public BST_stmt_with_dest {
 public:
     int vreg_from = VREG_UNDEFINED;
     int level = VREG_UNDEFINED;
-    int vreg_name = VREG_UNDEFINED;
+    int index_id = VREG_UNDEFINED;
 
     BSTFIXEDVREGS(ImportName, BST_stmt_with_dest)
 } PACKED;
