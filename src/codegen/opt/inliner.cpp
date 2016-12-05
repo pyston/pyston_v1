@@ -116,6 +116,69 @@ public:
 
     virtual const char* getPassName() const { return "Pyston inlining pass"; }
 
+    bool prepareInlining(llvm::CallSite CS) {
+        if (llvm::isa<llvm::IntrinsicInst>(CS.getInstruction()))
+            return false;
+
+        llvm::Value* v = CS.getCalledValue();
+        llvm::ConstantExpr* ce = llvm::dyn_cast<llvm::ConstantExpr>(v);
+        if (!ce)
+            return false;
+
+        assert(ce->isCast());
+        llvm::ConstantInt* l_addr = llvm::cast<llvm::ConstantInt>(ce->getOperand(0));
+        int64_t addr = l_addr->getSExtValue();
+
+        if (addr == (int64_t)printf)
+            return false;
+        llvm::Function* f = g.func_addr_registry.getLLVMFuncAtAddress((void*)addr);
+        if (f == NULL) {
+            if (VERBOSITY() >= 3) {
+                printf("Giving up on inlining %s:\n",
+                       g.func_addr_registry.getFuncNameAtAddress((void*)addr, true).c_str());
+                CS->dump();
+            }
+            return false;
+        }
+
+        // We load the bitcode lazily, so check if we haven't yet fully loaded the function:
+        if (f->isMaterializable()) {
+#if LLVMREV < 220600
+            f->Materialize();
+#else
+            f->materialize();
+#endif
+        }
+
+        // It could still be a declaration, though I think the code won't generate this case any more:
+        if (f->isDeclaration())
+            return false;
+
+        // Keep this section as a release_assert since the code-to-be-inlined, as well as the inlining
+        // decisions, can be different in release mode:
+        int op_idx = -1;
+        for (llvm::Argument& arg : f->args()) {
+            ++op_idx;
+            llvm::Type* op_type = CS->getOperand(op_idx)->getType();
+            if (arg.getType() != op_type) {
+                llvm::errs() << f->getName() << " has arg " << op_idx << " mismatched!\n";
+                llvm::errs() << "Given ";
+                op_type->dump();
+                llvm::errs() << " but underlying function expected ";
+                arg.getType()->dump();
+                llvm::errs() << '\n';
+            }
+            RELEASE_ASSERT(arg.getType() == CS->getOperand(op_idx)->getType(), "");
+        }
+
+        if (f->getName() == "allowGLReadPreemption")
+            return false;
+
+        assert(!f->isDeclaration());
+        CS.setCalledFunction(f);
+        return true;
+    }
+
     bool _runOnFunction(llvm::Function& f) {
         Timer _t2("(sum)");
         Timer _t("initializing");
@@ -154,70 +217,15 @@ public:
 
             std::vector<llvm::CallSite> calls;
             for (llvm::inst_iterator I = llvm::inst_begin(f), E = llvm::inst_end(f); I != E; ++I) {
-                llvm::CallInst* call = llvm::dyn_cast<llvm::CallInst>(&(*I));
-                // From Inliner.cpp:
-                if (!call || llvm::isa<llvm::IntrinsicInst>(call))
-                    continue;
-                // I->dump();
-                llvm::CallSite CS(call);
-
-                llvm::Value* v = CS.getCalledValue();
-                llvm::ConstantExpr* ce = llvm::dyn_cast<llvm::ConstantExpr>(v);
-                if (!ce)
-                    continue;
-
-                assert(ce->isCast());
-                llvm::ConstantInt* l_addr = llvm::cast<llvm::ConstantInt>(ce->getOperand(0));
-                int64_t addr = l_addr->getSExtValue();
-
-                if (addr == (int64_t)printf)
-                    continue;
-                llvm::Function* f = g.func_addr_registry.getLLVMFuncAtAddress((void*)addr);
-                if (f == NULL) {
-                    if (VERBOSITY() >= 3) {
-                        printf("Giving up on inlining %s:\n",
-                               g.func_addr_registry.getFuncNameAtAddress((void*)addr, true).c_str());
-                        call->dump();
-                    }
-                    continue;
+                if (auto* call = llvm::dyn_cast<llvm::CallInst>(&(*I))) {
+                    llvm::CallSite CS(call);
+                    if (prepareInlining(CS))
+                        calls.push_back(CS);
+                } else if (auto* call = llvm::dyn_cast<llvm::InvokeInst>(&(*I))) {
+                    llvm::CallSite CS(call);
+                    if (prepareInlining(CS))
+                        calls.push_back(CS);
                 }
-
-                // We load the bitcode lazily, so check if we haven't yet fully loaded the function:
-                if (f->isMaterializable()) {
-#if LLVMREV < 220600
-                    f->Materialize();
-#else
-                    f->materialize();
-#endif
-                }
-
-                // It could still be a declaration, though I think the code won't generate this case any more:
-                if (f->isDeclaration())
-                    continue;
-
-                // Keep this section as a release_assert since the code-to-be-inlined, as well as the inlining
-                // decisions, can be different in release mode:
-                int op_idx = -1;
-                for (llvm::Argument& arg : f->args()) {
-                    ++op_idx;
-                    llvm::Type* op_type = call->getOperand(op_idx)->getType();
-                    if (arg.getType() != op_type) {
-                        llvm::errs() << f->getName() << " has arg " << op_idx << " mismatched!\n";
-                        llvm::errs() << "Given ";
-                        op_type->dump();
-                        llvm::errs() << " but underlying function expected ";
-                        arg.getType()->dump();
-                        llvm::errs() << '\n';
-                    }
-                    RELEASE_ASSERT(arg.getType() == call->getOperand(op_idx)->getType(), "");
-                }
-
-                if (f->getName() == "allowGLReadPreemption")
-                    continue;
-
-                assert(!f->isDeclaration());
-                CS.setCalledFunction(f);
-                calls.push_back(CS);
             }
 
             // assert(0 && "TODO");
