@@ -673,13 +673,7 @@ Box* ASTInterpreter::doOSR(BST_Jump* node) {
         Py_CLEAR(vregs[vreg_num]);
     }
 
-    const OSREntryDescriptor* found_entry = nullptr;
-    for (auto& f : getCode()->osr_versions) {
-        if (f->entry_descriptor->backedge != node)
-            continue;
 
-        found_entry = f->entry_descriptor;
-    }
 
     int num_vregs = source_info->cfg->getVRegInfo().getTotalNumOfVRegs();
     VRegMap<Box*> sorted_symbol_table(num_vregs);
@@ -718,12 +712,30 @@ Box* ASTInterpreter::doOSR(BST_Jump* node) {
         return nullptr;
     }
 
+    const OSREntryDescriptor* found_entry = nullptr;
+    for (auto& f : getCode()->osr_versions) {
+        if (f->entry_descriptor->backedge != node)
+            continue;
+
+        bool same_types = true;
+        for (auto&& p : sorted_symbol_table) {
+            same_types = f->entry_descriptor->args[p.first] == UNKNOWN
+                         || f->entry_descriptor->args[p.first] == typeFromClass(p.second->cls);
+            if (!same_types)
+                break;
+        }
+        if (same_types)
+            found_entry = f->entry_descriptor;
+    }
+
     if (found_entry == nullptr) {
         OSREntryDescriptor* entry = OSREntryDescriptor::create(getCode(), node, CXX);
 
-        // TODO can we just get rid of this?
+        // for the first OSR we try to create a type specialized version.
+        bool create_type_specialized_osr = getCode()->osr_versions.empty();
+
         for (auto&& p : sorted_symbol_table) {
-            entry->args[p.first] = UNKNOWN;
+            entry->args[p.first] = create_type_specialized_osr ? typeFromClass(p.second->cls) : UNKNOWN;
         }
 
         entry->potentially_undefined = potentially_undefined;
