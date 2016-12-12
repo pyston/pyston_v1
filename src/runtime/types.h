@@ -712,8 +712,14 @@ public:
     }
 };
 
+#define PyList_MAXFREELIST 80
 class BoxedList : public Box {
 private:
+#if PyList_MAXFREELIST > 0
+    static BoxedList* free_list[PyList_MAXFREELIST];
+    static int numfree;
+#endif
+
     void grow(int min_free);
 
 public:
@@ -727,7 +733,24 @@ public:
     void shrink();
     static const int INITIAL_CAPACITY;
 
-    DEFAULT_CLASS_SIMPLE(list_cls, true);
+
+    void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default"))) {
+        return Box::operator new(size, cls);
+    }
+
+    void* operator new(size_t size) __attribute__((visibility("default"))) {
+        ALLOC_STATS(list_cls);
+        BoxedList* list = NULL;
+        if (likely(numfree)) {
+            numfree--;
+            list = free_list[numfree];
+            _Py_NewReference((PyObject*)list);
+        } else {
+            list = PyObject_GC_New(BoxedList, &PyList_Type);
+        }
+        _PyObject_GC_TRACK(list);
+        return list;
+    }
 
     static void dealloc(Box* self) noexcept;
     static int traverse(Box* self, visitproc visit, void* arg) noexcept;
