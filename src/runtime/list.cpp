@@ -590,7 +590,7 @@ static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i
     memmove(self->elts->elts + start + v_size, self->elts->elts + stop, remaining_elts * sizeof(Box*));
     for (int i = 0; i < v_size; i++) {
         Box* r = v_elts[i];
-        Py_XINCREF(r);
+        Py_INCREF(r);
         self->elts->elts[start + i] = r;
     }
 
