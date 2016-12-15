@@ -54,7 +54,7 @@ void BoxedCode::addVersion(CompiledFunction* compiled) {
         assert(compiled->spec->arg_types.size() == numReceivedArgs());
         versions.push_back(compiled);
     } else {
-        osr_versions.emplace_front(compiled->entry_descriptor, compiled);
+        osr_versions.push_back(compiled);
     }
 }
 

@@ -1143,7 +1143,7 @@ public:
         versions; // any compiled versions along with their type parameters; in order from most preferred to least
     ExceptionSwitchable<CompiledFunction*>
         always_use_version; // if this version is set, always use it (for unboxed cases)
-    std::forward_list<std::pair<const OSREntryDescriptor*, CompiledFunction*>> osr_versions;
+    llvm::TinyPtrVector<CompiledFunction*> osr_versions;
 
     // Profiling counter:
     int propagated_cxx_exceptions = 0;

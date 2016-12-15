@@ -674,11 +674,11 @@ Box* ASTInterpreter::doOSR(BST_Jump* node) {
     }
 
     const OSREntryDescriptor* found_entry = nullptr;
-    for (auto& p : getCode()->osr_versions) {
-        if (p.first->backedge != node)
+    for (auto& f : getCode()->osr_versions) {
+        if (f->entry_descriptor->backedge != node)
             continue;
 
-        found_entry = p.first;
+        found_entry = f->entry_descriptor;
     }
 
     int num_vregs = source_info->cfg->getVRegInfo().getTotalNumOfVRegs();

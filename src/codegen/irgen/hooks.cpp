@@ -539,14 +539,12 @@ void CompiledFunction::speculationFailed() {
         }
 
         if (!found) {
-            code->osr_versions.remove_if([&](const std::pair<const OSREntryDescriptor*, CompiledFunction*>& e) {
-                if (e.second == this) {
-                    this->dependent_callsites.invalidateAll();
-                    found = true;
-                    return true;
-                }
-                return false;
-            });
+            auto it = std::find(code->osr_versions.begin(), code->osr_versions.end(), this);
+            if (it != code->osr_versions.end()) {
+                code->osr_versions.erase(it);
+                this->dependent_callsites.invalidateAll();
+                found = true;
+            }
         }
 
         if (!found) {
@@ -558,7 +556,6 @@ void CompiledFunction::speculationFailed() {
     }
 }
 
-std::unordered_set<CompiledFunction*> all_compiled_functions;
 CompiledFunction::CompiledFunction(BoxedCode* code_obj, FunctionSpecialization* spec, void* code, EffortLevel effort,
                                    ExceptionStyle exception_style, const OSREntryDescriptor* entry_descriptor)
     : code_obj(code_obj),
@@ -629,16 +626,15 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
     BoxedCode* code = exit->entry->code;
     assert(code);
     for (auto&& osr_functions : code->osr_versions) {
-        if (osr_functions.first == exit->entry)
-            return osr_functions.second;
+        if (osr_functions->entry_descriptor == exit->entry)
+            return osr_functions;
     }
 
     EffortLevel new_effort = EffortLevel::MAXIMAL;
     CompiledFunction* compiled
         = compileFunction(code, NULL, new_effort, exit->entry, true, exit->entry->exception_style);
     stat_osr_compiles.log();
-    assert(std::find(code->osr_versions.begin(), code->osr_versions.end(), std::make_pair(exit->entry, compiled))
-           != code->osr_versions.end());
+    assert(std::find(code->osr_versions.begin(), code->osr_versions.end(), compiled) != code->osr_versions.end());
     return compiled;
 }
 
