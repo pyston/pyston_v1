@@ -662,15 +662,10 @@ Box* ASTInterpreter::doOSR(BST_Jump* node) {
     LivenessAnalysis* liveness = getLiveness();
     std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(getCode()->param_names, source_info->cfg, liveness);
 
-    llvm::SmallVector<int, 16> dead_vregs;
-
     for (int vreg = 0; vreg < getVRegInfo().getTotalNumOfVRegs(); ++vreg) {
         if (!liveness->isLiveAtEnd(vreg, current_block)) {
-            dead_vregs.push_back(vreg);
+            Py_CLEAR(vregs[vreg]);
         }
-    }
-    for (auto&& vreg_num : dead_vregs) {
-        Py_CLEAR(vregs[vreg_num]);
     }
 
 
@@ -745,7 +740,7 @@ Box* ASTInterpreter::doOSR(BST_Jump* node) {
 
     OSRExit exit(found_entry);
 
-    std::vector<Box*> arg_array;
+    llvm::SmallVector<Box*, 8> arg_array;
     arg_array.reserve(sorted_symbol_table.numSet() + potentially_undefined.numSet());
     for (auto&& p : sorted_symbol_table) {
         arg_array.push_back(p.second);
@@ -758,8 +753,8 @@ Box* ASTInterpreter::doOSR(BST_Jump* node) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
     CompiledFunction* partial_func = compilePartialFuncInternal(&exit);
 
-    // generated is only borrowed in order to not introduce cycles
-    Box* r = partial_func->call_osr(generator, created_closure, &frame_info, &arg_array[0]);
+    // generator is only borrowed in order to not introduce cycles
+    Box* r = partial_func->call_osr(generator, created_closure, &frame_info, arg_array.data());
 
     if (partial_func->exception_style == CXX) {
         assert(r);
