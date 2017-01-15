@@ -1490,7 +1490,20 @@ PyArg_ParseTupleAndKeywords(PyObject *args,
     }
 
     va_start(va, kwlist);
-    retval = vgetargskeywords(args, keywords, format, kwlist, &va, 0);
+
+    // Pyston change: special case "O|" and "OO|" because they are common
+    // retval = vgetargskeywords(args, keywords, format, kwlist, &va, 0);
+    if (format[0] == 'O' && format[1] == '|' && PyTuple_GET_SIZE(args) == 1 && !keywords) {
+        *va_arg(va, PyObject **) = PyTuple_GET_ITEM(args, 0);
+        retval = 1;
+    } else if (format[0] == 'O' && format[1] == 'O' && format[2] == '|' && PyTuple_GET_SIZE(args) == 2 && !keywords) {
+        *va_arg(va, PyObject **) = PyTuple_GET_ITEM(args, 0);
+        *va_arg(va, PyObject **) = PyTuple_GET_ITEM(args, 1);
+        retval = 1;
+    } else {
+        retval = vgetargskeywords(args, keywords, format, kwlist, &va, 0);
+    }
+
     va_end(va);
     return retval;
 }
