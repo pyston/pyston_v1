@@ -662,24 +662,13 @@ Box* ASTInterpreter::doOSR(BST_Jump* node) {
     LivenessAnalysis* liveness = getLiveness();
     std::unique_ptr<PhiAnalysis> phis = computeRequiredPhis(getCode()->param_names, source_info->cfg, liveness);
 
-    llvm::SmallVector<int, 16> dead_vregs;
-
     for (int vreg = 0; vreg < getVRegInfo().getTotalNumOfVRegs(); ++vreg) {
         if (!liveness->isLiveAtEnd(vreg, current_block)) {
-            dead_vregs.push_back(vreg);
+            Py_CLEAR(vregs[vreg]);
         }
     }
-    for (auto&& vreg_num : dead_vregs) {
-        Py_CLEAR(vregs[vreg_num]);
-    }
 
-    const OSREntryDescriptor* found_entry = nullptr;
-    for (auto& p : getCode()->osr_versions) {
-        if (p.first->backedge != node)
-            continue;
 
-        found_entry = p.first;
-    }
 
     int num_vregs = source_info->cfg->getVRegInfo().getTotalNumOfVRegs();
     VRegMap<Box*> sorted_symbol_table(num_vregs);
@@ -718,12 +707,30 @@ Box* ASTInterpreter::doOSR(BST_Jump* node) {
         return nullptr;
     }
 
+    const OSREntryDescriptor* found_entry = nullptr;
+    for (auto& f : getCode()->osr_versions) {
+        if (f->entry_descriptor->backedge != node)
+            continue;
+
+        bool same_types = true;
+        for (auto&& p : sorted_symbol_table) {
+            same_types = f->entry_descriptor->args[p.first] == UNKNOWN
+                         || f->entry_descriptor->args[p.first] == typeFromClass(p.second->cls);
+            if (!same_types)
+                break;
+        }
+        if (same_types)
+            found_entry = f->entry_descriptor;
+    }
+
     if (found_entry == nullptr) {
         OSREntryDescriptor* entry = OSREntryDescriptor::create(getCode(), node, CXX);
 
-        // TODO can we just get rid of this?
+        // for the first OSR we try to create a type specialized version.
+        bool create_type_specialized_osr = getCode()->osr_versions.empty();
+
         for (auto&& p : sorted_symbol_table) {
-            entry->args[p.first] = UNKNOWN;
+            entry->args[p.first] = create_type_specialized_osr ? typeFromClass(p.second->cls) : UNKNOWN;
         }
 
         entry->potentially_undefined = potentially_undefined;
@@ -733,7 +740,7 @@ Box* ASTInterpreter::doOSR(BST_Jump* node) {
 
     OSRExit exit(found_entry);
 
-    std::vector<Box*> arg_array;
+    llvm::SmallVector<Box*, 8> arg_array;
     arg_array.reserve(sorted_symbol_table.numSet() + potentially_undefined.numSet());
     for (auto&& p : sorted_symbol_table) {
         arg_array.push_back(p.second);
@@ -746,8 +753,8 @@ Box* ASTInterpreter::doOSR(BST_Jump* node) {
     UNAVOIDABLE_STAT_TIMER(t0, "us_timer_in_jitted_code");
     CompiledFunction* partial_func = compilePartialFuncInternal(&exit);
 
-    // generated is only borrowed in order to not introduce cycles
-    Box* r = partial_func->call_osr(generator, created_closure, &frame_info, &arg_array[0]);
+    // generator is only borrowed in order to not introduce cycles
+    Box* r = partial_func->call_osr(generator, created_closure, &frame_info, arg_array.data());
 
     if (partial_func->exception_style == CXX) {
         assert(r);

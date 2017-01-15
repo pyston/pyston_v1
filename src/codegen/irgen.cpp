@@ -493,7 +493,6 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // good to go
                 v = from_arg;
             } else if (p.second->canConvertTo(phi_type)) {
-                RELEASE_ASSERT(0, "this hasn't been hit in a very long time -- check refcounting");
                 // not sure if/when this happens, but if there's a type mismatch but one we know
                 // can be handled (such as casting from a subclass to a superclass), handle it:
                 ConcreteCompilerVariable* converted = var->makeConverted(*unbox_emitter, phi_type);
