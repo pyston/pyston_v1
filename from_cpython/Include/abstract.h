@@ -846,15 +846,10 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     // Pyston change: made this a function:
-    PyAPI_FUNC(int) _PyIndex_Check(PyObject* o) PYSTON_NOEXCEPT;
-#define PyIndex_Check(obj) _PyIndex_Check((PyObject*)(obj))
-#if 0
 #define PyIndex_Check(obj) \
-   ((obj)->ob_type->tp_as_number != NULL && \
-    PyType_HasFeature((obj)->ob_type, Py_TPFLAGS_HAVE_INDEX) && \
-    (obj)->ob_type->tp_as_number->nb_index != NULL)
-#endif
+   (Py_TYPE((obj))->tp_as_number != NULL && \
+    PyType_HasFeature(Py_TYPE((obj)), Py_TPFLAGS_HAVE_INDEX) && \
+    Py_TYPE((obj))->tp_as_number->nb_index != NULL)
 
      PyAPI_FUNC(PyObject *) PyNumber_Index(PyObject *o) PYSTON_NOEXCEPT;
 

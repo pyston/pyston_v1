@@ -1994,6 +1994,30 @@ extern "C" int PySlice_GetIndices(PySliceObject* r, Py_ssize_t length, Py_ssize_
     return 0;
 }
 
+extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {
+    if (v != NULL) {
+        Py_ssize_t x;
+        if (PyInt_Check(v)) {
+            /* XXX(nnorwitz): I think PyInt_AS_LONG is correct,
+               however, it looks like it should be AsSsize_t.
+               There should be a comment here explaining why.
+            */
+            x = PyInt_AS_LONG(v);
+        } else if (PyIndex_Check(v)) {
+            x = PyNumber_AsSsize_t(v, NULL);
+            if (x == -1 && PyErr_Occurred())
+                return 0;
+        } else {
+            PyErr_SetString(PyExc_TypeError, "slice indices must be integers or "
+                                             "None or have an __index__ method");
+            return 0;
+        }
+        *pi = x;
+    }
+    return 1;
+}
+
+
 extern "C" int PySlice_GetIndicesEx(PySliceObject* _r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
                                     Py_ssize_t* step, Py_ssize_t* slicelength) noexcept {
     BoxedSlice* r = (BoxedSlice*)_r;
@@ -2008,7 +2032,7 @@ extern "C" int PySlice_GetIndicesEx(PySliceObject* _r, Py_ssize_t length, Py_ssi
     } else {
         if (!_PyEval_SliceIndex(r->step, step))
             return -1;
-        if (*step == 0) {
+        if (unlikely(*step == 0)) {
             PyErr_SetString(PyExc_ValueError, "slice step cannot be zero");
             return -1;
         }
@@ -2047,6 +2071,8 @@ extern "C" int PySlice_GetIndicesEx(PySliceObject* _r, Py_ssize_t length, Py_ssi
         *slicelength = 0;
     } else if (*step == 1) { // Pyston change: added this branch to make the common step==1 case avoid the div:
         *slicelength = (*stop - *start - 1) + 1;
+    } else if (*step == -1) { // Pyston change: added this branch to make the common step==-1 case avoid the div:
+        *slicelength = (*stop - *start + 1) / -1 + 1;
     } else if (*step < 0) {
         *slicelength = (*stop - *start + 1) / (*step) + 1;
     } else {

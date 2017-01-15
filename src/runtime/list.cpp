@@ -31,6 +31,9 @@ extern "C" PyObject* listsort(PyListObject* self, PyObject* args, PyObject* kwds
 
 namespace pyston {
 
+BoxedList* BoxedList::free_list[PyList_MAXFREELIST];
+int BoxedList::numfree = 0;
+
 static int list_ass_slice(PyListObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, PyObject* v);
 
 extern "C" int PyList_Append(PyObject* op, PyObject* newitem) noexcept {
@@ -590,7 +593,7 @@ static inline void listSetitemSliceInt64(BoxedList* self, i64 start, i64 stop, i
     memmove(self->elts->elts + start + v_size, self->elts->elts + stop, remaining_elts * sizeof(Box*));
     for (int i = 0; i < v_size; i++) {
         Box* r = v_elts[i];
-        Py_XINCREF(r);
+        Py_INCREF(r);
         self->elts->elts[start + i] = r;
     }
 
@@ -1383,12 +1386,10 @@ void BoxedList::dealloc(Box* b) noexcept {
         }
         delete op->elts;
     }
-#if 0
     if (numfree < PyList_MAXFREELIST && PyList_CheckExact(op))
         free_list[numfree++] = op;
     else
-#endif
-    Py_TYPE(op)->tp_free((PyObject*)op);
+        Py_TYPE(op)->tp_free((PyObject*)op);
     Py_TRASHCAN_SAFE_END(op)
 }
 

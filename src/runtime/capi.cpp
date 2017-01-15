@@ -48,11 +48,6 @@
 
 namespace pyston {
 
-extern "C" int _PyIndex_Check(PyObject* obj) noexcept {
-    return (Py_TYPE(obj)->tp_as_number != NULL && PyType_HasFeature(Py_TYPE(obj), Py_TPFLAGS_HAVE_INDEX)
-            && Py_TYPE(obj)->tp_as_number->nb_index != NULL);
-}
-
 extern "C" int _PyObject_CheckBuffer(PyObject* obj) noexcept {
     return ((Py_TYPE(obj)->tp_as_buffer != NULL) && (PyType_HasFeature(Py_TYPE(obj), Py_TPFLAGS_HAVE_NEWBUFFER))
             && (Py_TYPE(obj)->tp_as_buffer->bf_getbuffer != NULL));
@@ -1340,29 +1335,6 @@ extern "C" PyObject* PyCFunction_Call(PyObject* func, PyObject* arg, PyObject* k
     assert(arg->cls == tuple_cls);
     assert(!kw || kw->cls == dict_cls);
     return BoxedCApiFunction::tppCall<CAPI>(func, NULL, ArgPassSpec(0, 0, true, true), arg, kw, NULL, NULL, NULL);
-}
-
-extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {
-    if (v != NULL) {
-        Py_ssize_t x;
-        if (PyInt_Check(v)) {
-            /* XXX(nnorwitz): I think PyInt_AS_LONG is correct,
-               however, it looks like it should be AsSsize_t.
-               There should be a comment here explaining why.
-            */
-            x = PyInt_AS_LONG(v);
-        } else if (PyIndex_Check(v)) {
-            x = PyNumber_AsSsize_t(v, NULL);
-            if (x == -1 && PyErr_Occurred())
-                return 0;
-        } else {
-            PyErr_SetString(PyExc_TypeError, "slice indices must be integers or "
-                                             "None or have an __index__ method");
-            return 0;
-        }
-        *pi = x;
-    }
-    return 1;
 }
 
 extern "C" int PyEval_GetRestricted(void) noexcept {
