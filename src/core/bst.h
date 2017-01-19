@@ -775,8 +775,7 @@ public:
     // Only valid for lookup_type == CLOSURE:
     int closure_offset = -1;
 
-    BST_Name(InternedString id, int lineno)
-        : id(id), lookup_type(ScopeInfo::VarScopeType::UNKNOWN), vreg(VREG_UNDEFINED) {}
+    BST_Name(InternedString id) : id(id), lookup_type(ScopeInfo::VarScopeType::UNKNOWN), vreg(VREG_UNDEFINED) {}
 };
 
 template <typename T> T* bst_cast(BST_stmt* node) {

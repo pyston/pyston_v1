@@ -136,11 +136,11 @@ ParamNames::ParamNames(AST_arguments* arguments, InternedStringPool& pool)
         AST_expr* arg = arguments->args[i];
         if (arg->type == AST_TYPE::Name) {
             AST_Name* name = ast_cast<AST_Name>(arg);
-            BST_Name* new_name = new BST_Name(name->id, name->lineno);
+            BST_Name* new_name = new BST_Name(name->id);
             all_args.emplace_back(new_name);
         } else {
             InternedString dot_arg_name = pool.get("." + std::to_string(i));
-            auto new_name = new BST_Name(dot_arg_name, arg->lineno);
+            auto new_name = new BST_Name(dot_arg_name);
             new_name->lookup_type = ScopeInfo::VarScopeType::FAST;
             all_args.emplace_back(new_name);
         }
@@ -149,14 +149,14 @@ ParamNames::ParamNames(AST_arguments* arguments, InternedStringPool& pool)
     auto vararg_name = arguments->vararg;
     if (vararg_name) {
         has_vararg_name = 1;
-        BST_Name* new_name = new BST_Name(vararg_name->id, vararg_name->lineno);
+        BST_Name* new_name = new BST_Name(vararg_name->id);
         all_args.emplace_back(new_name);
     }
 
     auto kwarg_name = arguments->kwarg;
     if (kwarg_name) {
         has_kwarg_name = 1;
-        BST_Name* new_name = new BST_Name(kwarg_name->id, kwarg_name->lineno);
+        BST_Name* new_name = new BST_Name(kwarg_name->id);
         all_args.emplace_back(new_name);
     }
 }
