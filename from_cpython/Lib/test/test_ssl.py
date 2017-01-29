@@ -1404,11 +1404,9 @@ def test_main(verbose=False):
     global CERTFILE, SVN_PYTHON_ORG_ROOT_CERT, NOKIACERT, NULLBYTECERT
     CERTFILE = os.path.join(os.path.dirname(__file__) or os.curdir,
                             "keycert.pem")
-    # Pyston change: seems the ca file to svn.python.org is invalid now
-    # use the system's root ca file temporarilly.
-    # SVN_PYTHON_ORG_ROOT_CERT = os.path.join(
-    #     os.path.dirname(__file__) or os.curdir,
-    #     "https_svn_python_org_root.pem")
+    SVN_PYTHON_ORG_ROOT_CERT = os.path.join(
+        os.path.dirname(__file__) or os.curdir,
+        "https_svn_python_org_root.pem")
     SVN_PYTHON_ORG_ROOT_CERT = '/etc/ssl/certs/ca-certificates.crt'
     NOKIACERT = os.path.join(os.path.dirname(__file__) or os.curdir,
                              "nokia.pem")
@@ -1423,8 +1421,11 @@ def test_main(verbose=False):
 
     tests = [BasicTests, BasicSocketTests]
 
-    if test_support.is_resource_enabled('network'):
-        tests.append(NetworkedTests)
+    # Pyston change: https://svn.python.org 's cert is expired now, and cpython's
+    # tests don't rely on it since v2.7.12
+    # we have to disable this until we updated to 2.7.12
+    # if test_support.is_resource_enabled('network'):
+    #     tests.append(NetworkedTests)
 
     if _have_threads:
         thread_info = test_support.threading_setup()
