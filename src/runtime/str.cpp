@@ -1935,6 +1935,14 @@ Box* strRStrip(BoxedString* self, Box* chars) {
 
 Box* strCapitalize(BoxedString* self) {
     assert(PyString_Check(self));
+    int length = self->s().size();
+    if (length == 0)
+        return incref(EmptyString);
+
+    if (length == 1) {
+        char c = std::toupper(self->data()[0]);
+        return incref(characters[c & UCHAR_MAX]);
+    }
 
     std::string s(self->s());
 
@@ -2003,15 +2011,37 @@ Box* strTranslate(BoxedString* self, BoxedString* table, BoxedString* delete_cha
 
 Box* strLower(BoxedString* self) {
     assert(PyString_Check(self));
+    int length = self->s().size();
+    if (length == 0)
+        return incref(EmptyString);
+
+    if (length == 1) {
+        char c = std::tolower(self->data()[0]);
+        return incref(characters[c & UCHAR_MAX]);
+    }
 
     BoxedString* rtn = new (self->size()) BoxedString(self->s());
-    for (int i = 0; i < rtn->size(); i++)
-        rtn->data()[i] = std::tolower(rtn->data()[i]);
+    for (int i = 0; i < rtn->size(); i++) {
+        char c = rtn->data()[i];
+        if (std::islower(c))
+            rtn->data()[i] = std::toupper(c);
+        else if (std::isupper(c))
+            rtn->data()[i] = std::tolower(c);
+    }
     return rtn;
 }
 
 Box* strUpper(BoxedString* self) {
     assert(PyString_Check(self));
+    int length = self->s().size();
+    if (length == 0)
+        return incref(EmptyString);
+
+    if (length == 1) {
+        char c = std::toupper(self->data()[0]);
+        return incref(characters[c & UCHAR_MAX]);
+    }
+
     BoxedString* rtn = new (self->size()) BoxedString(self->s());
     for (int i = 0; i < rtn->size(); i++)
         rtn->data()[i] = std::toupper(rtn->data()[i]);
@@ -2020,13 +2050,15 @@ Box* strUpper(BoxedString* self) {
 
 Box* strSwapcase(BoxedString* self) {
     assert(PyString_Check(self));
+    int length = self->s().size();
+    if (length == 0)
+        return incref(EmptyString);
+
     BoxedString* rtn = new (self->size()) BoxedString(self->s());
     for (int i = 0; i < rtn->size(); i++) {
         char c = rtn->data()[i];
-        if (std::islower(c))
-            rtn->data()[i] = std::toupper(c);
-        else if (std::isupper(c))
-            rtn->data()[i] = std::tolower(c);
+        if (std::isalpha(c))
+            rtn->data()[i] = c ^ 32;
     }
     return rtn;
 }
