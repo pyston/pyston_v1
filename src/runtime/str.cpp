@@ -2021,8 +2021,13 @@ Box* strLower(BoxedString* self) {
     }
 
     BoxedString* rtn = new (self->size()) BoxedString(self->s());
-    for (int i = 0; i < rtn->size(); i++)
-        rtn->data()[i] = std::tolower(rtn->data()[i]);
+    for (int i = 0; i < rtn->size(); i++) {
+        char c = rtn->data()[i];
+        if (std::islower(c))
+            rtn->data()[i] = std::toupper(c);
+        else if (std::isupper(c))
+            rtn->data()[i] = std::tolower(c);
+    }
     return rtn;
 }
 
@@ -2052,10 +2057,8 @@ Box* strSwapcase(BoxedString* self) {
     BoxedString* rtn = new (self->size()) BoxedString(self->s());
     for (int i = 0; i < rtn->size(); i++) {
         char c = rtn->data()[i];
-        if (std::islower(c))
-            rtn->data()[i] = std::toupper(c);
-        else if (std::isupper(c))
-            rtn->data()[i] = std::tolower(c);
+        if (std::isalpha(c))
+            rtn->data()[i] = c ^ 32;
     }
     return rtn;
 }
