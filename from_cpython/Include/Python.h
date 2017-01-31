@@ -18,7 +18,7 @@
 // Cython depends on having this define set:
 #define Py_PYTHON_H
 
-#define PYSTON_VERSION "0.7"
+#define PYSTON_VERSION "0.6.1"
 
 #define WITH_PYMALLOC
 
