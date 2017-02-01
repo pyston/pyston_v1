@@ -249,6 +249,9 @@ SET_SOURCE_FILES_PROPERTIES(
 add_subdirectory(build_deps/lz4/cmake_unofficial EXCLUDE_FROM_ALL)
 add_dependencies(lz4 gitsubmodules)
 
+# CPack
+include(cmake/Deploy.cmake)
+
 # valgrind
 if(ENABLE_VALGRIND)
   find_package(Valgrind REQUIRED)
