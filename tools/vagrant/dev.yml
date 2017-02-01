@@ -1,0 +1,144 @@
+---
+# Extra commands only dev needs.
+- hosts: all
+  vars:
+      system_packages:
+          # clang deps:
+          - libgmp-dev
+          - libmpfr-dev
+          - libmpc-dev
+          - make
+          - build-essential
+          - libtool
+          - zip
+          - gcc-multilib
+          - autogen
+          # to speed up builds:
+          - ccache
+          # llvm deps:
+          - libncurses5-dev
+          - zlib1g-dev
+          # for development:
+          - git
+          # something else:
+          - zsh
+          # needed when linking pyston:
+          - liblzma-dev
+  gather_facts: false
+  sudo: true
+
+  tasks:
+    - name: Install required system packages.
+      apt: name="{{item}}" state=present
+      with_items: system_packages
+
+# Compiler tools: gcc, clang, llvm
+- hosts: all
+  vars:
+      gcc_version: 4.8.2
+      dep_dir: /home/vagrant/pyston_deps
+      pyston_src: /home/vagrant/pyston/src
+  gather_facts: false
+
+  tasks:
+    - name: Upload .gitconfig from local machine, will be needed later, do it first so build fails first
+      copy: src=~/.gitconfig dest=~/.gitconfig
+
+    - name: Make sure the pyston_deps directory exists
+      file: path={{dep_dir}} state=directory
+
+    - name: Download gcc
+      get_url: url=http://www.netgull.com/gcc/releases/gcc-{{gcc_version}}/gcc-{{gcc_version}}.tar.bz2
+               dest={{dep_dir}}/gcc-{{gcc_version}}.tar.bz2
+
+    - name: Untar gcc
+      command: chdir={{dep_dir}} tar xvf gcc-{{gcc_version}}.tar.bz2
+               creates=gcc-{{gcc_version}}
+
+    - name: Make sure the gcc-build directory exists
+      file: path={{dep_dir}}/gcc-{{gcc_version}}-build state=directory
+
+    - name: Make sure the gcc-install directory exists
+      file: path={{dep_dir}}/gcc-{{gcc_version}}-install state=directory
+
+    - name: Prepare gcc for compilation
+      command: chdir={{dep_dir}}/gcc-{{gcc_version}}-build ../gcc-{{gcc_version}}/configure --disable-bootstrap --enable-languages=c,c++ --prefix={{dep_dir}}/gcc-{{gcc_version}}-install
+               creates={{dep_dir}}/gcc-{{gcc_version}}-build/Makefile
+
+    - name: Build gcc
+      command: chdir={{dep_dir}}/gcc-{{gcc_version}}-build make -j4
+               creates={{dep_dir}}/gcc-{{gcc_version}}-build/gcc/xg++
+
+    - name: Install gcc
+      command: chdir={{dep_dir}}/gcc-{{gcc_version}}-build make install
+               creates={{dep_dir}}/gcc-{{gcc_version}}-install/bin/g++
+
+    # Begin some git commands.
+    - name: clone llvm git
+      git: repo=http://llvm.org/git/llvm.git update=no dest={{dep_dir}}/llvm-trunk
+
+    - name: clone clang git
+      git: repo=http://llvm.org/git/clang.git update=no dest={{dep_dir}}/llvm-trunk/tools/clang
+
+    - name: Apply patches to llvm
+      command: chdir={{pyston_src}} make llvm_up
+               creates={{dep_dir}}/llvm-trunk/_patched
+
+    - name: Configure Makefile for llvm
+      command: chdir={{pyston_src}} make llvm_configure
+               creates={{dep_dir}}/llvm-trunk-build/Makefile.config
+
+    - name: Build llvm
+      command: chdir={{pyston_src}} make llvm -j4
+               creates={{dep_dir}}/llvm-trunk-build/Debug+Asserts/bin/llc
+
+
+# libunwind
+- hosts: all
+  vars:
+      libunwind_version: 1.1
+      dep_dir: /home/vagrant/pyston_deps
+      pyston_dir: /home/vagrant/pyston
+  gather_facts: false
+
+  tasks:
+    - name: Download libunwind
+      get_url: url=http://download.savannah.gnu.org/releases/libunwind/libunwind-1.1.tar.gz
+               dest={{dep_dir}}/libunwind-{{libunwind_version}}.tar.gz
+
+    - name: Untar libunwind
+      command: chdir={{dep_dir}} tar xvf libunwind-{{libunwind_version}}.tar.gz
+               creates=libunwind-{{libunwind_version}}
+
+    - name: Make sure the libunwind-install directory exists
+      file: path={{dep_dir}}/libunwind-{{libunwind_version}}-install state=directory
+
+    - name: Prepare libunwind for compilation
+      command: chdir={{dep_dir}}/libunwind-{{libunwind_version}} ./configure --prefix={{dep_dir}}/libunwind-{{libunwind_version}}-install --enable-shared=0
+               creates={{dep_dir}}/libunwind-{{libunwind_version}}/Makefile
+
+    # Sorry, creates below isn't really correct, but you get errors if you run patch twice.
+    - name: Patch libunwind
+      shell: chdir={{dep_dir}}/libunwind-{{libunwind_version}} patch -p1 < {{pyston_dir}}/libunwind_patches/0001-Change-the-RBP-validation-heuristic-to-allow-size-0-.patch
+             creates={{dep_dir}}/libunwind-{{libunwind_version}}/src/libunwind.la
+
+    - name: Build libunwind
+      command: chdir={{dep_dir}}/libunwind-{{libunwind_version}} make -j4
+               creates={{dep_dir}}/libunwind-{{libunwind_version}}/src/libunwind.la
+
+    - name: Install libunwind
+      command: chdir={{dep_dir}}/libunwind-{{libunwind_version}} make install
+               creates={{dep_dir}}/libunwind-{{libunwind_version}}-install/lib/libunwind.la
+
+
+# pyston
+- hosts: all
+  vars:
+      pyston_dir: /home/vagrant/pyston
+  gather_facts: false
+
+  tasks:
+    - name: Compile pyston
+      command: chdir={{pyston_dir}}/src make -j4
+               creates={{pyston_dir}}/src/pyston_dbg
+
