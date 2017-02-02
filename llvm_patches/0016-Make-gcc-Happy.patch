@@ -1,0 +1,76 @@
+From 61029df10ea6af78be513154f72c36a3e3e73273 Mon Sep 17 00:00:00 2001
+From: Dong-hee Na <corona10@gmail.com>
+Date: Thu, 6 Oct 2016 01:56:42 +0900
+Subject: [PATCH] Make gcc Happy
+
+---
+ lib/Analysis/LoopInfo.cpp                          | 2 +-
+ lib/ExecutionEngine/RuntimeDyld/RuntimeDyldELF.cpp | 4 ++--
+ lib/MC/MachObjectWriter.cpp                        | 2 +-
+ lib/Support/APFloat.cpp                            | 4 ++--
+ 4 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/lib/Analysis/LoopInfo.cpp b/lib/Analysis/LoopInfo.cpp
+index 95f6eb0..35ccba4 100644
+--- a/lib/Analysis/LoopInfo.cpp
++++ b/lib/Analysis/LoopInfo.cpp
+@@ -679,7 +679,7 @@ LoopInfo LoopAnalysis::run(Function &F, AnalysisManager<Function> *AM) {
+   // the problem is better understood.
+   LoopInfo LI;
+   LI.Analyze(AM->getResult<DominatorTreeAnalysis>(F));
+-  return std::move(LI);
++  return LI;
+ }
+ 
+ PreservedAnalyses LoopPrinterPass::run(Function &F,
+diff --git a/lib/ExecutionEngine/RuntimeDyld/RuntimeDyldELF.cpp b/lib/ExecutionEngine/RuntimeDyld/RuntimeDyldELF.cpp
+index 0f3ca0f..cabeb1f 100644
+--- a/lib/ExecutionEngine/RuntimeDyld/RuntimeDyldELF.cpp
++++ b/lib/ExecutionEngine/RuntimeDyld/RuntimeDyldELF.cpp
+@@ -418,8 +418,8 @@ void RuntimeDyldELF::resolveAArch64Relocation(const SectionEntry &Section,
+         ((Value + Addend) & ~0xfffULL) - (FinalAddress & ~0xfffULL);
+ 
+     // Check that -2^32 <= X < 2^32
+-    assert(static_cast<int64_t>(Result) >= (-1LL << 32) &&
+-           static_cast<int64_t>(Result) < (1LL << 32) &&
++    assert(static_cast<int64_t>(Result) >= INT32_MIN &&
++           static_cast<int64_t>(Result) < UINT32_MAX &&
+            "overflow check failed for relocation");
+ 
+     // AArch64 code is emitted with .rela relocations. The data already in any
+diff --git a/lib/MC/MachObjectWriter.cpp b/lib/MC/MachObjectWriter.cpp
+index 588d424..d7b61ea 100644
+--- a/lib/MC/MachObjectWriter.cpp
++++ b/lib/MC/MachObjectWriter.cpp
+@@ -624,7 +624,7 @@ void MachObjectWriter::ComputeSymbolTable(
+       unsigned Index = Rel.Sym->getIndex();
+       assert(isInt<24>(Index));
+       if (IsLittleEndian)
+-        Rel.MRE.r_word1 = (Rel.MRE.r_word1 & (-1 << 24)) | Index | (1 << 27);
++        Rel.MRE.r_word1 = (Rel.MRE.r_word1 & (-0U << 24)) | Index | (1 << 27);
+       else
+         Rel.MRE.r_word1 = (Rel.MRE.r_word1 & 0xff) | Index << 8 | (1 << 4);
+     }
+diff --git a/lib/Support/APFloat.cpp b/lib/Support/APFloat.cpp
+index 393ecf4..2859837 100644
+--- a/lib/Support/APFloat.cpp
++++ b/lib/Support/APFloat.cpp
+@@ -3920,7 +3920,7 @@ APFloat::makeZero(bool Negative) {
+ 
+ APFloat llvm::scalbn(APFloat X, int Exp) {
+   if (X.isInfinity() || X.isZero() || X.isNaN())
+-    return std::move(X);
++    return X;
+ 
+   auto MaxExp = X.getSemantics().maxExponent;
+   auto MinExp = X.getSemantics().minExponent;
+@@ -3932,5 +3932,5 @@ APFloat llvm::scalbn(APFloat X, int Exp) {
+     return APFloat::getZero(X.getSemantics(), X.isNegative());
+ 
+   X.exponent += Exp;
+-  return std::move(X);
++  return X;
+ }
+-- 
+2.7.4
+
