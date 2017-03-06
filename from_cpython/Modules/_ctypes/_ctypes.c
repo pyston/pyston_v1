@@ -3772,7 +3772,7 @@ _build_callargs(PyCFuncPtrObject *self, PyObject *argtypes,
             */
             if (ob == NULL)
                 goto error;
-            /* The .from_param call that will ocurr later will pass this
+            /* The .from_param call that will occur later will pass this
                as a byref parameter. */
             PyTuple_SET_ITEM(callargs, i, ob);
             *poutmask |= (1 << i); /* mark as out arg */
@@ -3992,7 +3992,7 @@ PyCFuncPtr_call(PyCFuncPtrObject *self, PyObject *inargs, PyObject *kwds)
                                                    self,
                                                    callargs,
                                                    NULL);
-        /* If the errcheck funtion failed, return NULL.
+        /* If the errcheck function failed, return NULL.
            If the errcheck function returned callargs unchanged,
            continue normal processing.
            If the errcheck function returned something else,

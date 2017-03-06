@@ -136,7 +136,7 @@ uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t S
     sys::MemoryBlock MB = sys::Memory::allocateMappedMemory(RequiredSize, &MemGroup.Near,
                                                             sys::Memory::MF_READ | sys::Memory::MF_WRITE, ec);
     if (ec) {
-        // FIXME: Add error propogation to the interface.
+        // FIXME: Add error propagation to the interface.
         return nullptr;
     }
 

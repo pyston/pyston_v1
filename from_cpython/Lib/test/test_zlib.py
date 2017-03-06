@@ -70,7 +70,7 @@ class ChecksumTestCase(unittest.TestCase):
 
     def test_negative_crc_iv_input(self):
         # The range of valid input values for the crc state should be
-        # -2**31 through 2**32-1 to allow inputs artifically constrained
+        # -2**31 through 2**32-1 to allow inputs artificially constrained
         # to a signed 32-bit integer.
         self.assertEqual(zlib.crc32('ham', -1), zlib.crc32('ham', 0xffffffffL))
         self.assertEqual(zlib.crc32('spam', -3141593),

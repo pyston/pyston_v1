@@ -1,4 +1,4 @@
-"""High-perfomance logging profiler, mostly written in C."""
+"""High-performance logging profiler, mostly written in C."""
 
 import _hotshot
 from _hotshot import ProfilerError
@@ -72,7 +72,7 @@ class Profile:
 
         Additional positional and keyword arguments may be passed
         along; the result of the call is returned, and exceptions are
-        allowed to propogate cleanly, while ensuring that profiling is
+        allowed to propagate cleanly, while ensuring that profiling is
         disabled on the way out.
         """
         return self._prof.runcall(func, args, kw)

@@ -1987,12 +1987,12 @@ static struct PyMethodDef al_methods[] = {
 };
 
 
-/* Initialization function for the module (*must* be called inital) */
+/* Initialization function for the module (*must* be called initial) */
 
 PyDoc_STRVAR(al_module_documentation, "");
 
 void
-inital(void)
+initial(void)
 {
     PyObject *m, *d, *x;
 

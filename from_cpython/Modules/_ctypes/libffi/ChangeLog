@@ -2353,7 +2353,7 @@
 
 2007-11-25  Andreas Tobler  <a.tobler@schweiz.org>
 
-	* src/closures.c: Move defintion of MAYBE_UNUSED from here to ...
+	* src/closures.c: Move definition of MAYBE_UNUSED from here to ...
 	* include/ffi_common.h: ... here.
 	Update copyright.
 
@@ -5125,7 +5125,7 @@
 
 2001-10-07  Joseph S. Myers  <jsm28@cam.ac.uk>
 
-	* src/x86/ffi.c: Fix spelling error of "separate" as "seperate".
+	* src/x86/ffi.c: Fix spelling error of "separate" as "separate".
 
 2001-07-16  Rainer Orth  <ro@TechFak.Uni-Bielefeld.DE>
 

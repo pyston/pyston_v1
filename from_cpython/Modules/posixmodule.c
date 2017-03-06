@@ -5148,7 +5148,7 @@ static int _PyPclose(FILE *file)
 #include <io.h>
 #include <fcntl.h>
 
-/* These tell _PyPopen() wether to return 1, 2, or 3 file objects. */
+/* These tell _PyPopen() whether to return 1, 2, or 3 file objects. */
 #define POPEN_1 1
 #define POPEN_2 2
 #define POPEN_3 3
@@ -9493,7 +9493,7 @@ INITFUNC(void)
      * currently active platform.
      *
      * This block allow one to use a python binary that was build on
-     * OSX 10.4 on OSX 10.3, without loosing access to new APIs on
+     * OSX 10.4 on OSX 10.3, without losing access to new APIs on
      * OSX 10.4.
      */
 #ifdef HAVE_FSTATVFS
