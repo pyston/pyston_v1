@@ -51,8 +51,6 @@ See [travis-ci.org/dropbox/pyston/builds](https://travis-ci.org/dropbox/pyston/b
 
 ### Roadmap
 
-##### v0.7: coming soon
-
 ##### v0.6.1: [released 1/31/2017](https://blog.pyston.org/2017/01/31/pyston-0-6-1-released-and-future-plans/)
 - smaller performance optimizations and bug fixes
 - updated CPython runtime to 2.7.8
