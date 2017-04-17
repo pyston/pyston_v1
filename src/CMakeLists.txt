@@ -8,6 +8,7 @@ set_source_files_properties(jit.cpp PROPERTIES COMPILE_DEFINITIONS "GITREV=${GIT
 include_directories(${CMAKE_BINARY_DIR})
 include_directories(${CMAKE_BINARY_DIR}/build_deps/libunwind/include)
 include_directories(${CMAKE_SOURCE_DIR}/build_deps/lz4/lib)
+include_directories(${CMAKE_SOURCE_DIR}/from_cpython/Include/)
 
 if(ENABLE_GPERFTOOLS)
   set(OPTIONAL_SRCS ${OPTIONAL_SRCS} codegen/profiling/pprof.cpp)
