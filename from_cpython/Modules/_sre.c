@@ -3310,9 +3310,15 @@ static Py_ssize_t
 match_getindex(MatchObject* self, PyObject* index)
 {
     Py_ssize_t i;
+ 
+    // Python3_updating, bool become long object, temporary fixing.
+    if (index == NULL)
+        /* Default value */
+        return 0;
 
-    if (PyInt_Check(index))
-        return PyInt_AsSsize_t(index);
+    if (PyIndex_Check(index)) {
+        return PyNumber_AsSsize_t(index, NULL);
+    }
 
     i = -1;
 
