@@ -16,7 +16,6 @@
 #define PYSTON_RUNTIME_LONG_H
 
 #include <cstddef>
-#include <gmp.h>
 
 #include "core/types.h"
 #include "runtime/types.h"
@@ -27,23 +26,15 @@ void setupLong();
 
 extern BoxedClass* long_cls;
 
-class BoxedLong : public Box {
-public:
-    mpz_t n;
-
-    BoxedLong() __attribute__((visibility("default"))) {}
-
-    static void tp_dealloc(Box* b) noexcept;
-
-    DEFAULT_CLASS_SIMPLE(long_cls, false);
-};
-
 extern "C" Box* createLong(llvm::StringRef s);
 extern "C" BoxedLong* boxLong(int64_t n);
 
 Box* longNeg(BoxedLong* lhs);
 Box* longAbs(BoxedLong* v1);
 
+Box* longAnd(BoxedLong* lhs, Box* rhs);
+Box* longOr(BoxedLong* lhs, Box* rhs);
+Box* longXor(BoxedLong* lhs, Box* rhs);
 Box* longAdd(BoxedLong* lhs, Box* rhs);
 Box* longSub(BoxedLong* lhs, Box* rhs);
 Box* longMul(BoxedLong* lhs, Box* rhs);
