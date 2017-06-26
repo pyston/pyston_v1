@@ -18,6 +18,7 @@
 #include <llvm/ADT/StringMap.h>
 #include <llvm/ADT/Twine.h>
 #include <ucontext.h>
+#include <gmp.h>
 
 #include "Python.h"
 #include "structmember.h"
@@ -541,6 +542,18 @@ public:
 static_assert(sizeof(BoxedInt) == sizeof(PyIntObject), "");
 static_assert(offsetof(BoxedInt, n) == offsetof(PyIntObject, ob_ival), "");
 
+class BoxedLong : public Box {
+public:
+    mpz_t n;
+
+    BoxedLong() __attribute__((visibility("default"))){};
+    BoxedLong(int64_t ival) __attribute__((visibility("default"))) { mpz_init_set_si(n, ival); }
+
+    static void tp_dealloc(Box* b) noexcept;
+
+    DEFAULT_CLASS_SIMPLE(long_cls, false);
+};
+
 extern "C" int PyFloat_ClearFreeList() noexcept;
 class BoxedFloat : public Box {
 private:
@@ -593,9 +606,9 @@ static_assert(sizeof(BoxedComplex) == sizeof(PyComplexObject), "");
 static_assert(offsetof(BoxedComplex, real) == offsetof(PyComplexObject, cval.real), "");
 static_assert(offsetof(BoxedComplex, imag) == offsetof(PyComplexObject, cval.imag), "");
 
-class BoxedBool : public BoxedInt {
+class BoxedBool : public BoxedLong {
 public:
-    BoxedBool(bool b) __attribute__((visibility("default"))) : BoxedInt(b ? 1 : 0) {}
+    BoxedBool(bool b) __attribute__((visibility("default"))) { mpz_init_set_si(n, b ? 1 : 0); }
 
     DEFAULT_CLASS_SIMPLE(bool_cls, false);
 };

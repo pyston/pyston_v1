@@ -9,8 +9,6 @@ extern "C" {
 #endif
 
 
-typedef PyIntObject PyBoolObject;
-
 // Pyston change: this is no longer a static object
 PyAPI_DATA(PyTypeObject*) bool_cls;
 #define PyBool_Type (*bool_cls)
@@ -22,7 +20,7 @@ Don't forget to apply Py_INCREF() when returning either!!! */
 
 // Pyston change: these are currently stored as pointers, not as static globals
 /* Don't use these directly */
-//PyAPI_DATA(PyIntObject) _Py_ZeroStruct, _Py_TrueStruct;
+// PyAPI_DATA(struct _longobject) _Py_FalseStruct, _Py_TrueStruct;
 PyAPI_DATA(PyObject) *pyston_True, *pyston_False;
 /* Use these macros */
 #define Py_False ((PyObject *) pyston_False)
