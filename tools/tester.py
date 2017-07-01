@@ -152,6 +152,9 @@ def run_test(fn, check_stats, run_memcheck):
     opts = get_test_options(fn, check_stats, run_memcheck)
     del check_stats, run_memcheck
 
+    if opts.expected != "py3ready":
+        opts.skip = True
+
     if opts.skip:
         return ("(skipped: %s)" % opts.skip) if DISPLAY_SKIPS else ""
 

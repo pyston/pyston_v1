@@ -15,10 +15,10 @@
 #ifndef PYSTON_RUNTIME_TYPES_H
 #define PYSTON_RUNTIME_TYPES_H
 
+#include <gmp.h>
 #include <llvm/ADT/StringMap.h>
 #include <llvm/ADT/Twine.h>
 #include <ucontext.h>
-#include <gmp.h>
 
 #include "Python.h"
 #include "structmember.h"
