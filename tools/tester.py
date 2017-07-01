@@ -152,6 +152,9 @@ def run_test(fn, check_stats, run_memcheck):
     opts = get_test_options(fn, check_stats, run_memcheck)
     del check_stats, run_memcheck
 
+    if opts.expected != "py3ready":
+        opts.skip = True
+
     if opts.skip:
         return ("(skipped: %s)" % opts.skip) if DISPLAY_SKIPS else ""
 
@@ -224,7 +227,7 @@ def get_test_options(fn, check_stats, run_memcheck):
         elif os.path.basename(fn).split('.')[0] in TESTS_TO_SKIP:
             opts.skip = 'command line option'
 
-    assert opts.expected in ("success", "fail", "statfail"), opts.expected
+    assert opts.expected in ("success", "fail", "statfail", "py3ready"), opts.expected
 
     if TEST_PYPY:
         opts.jit_args = []
