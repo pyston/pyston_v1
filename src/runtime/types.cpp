@@ -4262,11 +4262,11 @@ void setupRuntime() {
     int_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedInt), false, "int", true, BoxedInt::tp_dealloc,
                                  /*BoxedInt::tp_free*/ NULL, false);
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
-    bool_cls = new (0) BoxedClass(int_cls, 0, 0, sizeof(BoxedBool), false, "bool", false, NULL, NULL, false);
     complex_cls = new (0) BoxedClass(object_cls, 0, 0, sizeof(BoxedComplex), false, "complex", true, NULL, NULL, false);
     long_cls = new (0)
         BoxedClass(object_cls, 0, 0, sizeof(BoxedLong), false, "long", true, BoxedLong::tp_dealloc, NULL, false);
     long_cls->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
+    bool_cls = new (0) BoxedClass(long_cls, 0, 0, sizeof(BoxedLong), false, "bool", false, NULL, NULL, false);
     float_cls = new (0)
         BoxedClass(object_cls, 0, 0, sizeof(BoxedFloat), false, "float", true, BoxedFloat::tp_dealloc, NULL, false);
     function_cls = new (0) BoxedClass(object_cls, offsetof(BoxedFunction, attrs), offsetof(BoxedFunction, weakreflist),
@@ -4304,9 +4304,9 @@ void setupRuntime() {
     attrwrapper_cls->tp_mro = BoxedTuple::create({ attrwrapper_cls, object_cls });
     dict_cls->tp_mro = BoxedTuple::create({ dict_cls, object_cls });
     int_cls->tp_mro = BoxedTuple::create({ int_cls, object_cls });
-    bool_cls->tp_mro = BoxedTuple::create({ bool_cls, int_cls, object_cls });
     complex_cls->tp_mro = BoxedTuple::create({ complex_cls, object_cls });
     long_cls->tp_mro = BoxedTuple::create({ long_cls, object_cls });
+    bool_cls->tp_mro = BoxedTuple::create({ bool_cls, int_cls, object_cls });
     float_cls->tp_mro = BoxedTuple::create({ float_cls, object_cls });
     function_cls->tp_mro = BoxedTuple::create({ function_cls, object_cls });
     builtin_function_or_method_cls->tp_mro = BoxedTuple::create({ builtin_function_or_method_cls, object_cls });
@@ -4318,13 +4318,13 @@ void setupRuntime() {
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);
     BOXED_FLOAT = typeFromClass(float_cls);
-    BOXED_BOOL = typeFromClass(bool_cls);
     NONE = typeFromClass(none_cls);
     LIST = typeFromClass(list_cls);
     MODULE = typeFromClass(module_cls);
     DICT = typeFromClass(dict_cls);
     BOXED_TUPLE = typeFromClass(tuple_cls);
     LONG = typeFromClass(long_cls);
+    BOXED_BOOL = typeFromClass(bool_cls);
     BOXED_COMPLEX = typeFromClass(complex_cls);
 
     pyston_True = new BoxedBool(true);
@@ -4362,9 +4362,9 @@ void setupRuntime() {
     attrwrapper_cls->finishInitialization();
     dict_cls->finishInitialization();
     int_cls->finishInitialization();
-    bool_cls->finishInitialization();
     complex_cls->finishInitialization();
     long_cls->finishInitialization();
+    bool_cls->finishInitialization();
     float_cls->finishInitialization();
     function_cls->finishInitialization();
     builtin_function_or_method_cls->finishInitialization();
@@ -4495,8 +4495,8 @@ void setupRuntime() {
     assert(object_cls->tp_new == object_new);
     assert(object_cls->tp_str == object_str);
 
-    setupBool();
     setupLong();
+    setupBool();
     setupFloat();
     setupComplex();
     setupStr();

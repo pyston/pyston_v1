@@ -3255,7 +3255,7 @@ static bool nonzeroHelper(STOLEN(Box*) r) {
     // I believe this behavior is handled by the slot wrappers in CPython:
     if (r->cls == bool_cls) {
         BoxedBool* b = static_cast<BoxedBool*>(r);
-        bool rtn = b->n;
+        bool rtn = (b == Py_True);
         return rtn;
     } else if (r->cls == int_cls) {
         BoxedInt* b = static_cast<BoxedInt*>(r);
@@ -3285,14 +3285,8 @@ extern "C" bool nonzero(Box* obj) {
     // able to at least generate rewrites that are as good as the ones we write here.
     // But for now we can't and these should be a bit faster:
     if (obj->cls == bool_cls) {
-        // TODO: is it faster to compare to True? (especially since it will be a constant we can embed in the rewrite)
-        if (rewriter.get()) {
-            RewriterVar* b = r_obj->getAttr(offsetof(BoxedBool, n), rewriter->getReturnDestination());
-            rewriter->commitReturningNonPython(b);
-        }
-
         BoxedBool* bool_obj = static_cast<BoxedBool*>(obj);
-        return bool_obj->n;
+        return bool_obj == Py_True;
     } else if (obj->cls == int_cls) {
         if (rewriter.get()) {
             RewriterVar* n = r_obj->getAttr(offsetof(BoxedInt, n), rewriter->getReturnDestination());
