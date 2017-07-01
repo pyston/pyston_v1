@@ -14,7 +14,7 @@
 
 #include "core/common.h"
 #include "core/types.h"
-#include "runtime/int.h"
+#include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -62,9 +62,9 @@ extern "C" Box* boolAnd(BoxedBool* lhs, BoxedBool* rhs) {
                        getTypeName(lhs));
 
     if (!PyBool_Check(rhs))
-        return intAnd(lhs, rhs);
+        return longAnd(lhs, rhs);
 
-    return boxBool(lhs->n && rhs->n);
+    return boxBool((lhs == Py_True) & (rhs == Py_True));
 }
 
 extern "C" Box* boolOr(BoxedBool* lhs, BoxedBool* rhs) {
@@ -72,9 +72,9 @@ extern "C" Box* boolOr(BoxedBool* lhs, BoxedBool* rhs) {
         raiseExcHelper(TypeError, "descriptor '__or__' requires a 'bool' object but received a '%s'", getTypeName(lhs));
 
     if (!PyBool_Check(rhs))
-        return intOr(lhs, rhs);
+        return longOr(lhs, rhs);
 
-    return boxBool(lhs->n || rhs->n);
+    return boxBool((lhs == Py_True) | (rhs == Py_True));
 }
 
 extern "C" Box* boolXor(BoxedBool* lhs, BoxedBool* rhs) {
@@ -83,9 +83,9 @@ extern "C" Box* boolXor(BoxedBool* lhs, BoxedBool* rhs) {
                        getTypeName(lhs));
 
     if (!PyBool_Check(rhs))
-        return intXor(lhs, rhs);
+        return longXor(lhs, rhs);
 
-    return boxBool(lhs->n ^ rhs->n);
+    return boxBool((lhs == Py_True) ^ (rhs == Py_True));
 }
 
 
@@ -111,6 +111,6 @@ void setupBool() {
     bool_cls->freeze();
     bool_cls->tp_hash = (hashfunc)bool_hash;
     bool_cls->tp_repr = boolRepr<CAPI>;
-    bool_as_number.nb_int = int_cls->tp_as_number->nb_int;
+    bool_as_number.nb_int = long_cls->tp_as_number->nb_int;
 }
 }
