@@ -30,11 +30,13 @@ addons:
     - kubuntu-backports
     - llvm-toolchain-precise-3.5
     - ubuntu-toolchain-r-test
+    - george-edison55-precise-backports
     packages:
     - autoconf
     - ccache
     - clang-3.5
     - cmake
+    - cmake-data
     - g++-4.8
     - gdb
     - gfortran
