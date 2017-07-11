@@ -52,7 +52,7 @@ addons:
     - libsqlite3-dev
     - libtool
     - ninja-build
-    - python-dev
+    - python3-dev
     - libcurl4-openssl-dev
     - libxml2-dev 
     - libxslt1-dev
