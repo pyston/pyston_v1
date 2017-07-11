@@ -185,11 +185,11 @@ standard ./configure, make, make install
 Having a debug-enabled CPython can be useful for debugging issues with our extension modules.  To get it set up:
 
 ```
-sudo apt-get install python2.7-dbg
+sudo apt-get install python3.5-dbg
 cd ~/pyston_deps
 mkdir python-src
 cd python-src
-apt-get source python2.7-dbg
+apt-get source python3.5-dbg
 ```
 
 Then, run `make dbgpy_TESTNAME` and it will launch the test under gdb.  There's also a [wiki page](https://wiki.python.org/moin/DebuggingWithGdb) with some extra Python-specific GDB commands.
