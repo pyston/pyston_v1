@@ -14,9 +14,9 @@
 
 #!/usr/bin/env python
 
-import Queue
+import queue
 import argparse
-import cPickle
+import pickle
 import datetime
 import functools
 import glob
@@ -100,7 +100,7 @@ def get_expected_output(fn):
         cache_mtime = os.stat(cache_fn).st_mtime
         if cache_mtime > os.stat(fn).st_mtime and cache_mtime > get_global_mtime():
             try:
-                return cPickle.load(open(cache_fn))
+                return pickle.load(open(cache_fn))
             except (EOFError, ValueError):
                 pass
 
@@ -108,14 +108,14 @@ def get_expected_output(fn):
     env = dict(os.environ)
     env["PYTHONPATH"] = EXTMODULE_DIR
     env["PYTHONIOENCODING"] = PYTHONIOENCODING
-    p = subprocess.Popen(["python", "-Wignore", fn], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits, env=env)
+    p = subprocess.Popen(["python3", "-Wignore", fn], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits, env=env)
     out, err = p.communicate()
     code = p.wait()
 
     r = code, out, err
     assert code >= 0, "CPython exited with an unexpected exit code: %d" % (code,)
 
-    cPickle.dump(r, open(cache_fn, 'w'))
+    pickle.dump(r, open(cache_fn, 'w'))
     return r
 
 def canonicalize_stderr(stderr):
@@ -151,6 +151,9 @@ class Options(object): pass
 def run_test(fn, check_stats, run_memcheck):
     opts = get_test_options(fn, check_stats, run_memcheck)
     del check_stats, run_memcheck
+
+    if opts.expected != "py3ready":
+        opts.skip = True
 
     if opts.skip:
         return ("(skipped: %s)" % opts.skip) if DISPLAY_SKIPS else ""
@@ -342,7 +345,7 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
             return "\033[%dmFAILED\033[0m (%s)" % (color, msg)
         else:
             # show last line of stderr so we have some idea went wrong
-            print "Last line of stderr: " + last_stderr_line
+            print("Last line of stderr: " + last_stderr_line)
             raise Exception(msg)
 
     elif out != expected_out:
@@ -444,7 +447,7 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
 
     return success_message(r)
 
-q = Queue.Queue()
+q = queue.Queue()
 cv = threading.Condition()
 results = {}
 quit = {}
@@ -526,7 +529,7 @@ def main(orig_dir):
     EXTRA_JIT_ARGS += opts.extra_args
     TIME_LIMIT = opts.time_limit
     TESTS_TO_SKIP = opts.skip_tests.split(',')
-    TESTS_TO_SKIP = filter(bool, TESTS_TO_SKIP) # "".split(',') == ['']
+    TESTS_TO_SKIP = list(filter(bool, TESTS_TO_SKIP)) # "".split(',') == ['']
     EXIT_CODE_ONLY = opts.exit_code_only
     SKIP_FAILING_TESTS = opts.skip_failing
 
@@ -535,8 +538,8 @@ def main(orig_dir):
 
     TEST_DIR = os.path.join(orig_dir, opts.test_dir)
     EXTMODULE_DIR_PYSTON = os.path.abspath(os.path.dirname(os.path.realpath(IMAGE)) + "/test/test_extension/")
-    # EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(IMAGE)) + "/test/test_extension/build/lib.linux-x86_64-2.7/")
-    EXTMODULE_DIR = os.path.abspath(orig_dir) + "/test/test_extension/build/lib.linux-x86_64-2.7/"
+    # EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(IMAGE)) + "/test/test_extension/build/lib.linux-x86_64-3.5/")
+    EXTMODULE_DIR = os.path.abspath(orig_dir) + "/test/test_extension/build/lib.linux-x86_64-3.5/"
     patterns = opts.pattern
 
     IS_OPTIMIZED = int(subprocess.check_output([IMAGE, "-c", 'import sysconfig; print int("-O0" not in sysconfig.get_config_var(\"CFLAGS\"))']))
@@ -544,16 +547,17 @@ def main(orig_dir):
     if not patterns and not TESTS_TO_SKIP:
         TESTS_TO_SKIP = ["t", "t2", "t3"]
 
-    assert os.path.isdir(TEST_DIR), "%s doesn't look like a directory with tests in it" % TEST_DIR
+    # py3updating: I removed all old CPython2 tests for now.
+    # assert os.path.isdir(TEST_DIR), "%s doesn't look like a directory with tests in it" % TEST_DIR
 
     if TEST_DIR.rstrip('/').endswith("cpython") and not EXIT_CODE_ONLY:
-        print >>sys.stderr, "Test directory name ends in cpython; are you sure you don't want --exit-code-only?"
+        print("Test directory name ends in cpython; are you sure you don't want --exit-code-only?", file=sys.stderr)
 
     if TEST_DIR.rstrip('/').endswith("extra") or TEST_DIR.rstrip('/').endswith("integration"):
         if not os.path.exists(os.path.join(TEST_DIR, '../lib/virtualenv/virtualenv.py')):
-            print "Looks like you don't have the integration-test repositories checked out; skipping them."
-            print "If you would like to run them, please run:"
-            print "git submodule update --init --recursive", os.path.join(TEST_DIR, "../lib")
+            print("Looks like you don't have the integration-test repositories checked out; skipping them.")
+            print("If you would like to run them, please run:")
+            print("git submodule update --init --recursive", os.path.join(TEST_DIR, "../lib"))
             sys.exit(0)
 
     # do we need this any more?
@@ -561,7 +565,7 @@ def main(orig_dir):
 
     tests = [t for t in glob.glob("%s/*.py" % TEST_DIR)]
 
-    LIB_DIR = os.path.join(sys.prefix, "lib/python2.7")
+    LIB_DIR = os.path.join(sys.prefix, "lib/python3.5")
     for t in tests:
         bn = os.path.basename(t)
         assert bn.endswith(".py")
@@ -599,7 +603,7 @@ def main(orig_dir):
         q.put((fn, check_stats, run_memcheck))
 
     threads = []
-    for i in xrange(NUM_THREADS):
+    for i in range(NUM_THREADS):
         t = threading.Thread(target=worker_thread)
         t.setDaemon(True)
         t.start()
@@ -612,14 +616,14 @@ def main(orig_dir):
                 try:
                     cv.wait(1)
                 except KeyboardInterrupt:
-                    print >>sys.stderr, "Interrupted"
+                    print("Interrupted", file=sys.stderr)
                     sys.exit(1)
 
         if results[fn] is None:
             assert quit
-            print quit.pop(fn).strip()
-            for fn, s in quit.items():
-                print "(%s also failed)" % fn
+            print(quit.pop(fn).strip())
+            for fn, s in list(quit.items()):
+                print("(%s also failed)" % fn)
             sys.exit(1)
             break
 
@@ -628,7 +632,7 @@ def main(orig_dir):
             msgs = results[fn]
             if isinstance(msgs,str):
                 msgs = [msgs]
-            print '    '.join([name] + list(msgs))
+            print('    '.join([name] + list(msgs)))
 
     for t in threads:
         t.join()
