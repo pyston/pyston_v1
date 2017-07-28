@@ -1,1 +1,0 @@
-../../from_cpython/Lib/test/test_pep263.py
