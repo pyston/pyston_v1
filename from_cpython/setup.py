@@ -2067,69 +2067,71 @@ class PyBuildExt(build_ext):
         return True
 
     def configure_ctypes(self, ext):
-        if not self.use_system_libffi:
-            if host_platform == 'darwin':
-                return self.configure_ctypes_darwin(ext)
-
-            srcdir = sysconfig.get_config_var('srcdir')
-            ffi_builddir = os.path.join(self.build_temp, 'libffi')
-            ffi_srcdir = os.path.abspath(os.path.join(srcdir, 'Modules',
-                                         '_ctypes', 'libffi'))
-            ffi_configfile = os.path.join(ffi_builddir, 'fficonfig.py')
-
-            from distutils.dep_util import newer_group
-
-            config_sources = [os.path.join(ffi_srcdir, fname)
-                              for fname in os.listdir(ffi_srcdir)
-                              if os.path.isfile(os.path.join(ffi_srcdir, fname))]
-            if self.force or newer_group(config_sources,
-                                         ffi_configfile):
-                from distutils.dir_util import mkpath
-                mkpath(ffi_builddir)
-                config_args = [arg for arg in sysconfig.get_config_var("CONFIG_ARGS").split()
-                               if (('--host=' in arg) or ('--build=' in arg))]
-                if not self.verbose:
-                    config_args.append("-q")
-
-                # Pass empty CFLAGS because we'll just append the resulting
-                # CFLAGS to Python's; -g or -O2 is to be avoided.
-                cmd = "cd %s && env CFLAGS='' '%s/configure' %s" \
-                      % (ffi_builddir, ffi_srcdir, " ".join(config_args))
-
-                res = os.system(cmd)
-                if res or not os.path.exists(ffi_configfile):
-                    print "Failed to configure _ctypes module"
-                    return False
-
-            fficonfig = {}
-            with open(ffi_configfile) as f:
-                exec f in fficonfig
-
-            # Add .S (preprocessed assembly) to C compiler source extensions.
-            self.compiler.src_extensions.append('.S')
-
-            include_dirs = [os.path.join(ffi_builddir, 'include'),
-                            ffi_builddir,
-                            os.path.join(ffi_srcdir, 'src')]
-            extra_compile_args = fficonfig['ffi_cflags'].split()
-
-            ext.sources.extend(os.path.join(ffi_srcdir, f) for f in
-                               fficonfig['ffi_sources'])
-            ext.include_dirs.extend(include_dirs)
-            ext.extra_compile_args.extend(extra_compile_args)
-        return True
+        # py3updating: disable ctypes for now.
+        return False
+        # if not self.use_system_libffi:
+        #     if host_platform == 'darwin':
+        #         return self.configure_ctypes_darwin(ext)
+        #
+        #     srcdir = sysconfig.get_config_var('srcdir')
+        #     ffi_builddir = os.path.join(self.build_temp, 'libffi')
+        #     ffi_srcdir = os.path.abspath(os.path.join(srcdir, 'Modules',
+        #                                  '_ctypes', 'libffi'))
+        #     ffi_configfile = os.path.join(ffi_builddir, 'fficonfig.py')
+        #
+        #     from distutils.dep_util import newer_group
+        #
+        #     config_sources = [os.path.join(ffi_srcdir, fname)
+        #                       for fname in os.listdir(ffi_srcdir)
+        #                       if os.path.isfile(os.path.join(ffi_srcdir, fname))]
+        #     if self.force or newer_group(config_sources,
+        #                                  ffi_configfile):
+        #         from distutils.dir_util import mkpath
+        #         mkpath(ffi_builddir)
+        #         config_args = [arg for arg in sysconfig.get_config_var("CONFIG_ARGS").split()
+        #                        if (('--host=' in arg) or ('--build=' in arg))]
+        #         if not self.verbose:
+        #             config_args.append("-q")
+        #
+        #         # Pass empty CFLAGS because we'll just append the resulting
+        #         # CFLAGS to Python's; -g or -O2 is to be avoided.
+        #         cmd = "cd %s && env CFLAGS='' '%s/configure' %s" \
+        #               % (ffi_builddir, ffi_srcdir, " ".join(config_args))
+        #
+        #         res = os.system(cmd)
+        #         if res or not os.path.exists(ffi_configfile):
+        #             print("Failed to configure _ctypes module")
+        #             return False
+        #
+        #     fficonfig = {}
+        #     with open(ffi_configfile) as f:
+        #         exec(f, fficonfig)
+        #
+        #     # Add .S (preprocessed assembly) to C compiler source extensions.
+        #     self.compiler.src_extensions.append('.S')
+        #
+        #     include_dirs = [os.path.join(ffi_builddir, 'include'),
+        #                     ffi_builddir,
+        #                     os.path.join(ffi_srcdir, 'src')]
+        #     extra_compile_args = fficonfig['ffi_cflags'].split()
+        #
+        #     ext.sources.extend(os.path.join(ffi_srcdir, f) for f in
+        #                        fficonfig['ffi_sources'])
+        #     ext.include_dirs.extend(include_dirs)
+        #     ext.extra_compile_args.extend(extra_compile_args)
+        # return True
 
     def detect_ctypes(self, inc_dirs, lib_dirs):
         self.use_system_libffi = False
         include_dirs = []
         extra_compile_args = []
         extra_link_args = []
-        sources = map(relpath, ["Modules/_ctypes/_ctypes.c",
+        sources = list(map(relpath, ["Modules/_ctypes/_ctypes.c",
                                 "Modules/_ctypes/callbacks.c",
                                 "Modules/_ctypes/callproc.c",
                                 "Modules/_ctypes/stgdict.c",
                                 "Modules/_ctypes/cfield.c"
-                                ])
+                                ]))
         depends = ['_ctypes/ctypes.h']
 
         if host_platform == 'darwin':
