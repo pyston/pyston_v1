@@ -1400,9 +1400,9 @@ done:
 /* Need to define long_format as a function that will convert a long
    to a string.  In 3.0, _PyLong_Format has the correct signature.  In
    2.x, we need to fudge a few parameters */
-#if PY_VERSION_HEX >= 0x03000000
-#define long_format _PyLong_Format
-#else
+// #if PY_VERSION_HEX >= 0x03000000
+// #define long_format _PyLong_Format
+// #else
 static PyObject*
 long_format(PyObject* value, int base)
 {
@@ -1412,13 +1412,14 @@ long_format(PyObject* value, int base)
     /* convert to base, don't add 'L', and use the new octal format */
     return _PyLong_Format(value, base, 0, 1);
 }
-#endif
+// #endif
 
 PyObject *
 FORMAT_LONG(PyObject *obj,
             STRINGLIB_CHAR *format_spec,
             Py_ssize_t format_spec_len)
 {
+    Py_FatalError("FORMAT_LONG unimplemented");
     return format_int_or_long(obj, format_spec, format_spec_len,
                               long_format);
 }

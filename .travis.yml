@@ -30,11 +30,13 @@ addons:
     - kubuntu-backports
     - llvm-toolchain-precise-3.5
     - ubuntu-toolchain-r-test
+    - george-edison55-precise-backports
     packages:
     - autoconf
     - ccache
     - clang-3.5
     - cmake
+    - cmake-data
     - g++-4.8
     - gdb
     - gfortran
@@ -50,7 +52,7 @@ addons:
     - libsqlite3-dev
     - libtool
     - ninja-build
-    - python-dev
+    - python3-dev
     - libcurl4-openssl-dev
     - libxml2-dev 
     - libxslt1-dev

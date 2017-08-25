@@ -137,8 +137,8 @@ def verify_include_order(_, dir, files):
         def check_sorted(section):
             section = [incl.lower() for incl in section]
             if section != list(sorted(section)):
-                print >>sys.stderr, "The following section is not sorted in %s:" % fn
-                print >>sys.stderr, '\n'.join(section)
+                print("The following section is not sorted in %s:" % fn, file=sys.stderr)
+                print('\n'.join(section), file=sys.stderr)
                 sys.exit(1)
             assert len(sections[0]) == len(set(sections[0]))
 
@@ -162,28 +162,28 @@ def verify_include_order(_, dir, files):
             check_sorted(sections[0])
             for incl in sections[0]:
                 if is_corresponding_header([incl]):
-                    print >>sys.stderr, "Include-order error in %s:" % fn
-                    print >>sys.stderr, "%r should be put first" % incl
+                    print("Include-order error in %s:" % fn, file=sys.stderr)
+                    print("%r should be put first" % incl, file=sys.stderr)
                     sys.exit(1)
             del sections[0]
 
         if sections:
-            print >>sys.stderr, "Include-order error in %s:" % fn
-            print >>sys.stderr, "Sections not appropriately grouped.  Should be:"
-            print >>sys.stderr, "- Corresponding header"
-            print >>sys.stderr, "- System headers"
-            print >>sys.stderr, "- Third party headers"
-            print >>sys.stderr, "- Pyston headers"
-            print >>sys.stderr, "There should be an extra line between sections but not within sections"
-            print >>sys.stderr, "\ndbg: %s" % dbg
+            print("Include-order error in %s:" % fn, file=sys.stderr)
+            print("Sections not appropriately grouped.  Should be:", file=sys.stderr)
+            print("- Corresponding header", file=sys.stderr)
+            print("- System headers", file=sys.stderr)
+            print("- Third party headers", file=sys.stderr)
+            print("- Pyston headers", file=sys.stderr)
+            print("There should be an extra line between sections but not within sections", file=sys.stderr)
+            print("\ndbg: %s" % dbg, file=sys.stderr)
             sys.exit(1)
         assert not sections, fn
 
 
 if __name__ == "__main__":
-    os.path.walk('.', verify_include_guard, None)
-    os.path.walk('.', verify_include_order, None)
-    os.path.walk('.', verify_license, None)
-    os.path.walk('../tools', verify_license, None)
-    print "Lint checks passed"
+    os.walk('.', verify_include_guard, None)
+    os.walk('.', verify_include_order, None)
+    os.walk('.', verify_license, None)
+    os.walk('../tools', verify_license, None)
+    print("Lint checks passed")
 

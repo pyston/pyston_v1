@@ -6,9 +6,9 @@ We have a small website [pyston.org](http://pyston.org/), which for now just hos
 
 ### Current state
 
-Pyston should be considered in alpha: it "works" in that it can successfully run Python code, but it is still quite far from being useful for end-users.
+Pyston is updating to Python 3, it totally unusable for now.
 
-Currently, Pyston targets Python 2.7, only runs on x86_64 platforms, and only has been tested on Ubuntu.  Support for more platforms -- along with Python 3 compatibility -- is desired but deferred until we feel successful on our initial platform.  Pyston does not currently work on Mac OSX, and it is not clear when it will.
+Currently, Pyston targets Python 3.5.2(commit da27a8813f67271dd15d33d9852ca9469bdb0078), only runs on x86_64 platforms, and only has been tested on Ubuntu.  Support for more platforms is desired but deferred until we feel successful on our initial platform.  Pyston does not currently work on Mac OSX, and it is not clear when it will.
 
 ### Getting Pyston
 

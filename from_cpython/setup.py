@@ -263,24 +263,20 @@ class PyBuildExt(build_ext):
             while len(lst) % 3:
                 lst.append("")
             for e, f, g in zip(lst[::3], lst[1::3], lst[2::3]):
-                print "%-*s   %-*s   %-*s" % (longest, e, longest, f,
-                                              longest, g)
+                print("%-*s   %-*s   %-*s" % (longest, e, longest, f,
+                                              longest, g))
 
         if missing:
-            print
             print ("Python build finished, but the necessary bits to build "
                    "these modules were not found:")
             print_three_column(missing)
             print ("To find the necessary bits, look in setup.py in"
                    " detect_modules() for the module's name.")
-            print
 
         if self.failed:
             failed = self.failed[:]
-            print
-            print "Failed to build these modules:"
+            print("Failed to build these modules:")
             print_three_column(failed)
-            print
 
     def build_extension(self, ext):
 
@@ -290,7 +286,7 @@ class PyBuildExt(build_ext):
 
         try:
             build_ext.build_extension(self, ext)
-        except (CCompilerError, DistutilsError), why:
+        except (CCompilerError, DistutilsError) as why:
             self.announce('WARNING: building of extension "%s" failed: %s' %
                           (ext.name, sys.exc_info()[1]))
             self.failed.append(ext.name)
@@ -304,7 +300,7 @@ class PyBuildExt(build_ext):
             return
 
         if host_platform == 'darwin' and (
-                sys.maxint > 2**32 and '-arch' in ext.extra_link_args):
+                sys.maxsize > 2**32 and '-arch' in ext.extra_link_args):
             # Don't bother doing an import check when an extension was
             # build with an explicit '-arch' flag on OSX. That's currently
             # only used to build 32-bit only extensions in a 4-way
@@ -331,7 +327,7 @@ class PyBuildExt(build_ext):
 
         try:
             imp.load_dynamic(ext.name, ext_filename)
-        except ImportError, why:
+        except ImportError as why:
             self.failed.append(ext.name)
             self.announce('*** WARNING: renaming "%s" since importing it'
                           ' failed: %s' % (ext.name, why), level=3)
@@ -494,7 +490,7 @@ class PyBuildExt(build_ext):
                             sysconfig.get_config_var("INCLUDEDIR"))
 
         try:
-            have_unicode = unicode
+            have_unicode = str
         except NameError:
             have_unicode = 0
 
@@ -574,8 +570,8 @@ class PyBuildExt(build_ext):
         # Pyston change: the array module is handled by from_cpython/CMakefile
         # exts.append( Extension('array', ['arraymodule.c']) )
         # complex math library functions
-        exts.append( Extension('cmath', sources = map(relpath, [
-            "Modules/cmathmodule.c",]),
+        exts.append( Extension('cmath', sources = list(map(relpath, [
+            "Modules/cmathmodule.c",])),
             depends=['_math.h'],
         ))
         # math library functions, e.g. sin()
@@ -596,9 +592,9 @@ class PyBuildExt(build_ext):
         # exts.append( Extension("itertools", ["itertoolsmodule.c"]) )
         # code that will be builtins in the future, but conflict with the
         #  current builtins
-        exts.append( Extension('future_builtins',  sources = map(relpath, [
+        exts.append( Extension('future_builtins',  sources = list(map(relpath, [
             "Modules/future_builtins.c",
-        ])) )
+        ]))) )
 
         # Pyston change: comment out, those modules are handled by from_cpython/CMakefile.txt
         # # random number generator implemented in C
@@ -655,9 +651,9 @@ class PyBuildExt(build_ext):
         else:
             locale_extra_link_args = []
 
-        exts.append( Extension('_locale', sources = map(relpath, [ 
+        exts.append( Extension('_locale', sources = list(map(relpath, [
             "Modules/_localemodule.c",
-        ])) )
+        ]))) )
 
         # Modules with some UNIX dependencies -- on by default:
         # (If you have a really backward UNIX, select and socket may not be
@@ -674,9 +670,9 @@ class PyBuildExt(build_ext):
         # Pyston change: the pwd module handled by from_cpython/CMakefile.txt
         # exts.append( Extension('pwd', ['pwdmodule.c']) )
         # grp(3)
-        exts.append( Extension('grp', sources = map(relpath, [
+        exts.append( Extension('grp', sources = list(map(relpath, [
             "Modules/grpmodule.c",
-        ])) )
+        ]))) )
         # spwd, shadow passwords
         # Pyston change: handled by from_cpython/CMakefile.txt
         # if (config_h_vars.get('HAVE_GETSPNAM', False) or
@@ -690,23 +686,23 @@ class PyBuildExt(build_ext):
         # exts.append( Extension('select', ['selectmodule.c']) )
 
         # Fred Drake's interface to the Python parser
-        exts.append( Extension('parser',  sources = map(relpath, [
+        exts.append( Extension('parser',  sources = list(map(relpath, [
             "Modules/parsermodule.c",
-        ])) )
+        ]))) )
 
         # cStringIO and cPickle
-        exts.append( Extension('cStringIO', sources = map(relpath, [
+        exts.append( Extension('cStringIO', sources = list(map(relpath, [
             "Modules/cStringIO.c",
-        ])) )
-        exts.append( Extension('cPickle', sources = map(relpath, [
+        ]))) )
+        exts.append( Extension('cPickle', sources = list(map(relpath, [
             "Modules/cPickle.c",
-        ])) )
+        ]))) )
 
         # Memory-mapped files (also works on Win32).
         if host_platform not in ['atheos']:
-            exts.append( Extension('mmap', sources = map(relpath, [
+            exts.append( Extension('mmap', sources = list(map(relpath, [
                 "Modules/mmapmodule.c",
-            ])) )
+            ]))) )
         else:
             missing.append('mmap')
 
@@ -736,7 +732,7 @@ class PyBuildExt(build_ext):
         # exts.append( Extension('audioop', ['audioop.c']) )
 
         # Disabled on 64-bit platforms
-        if sys.maxint != 9223372036854775807L:
+        if sys.maxsize != 9223372036854775807:
             # Operations on images
             exts.append( Extension('imageop', ['imageop.c']) )
         else:
@@ -805,9 +801,9 @@ class PyBuildExt(build_ext):
                                                      ['/usr/lib/termcap'],
                                                      'termcap'):
                 readline_libs.append('termcap')
-            exts.append( Extension('readline', sources = map(relpath, [
+            exts.append( Extension('readline', sources = list(map(relpath, [
                 "Modules/readline.c",
-            ])))
+            ]))))
         else:
             missing.append('readline')
 
@@ -876,8 +872,8 @@ class PyBuildExt(build_ext):
                     m = openssl_ver_re.match(line)
                     if m:
                         openssl_ver = eval(m.group(1))
-            except IOError, msg:
-                print "IOError while reading opensshv.h:", msg
+            except IOError as msg:
+                print("IOError while reading opensshv.h:", msg)
                 pass
 
         min_openssl_ver = 0x00907000
@@ -1037,7 +1033,7 @@ class PyBuildExt(build_ext):
                 if host_platform == 'darwin' and is_macosx_sdk_path(d):
                     f = os.path.join(sysroot, d[1:], "db.h")
 
-                if db_setup_debug: print "db: looking for db.h in", f
+                if db_setup_debug: print("db: looking for db.h in", f)
                 if os.path.exists(f):
                     f = open(f).read()
                     m = re.search(r"#define\WDB_VERSION_MAJOR\W(\d+)", f)
@@ -1052,8 +1048,8 @@ class PyBuildExt(build_ext):
                             m = re.search(r"#define\WDB_VERSION_PATCH\W(\d+)", f)
                             db_patch = int(m.group(1))
                             if db_patch < 21:
-                                print "db.h:", db_ver, "patch", db_patch,
-                                print "being ignored (4.6.x must be >= 4.6.21)"
+                                print("db.h:", db_ver, "patch", db_patch)
+                                print("being ignored (4.6.x must be >= 4.6.21)")
                                 continue
 
                         if ( (db_ver not in db_ver_inc_map) and
@@ -1062,16 +1058,16 @@ class PyBuildExt(build_ext):
                             # (first occurrence only)
                             db_ver_inc_map[db_ver] = d
                             if db_setup_debug:
-                                print "db.h: found", db_ver, "in", d
+                                print("db.h: found", db_ver, "in", d)
                         else:
                             # we already found a header for this library version
-                            if db_setup_debug: print "db.h: ignoring", d
+                            if db_setup_debug: print("db.h: ignoring", d)
                     else:
                         # ignore this header, it didn't contain a version number
                         if db_setup_debug:
-                            print "db.h: no version number version in", d
+                            print("db.h: no version number version in", d)
 
-            db_found_vers = db_ver_inc_map.keys()
+            db_found_vers = list(db_ver_inc_map.keys())
             db_found_vers.sort()
 
             while db_found_vers:
@@ -1085,7 +1081,7 @@ class PyBuildExt(build_ext):
                 ]
 
                 if host_platform != 'darwin':
-                    db_dirs_to_check = filter(os.path.isdir, db_dirs_to_check)
+                    db_dirs_to_check = list(filter(os.path.isdir, db_dirs_to_check))
 
                 else:
                     # Same as other branch, but takes OSX SDK into account
@@ -1112,12 +1108,12 @@ class PyBuildExt(build_ext):
                         dblib_dir = [ os.path.abspath(os.path.dirname(dblib_file)) ]
                         raise db_found
                     else:
-                        if db_setup_debug: print "db lib: ", dblib, "not found"
+                        if db_setup_debug: print("db lib: ", dblib, "not found")
 
         except db_found:
             if db_setup_debug:
-                print "bsddb using BerkeleyDB lib:", db_ver, dblib
-                print "bsddb lib dir:", dblib_dir, " inc dir:", db_incdir
+                print("bsddb using BerkeleyDB lib:", db_ver, dblib)
+                print("bsddb lib dir:", dblib_dir, " inc dir:", db_incdir)
             db_incs = [db_incdir]
             dblibs = [dblib]
             # We add the runtime_library_dirs argument because the
@@ -1134,7 +1130,7 @@ class PyBuildExt(build_ext):
         #                           include_dirs=db_incs,
         #                           libraries=dblibs))
         else:
-            if db_setup_debug: print "db: no appropriate library found"
+            if db_setup_debug: print("db: no appropriate library found")
             db_incs = None
             dblibs = []
             dblib_dir = None
@@ -1172,7 +1168,7 @@ class PyBuildExt(build_ext):
 
             f = os.path.join(d, "sqlite3.h")
             if os.path.exists(f):
-                if sqlite_setup_debug: print "sqlite: found %s"%f
+                if sqlite_setup_debug: print("sqlite: found %s"%f)
                 incf = open(f).read()
                 m = re.search(
                     r'\s*.*#\s*.*define\s.*SQLITE_VERSION\W*"([\d\.]*)"', incf)
@@ -1183,15 +1179,15 @@ class PyBuildExt(build_ext):
                     if sqlite_version_tuple >= MIN_SQLITE_VERSION_NUMBER:
                         # we win!
                         if sqlite_setup_debug:
-                            print "%s/sqlite3.h: version %s"%(d, sqlite_version)
+                            print("%s/sqlite3.h: version %s"%(d, sqlite_version))
                         sqlite_incdir = d
                         break
                     else:
                         if sqlite_setup_debug:
-                            print "%s: version %d is too old, need >= %s"%(d,
-                                        sqlite_version, MIN_SQLITE_VERSION)
+                            print("%s: version %d is too old, need >= %s"%(d,
+                                        sqlite_version, MIN_SQLITE_VERSION))
                 elif sqlite_setup_debug:
-                    print "sqlite: %s had no SQLITE_VERSION"%(f,)
+                    print("sqlite: %s had no SQLITE_VERSION"%(f,))
 
         if sqlite_incdir:
             sqlite_dirs_to_check = [
@@ -1311,7 +1307,7 @@ class PyBuildExt(build_ext):
                             ndbm_libs = ['gdbm_compat']
                         else:
                             ndbm_libs = []
-                        print "building dbm using ndbm"
+                        print("building dbm using ndbm")
                         dbmext = Extension('dbm', ['dbmmodule.c'],
                                            define_macros=[
                                                ('HAVE_NDBM_H',None),
@@ -1326,7 +1322,7 @@ class PyBuildExt(build_ext):
                                                                'gdbm_compat'):
                             gdbm_libs.append('gdbm_compat')
                         if find_file("gdbm/ndbm.h", inc_dirs, []) is not None:
-                            print "building dbm using gdbm"
+                            print("building dbm using gdbm")
                             dbmext = Extension(
                                 'dbm', ['dbmmodule.c'],
                                 define_macros=[
@@ -1335,7 +1331,7 @@ class PyBuildExt(build_ext):
                                 libraries = gdbm_libs)
                             break
                         if find_file("gdbm-ndbm.h", inc_dirs, []) is not None:
-                            print "building dbm using gdbm"
+                            print("building dbm using gdbm")
                             dbmext = Extension(
                                 'dbm', ['dbmmodule.c'],
                                 define_macros=[
@@ -1345,7 +1341,7 @@ class PyBuildExt(build_ext):
                             break
                 elif cand == "bdb":
                     if db_incs is not None:
-                        print "building dbm using bdb"
+                        print("building dbm using bdb")
                         dbmext = Extension('dbm', ['dbmmodule.c'],
                                            library_dirs=dblib_dir,
                                            runtime_library_dirs=dblib_dir,
@@ -1374,9 +1370,9 @@ class PyBuildExt(build_ext):
         # Unix-only modules
         if host_platform not in ['win32']:
             # Steen Lumholt's termios module
-            exts.append( Extension('termios', sources = map(relpath, [
+            exts.append( Extension('termios', sources = list(map(relpath, [
                 "Modules/termios.c",
-            ])) )
+            ]))) )
 
             # Pyston change: the resource module handled by from_cpython/CMakefile
             # # Jeremy Hylton's rlimit interface
@@ -1413,8 +1409,8 @@ class PyBuildExt(build_ext):
             curses_incs = find_file('curses.h', inc_dirs,
                                     [os.path.join(d, 'ncursesw') for d in inc_dirs])
             exts.append( Extension('_curses',
-                                   sources = map(relpath,
-                                                 [ "Modules/_cursesmodule.c", ]),
+                                   sources = list(map(relpath,
+                                                 [ "Modules/_cursesmodule.c", ])),
                                    include_dirs = curses_incs,
                                    libraries = curses_libs) )
         elif curses_library == 'curses' and host_platform != 'darwin':
@@ -1510,8 +1506,8 @@ class PyBuildExt(build_ext):
                 bz2_extra_link_args = ('-Wl,-search_paths_first',)
             else:
                 bz2_extra_link_args = ()
-            exts.append( Extension('bz2', sources = map(relpath,
-                                                        [ "Modules/bz2module.c", ]),
+            exts.append( Extension('bz2', sources = list(map(relpath,
+                                                        [ "Modules/bz2module.c", ])),
                                    libraries = ['bz2'],
                                    extra_link_args = bz2_extra_link_args) )
         else:
@@ -1539,12 +1535,12 @@ class PyBuildExt(build_ext):
         # else:
         #     expat_inc = [os.path.join(os.getcwd(), srcdir, 'Modules', 'expat')]
         define_macros = [('HAVE_EXPAT_CONFIG_H', '1'),]
-        expat_sources = map(relpath, ['Modules/expat/xmlparse.c',
+        expat_sources = list(map(relpath, ['Modules/expat/xmlparse.c',
                                       'Modules/expat/xmlrole.c',
                                       'Modules/expat/xmltok.c',
-                                      'Modules/pyexpat.c'])
+                                      'Modules/pyexpat.c']))
 
-        expat_depends = map(relpath, ['Modules/expat/ascii.h',
+        expat_depends = list(map(relpath, ['Modules/expat/ascii.h',
                                       'Modules/expat/asciitab.h',
                                       'Modules/expat/expat.h',
                                       'Modules/expat/expat_config.h',
@@ -1555,7 +1551,7 @@ class PyBuildExt(build_ext):
                                       'Modules/expat/xmlrole.h',
                                       'Modules/expat/xmltok.h',
                                       'Modules/expat/xmltok_impl.h'
-                                      ])
+                                      ]))
         exts.append(Extension('pyexpat',
                               define_macros = define_macros,
                               include_dirs = [relpath('Modules/expat')],
@@ -1651,11 +1647,11 @@ class PyBuildExt(build_ext):
                                    ]
 
         else:
-            multiprocessing_srcs = map(relpath, [
+            multiprocessing_srcs = list(map(relpath, [
                 "Modules/_multiprocessing/multiprocessing.c",
                 "Modules/_multiprocessing/socket_connection.c",
                 "Modules/_multiprocessing/semaphore.c",
-            ])
+            ]))
         # if sysconfig.get_config_var('WITH_THREAD'):
         exts.append( Extension('_multiprocessing', multiprocessing_srcs,
                                 include_dirs=["Modules/_multiprocessing"]))
@@ -1882,7 +1878,7 @@ class PyBuildExt(build_ext):
         #
         include_dirs = [
             join(F, fw + '.framework', H)
-            for fw in 'Tcl', 'Tk'
+            for fw in ('Tcl', 'Tk')
             for H in 'Headers', 'Versions/Current/PrivateHeaders'
         ]
 
@@ -2071,69 +2067,71 @@ class PyBuildExt(build_ext):
         return True
 
     def configure_ctypes(self, ext):
-        if not self.use_system_libffi:
-            if host_platform == 'darwin':
-                return self.configure_ctypes_darwin(ext)
-
-            srcdir = sysconfig.get_config_var('srcdir')
-            ffi_builddir = os.path.join(self.build_temp, 'libffi')
-            ffi_srcdir = os.path.abspath(os.path.join(srcdir, 'Modules',
-                                         '_ctypes', 'libffi'))
-            ffi_configfile = os.path.join(ffi_builddir, 'fficonfig.py')
-
-            from distutils.dep_util import newer_group
-
-            config_sources = [os.path.join(ffi_srcdir, fname)
-                              for fname in os.listdir(ffi_srcdir)
-                              if os.path.isfile(os.path.join(ffi_srcdir, fname))]
-            if self.force or newer_group(config_sources,
-                                         ffi_configfile):
-                from distutils.dir_util import mkpath
-                mkpath(ffi_builddir)
-                config_args = [arg for arg in sysconfig.get_config_var("CONFIG_ARGS").split()
-                               if (('--host=' in arg) or ('--build=' in arg))]
-                if not self.verbose:
-                    config_args.append("-q")
-
-                # Pass empty CFLAGS because we'll just append the resulting
-                # CFLAGS to Python's; -g or -O2 is to be avoided.
-                cmd = "cd %s && env CFLAGS='' '%s/configure' %s" \
-                      % (ffi_builddir, ffi_srcdir, " ".join(config_args))
-
-                res = os.system(cmd)
-                if res or not os.path.exists(ffi_configfile):
-                    print "Failed to configure _ctypes module"
-                    return False
-
-            fficonfig = {}
-            with open(ffi_configfile) as f:
-                exec f in fficonfig
-
-            # Add .S (preprocessed assembly) to C compiler source extensions.
-            self.compiler.src_extensions.append('.S')
-
-            include_dirs = [os.path.join(ffi_builddir, 'include'),
-                            ffi_builddir,
-                            os.path.join(ffi_srcdir, 'src')]
-            extra_compile_args = fficonfig['ffi_cflags'].split()
-
-            ext.sources.extend(os.path.join(ffi_srcdir, f) for f in
-                               fficonfig['ffi_sources'])
-            ext.include_dirs.extend(include_dirs)
-            ext.extra_compile_args.extend(extra_compile_args)
-        return True
+        # py3updating: disable ctypes for now.
+        return False
+        # if not self.use_system_libffi:
+        #     if host_platform == 'darwin':
+        #         return self.configure_ctypes_darwin(ext)
+        #
+        #     srcdir = sysconfig.get_config_var('srcdir')
+        #     ffi_builddir = os.path.join(self.build_temp, 'libffi')
+        #     ffi_srcdir = os.path.abspath(os.path.join(srcdir, 'Modules',
+        #                                  '_ctypes', 'libffi'))
+        #     ffi_configfile = os.path.join(ffi_builddir, 'fficonfig.py')
+        #
+        #     from distutils.dep_util import newer_group
+        #
+        #     config_sources = [os.path.join(ffi_srcdir, fname)
+        #                       for fname in os.listdir(ffi_srcdir)
+        #                       if os.path.isfile(os.path.join(ffi_srcdir, fname))]
+        #     if self.force or newer_group(config_sources,
+        #                                  ffi_configfile):
+        #         from distutils.dir_util import mkpath
+        #         mkpath(ffi_builddir)
+        #         config_args = [arg for arg in sysconfig.get_config_var("CONFIG_ARGS").split()
+        #                        if (('--host=' in arg) or ('--build=' in arg))]
+        #         if not self.verbose:
+        #             config_args.append("-q")
+        #
+        #         # Pass empty CFLAGS because we'll just append the resulting
+        #         # CFLAGS to Python's; -g or -O2 is to be avoided.
+        #         cmd = "cd %s && env CFLAGS='' '%s/configure' %s" \
+        #               % (ffi_builddir, ffi_srcdir, " ".join(config_args))
+        #
+        #         res = os.system(cmd)
+        #         if res or not os.path.exists(ffi_configfile):
+        #             print("Failed to configure _ctypes module")
+        #             return False
+        #
+        #     fficonfig = {}
+        #     with open(ffi_configfile) as f:
+        #         exec(f, fficonfig)
+        #
+        #     # Add .S (preprocessed assembly) to C compiler source extensions.
+        #     self.compiler.src_extensions.append('.S')
+        #
+        #     include_dirs = [os.path.join(ffi_builddir, 'include'),
+        #                     ffi_builddir,
+        #                     os.path.join(ffi_srcdir, 'src')]
+        #     extra_compile_args = fficonfig['ffi_cflags'].split()
+        #
+        #     ext.sources.extend(os.path.join(ffi_srcdir, f) for f in
+        #                        fficonfig['ffi_sources'])
+        #     ext.include_dirs.extend(include_dirs)
+        #     ext.extra_compile_args.extend(extra_compile_args)
+        # return True
 
     def detect_ctypes(self, inc_dirs, lib_dirs):
         self.use_system_libffi = False
         include_dirs = []
         extra_compile_args = []
         extra_link_args = []
-        sources = map(relpath, ["Modules/_ctypes/_ctypes.c",
+        sources = list(map(relpath, ["Modules/_ctypes/_ctypes.c",
                                 "Modules/_ctypes/callbacks.c",
                                 "Modules/_ctypes/callproc.c",
                                 "Modules/_ctypes/stgdict.c",
                                 "Modules/_ctypes/cfield.c"
-                                ])
+                                ]))
         depends = ['_ctypes/ctypes.h']
 
         if host_platform == 'darwin':
@@ -2166,7 +2164,7 @@ class PyBuildExt(build_ext):
                         sources=sources,
                         depends=depends)
         ext_test = Extension('_ctypes_test',
-                             sources= map(relpath, ['Modules/_ctypes/_ctypes_test.c']))
+                             sources= list(map(relpath, ['Modules/_ctypes/_ctypes_test.c'])))
         self.extensions.extend([ext, ext_test])
 
         # Pyston change: Pyston don't support CONFIG_ARGS yet.
@@ -2225,8 +2223,8 @@ class PyBuildInstallLib(install_lib):
 
     def install(self):
         outfiles = install_lib.install(self)
-        self.set_file_modes(outfiles, 0644, 0755)
-        self.set_dir_modes(self.install_dir, 0755)
+        self.set_file_modes(outfiles, 0o644, 0o755)
+        self.set_dir_modes(self.install_dir, 0o755)
         return outfiles
 
     def set_file_modes(self, files, defaultMode, sharedLibMode):
@@ -2292,9 +2290,9 @@ def main():
           cmdclass = {'build_ext':PyBuildExt,},
           # The struct module is defined here, because build_ext won't be
           # called unless there's at least one extension module defined.
-          ext_modules = [Extension("_struct", sources = map(relpath, [
+          ext_modules = [Extension("_struct", sources = list(map(relpath, [
               "Modules/_struct.c",
-          ]))]
+          ])))]
 
         )
 
