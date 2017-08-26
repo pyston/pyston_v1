@@ -60,7 +60,7 @@ static Box* dumpStats(Box* includeZeros) {
     if (includeZeros->cls != bool_cls)
         raiseExcHelper(TypeError, "includeZeros must be a 'bool' object but received a '%s'",
                        getTypeName(includeZeros));
-    Stats::dump(((BoxedBool*)includeZeros)->n != 0);
+    Stats::dump(((BoxedBool*)includeZeros) != Py_False);
     Py_RETURN_NONE;
 }
 

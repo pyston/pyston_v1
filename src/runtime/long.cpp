@@ -777,19 +777,20 @@ template <ExceptionStyle S> Box* longNew(Box* _cls, Box* val, Box* base) noexcep
     return rtn;
 }
 
+static Box* long_int(Box* v) noexcept {
+    int overflow = 0;
+    long n = PyLong_AsLongAndOverflow(v, &overflow);
+    static_assert(sizeof(BoxedInt::n) == sizeof(long), "");
+    BoxedLong* rtn = new BoxedLong();
+    mpz_init_set(rtn->n, ((BoxedLong*)v)->n);
+    return rtn;
+}
+
 Box* longInt(Box* v) {
     if (!PyLong_Check(v))
         raiseExcHelper(TypeError, "descriptor '__int__' requires a 'long' object but received a '%s'", getTypeName(v));
 
-    int overflow = 0;
-    long n = PyLong_AsLongAndOverflow(v, &overflow);
-    static_assert(sizeof(BoxedInt::n) == sizeof(long), "");
-    if (overflow) {
-        BoxedLong* rtn = new BoxedLong();
-        mpz_init_set(rtn->n, ((BoxedLong*)v)->n);
-        return rtn;
-    } else
-        return boxInt(n);
+    return long_int(v);
 }
 
 Box* longToLong(Box* self) noexcept {
@@ -949,7 +950,7 @@ Box* longAdd(BoxedLong* v1, Box* _v2) {
 }
 
 // TODO: split common code out into a helper function
-extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
+Box* longAnd(BoxedLong* v1, Box* _v2) {
     if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__and__' requires a 'long' object but received a '%s'", getTypeName(v1));
     if (PyLong_Check(_v2)) {
@@ -975,7 +976,7 @@ extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
     return incref(NotImplemented);
 }
 
-extern "C" Box* longOr(BoxedLong* v1, Box* _v2) {
+Box* longOr(BoxedLong* v1, Box* _v2) {
     if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__or__' requires a 'long' object but received a '%s'", getTypeName(v1));
     if (PyLong_Check(_v2)) {
@@ -1001,7 +1002,7 @@ extern "C" Box* longOr(BoxedLong* v1, Box* _v2) {
     return incref(NotImplemented);
 }
 
-extern "C" Box* longXor(BoxedLong* v1, Box* _v2) {
+Box* longXor(BoxedLong* v1, Box* _v2) {
     if (!PyLong_Check(v1))
         raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'long' object but received a '%s'", getTypeName(v1));
     if (PyLong_Check(_v2)) {
@@ -1811,6 +1812,7 @@ void setupLong() {
     long_cls->freeze();
 
     long_cls->tp_as_number->nb_power = long_pow;
+    long_cls->tp_as_number->nb_int = long_int;
     long_cls->tp_hash = long_hash;
     long_cls->tp_repr = longRepr<CAPI>;
     long_cls->tp_str = longStr<CAPI>;
