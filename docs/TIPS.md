@@ -149,7 +149,7 @@ Looking at the classes of objects in the current stack frame is always a good st
 
 In general, boxes are allocated in the heap (but not all - e.g. classes of built-in types) in one of the three heaps. Pointers in the heap have a hardcoded range of allowed values (see `src/gc/heap.h`) - values that fall outside this range (and are not in the stack) could potentially indicate memory errors.
 
-The C++ stacktrace can be quite difficult to read. Every Python function call will result in half a dozen C++ function calls along the lines of `getAttrInternal`. This is why using `signal SIGUSR1` which will call `_printStacktrace()` is useful as it gives you a more readeable with Python stacktrace (albeit with less information).
+The C++ stacktrace can be quite difficult to read. Every Python function call will result in half a dozen C++ function calls along the lines of `getAttrInternal`. This is why using `signal SIGUSR1` which will call `_printStacktrace()` is useful as it gives you a more readable with Python stacktrace (albeit with less information).
 
 ##### Problem: The tests fail in release mode
 
