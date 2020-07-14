@@ -179,8 +179,8 @@ add_custom_target(libjemalloc_byproducts DEPENDS ${CMAKE_BINARY_DIR}/jemalloc/li
 execute_process(COMMAND cat llvm_revision.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT_VARIABLE LLVMREV OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 # llvm, clang, and libunwind patches
-add_custom_target(llvm_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk ${LLVMREV} llvm_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-add_custom_target(clang_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk/tools/clang ${LLVMREV} clang_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_custom_target(llvm_gotorev python2 ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk ${LLVMREV} llvm_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_custom_target(clang_gotorev python2 ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk/tools/clang ${LLVMREV} clang_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_custom_target(llvm_up DEPENDS llvm_gotorev clang_gotorev)
 
 set(LIBUNWIND_PATCHES
@@ -193,7 +193,7 @@ set(LIBUNWIND_PATCHES
 
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/build_deps/libunwind/pyston_patched
                    COMMAND git submodule update build_deps/libunwind
-                   COMMAND python ${CMAKE_SOURCE_DIR}/tools/git_am_automated.py build_deps/libunwind ${LIBUNWIND_PATCHES}
+                   COMMAND python2 ${CMAKE_SOURCE_DIR}/tools/git_am_automated.py build_deps/libunwind ${LIBUNWIND_PATCHES}
                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
                    DEPENDS ${LIBUNWIND_PATCHES}
                    DEPENDS gitsubmodules)

@@ -19,7 +19,7 @@ USE_CCACHE := 1
 USE_DISTCC := 0
 
 PYPY := pypy
-CPYTHON := python
+CPYTHON := python2
 
 ENABLE_VALGRIND := 0
 

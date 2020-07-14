@@ -20,7 +20,7 @@
 	ignore = untracked
 [submodule "build_deps/libunwind"]
 	path = build_deps/libunwind
-	url = https://github.com/pathscale/libunwind.git
+	url = https://github.com/libunwind/libunwind.git
 	ignore = all
 [submodule "build_deps/lz4"]
 	path = build_deps/lz4
