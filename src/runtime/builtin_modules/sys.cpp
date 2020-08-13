@@ -690,6 +690,44 @@ static PyObject* make_version_info(void) noexcept {
     return version_info;
 }
 
+static struct _typeobject LongInfoType;
+
+PyDoc_STRVAR(long_info__doc__, "sys.long_info\n\
+\n\
+A struct sequence that holds information about Python's\n\
+internal representation of integers.  The attributes are read only.");
+
+static PyStructSequence_Field long_info_fields[]
+    = { { "bits_per_digit", "size of a digit in bits" },
+        { "sizeof_digit", "size in bytes of the C type used to represent a digit" },
+        { NULL, NULL } };
+
+static PyStructSequence_Desc long_info_desc = {
+    "sys.long_info",  /* name */
+    long_info__doc__, /* doc */
+    long_info_fields, /* fields */
+    2                 /* number of fields */
+};
+
+PyObject* PyLong_GetInfo(void) {
+    PyObject* long_info;
+    int field = 0;
+    long_info = PyStructSequence_New(&LongInfoType);
+    if (long_info == NULL)
+        return NULL;
+    // Now Pyston use gmp's mpz_t as it's long object implementation, so these
+    // two field may mean nothing. And in fulture Pyston may use CPython's long
+    // object implementation for Windows platform support.
+    // So we just put two const number here for running test.
+    PyStructSequence_SET_ITEM(long_info, field++, PyInt_FromLong(30));
+    PyStructSequence_SET_ITEM(long_info, field++, PyInt_FromLong(4));
+    if (PyErr_Occurred()) {
+        Py_CLEAR(long_info);
+        return NULL;
+    }
+    return long_info;
+}
+
 static struct _typeobject FloatInfoType;
 
 PyDoc_STRVAR(floatinfo__doc__, "sys.float_info\n\
@@ -944,5 +982,14 @@ void setupSysEnd() {
     FloatInfoType.tp_new = NULL;
 
     SET_SYS_FROM_STRING("float_info", PyFloat_GetInfo());
+
+    /* long_info */
+    if (LongInfoType.tp_name == 0)
+        PyStructSequence_InitType((PyTypeObject*)&LongInfoType, &long_info_desc);
+    /* prevent user from creating new instances */
+    LongInfoType.tp_init = NULL;
+    LongInfoType.tp_new = NULL;
+
+    SET_SYS_FROM_STRING("long_info", PyLong_GetInfo());
 }
 }
