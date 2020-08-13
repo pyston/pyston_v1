@@ -246,6 +246,7 @@ class UnixCCompiler(CCompiler):
         shared_f = self.library_filename(lib, lib_type='shared')
         dylib_f = self.library_filename(lib, lib_type='dylib')
         static_f = self.library_filename(lib, lib_type='static')
+        non_pyston_shared_f = '.'.join(shared_f.split('.')[:-2] + ['so'])
 
         if sys.platform == 'darwin':
             # On OSX users can specify an alternate SDK using
@@ -262,6 +263,7 @@ class UnixCCompiler(CCompiler):
 
         for dir in dirs:
             shared = os.path.join(dir, shared_f)
+            non_pyston_shared = os.path.join(dir, non_pyston_shared_f)
             dylib = os.path.join(dir, dylib_f)
             static = os.path.join(dir, static_f)
 
@@ -281,6 +283,8 @@ class UnixCCompiler(CCompiler):
                 return dylib
             elif os.path.exists(shared):
                 return shared
+            elif os.path.exists(non_pyston_shared):
+                return non_pyston_shared
             elif os.path.exists(static):
                 return static
 

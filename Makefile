@@ -24,9 +24,6 @@ CPYTHON := python2
 ENABLE_VALGRIND := 0
 
 GDB := gdb
-# If you followed the old install instructions:
-# GCC_DIR := $(DEPS_DIR)/gcc-4.8.2-install
-GCC_DIR := /usr
 GTEST_DIR := $(DEPS_DIR)/gtest-1.7.0
 
 USE_DEBUG_LIBUNWIND := 0
@@ -76,8 +73,8 @@ TOOLS_DIR := ./tools
 TEST_DIR := $(abspath ./test)
 TESTS_DIR := $(abspath ./test/tests)
 
-GPP := $(GCC_DIR)/bin/g++
-GCC := $(GCC_DIR)/bin/gcc
+GPP := g++
+GCC := gcc
 
 ifeq ($(V),1)
 	VERBOSE := 1
@@ -154,11 +151,6 @@ COMMON_LDFLAGS += `pkg-config tinfo 2>/dev/null && pkg-config tinfo --libs || ec
 # Make sure that we put all symbols in the dynamic symbol table so that MCJIT can load them;
 # TODO should probably do the linking before MCJIT
 COMMON_LDFLAGS += -Wl,-E
-
-# We get multiple shared libraries (libstdc++, libgcc_s) from the gcc installation:
-ifneq ($(GCC_DIR),/usr)
-	COMMON_LDFLAGS += -Wl,-rpath $(GCC_DIR)/lib64
-endif
 
 ifneq ($(USE_DEBUG_LIBUNWIND),0)
 	COMMON_LDFLAGS += -L$(DEPS_DIR)/libunwind-trunk-debug-install/lib
