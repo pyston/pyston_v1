@@ -357,6 +357,15 @@ Box* setIOr(BoxedSet* lhs, BoxedSet* rhs) {
     return incref(lhs);
 }
 
+static PyObject* set_ior(PySetObject* so, PyObject* other) noexcept {
+    try {
+        return setIOr((BoxedSet*)so, (BoxedSet*)other);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 Box* setOr(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
     if (!PyAnySet_Check(rhs))
@@ -365,6 +374,15 @@ Box* setOr(BoxedSet* lhs, BoxedSet* rhs) {
     BoxedSet* rtn = makeNewSet(lhs->cls, lhs);
     AUTO_DECREF(rtn);
     return setIOr(rtn, rhs);
+}
+
+static PyObject* set_or(PySetObject* so, PyObject* other) noexcept {
+    try {
+        return setOr((BoxedSet*)so, (BoxedSet*)other);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 Box* setIAnd(BoxedSet* lhs, BoxedSet* rhs) {
@@ -377,12 +395,30 @@ Box* setIAnd(BoxedSet* lhs, BoxedSet* rhs) {
     return incref(lhs);
 }
 
+static PyObject* set_iand(PySetObject* so, PyObject* other) noexcept {
+    try {
+        return setIAnd((BoxedSet*)so, (BoxedSet*)other);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 Box* setAnd(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
     if (!PyAnySet_Check(rhs))
         return incref(NotImplemented);
 
     return setIntersection2(lhs, rhs);
+}
+
+static PyObject* set_and(PySetObject* so, PyObject* other) noexcept {
+    try {
+        return setAnd((BoxedSet*)so, (BoxedSet*)other);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 Box* setISub(BoxedSet* lhs, BoxedSet* rhs) {
@@ -397,6 +433,15 @@ Box* setISub(BoxedSet* lhs, BoxedSet* rhs) {
     return incref(lhs);
 }
 
+static PyObject* set_isub(PySetObject* so, PyObject* other) noexcept {
+    try {
+        return setISub((BoxedSet*)so, (BoxedSet*)other);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 Box* setSub(BoxedSet* lhs, BoxedSet* rhs) {
     RELEASE_ASSERT(PyAnySet_Check(lhs), "");
     if (!PyAnySet_Check(rhs))
@@ -405,6 +450,15 @@ Box* setSub(BoxedSet* lhs, BoxedSet* rhs) {
     BoxedSet* rtn = makeNewSet(lhs->cls, lhs);
     AUTO_DECREF(rtn);
     return setISub(rtn, rhs);
+}
+
+static PyObject* set_sub(PySetObject* so, PyObject* other) noexcept {
+    try {
+        return setSub((BoxedSet*)so, (BoxedSet*)other);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 Box* setIXor(BoxedSet* lhs, BoxedSet* rhs) {
@@ -427,6 +481,15 @@ Box* setXor(BoxedSet* lhs, BoxedSet* rhs) {
     return setIXor(rtn, rhs);
 }
 
+static PyObject* set_xor(PySetObject* so, PyObject* other) noexcept {
+    try {
+        return setXor((BoxedSet*)so, (BoxedSet*)other);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 Box* setIter(BoxedSet* self) noexcept {
     RELEASE_ASSERT(PyAnySet_Check(self), "");
     return new BoxedSetIterator(self);
@@ -435,6 +498,10 @@ Box* setIter(BoxedSet* self) noexcept {
 Box* setLen(BoxedSet* self) {
     RELEASE_ASSERT(PyAnySet_Check(self), "");
     return boxInt(self->s.size());
+}
+
+static Py_ssize_t set_len(PyObject* so) noexcept {
+    return static_cast<BoxedSet*>(so)->s.size();
 }
 
 Box* setAdd(BoxedSet* self, Box* v) {
@@ -741,13 +808,13 @@ Box* setGt(BoxedSet* self, BoxedSet* rhs) {
     return setIssuperset(self, rhs);
 }
 
-Box* setContains(BoxedSet* self, Box* key) {
+static inline int setContainsShared(BoxedSet* self, Box* key) {
     RELEASE_ASSERT(PyAnySet_Check(self), "");
 
     if (PySet_Check(key)) {
         try {
             BoxAndHash k_hash(key);
-            return boxBool(self->s.find(k_hash) != self->s.end());
+            return self->s.find(k_hash) != self->s.end();
         } catch (ExcInfo e) {
             if (!e.matches(TypeError))
                 throw e;
@@ -756,11 +823,24 @@ Box* setContains(BoxedSet* self, Box* key) {
 
             BoxedSet* tmpKey = makeNewSet(frozenset_cls, key);
             AUTO_DECREF(tmpKey);
-            return boxBool(self->s.find(tmpKey) != self->s.end());
+            return self->s.find(tmpKey) != self->s.end();
         }
     }
 
-    return boxBool(self->s.find(key) != self->s.end());
+    return self->s.find(key) != self->s.end();
+}
+
+Box* setContains(BoxedSet* self, Box* key) {
+    return boxBool(setContainsShared(self, key));
+}
+
+static int set_contains(PySetObject* so, PyObject* key) noexcept {
+    try {
+        return setContainsShared((BoxedSet*)so, key);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 }
 
 Box* setRemove(BoxedSet* self, Box* key) {
@@ -1097,6 +1177,18 @@ void setupSet() {
 
     set_cls->freeze();
     frozenset_cls->freeze();
+
+    frozenset_cls->tp_as_sequence->sq_length = set_cls->tp_as_sequence->sq_length = set_len;
+    frozenset_cls->tp_as_sequence->sq_contains = set_cls->tp_as_sequence->sq_contains = (objobjproc)set_contains;
+
+    frozenset_cls->tp_as_number->nb_and = set_cls->tp_as_number->nb_and = (binaryfunc)set_and;
+    frozenset_cls->tp_as_number->nb_inplace_and = set_cls->tp_as_number->nb_inplace_and = (binaryfunc)set_iand;
+    frozenset_cls->tp_as_number->nb_or = set_cls->tp_as_number->nb_or = (binaryfunc)set_or;
+    frozenset_cls->tp_as_number->nb_inplace_or = set_cls->tp_as_number->nb_inplace_or = (binaryfunc)set_ior;
+    frozenset_cls->tp_as_number->nb_xor = set_cls->tp_as_number->nb_xor = (binaryfunc)set_xor;
+    frozenset_cls->tp_as_number->nb_subtract = set_cls->tp_as_number->nb_subtract = (binaryfunc)set_sub;
+    frozenset_cls->tp_as_number->nb_inplace_subtract = set_cls->tp_as_number->nb_inplace_subtract
+        = (binaryfunc)set_isub;
 
     frozenset_cls->tp_repr = set_cls->tp_repr = set_repr;
     frozenset_cls->tp_iter = set_cls->tp_iter = (decltype(set_cls->tp_iter))setIter;
