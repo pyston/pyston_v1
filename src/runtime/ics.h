@@ -59,7 +59,7 @@ public:
     CallattrIC() : RuntimeIC((void*)callattr, 512) {}
 
     Box* call(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg0, Box* arg1, Box* arg2, Box** args,
-              const std::vector<BoxedString*>* keyword_names) {
+              BoxedTuple* keyword_names) {
         return (Box*)call_ptr(obj, attr, flags, arg0, arg1, arg2, args, keyword_names);
     }
 };
@@ -69,7 +69,7 @@ public:
     CallattrCapiIC() : RuntimeIC((void*)callattrCapi, 512) {}
 
     Box* call(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg0, Box* arg1, Box* arg2, Box** args,
-              const std::vector<BoxedString*>* keyword_names) {
+              BoxedTuple* keyword_names) {
         return (Box*)call_ptr(obj, attr, flags, arg0, arg1, arg2, args, keyword_names);
     }
 };

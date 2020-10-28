@@ -306,8 +306,7 @@ using FunctorPointer
 // them in the CXX style.
 Box* rearrangeArgumentsAndCall(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
                                Box** defaults, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-                               Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,
-                               FunctorPointer continuation);
+                               Box* arg3, Box** args, BoxedTuple* keyword_names, FunctorPointer continuation);
 
 // new_args should be allocated by the caller if at least three args get passed in.
 // rewrite_args will get modified in place.

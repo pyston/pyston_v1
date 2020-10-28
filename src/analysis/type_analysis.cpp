@@ -130,8 +130,7 @@ private:
         return old_type;
     }
 
-    CompilerType* getConstantType(int vreg) {
-        Box* o = code_constants.getConstant(vreg);
+    CompilerType* getConstantType(Box* o) {
         if (o->cls == int_cls)
             return INT;
         else if (o->cls == float_cls)
@@ -148,9 +147,18 @@ private:
             return NONE;
         else if (o->cls == ellipsis_cls)
             return typeFromClass(ellipsis_cls);
-        else
+        else if (o->cls == tuple_cls) {
+            auto* tuple = (BoxedTuple*)o;
+            std::vector<CompilerType*> elt_types;
+            for (int i = 0; i < tuple->size(); ++i) {
+                elt_types.push_back(getConstantType(tuple->elts[i]));
+            }
+            return makeTupleType(elt_types);
+        } else
             RELEASE_ASSERT(0, "");
     }
+
+    CompilerType* getConstantType(int vreg) { return getConstantType(code_constants.getConstant(vreg)); }
 
     CompilerType* getType(int vreg) {
         if (vreg == VREG_UNDEFINED)

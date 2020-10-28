@@ -3621,7 +3621,7 @@ template BoxedInt* lenInternal<CAPI, NOT_REWRITABLE>(Box*, UnaryopRewriteArgs*);
 template BoxedInt* lenInternal<CXX, NOT_REWRITABLE>(Box*, UnaryopRewriteArgs*);
 
 Box* lenCallInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-                     Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) {
+                     Box* arg3, Box** args, BoxedTuple* keyword_names) {
     if (argspec != ArgPassSpec(1))
         return callFunc<CXX>(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 
@@ -3689,7 +3689,7 @@ extern "C" i64 unboxedLen(Box* obj) {
 template <ExceptionStyle S, Rewritable rewritable>
 Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRewriteArgs* rewrite_args,
                       ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
-                      const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+                      BoxedTuple* keyword_names) noexcept(S == CAPI) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -3803,7 +3803,7 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
                 AUTO_DECREF(val);
 
                 Box** args = (Box**)extra_args[0];
-                const std::vector<BoxedString*>* keyword_names = (const std::vector<BoxedString*>*)extra_args[1];
+                auto* keyword_names = (BoxedTuple*)extra_args[1];
                 Box* rtn
                     = runtimeCallInternal<S, NOT_REWRITABLE>(val, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
                 return rtn;
@@ -3833,7 +3833,7 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
         rewrite_args->obj->refConsumed();
         rewrite_args->setReturn(r_rtn, S == CXX ? ReturnConvention::HAS_RETURN : ReturnConvention::CAPI_RETURN);
 
-        void* _args[2] = { args, const_cast<std::vector<BoxedString*>*>(keyword_names) };
+        void* _args[2] = { args, keyword_names };
         Box* rtn = Helper::call(val, argspec, arg1, arg2, arg3, _args);
         return rtn;
     }
@@ -3855,11 +3855,11 @@ Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope scope, CallattrRe
 
 // Force instantiation of the template
 template Box* callattrInternal<CAPI, NOT_REWRITABLE>(Box*, BoxedString*, LookupScope, CallattrRewriteArgs*, ArgPassSpec,
-                                                     Box*, Box*, Box*, Box**, const std::vector<BoxedString*>*);
+                                                     Box*, Box*, Box*, Box**, BoxedTuple*);
 
 template <ExceptionStyle S>
 Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1, Box* arg2, Box* arg3, Box** args,
-                    const std::vector<BoxedString*>* keyword_names, void* return_addr) {
+                    BoxedTuple* keyword_names, void* return_addr) {
     STAT_TIMER(t0, "us_timer_slowpath_callattr", 10);
 
     if (S == CAPI)
@@ -3959,13 +3959,13 @@ Box* _callattrEntry(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1,
 }
 
 extern "C" Box* callattr(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1, Box* arg2, Box* arg3, Box** args,
-                         const std::vector<BoxedString*>* keyword_names) {
+                         BoxedTuple* keyword_names) {
     return _callattrEntry<CXX>(obj, attr, flags, arg1, arg2, arg3, args, keyword_names,
                                __builtin_extract_return_addr(__builtin_return_address(0)));
 }
 
 extern "C" Box* callattrCapi(Box* obj, BoxedString* attr, CallattrFlags flags, Box* arg1, Box* arg2, Box* arg3,
-                             Box** args, const std::vector<BoxedString*>* keyword_names) noexcept {
+                             Box** args, BoxedTuple* keyword_names) noexcept {
     return _callattrEntry<CAPI>(obj, attr, flags, arg1, arg2, arg3, args, keyword_names,
                                 __builtin_extract_return_addr(__builtin_return_address(0)));
 }
@@ -4110,7 +4110,7 @@ template <ExceptionStyle S>
 static Box* _callFuncHelper(BoxedFunctionBase* func, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                             void** extra_args) {
     Box** args = (Box**)extra_args[0];
-    auto keyword_names = (const std::vector<BoxedString*>*)extra_args[1];
+    auto keyword_names = (BoxedTuple*)extra_args[1];
     return callFunc<S, NOT_REWRITABLE>(func, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
 }
 
@@ -4164,7 +4164,7 @@ public:
 Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNames* param_names,
                                        FuncNameGetter func_name_cb, Box** defaults, CallRewriteArgs* rewrite_args,
                                        ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
-                                       const std::vector<BoxedString*>* keyword_names, FunctorPointer continuation) {
+                                       BoxedTuple* keyword_names, FunctorPointer continuation) {
     /*
      * Procedure:
      * - First match up positional arguments; any extra go to varargs.  error if too many.
@@ -4489,12 +4489,12 @@ Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNa
 
             if (!param_names || !param_names->takes_param_names) {
                 assert(!rewrite_args); // would need to add it to r_kwargs
-                okwargs->d[incref((*keyword_names)[i])] = incref(kw_val);
+                okwargs->d[incref(keyword_names->elts[i])] = incref(kw_val);
                 continue;
             }
 
-            int dest = placeKeyword(param_names, params_filled, (*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs,
-                                    okwargs, func_name_cb);
+            int dest = placeKeyword(param_names, params_filled, (BoxedString*)keyword_names->elts[i], kw_val, oarg1,
+                                    oarg2, oarg3, oargs, okwargs, func_name_cb);
             if (rewrite_args) {
                 assert(dest != -1);
                 if (dest == 0)
@@ -4625,8 +4625,7 @@ Box* rearrangeArgumentsAndCallInternal(ParamReceiveSpec paramspec, const ParamNa
 
 Box* rearrangeArgumentsAndCall(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
                                Box** defaults, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-                               Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names,
-                               FunctorPointer continuation) {
+                               Box* arg3, Box** args, BoxedTuple* keyword_names, FunctorPointer continuation) {
     return rearrangeArgumentsAndCallInternal(paramspec, param_names, func_name, defaults, rewrite_args, argspec, arg1,
                                              arg2, arg3, args, keyword_names, continuation);
 }
@@ -4634,7 +4633,7 @@ Box* rearrangeArgumentsAndCall(ParamReceiveSpec paramspec, const ParamNames* par
 static StatCounter slowpath_callfunc("slowpath_callfunc");
 template <ExceptionStyle S, Rewritable rewritable>
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-              Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+              Box* arg3, Box** args, BoxedTuple* keyword_names) noexcept(S == CAPI) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -5120,7 +5119,7 @@ const char* PyEval_GetFuncDesc(PyObject* func) noexcept {
 
 template <ExceptionStyle S, Rewritable rewritable>
 Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
-                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI) {
+                         Box** args, BoxedTuple* keyword_names) noexcept(S == CAPI) {
     if (rewritable == NOT_REWRITABLE) {
         assert(!rewrite_args);
         rewrite_args = NULL;
@@ -5357,17 +5356,17 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 }
 // Force instantiation:
 template Box* runtimeCallInternal<CAPI, REWRITABLE>(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
-                                                    const std::vector<BoxedString*>*);
+                                                    BoxedTuple*);
 template Box* runtimeCallInternal<CXX, REWRITABLE>(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
-                                                   const std::vector<BoxedString*>*);
+                                                   BoxedTuple*);
 template Box* runtimeCallInternal<CAPI, NOT_REWRITABLE>(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
-                                                        const std::vector<BoxedString*>*);
+                                                        BoxedTuple*);
 template Box* runtimeCallInternal<CXX, NOT_REWRITABLE>(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
-                                                       const std::vector<BoxedString*>*);
+                                                       BoxedTuple*);
 
 template <ExceptionStyle S>
 static Box* runtimeCallEntry(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
-                             const std::vector<BoxedString*>* keyword_names, void* return_addr) noexcept(S == CAPI) {
+                             BoxedTuple* keyword_names, void* return_addr) noexcept(S == CAPI) {
     STAT_TIMER(t0, "us_timer_slowpath_runtimecall", 10);
 
     int npassed_args = argspec.totalPassed();
@@ -5433,7 +5432,7 @@ static Box* runtimeCallEntry(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2
 }
 
 extern "C" Box* runtimeCall(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
-                            const std::vector<BoxedString*>* keyword_names) {
+                            BoxedTuple* keyword_names) {
     static StatCounter slowpath_runtimecall("slowpath_runtimecall");
     slowpath_runtimecall.log();
     return runtimeCallEntry<CXX>(obj, argspec, arg1, arg2, arg3, args, keyword_names,
@@ -5441,7 +5440,7 @@ extern "C" Box* runtimeCall(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2,
 }
 
 extern "C" Box* runtimeCallCapi(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
-                                const std::vector<BoxedString*>* keyword_names) noexcept {
+                                BoxedTuple* keyword_names) noexcept {
     static StatCounter slowpath_runtimecall("slowpath_runtimecall_capi");
     slowpath_runtimecall.log();
     // TODO add rewriting

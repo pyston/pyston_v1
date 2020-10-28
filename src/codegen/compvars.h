@@ -36,6 +36,7 @@ class BoxedInt;
 class BoxedFloat;
 class BoxedLong;
 class BoxedString;
+class BoxedTuple;
 
 typedef llvm::SmallVector<uint64_t, 1> FrameVals;
 
@@ -127,13 +128,12 @@ public:
 
     virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, BoxedString* attr,
                                        CallattrFlags flags, const std::vector<CompilerVariable*>& args,
-                                       const std::vector<BoxedString*>* keyword_names) {
+                                       BoxedTuple* keyword_names) {
         printf("callattr not defined for %s\n", debugName().c_str());
         abort();
     }
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, VAR* var, struct ArgPassSpec argspec,
-                                   const std::vector<CompilerVariable*>& args,
-                                   const std::vector<BoxedString*>* keyword_names);
+                                   const std::vector<CompilerVariable*>& args, BoxedTuple* keyword_names);
     virtual CompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) {
         printf("len not defined for %s\n", debugName().c_str());
         abort();
@@ -223,11 +223,9 @@ public:
     virtual void setattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, CompilerVariable* v) = 0;
     virtual void delattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr) = 0;
     virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, CallattrFlags flags,
-                                       const std::vector<CompilerVariable*>& args,
-                                       const std::vector<BoxedString*>* keyword_names) = 0;
+                                       const std::vector<CompilerVariable*>& args, BoxedTuple* keyword_names) = 0;
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, struct ArgPassSpec argspec,
-                                   const std::vector<CompilerVariable*>& args,
-                                   const std::vector<BoxedString*>* keyword_names) = 0;
+                                   const std::vector<CompilerVariable*>& args, BoxedTuple* keyword_names) = 0;
     virtual CompilerVariable* len(IREmitter& emitter, const OpInfo& info) = 0;
     virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, CompilerVariable*) = 0;
     virtual CompilerVariable* getPystonIter(IREmitter& emitter, const OpInfo& info) = 0;
@@ -291,13 +289,11 @@ public:
     }
 
     CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, BoxedString* attr, CallattrFlags flags,
-                               const std::vector<CompilerVariable*>& args,
-                               const std::vector<BoxedString*>* keyword_names) override {
+                               const std::vector<CompilerVariable*>& args, BoxedTuple* keyword_names) override {
         return type->callattr(emitter, info, this, attr, flags, args, keyword_names);
     }
     CompilerVariable* call(IREmitter& emitter, const OpInfo& info, struct ArgPassSpec argspec,
-                           const std::vector<CompilerVariable*>& args,
-                           const std::vector<BoxedString*>* keyword_names) override {
+                           const std::vector<CompilerVariable*>& args, BoxedTuple* keyword_names) override {
         return type->call(emitter, info, this, argspec, args, keyword_names);
     }
     CompilerVariable* len(IREmitter& emitter, const OpInfo& info) override { return type->len(emitter, info, this); }
@@ -363,7 +359,7 @@ CompilerVariable* makeUnicode(IREmitter& emitter, llvm::StringRef);
 CompilerVariable* makeFunction(IREmitter& emitter, BoxedCode*, llvm::Value* closure, llvm::Value* globals,
                                const std::vector<ConcreteCompilerVariable*>& defaults);
 ConcreteCompilerVariable* undefVariable();
-CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts);
+CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts, ConcreteCompilerVariable* boxed = NULL);
 
 CompilerType* typeOfClassobj(BoxedClass*);
 CompilerType* makeTupleType(const std::vector<CompilerType*>& elt_types);
@@ -415,7 +411,7 @@ CompilerType* _ValuedCompilerType<V>::callType(struct ArgPassSpec argspec, const
 template <typename V>
 CompilerVariable* _ValuedCompilerType<V>::call(IREmitter& emitter, const OpInfo& info, VAR* var,
                                                struct ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
-                                               const std::vector<BoxedString*>* keyword_names) {
+                                               BoxedTuple* keyword_names) {
     assert((CompilerType*)this != UNKNOWN);
     ConcreteCompilerVariable* converted = makeConverted(emitter, var, UNKNOWN);
     auto r = UNKNOWN->call(emitter, info, converted, argspec, args, keyword_names);

@@ -245,8 +245,7 @@ RewriterVar* JitFragmentWriter::emitBinop(BST_stmt* node, RewriterVar* lhs, Rewr
 }
 
 RewriterVar* JitFragmentWriter::emitCallattr(BST_stmt* node, RewriterVar* obj, BoxedString* attr, CallattrFlags flags,
-                                             const llvm::ArrayRef<RewriterVar*> args,
-                                             const std::vector<BoxedString*>* keyword_names) {
+                                             const llvm::ArrayRef<RewriterVar*> args, BoxedTuple* keyword_names) {
 #if ENABLE_BASELINEJIT_ICS
     RewriterVar* attr_var = imm(attr);
     RewriterVar* flags_var = imm(flags.asInt());
@@ -519,8 +518,7 @@ RewriterVar* JitFragmentWriter::emitRepr(RewriterVar* v) {
 }
 
 RewriterVar* JitFragmentWriter::emitRuntimeCall(BST_stmt* node, RewriterVar* obj, ArgPassSpec argspec,
-                                                const llvm::ArrayRef<RewriterVar*> args,
-                                                const std::vector<BoxedString*>* keyword_names) {
+                                                const llvm::ArrayRef<RewriterVar*> args, BoxedTuple* keyword_names) {
 #if ENABLE_BASELINEJIT_ICS
     RewriterVar* argspec_var = imm(argspec.asInt());
     RewriterVar::SmallVector call_args;
@@ -1002,7 +1000,7 @@ void JitFragmentWriter::assertNameDefinedHelper(const char* id) {
 }
 
 Box* JitFragmentWriter::callattrHelper(Box* obj, BoxedString* attr, CallattrFlags flags, Box** args,
-                                       const std::vector<BoxedString*>* keyword_names) {
+                                       BoxedTuple* keyword_names) {
     auto arg_tuple = getTupleFromArgsArray(&args[0], flags.argspec.totalPassed());
     Box* r = callattr(obj, attr, flags, std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
                       std::get<3>(arg_tuple), keyword_names);
@@ -1060,8 +1058,7 @@ BORROWED(Box*) JitFragmentWriter::notHelper(Box* b) {
     return b->nonzeroIC() ? Py_False : Py_True;
 }
 
-Box* JitFragmentWriter::runtimeCallHelper(Box* obj, ArgPassSpec argspec, Box** args,
-                                          const std::vector<BoxedString*>* keyword_names) {
+Box* JitFragmentWriter::runtimeCallHelper(Box* obj, ArgPassSpec argspec, Box** args, BoxedTuple* keyword_names) {
     auto arg_tuple = getTupleFromArgsArray(&args[0], argspec.totalPassed());
     Box* r = runtimeCall(obj, argspec, std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
                          std::get<3>(arg_tuple), keyword_names);

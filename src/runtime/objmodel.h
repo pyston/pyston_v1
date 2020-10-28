@@ -62,14 +62,13 @@ extern "C" void setattr(Box* obj, BoxedString* attr, STOLEN(Box*) attr_val) __at
 extern "C" void delattr(Box* obj, BoxedString* attr) __attribute__((noinline));
 extern "C" void delattrGeneric(Box* obj, BoxedString* attr, DelattrRewriteArgs* rewrite_args);
 extern "C" bool nonzero(Box* obj) __attribute__((noinline));
-extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<BoxedString*>*)
+extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, BoxedTuple*) __attribute__((noinline));
+extern "C" Box* runtimeCallCapi(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, BoxedTuple*) noexcept
     __attribute__((noinline));
-extern "C" Box* runtimeCallCapi(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<BoxedString*>*) noexcept
+extern "C" Box* callattr(Box*, BoxedString*, CallattrFlags, Box*, Box*, Box*, Box**, BoxedTuple*)
     __attribute__((noinline));
-extern "C" Box* callattr(Box*, BoxedString*, CallattrFlags, Box*, Box*, Box*, Box**, const std::vector<BoxedString*>*)
+extern "C" Box* callattrCapi(Box*, BoxedString*, CallattrFlags, Box*, Box*, Box*, Box**, BoxedTuple*) noexcept
     __attribute__((noinline));
-extern "C" Box* callattrCapi(Box*, BoxedString*, CallattrFlags, Box*, Box*, Box*, Box**,
-                             const std::vector<BoxedString*>*) noexcept __attribute__((noinline));
 extern "C" BoxedString* str(Box* obj) __attribute__((noinline));
 extern "C" BoxedString* repr(Box* obj) __attribute__((noinline));
 extern "C" bool exceptionMatches(Box* obj, Box* cls) __attribute__((noinline));
@@ -124,7 +123,7 @@ Box* binopInternal(Box* lhs, Box* rhs, int op_type, BinopRewriteArgs* rewrite_ar
 struct CallRewriteArgs;
 template <ExceptionStyle S, Rewritable rewritable>
 Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
-                         Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
+                         Box** args, BoxedTuple* keyword_names) noexcept(S == CAPI);
 
 struct GetitemRewriteArgs;
 template <ExceptionStyle S, Rewritable rewritable = REWRITABLE>
@@ -136,11 +135,11 @@ template <ExceptionStyle S> inline Box* getitemInternal(Box* target, Box* slice)
 template <ExceptionStyle S, Rewritable rewritable>
 BoxedInt* lenInternal(Box* obj, UnaryopRewriteArgs* rewrite_args) noexcept(S == CAPI);
 Box* lenCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-                     Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names);
+                     Box* arg3, Box** args, BoxedTuple* keyword_names);
 
 template <ExceptionStyle S, Rewritable rewritable = REWRITABLE>
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
-              Box* arg3, Box** args, const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
+              Box* arg3, Box** args, BoxedTuple* keyword_names) noexcept(S == CAPI);
 
 enum LookupScope {
     CLASS_ONLY = 1,
@@ -150,8 +149,7 @@ enum LookupScope {
 struct CallattrRewriteArgs;
 template <ExceptionStyle S, Rewritable rewritable>
 Box* callattrInternal(Box* obj, BoxedString* attr, LookupScope, CallattrRewriteArgs* rewrite_args, ArgPassSpec argspec,
-                      Box* arg1, Box* arg2, Box* arg3, Box** args,
-                      const std::vector<BoxedString*>* keyword_names) noexcept(S == CAPI);
+                      Box* arg1, Box* arg2, Box* arg3, Box** args, BoxedTuple* keyword_names) noexcept(S == CAPI);
 extern "C" void delattr_internal(Box* obj, BoxedString* attr, bool allow_custom, DelattrRewriteArgs* rewrite_args);
 struct CompareRewriteArgs;
 template <Rewritable rewritable>
