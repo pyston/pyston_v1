@@ -316,7 +316,7 @@ extern "C" Box* sum(Box* container, Box* initial) {
 }
 
 extern "C" Box* id(Box* arg) {
-    i64 addr = (i64)(arg) ^ 0xdeadbeef00000003;
+    i64 addr = (i64)(arg);
     return boxInt(addr);
 }
 

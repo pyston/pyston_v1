@@ -1420,6 +1420,9 @@ extern "C" Box* createUserClass(BoxedString* name, Box* _bases, Box* _attr_dict)
     } catch (ExcInfo e) {
         RELEASE_ASSERT(e.matches(BaseException), "");
 
+        if (!e.matches(TypeError))
+            throw e;
+
         Box* msg = e.value;
         assert(msg);
         // TODO this is an extra Pyston check and I don't think we should have to do it:
