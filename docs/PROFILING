@@ -1,5 +1,0 @@
-turning off ASLR:
-$ echo 0 | sudo tee /proc/sys/kernel/randomize_va_space
-gdb does this automatically, but disabling it outside of gdb can be nice to correlate runs with other runs or debugging.
-
-for better tracebacks, make sure that NoFramePointerElim is set to true in entry.cpp
