@@ -8,6 +8,8 @@ tools/mcjitcache_release
 tools/publicize
 tools/publicize_release
 
+.vagrant
+
 pyston
 pyston_opt
 pyston_noasserts
